@@ -77,6 +77,27 @@ public partial class MachineView : Node3D
                    metallic: _materials[materialId].Category == MaterialCategory.Metal ? 0.8f : 0,
                    roughness: _materials[materialId].Category == MaterialCategory.Metal ? 0.35f : 0.8f);
 
+    /// <summary>
+    /// A small floating name tag above a part — always faces the camera,
+    /// so a scene of several similar boxes (Heron's fountain's three
+    /// vessels, a row of material blocks) can be read at a glance instead
+    /// of cross-referencing the Details panel.
+    /// </summary>
+    private void AddLabel(string text, Vector3 above)
+    {
+        var label = new Label3D
+        {
+            Text = text,
+            Position = above,
+            FontSize = 24,
+            OutlineSize = 6,
+            PixelSize = 0.0035f, // most of these parts are 10-30cm across; default pixel_size made text roughly life-sized
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            NoDepthTest = true, // always readable, even behind glass or another part
+        };
+        AddChild(label);
+    }
+
     private void BuildTank(PartSpec part)
     {
         float side = Mathf.Sqrt((float)part.Number("area"));
@@ -90,6 +111,7 @@ public partial class MachineView : Node3D
                                Shapes.Mat(Shapes.Water, roughness: 0.2f, alpha: 0.8f));
         AddChild(water);
         _water.Add((Runtime.Tanks[part.Id], part, water));
+        AddLabel(part.Id, V(part.At) + new Vector3(0, height + 0.06f, 0));
     }
 
     private Vector3 PortPosition(PortRef r)
@@ -123,6 +145,7 @@ public partial class MachineView : Node3D
         fire.Position = V(part.At) + new Vector3(0, -0.03f, 0);
         AddChild(fire);
         _fires.Add((Runtime.Boilers[part.Id], fire));
+        AddLabel(part.Id, V(part.At) + new Vector3(0, height + 0.06f, 0));
     }
 
     private void BuildRotor(PartSpec part)
@@ -153,17 +176,20 @@ public partial class MachineView : Node3D
             node.AddChild(Shapes.Rod(new Vector3(0, s * arm, 0), new Vector3(0, s * arm, s * 0.025f), 0.006f, surface));
         }
         _rotors.Add((Runtime.Rotors[part.Id], node));
+        AddLabel(part.Id, axle + new Vector3(0, radius + arm + 0.05f, 0));
     }
 
     private void BuildBlock(PartSpec part)
     {
-        var block = new MaterialBlock(_materials[part.Material], (float)part.Number("size"), Shapes.ColorFor(part.Material))
+        float size = (float)part.Number("size");
+        var block = new MaterialBlock(_materials[part.Material], size, Shapes.ColorFor(part.Material))
         {
             Name = part.Id,
             Position = V(part.At),
             Freeze = true,
         };
         AddChild(block);
+        AddLabel($"{part.Id} ({part.Material})", V(part.At) + new Vector3(0, size / 2 + 0.05f, 0));
         Blocks.Add(block);
         _freezable.Add(block);
         _bodiesById[part.Id] = block;
@@ -226,6 +252,7 @@ public partial class MachineView : Node3D
         var joint = new HingeJoint3D { Position = V(part.At) };
         AddChild(joint);
         joint.NodeB = joint.GetPathTo(body);
+        AddLabel(part.Id, V(part.At) + new Vector3(0, 0.08f, 0));
     }
 
     /// <summary>
@@ -285,6 +312,7 @@ public partial class MachineView : Node3D
         joint.SetFlag(HingeJoint3D.Flag.UseLimit, true);
         joint.SetParam(HingeJoint3D.Param.LimitUpper, Mathf.DegToRad(limitDeg));
         joint.SetParam(HingeJoint3D.Param.LimitLower, Mathf.DegToRad(-limitDeg));
+        AddLabel(part.Id, V(part.At) + new Vector3(0, thickness + 0.08f, 0));
     }
 
     /// <summary>
@@ -309,6 +337,7 @@ public partial class MachineView : Node3D
         body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(width, thickness, length) } });
         body.AddChild(Shapes.Box(new Vector3(width, thickness, length), Surface(part.Material)));
         AddChild(body);
+        AddLabel(part.Id, V(part.At) + new Vector3(0, 0.1f, 0));
     }
 
     public void Simulate(double dt)
