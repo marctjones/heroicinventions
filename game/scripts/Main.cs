@@ -14,6 +14,12 @@ public enum Mode { Build, Run }
 ///
 /// Keys: Space = Build/Run, F = fires on/off, T = time 1×/10×,
 /// R = reload the machine files from disk.
+///
+/// Two environment variables help development and recording, and are
+/// never needed to just play the game:
+///   HEROIC_AUTORUN=1       start in Run mode instead of paused
+///   HEROIC_LIVE_LINK=1     open the Racket live-link TCP server (see
+///                          LiveLinkServer and racket/heroic/live.rkt)
 /// </summary>
 public partial class Main : Node3D
 {
@@ -24,6 +30,7 @@ public partial class Main : Node3D
     private double _timeScale = 1;
 
     private readonly List<MachineView> _machines = [];
+    private readonly Dictionary<string, MachineView> _byName = [];
     private readonly List<string> _errors = [];
     private Label _hud = null!;
 
@@ -37,6 +44,18 @@ public partial class Main : Node3D
         _hud = new Label { Position = new Vector2(16, 16) };
         _hud.AddThemeFontSizeOverride("font_size", 15);
         layer.AddChild(_hud);
+
+        if (OS.GetEnvironment(LiveLinkServer.EnableEnvVar) == "1")
+            AddChild(new LiveLinkServer(_byName, running => SetMode(running ? Mode.Run : Mode.Build)));
+
+        if (OS.GetEnvironment("HEROIC_AUTORUN") == "1")
+            SetMode(Mode.Run);
+    }
+
+    private void SetMode(Mode mode)
+    {
+        _mode = mode;
+        foreach (var m in _machines) m.SetFrozen(_mode == Mode.Build);
     }
 
     private void LoadMachines()
@@ -56,6 +75,7 @@ public partial class Main : Node3D
                 };
                 AddChild(view);
                 _machines.Add(view);
+                _byName[def.Name] = view;
             }
             catch (Exception e) when (e is MachineFormatException or FormatException)
             {
@@ -94,8 +114,7 @@ public partial class Main : Node3D
         switch (key.Keycode)
         {
             case Key.Space:
-                _mode = _mode == Mode.Build ? Mode.Run : Mode.Build;
-                foreach (var m in _machines) m.SetFrozen(_mode == Mode.Build);
+                SetMode(_mode == Mode.Build ? Mode.Run : Mode.Build);
                 break;
             case Key.F:
                 foreach (var m in _machines) m.ToggleFire();

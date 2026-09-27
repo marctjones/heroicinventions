@@ -23,6 +23,8 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Aeolipile> _rotors = [];
     private readonly Dictionary<string, string> _rotorBoiler = []; // rotor id → boiler id
     private readonly List<AirPocket> _air = [];
+    private readonly Dictionary<string, Func<double>> _getters = [];
+    private readonly Dictionary<string, Action<double>> _setters = [];
 
     public MachineDef Def { get; }
     public FluidNetwork Fluids { get; } = new();
@@ -32,6 +34,28 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Aeolipile> Rotors => _rotors;
     public IReadOnlyList<AirPocket> AirPockets => _air;
     public double Time { get; private set; }
+
+    /// <summary>
+    /// Named, human-scaled readouts and controls for the live link and the
+    /// HUD: "kettle.fire" (W), "kettle.temperature" (°C), "kettle.pressure"
+    /// (kPa gauge), "kettle.water" (kg), "ball.rpm", "basin.water" (L),
+    /// "nozzle.jet-height" (cm). Every tank, boiler, rotor and pipe gets an
+    /// entry; only a few fields (fire, water level) are settable.
+    /// </summary>
+    public IReadOnlyDictionary<string, Func<double>> FieldGetters => _getters;
+    public IReadOnlyDictionary<string, Action<double>> FieldSetters => _setters;
+
+    public double GetField(string target, string field) =>
+        _getters.TryGetValue($"{target}.{field}", out var get)
+            ? get()
+            : throw new MachineFormatException($"{target} has no readable field {field}");
+
+    public void SetField(string target, string field, double value)
+    {
+        if (!_setters.TryGetValue($"{target}.{field}", out var set))
+            throw new MachineFormatException($"{target} has no settable field {field}");
+        set(value);
+    }
 
     public string BoilerFor(string rotorId) => _rotorBoiler[rotorId];
 
@@ -98,6 +122,39 @@ public sealed class MachineRuntime
                 MomentOfInertia = ShellInertia(materials[part.Material].Density, radius, part.Number("wall", 0.001)),
             };
         }
+
+        RegisterFields();
+    }
+
+    private void RegisterFields()
+    {
+        foreach (var (id, tank) in _tanks)
+        {
+            _getters[$"{id}.water"] = () => tank.WaterVolume * 1000;   // L
+            _getters[$"{id}.level"] = () => tank.Level * 100;          // cm
+            _setters[$"{id}.water"] = liters => tank.WaterVolume = Math.Clamp(liters / 1000, 0, tank.Capacity);
+        }
+        foreach (var (id, boiler) in _boilers)
+        {
+            _getters[$"{id}.fire"] = () => boiler.HeatInput;           // W
+            _getters[$"{id}.temperature"] = () => boiler.Temperature;  // °C
+            _getters[$"{id}.pressure"] = () => boiler.GaugePressure / 1000; // kPa
+            _getters[$"{id}.water"] = () => boiler.WaterMass;          // kg
+            _setters[$"{id}.fire"] = watts => boiler.HeatInput = Math.Max(0, watts);
+        }
+        foreach (var (id, rotor) in _rotors)
+        {
+            _getters[$"{id}.rpm"] = () => rotor.Rpm;
+            _getters[$"{id}.thrust"] = () => rotor.Thrust;
+        }
+        foreach (var (id, pipe) in _pipes)
+        {
+            _getters[$"{id}.flow"] = () => pipe.Flow * 1000;               // L/s
+            _getters[$"{id}.jet-height"] = () => pipe.Flow > 0 ? pipe.JetHeight * 100 : 0; // cm
+        }
+        foreach (var air in _air)
+            foreach (var tank in _tanks.Values.Where(t => t.Air == air))
+                _getters[$"{tank.Name}.air-pressure"] = () => air.GaugePressure / 1000; // kPa
     }
 
     public void Step(double dt)
