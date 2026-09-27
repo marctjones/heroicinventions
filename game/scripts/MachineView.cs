@@ -23,7 +23,7 @@ public partial class MachineView : Node3D
     private readonly List<(Pipe pipe, Vector3 outlet, MeshInstance3D jet)> _jets = [];
     private readonly List<(Aeolipile rotor, Node3D node)> _rotors = [];
     private readonly List<(Boiler boiler, MeshInstance3D fire)> _fires = [];
-    private readonly List<(Aeolipile rotor, MeshInstance3D puff)> _steamPuffs = []; // approximate — not a modelled steam flow, just where it exits
+    private readonly List<(Aeolipile rotor, GpuParticles3D puff)> _steamPuffs = []; // approximate — not a modelled steam flow, just where it exits
     private readonly List<RigidBody3D> _freezable = []; // every dynamic body: blocks, pendulums, levers
     // Local-space centre-of-mass offset for each body, for real potential
     // energy. Blocks are centred on their own origin (no entry needed —
@@ -80,10 +80,23 @@ public partial class MachineView : Node3D
 
     private static Vector3 V(Vec3 v) => new((float)v.X, (float)v.Y, (float)v.Z);
 
-    private StandardMaterial3D Surface(string materialId) =>
-        Shapes.Mat(Shapes.ColorFor(materialId),
-                   metallic: _materials[materialId].Category == MaterialCategory.Metal ? 0.8f : 0,
-                   roughness: _materials[materialId].Category == MaterialCategory.Metal ? 0.35f : 0.8f);
+    /// <summary>
+    /// Roughness driven by the material's real friction coefficient
+    /// (0.30 bronze to 0.60 granite across the table) rather than a fixed
+    /// per-category value — a low-friction surface reads as polished, a
+    /// high-friction one as coarse, so the difference the μ label states
+    /// is also something you can just look at. Metals additionally get
+    /// metallic reflectance, since that's a real property of metal, not
+    /// of friction.
+    /// </summary>
+    private StandardMaterial3D Surface(string materialId)
+    {
+        var mat = _materials[materialId];
+        float roughness = Mathf.Clamp(0.12f + (float)(mat.Friction - 0.30) / 0.30f * 0.83f, 0.1f, 0.95f);
+        return Shapes.Mat(Shapes.ColorFor(materialId),
+                          metallic: mat.Category == MaterialCategory.Metal ? 0.8f : 0,
+                          roughness: roughness);
+    }
 
     /// <summary>
     /// A small floating name tag above a part — always faces the camera,
@@ -156,6 +169,46 @@ public partial class MachineView : Node3D
         AddChild(footing);
     }
 
+    /// <summary>
+    /// A small particle puffer at a nozzle tip: not a modelled gas flow,
+    /// just soft white puffs that spawn, drift upward, and fade — enough
+    /// to read as "steam is venting here" at a glance, visible only while
+    /// it actually is (toggled via GpuParticles3D.Emitting in Refresh).
+    /// LocalCoords=false so spawned puffs drift in world space rather
+    /// than being dragged around by the spinning rotor they came from.
+    /// </summary>
+    private GpuParticles3D BuildSteamPuffs(Aeolipile rotor, Vector3 localPosition)
+    {
+        var gradient = new Gradient();
+        gradient.SetColor(0, new Color(1, 1, 1, 0.55f));
+        gradient.AddPoint(1f, new Color(1, 1, 1, 0f)); // fades to nothing over its lifetime
+
+        var process = new ParticleProcessMaterial
+        {
+            Direction = new Vector3(0, 1, 0),
+            Spread = 35f,
+            InitialVelocityMin = 0.15f,
+            InitialVelocityMax = 0.4f,
+            Gravity = new Vector3(0, 0.35f, 0), // steam is buoyant, so it drifts up rather than falls
+            ScaleMin = 0.6f,
+            ScaleMax = 1.5f,
+            ColorRamp = new GradientTexture1D { Gradient = gradient },
+        };
+
+        var particles = new GpuParticles3D
+        {
+            Position = localPosition,
+            Amount = 14,
+            Lifetime = 0.9,
+            Emitting = false, // Refresh() turns this on only while steam is actually flowing
+            LocalCoords = false,
+            ProcessMaterial = process,
+            DrawPass1 = new SphereMesh { Radius = 0.012f, Height = 0.024f, Material = Shapes.Mat(Colors.White, roughness: 1f) },
+        };
+        _steamPuffs.Add((rotor, particles));
+        return particles;
+    }
+
     private Vector3 PortPosition(PortRef r)
     {
         var spec = Runtime.Def.Part(r.Part)!;
@@ -220,22 +273,12 @@ public partial class MachineView : Node3D
         var node = new Node3D { Position = axle };
         AddChild(node);
         node.AddChild(Shapes.Sphere(radius, surface));
-        var steamMat = Shapes.Mat(new Color(0.95f, 0.97f, 1f), roughness: 1f, alpha: 0.55f);
         var rotor = Runtime.Rotors[part.Id];
         foreach (int s in new[] { 1, -1 })
         {
             node.AddChild(Shapes.Rod(new Vector3(0, s * radius, 0), new Vector3(0, s * arm, 0), 0.006f, surface));
             node.AddChild(Shapes.Rod(new Vector3(0, s * arm, 0), new Vector3(0, s * arm, s * 0.025f), 0.006f, surface));
-
-            // Not a modelled gas flow — just a soft puff roughly where the
-            // steam actually exits, shown only while it's actually
-            // venting. Spinning with the nozzle, it reads as a hazy ring
-            // once the rotor is going fast, which is roughly honest to
-            // what a real jet of live steam looks like from a distance.
-            var puff = Shapes.Sphere(0.022f, steamMat);
-            puff.Position = new Vector3(0, s * arm, s * 0.05f);
-            node.AddChild(puff);
-            _steamPuffs.Add((rotor, puff));
+            node.AddChild(BuildSteamPuffs(rotor, new Vector3(0, s * arm, s * 0.05f)));
         }
         _rotors.Add((rotor, node));
         AddLabel(part.Id, axle + new Vector3(0, radius + arm + 0.05f, 0));
@@ -427,6 +470,25 @@ public partial class MachineView : Node3D
             joint.SetParam(HingeJoint3D.Param.MotorTargetVelocity, -Mathf.DegToRad(initialSpin));
             joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, 500);
             _motorTimeouts.Add((joint, Runtime.Time + 0.08)); // a brief pulse, then it coasts on momentum
+
+            // A visible stand-in for the twisted sinew skein the arm is
+            // actually anchored to — without this, a torsion catapult's
+            // pivot looks like a bare hinge with no hint of what powers
+            // it, unlike the trebuchet where the counterweight itself
+            // makes the mechanism obvious at a glance. Two washers
+            // (the skein's real frames) with a wound rope-textured drum
+            // between them, crossing the arm at the pivot.
+            var rope = Surface("hemp");
+            var skein = Shapes.Cylinder(0.05f, 0.16f, rope);
+            skein.RotationDegrees = new Vector3(0, 0, 90);
+            body.AddChild(skein); // child of the arm: twists with it, as the real skein does
+            foreach (float side in new[] { -0.08f, 0.08f })
+            {
+                var washer = Shapes.Cylinder(0.065f, 0.015f, Surface("oak"));
+                washer.RotationDegrees = new Vector3(0, 0, 90);
+                washer.Position = new Vector3(side, 0, 0);
+                body.AddChild(washer);
+            }
         }
         // Parented to the beam so the label tilts with it. Local (0,…,0)
         // is the pivot — body's own origin — which stays a sensible label
@@ -514,7 +576,7 @@ public partial class MachineView : Node3D
         foreach (var (boiler, fire) in _fires)
             fire.Visible = boiler.HeatInput > 0 && !boiler.IsDry;
         foreach (var (rotor, puff) in _steamPuffs)
-            puff.Visible = rotor.SteamFlow > 1e-6;
+            puff.Emitting = rotor.SteamFlow > 1e-6;
     }
 
     public void ToggleFire()

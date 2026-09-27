@@ -45,17 +45,21 @@ public partial class Main : Node3D
         ["torsion-catapult"] = new(new Vector3(0.2f, 1.8f, 3.6f), new Vector3(0.2f, 1.0f, 0), 55),
     };
     private static readonly (double Scale, string Label)[] Speeds =
-        [(0.1, "0.1×"), (0.25, "0.25×"), (1, "1×"), (5, "5×"), (20, "20×")];
+        [(0.1, "0.1×"), (0.25, "0.25×"), (1, "1×"), (5, "5×"), (10, "10×"), (20, "20×")];
     private static readonly Dictionary<string, double> DefaultSpeeds = new()
     {
         ["aeolipile"] = 5,
-        // At 1x, the jet reaches near-steady-state within the first
-        // second and then holds almost flat for many minutes before the
-        // supply vessel runs low enough to visibly matter — measured via
-        // the live link: jet height barely moved (23.7-23.9cm) over 30s
-        // of watching. 20x compresses that multi-minute drain into a
-        // watchable tens-of-seconds window.
-        ["herons-fountain"] = 20,
+        // Because supply and receiver share the same cross-section, the
+        // litre that leaves one arrives in the other almost 1-for-1, so
+        // total air volume — and pressure, and jet height — stays nearly
+        // constant for most of the run (measured: <3% drift over 30s at
+        // 1x). That's real: a real Heron's fountain runs at roughly
+        // constant strength and then stops outright once the receiver
+        // fills, rather than fading. Confirmed via the live link that it
+        // does reach that hard stop (jet exactly 0). 10x brings the whole
+        // "runs, then suddenly stops" story — around 2 real minutes at
+        // 1x — into a watchable ~15s.
+        ["herons-fountain"] = 10,
     };
     private static readonly (int Width, int Height, string Label)[] WindowSizes =
         [(1152, 720, "Small"), (1600, 1000, "Medium"), (1920, 1200, "Large")];
