@@ -255,10 +255,10 @@ pre.err { border-left: 3px solid var(--bad); }
 
   <main>
     <header class="doc">
-      <div class="eyebrow">Design document · draft 2</div>
+      <div class="eyebrow">Design document · draft 3</div>
       <h1>Heroic Inventions</h1>
       <p class="lede">A workshop game where players build historical machines one part at a time from real materials, then fire the boiler, open the valve or release the counterweight to see whether the machine works. Machines are written in Racket and run in Godot.</p>
-      <div class="meta"><span>Updated 27 Sep 2026</span><span>Design and control: Racket 9</span><span>Runtime: Godot 4.6 .NET · C#</span><span>Status: C# scaffold, 8 sim tests passing</span></div>
+      <div class="meta"><span>Updated 27 Sep 2026</span><span>Design and control: Racket 9</span><span>Runtime: Godot 4.6 .NET · C#</span><span>Status: milestone 1 done, Racket machines run in Godot</span><span><a href="https://github.com/marctjones/heroicinventions">github.com/marctjones/heroicinventions</a></span></div>
     </header>
 
     <h2 id="vision"><span class="num">I</span>Vision</h2>
@@ -322,101 +322,121 @@ flowchart LR
 
     <h2 id="racket"><span class="num">III</span>Racket layer</h2>
 
-    <h3>A language for machines</h3>
-    <p>A machine file is a full Racket module. Parts, ports and connections are declared, and all of Racket is available when a design needs computation.</p>
-    <div class="file">machines/aeolipile.rkt</div>
+    <h3>A language for machines <span class="chip mech">built · M1</span></h3>
+    <p>A machine file is a full Racket module. Parts and links are declared with clause forms, and every parameter value is an ordinary Racket expression, so a design can use variables, helper functions and unit conversions.</p>
+    <div class="file">racket/machines/aeolipile.rkt</div>
 <pre><code>#lang heroic
+;; Hero of Alexandria's aeolipile: a bronze sphere on an axle over a
+;; boiler, spun by the reaction of two bent steam nozzles.
+
+(define sphere-radius (cm 6))
 
 (define-machine aeolipile
   #:source "Hero of Alexandria, Pneumatica"
-  (part boiler (cylinder #:radius 0.12 #:height 0.16) #:material bronze
-    (port steam-l pipe) (port steam-r pipe))
-  (part post-l (tube #:radius 0.008 #:length 0.21) #:material bronze
-    (port in pipe) (port out bearing))
-  (part post-r (tube #:radius 0.008 #:length 0.21) #:material bronze
-    (port in pipe) (port out bearing))
-  (part rotor (sphere #:radius 0.06) #:material bronze
-    (port axle-l axle) (port axle-r axle)
-    (nozzles 2 #:bore 0.002 #:arm 0.08))
-  (connect boiler.steam-l post-l.in)
-  (connect boiler.steam-r post-r.in)
-  (connect post-l.out rotor.axle-l)
-  (connect post-r.out rotor.axle-r)
-  (fire boiler #:watts 3000 #:water 0.3))</code></pre>
-    <p>Repeated structure is written as ordinary code. A Vitruvian <span class="src">polyspastos</span> needs a pulley block with any number of sheaves, so it is a function:</p>
-<pre><code>(define (pulley-block name sheaves #:material [wood oak])
-  (for/list ([i (in-range sheaves)])
-    (part (format-symbol "~a-sheave-~a" name i)
-          (pulley #:radius 0.12 #:groove 0.02)
-          #:material wood
-          (port axle bearing) (port rope rope-groove))))</code></pre>
+  (boiler kettle #:at (0 (cm 8) 0) #:radius (cm 12) #:height (cm 16)
+          #:water (kg 0.3) #:fire (W 3000) #:material bronze)
+  (rotor ball #:at (0 (cm 45) 0) #:radius sphere-radius #:wall (mm 1)
+         #:material bronze #:nozzles 2 #:bore (mm 2)
+         ;; Nozzle tips sit 2 cm beyond the sphere's surface.
+         #:arm (+ sphere-radius (cm 2)))
+  (connect kettle.steam ball.steam-in))</code></pre>
+    <p>Helper functions position parts. This file drops four cubes in a row at staggered heights:</p>
+    <div class="file">racket/machines/material-samples.rkt</div>
+<pre><code>(define size (cm 15))
+(define (slot i) (+ -0.35 (* i 0.25)))  ; x position of the i-th cube
+(define (drop i) (+ 1.2 (* i 0.2)))     ; staggered drop heights
 
-    <h3>Checking at compile time</h3>
-    <p><code>define-machine</code> is a macro, so its rules run while the file compiles, before anything is simulated. It checks that every port referenced exists, that connected port types are compatible, that materials are in the table, and that no part is left floating. Errors point to the exact line in DrRacket or the editor:</p>
-<pre class="err"><code>aeolipile.rkt:18:2: connect: cannot join an axle to a pipe
-  from: rotor.axle-l  (axle)
-  to:   boiler.steam-l (pipe)
-  in: (connect rotor.axle-l boiler.steam-l)</code></pre>
-    <p>Racket's <code>syntax-parse</code> library provides this kind of error reporting with little extra work, along with the arrows DrRacket draws from each name to its definition.</p>
+(define-machine material-samples
+  (block cedar-cube   #:at ((slot 0) (drop 0) 0.3) #:size size #:material cedar)
+  (block oak-cube     #:at ((slot 1) (drop 1) 0.3) #:size size #:material oak)
+  (block granite-cube #:at ((slot 2) (drop 2) 0.3) #:size size #:material granite)
+  (block bronze-cube  #:at ((slot 3) (drop 3) 0.3) #:size size #:material bronze))</code></pre>
+    <p>In milestone 1, each part is written as its own clause, so its name and ports are known while the file compiles. Generating parts in loops, such as a pulley block with any number of sheaves, comes with the crane milestone. Those parts will be checked when the module runs, still with source locations.</p>
 
-    <h3>The .machine format</h3>
-    <p>Compiling a machine produces a <code>.machine</code> file: the fully expanded design as plain S-expressions, with every loop run and every function applied. It is data only, so the C# side reads it with a small parser and needs no Racket at runtime. Each entry keeps its source location, so a failure at runtime can point back to the line that caused it.</p>
-    <div class="file">build/aeolipile.machine</div>
-<pre><code>(machine aeolipile
+    <h3>Clause reference</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Clause</th><th>Options</th><th>Ports</th><th>Becomes</th></tr></thead>
+        <tbody>
+          <tr><td class="name">tank</td><td><code>#:at</code> (base centre) <code>#:area #:height</code>, optional <code>#:water #:material</code>, then <code>(port name #:height h)</code> …</td><td>declared, water</td><td>Tank in the fluid network</td></tr>
+          <tr><td class="name">boiler</td><td><code>#:at</code> (base centre) <code>#:radius #:height #:water</code>, optional <code>#:fire #:material</code></td><td><code>steam</code></td><td>Boiler (saturation pressure, latent heat)</td></tr>
+          <tr><td class="name">rotor</td><td><code>#:at</code> (axle centre) <code>#:radius #:material #:bore #:arm</code>, optional <code>#:wall #:nozzles</code></td><td><code>steam-in</code></td><td>Aeolipile rotor. Inertia comes from the material density and wall thickness.</td></tr>
+          <tr><td class="name">block</td><td><code>#:at</code> (centre) <code>#:size #:material</code></td><td>none</td><td>Jolt rigid body. Mass and friction come from the material.</td></tr>
+          <tr><td class="name">pipe</td><td><code>id from.port to.port #:conductance</code>, optional <code>#:jet</code></td><td>water to water</td><td>Pipe. With <code>#:jet</code>, the outlet shows its fountain jet.</td></tr>
+          <tr><td class="name">connect</td><td><code>a.port b.port</code></td><td>steam to steam</td><td>Feeds a boiler's steam to a rotor</td></tr>
+          <tr><td class="name">sealed-air</td><td><code>(tank …)</code>, optional <code>#:tube</code> volume</td><td>—</td><td>Air pocket following Boyle's law</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Units are plain functions returning SI values: <code>m cm mm m2 cm2 L kg g W kW</code>.</p>
+
+    <h3>Checking at compile time <span class="chip mech">built · M1</span></h3>
+    <p><code>define-machine</code> is a macro built with <code>syntax-parse</code>, so its rules run while the file compiles, before anything is simulated. It checks:</p>
+    <ul>
+      <li>part names are unique;</li>
+      <li>every material is in the material table;</li>
+      <li>every <code>part.port</code> reference exists;</li>
+      <li>pipes join water ports and steam connections join a boiler to a rotor;</li>
+      <li>every rotor has steam;</li>
+      <li>sealed-air groups contain only tanks.</li>
+    </ul>
+    <p>Required and duplicated options are reported too. This is the real output of <code>racket</code> on a machine that connects a boiler to a water tank:</p>
+<pre class="err"><code>broken.rkt:6:24: define-machine: cannot join kettle.steam (steam port) to vat.drain (water port)
+  at: vat.drain
+  in: (define-machine broken-aeolipile ...)</code></pre>
+    <p>A reference to a port that doesn't exist lists the ports that do: <code>kettle is a boiler with no port named spout; its ports are: steam</code>. DrRacket highlights the offending reference.</p>
+
+    <h3>The .machine format <span class="chip mech">built · M1</span></h3>
+    <p><code>racket racket/build.rkt</code> runs each machine module and writes a <code>.machine</code> file to <code>game/machines/</code>. The file holds plain S-expressions with every expression already evaluated and every number a finite decimal. The C# side reads it with a small parser and needs no Racket. Each clause keeps its source location. The generated files are committed, like compiled assets, so the game runs from a fresh clone.</p>
+    <div class="file">game/machines/aeolipile.machine</div>
+<pre><code>;; Generated by #lang heroic from racket/machines/aeolipile.rkt. Do not edit: change the Racket source and rebuild.
+(machine aeolipile
   (source "Hero of Alexandria, Pneumatica")
-  (part boiler (cylinder 0.12 0.16) bronze (srcloc 4 2)
-    (port steam-l pipe) (port steam-r pipe))
-  ...
-  (connect (boiler steam-l) (post-l in))
-  (fire boiler 3000.0 0.3))</code></pre>
-    <p>The in-game editor saves the same format, and Racket loads it back with its built-in <code>read</code>. A player's design can therefore be opened in DrRacket, turned into code, and extended there. Code, save files and network messages all share one format.</p>
+  (part kettle boiler (material bronze) (at 0.0 0.08 0.0) (props (radius 0.12) (height 0.16) (water 0.3) (fire 3000.0)) (ports (steam steam 0.16)) (srcloc "racket/machines/aeolipile.rkt" 9 2))
+  (part ball rotor (material bronze) (at 0.0 0.45 0.0) (props (radius 0.06) (wall 0.001) (bore 0.002) (arm 0.08) (nozzles 2.0)) (ports (steam-in steam 0.0)) (srcloc "racket/machines/aeolipile.rkt" 11 2))
+  (connect (kettle steam) (ball steam-in) (srcloc "racket/machines/aeolipile.rkt" 15 2)))</code></pre>
+    <p>The C# runtime checks every reference again, because the in-game editor and hand edits will also produce these files. Its errors quote the Racket location, for example <code>racket/machines/broken.rkt:4:2: nowhere is not a tank in this machine</code>. Racket reads the same files back with its built-in <code>read</code>, so a machine saved by the editor can be opened in DrRacket and turned into code.</p>
 
-    <h3>Geometry generated from formulas</h3>
-    <p>Many ancient machine parts have a shape that follows from a few numbers. Racket modules generate them and write glTF files that Godot imports directly:</p>
+    <h3>Geometry generated from formulas <span class="chip aero">planned · M4</span></h3>
+    <p>Many ancient machine parts have a shape that follows from a few numbers. Racket modules will generate them and write glTF files that Godot imports directly:</p>
     <ul>
       <li><strong>Gears:</strong> involute tooth profile from tooth count and module (tooth size). Examples are the odometer train and the Antikythera mechanism.</li>
       <li><strong>Archimedes' screws:</strong> helix from pitch, number of turns and radius.</li>
       <li><strong>Pulleys, drums and treadwheels:</strong> radius, groove and spoke count.</li>
       <li><strong>Torsion catapults:</strong> every dimension scaled from the bolt length, following Vitruvius's proportion tables.</li>
     </ul>
-    <p>The build step generates a <strong>catalogue</strong> of standard sizes, such as gears from 8 to 120 teeth in three modules. The in-game editor offers parts from that catalogue. A shape outside it is generated on request over the live link during a design session and then added to the catalogue.</p>
+    <p>The build step will generate a <strong>catalogue</strong> of standard sizes. The in-game editor offers parts from that catalogue, and a shape outside it is generated on request over the live link.</p>
 
-    <h3>Live link</h3>
-    <p>A Racket REPL connects to the running game over a local TCP socket. Messages in both directions are S-expressions, one per line.</p>
+    <h3>Live link <span class="chip aero">planned · M2</span></h3>
+    <p>A Racket REPL will connect to the running game over a local TCP socket. Messages in both directions are S-expressions, one per line.</p>
 <pre><code>;; REPL → game
-(load-machine "build/aeolipile.machine")
+(load-machine "game/machines/aeolipile.machine")
 (run)
-(set! (boiler heat) 5000)
-(subscribe (rotor rpm) (boiler pressure) #:hz 10)
-(redefine-part rotor (sphere #:radius 0.07))   ; keeps the running state
+(set! (kettle fire) 5000)
+(subscribe (ball rpm) (kettle pressure) #:hz 10)
+(redefine-part ball (rotor #:radius (cm 7) …))   ; keeps the running state
 
 ;; game → REPL
-(telemetry 41.2 (rotor rpm 312.0) (boiler pressure 18400.0))
-(event 55.8 break post-l "tension 91 MPa exceeds bronze" (srcloc 7 2))</code></pre>
-    <p><code>redefine-part</code> swaps in a new part but keeps the simulation state of every part whose name is unchanged: the water temperature, the rotor's spin and the fountain's water levels. This is the Lisp habit of redefining code inside a running program, applied to machines. A <code>break</code> event carries a source location, so the REPL can jump straight to the part that failed.</p>
+(telemetry 41.2 (ball rpm 312.0) (kettle pressure 18400.0))
+(event 55.8 break post-l "tension 91 MPa exceeds bronze" (srcloc "racket/machines/aeolipile.rkt" 7 2))</code></pre>
+    <p><code>redefine-part</code> swaps in a new part but keeps the simulation state of every part whose name is unchanged. A <code>break</code> event carries a source location, so the REPL can jump to the part that failed. Until the live link exists, rebuild with <code>racket racket/build.rkt</code> and press <strong>R</strong> in the game to reload.</p>
 
-    <h3>Machines as tests</h3>
-    <p>Behaviour claims are written as <code>rackunit</code> tests that run the real C# simulation through the headless host:</p>
+    <h3>Machines as tests <span class="chip aero">planned · M3</span></h3>
+    <p>Behaviour claims will be written as <code>rackunit</code> tests that run the real C# simulation through a headless host:</p>
 <pre><code>(test-case "Heron's fountain lifts water above its basin"
   (define run (simulate herons-fountain #:seconds 60))
-  (check-true (> (max-of run '(nozzle jet-height)) 0.0))
-  (check-true (< (final run '(supply volume)) (initial run '(supply volume)))))
-
-(test-case "Vitruvian crane lifts a 2-tonne limestone block"
-  (define run (simulate (crane #:sheaves 5 #:walkers 2) #:seconds 30
-                        #:load (block limestone 0.8)))
-  (check-true (> (final run '(load height)) 1.0)))</code></pre>
-    <p>Each historical blueprint gets a test like this, so a change to a solver that breaks any machine is caught automatically.</p>
+  (check-true (> (max-of run '(nozzle jet-height)) 0.0)))</code></pre>
+    <p>Today the same checks run in C#: the xUnit suite loads the generated <code>herons-fountain.machine</code> and <code>aeolipile.machine</code> files and simulates them.</p>
 
     <h2 id="godot"><span class="num">IV</span>Godot layer</h2>
     <p>Godot handles everything that runs every frame and must keep a steady frame rate. It works entirely from <code>.machine</code> data and generated meshes, so it has no dependency on Racket.</p>
     <ul>
-      <li><strong>Machine reader:</strong> a short S-expression parser in C# that builds the <code>Assembly</code> graph, the same graph the editor builds.</li>
-      <li><strong>Instantiation:</strong> each part becomes a Jolt body with mass from its material and volume. Each connection becomes a joint (hinge, gear constraint, rope distance constraint) or an edge in a fluid, thermal or electrical network.</li>
+      <li><strong>Machine reader</strong> (built): a short S-expression parser in C# that produces a <code>MachineDef</code>.</li>
+      <li><strong>Instantiation</strong> (built for tanks, pipes, sealed air, boilers, rotors and blocks): <code>MachineRuntime</code> builds the solvers, and <code>MachineView</code> builds the scene for any machine without machine-specific code. Joints (hinge, gear, rope) come with the crane milestone.</li>
       <li><strong>Solvers:</strong> <code>HeroicInventions.Sim</code>, the engine-independent C# library from the scaffold, stepped on every physics tick at 120 Hz.</li>
-      <li><strong>Editor:</strong> drag-and-drop building with port snapping. It saves <code>.machine</code> files.</li>
-      <li><strong>Live-link server:</strong> active only in development builds. It turns incoming S-expression messages into actions on the scene and sends telemetry back.</li>
-      <li><strong>Headless host:</strong> the same solvers run without rendering, for Racket's tests and for continuous integration.</li>
+      <li><strong>Editor</strong> (planned): drag-and-drop building with port snapping. It saves <code>.machine</code> files.</li>
+      <li><strong>Live-link server</strong> (planned): active only in development builds. It turns incoming S-expression messages into actions on the scene and sends telemetry back.</li>
+      <li><strong>Headless host</strong> (planned): the same solvers run without rendering, for Racket's tests and for continuous integration.</li>
     </ul>
 
     <h2 id="sim"><span class="num">V</span>Simulation</h2>
@@ -434,9 +454,9 @@ flowchart LR
     </ul>
 
     <h2 id="materials"><span class="num">VI</span>Materials</h2>
-    <p>The material table is Racket data (<code>materials.rktd</code>) and the source of truth. The build step exports it for the C# side. Values are approximate handbook figures. Stone is strong in compression and weak in tension, which is why Roman builders used arches. Wood is ten to twenty times weaker across the grain than along it.</p>
-<pre><code>(material oak #:category wood #:density 720
-          #:tension 90 #:across-grain 5 #:compression 50 #:friction 0.45)</code></pre>
+    <p>The material table is Racket data (<code>racket/heroic/materials.rktd</code>) and the source of truth. <code>define-machine</code> reads it while compiling to reject unknown materials, and <code>racket/build.rkt</code> exports it as <code>materials.json</code> for the C# side. Values are approximate handbook figures. Stone is strong in compression and weak in tension, which is why Roman builders used arches. Wood is ten to twenty times weaker across the grain than along it.</p>
+<pre><code>(oak (name "Oak") (category wood) (density 720) (youngs-modulus 11.0)
+     (tension 90) (across-grain 5) (compression 50) (friction 0.45))</code></pre>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Material</th><th class="num">Density kg/m³</th><th class="num">Tension MPa</th><th class="num">Across grain MPa</th><th class="num">Compression MPa</th><th class="num">Friction μ</th></tr></thead>
@@ -571,40 +591,43 @@ flowchart LR
     </div>
 
     <h2 id="repo"><span class="num">X</span>Repository</h2>
+    <p><a href="https://github.com/marctjones/heroicinventions">github.com/marctjones/heroicinventions</a> (public).</p>
 <pre><code>heroicinventions/
-├── docs/design.html                 this document
-├── racket/heroic/                   Racket package (planned)
-│   ├── lang/reader.rkt              makes #lang heroic work
-│   ├── machine.rkt                  define-machine, part, connect (macros + checks)
-│   ├── materials.rktd               material table, the source of truth
-│   ├── geometry/                    gear, screw, pulley generators; glTF writer
-│   ├── emit.rkt                     writes .machine files
-│   ├── live.rkt                     REPL client for the live link
-│   ├── machines/                    historical blueprints (aeolipile.rkt, …)
-│   └── tests/                       rackunit machine tests
-├── src/HeroicInventions.Sim/        C# solvers (exists)
-│   └── Machine/                     .machine reader (planned)
-├── src/HeroicInventions.SimHost/    headless runner for Racket tests (planned)
-├── tests/HeroicInventions.Sim.Tests/   C# unit tests (exists, 8 passing)
-├── game/                            Godot 4.6 .NET project (exists)
-│   ├── scripts/LiveLink/            TCP S-expression server (planned)
-│   └── assets/generated/            glTF catalogue from Racket (planned)
-└── build/                           .machine outputs (ignored by git)</code></pre>
-    <p>The existing C# scaffold stays as the runtime. Its demo machines, currently built in C#, move to <code>#lang heroic</code> blueprints once the reader exists, and its <code>materials.json</code> becomes a build output of <code>materials.rktd</code>.</p>
+├── docs/design.html                     this document
+├── racket/
+│   ├── heroic/                          the #lang heroic package
+│   │   ├── lang/reader.rkt              makes #lang heroic work
+│   │   ├── main.rkt                     the module language
+│   │   ├── machine.rkt                  define-machine and its compile-time checks
+│   │   ├── emit.rkt                     writes .machine files
+│   │   ├── units.rkt                    cm, mm, L, kg, W …
+│   │   ├── materials.rktd               material table, the source of truth
+│   │   └── tests/                       rackunit tests (10)
+│   ├── machines/                        blueprints: aeolipile, herons-fountain, material-samples
+│   └── build.rkt                        builds .machine files and materials.json
+├── src/HeroicInventions.Sim/            C# solvers, no Godot references
+│   ├── Machines/                        S-expression reader, MachineDef, MachineRuntime
+│   ├── Fluids/  Thermo/  Mechanics/     tank/pipe/air, boiler, rotor
+│   └── Materials/materials.json         generated from materials.rktd
+├── tests/HeroicInventions.Sim.Tests/    xUnit tests (16), run the generated blueprints
+└── game/                                Godot 4.6 .NET project
+    ├── machines/*.machine               generated, committed
+    └── scripts/MachineView.cs           builds any machine's scene from its definition</code></pre>
+    <p>The Godot project sits in its own <code>game/</code> folder because the Godot C# build compiles every <code>.cs</code> file under its project folder and the editor imports every file there. Racket sources stay outside it for the same reason. Only their generated output goes in.</p>
 
     <h2 id="roadmap"><span class="num">XI</span>Roadmap</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Milestone</th><th>Contents</th><th>Proves</th></tr></thead>
+        <thead><tr><th>Milestone</th><th>Contents</th><th>Status</th></tr></thead>
         <tbody>
-          <tr><td class="name">0 · Scaffold</td><td>C# solvers, aeolipile and fountain demos, material blocks in Jolt</td><td>Network and coupling approach (done)</td></tr>
-          <tr><td class="name">1 · #lang heroic</td><td><code>define-machine</code> with compile-time checks, <code>.machine</code> output, C# reader, aeolipile and fountain rewritten as blueprints</td><td>Racket and Godot joined by a data format</td></tr>
-          <tr><td class="name">2 · Live link</td><td>TCP server in Godot, REPL client, run and pause commands, parameter changes, telemetry, <code>redefine-part</code></td><td>Changing machines while they run</td></tr>
-          <tr><td class="name">3 · Machine tests</td><td>Headless host, <code>simulate</code> in Racket, a behaviour test for each blueprint</td><td>Machines tested like software</td></tr>
-          <tr><td class="name">4 · Generated geometry</td><td>Involute gears, screws, pulleys, glTF export, part catalogue</td><td>Shapes computed from formulas</td></tr>
-          <tr><td class="name">5 · Build mode</td><td>In-game editor with port snapping and a material picker. It saves <code>.machine</code> files.</td><td>Part-by-part design for players</td></tr>
-          <tr><td class="name">6 · Crane, gears, piston engine</td><td>Rope and pulley constraints, gear meshes, cylinder coupling, stress breakage</td><td>The core Vitruvian and Hero machines</td></tr>
-          <tr><td class="name">7 · Leonardo &amp; Franklin</td><td>Gear-direction checks, an electrical network reusing the fluid solver, convection</td><td>Testing designs that were never built</td></tr>
+          <tr><td class="name">0 · Scaffold</td><td>C# solvers, Godot project, material blocks in Jolt</td><td><span class="verdict yes">done</span></td></tr>
+          <tr><td class="name">1 · #lang heroic</td><td><code>define-machine</code> with compile-time checks, <code>.machine</code> output, C# reader and runtime, generic <code>MachineView</code>, three blueprints, materials exported from Racket</td><td><span class="verdict yes">done</span></td></tr>
+          <tr><td class="name">2 · Live link</td><td>TCP server in Godot, REPL client, run and pause, parameter changes, telemetry, <code>redefine-part</code></td><td><span class="verdict part">next</span></td></tr>
+          <tr><td class="name">3 · Machine tests</td><td>Headless host, <code>simulate</code> in Racket, a behaviour test for each blueprint</td><td>—</td></tr>
+          <tr><td class="name">4 · Generated geometry</td><td>Involute gears, screws, pulleys, glTF export, part catalogue</td><td>—</td></tr>
+          <tr><td class="name">5 · Build mode</td><td>In-game editor with port snapping and a material picker. It saves <code>.machine</code> files.</td><td>—</td></tr>
+          <tr><td class="name">6 · Crane, gears, piston engine</td><td>Rope and pulley constraints, gear meshes, cylinder coupling, stress breakage, generated parts in loops</td><td>—</td></tr>
+          <tr><td class="name">7 · Leonardo &amp; Franklin</td><td>Gear-direction checks, an electrical network reusing the fluid solver, convection</td><td>—</td></tr>
         </tbody>
       </table>
     </div>
@@ -619,6 +642,6 @@ flowchart LR
       <li>Godot C# web export status: <a href="https://github.com/godotengine/godot/issues/70796">godotengine/godot#70796</a>, <a href="https://github.com/godotengine/godot-proposals/discussions/13076">godot-proposals discussion #13076</a>.</li>
     </ul>
 
-    <footer>Heroic Inventions · design document · draft 2 · September 2026</footer>
+    <footer>Heroic Inventions · design document · draft 3 · September 2026</footer>
   </main>
 </div>

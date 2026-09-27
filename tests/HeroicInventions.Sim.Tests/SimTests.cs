@@ -1,6 +1,5 @@
 using HeroicInventions.Sim;
 using HeroicInventions.Sim.Fluids;
-using HeroicInventions.Sim.Machines;
 using HeroicInventions.Sim.Materials;
 using HeroicInventions.Sim.Mechanics;
 using HeroicInventions.Sim.Parts;
@@ -50,25 +49,6 @@ public class FluidTests
         Assert.Equal(before, net.TotalWater, precision: 9);
     }
 
-    [Fact]
-    public void HeronsFountainLiftsWaterAboveTheBasin()
-    {
-        var f = new HeronsFountain();
-        double before = f.Network.TotalWater;
-        double supplyStart = f.Supply.WaterVolume;
-
-        double maxJet = 0;
-        for (int i = 0; i < 1200; i++)
-        {
-            f.Step(0.05);
-            if (f.Nozzle.Flow > 0) maxJet = Math.Max(maxJet, f.Nozzle.JetHeight);
-        }
-
-        Assert.True(f.Air.GaugePressure > 0, "air should be compressed");
-        Assert.True(f.Supply.WaterVolume < supplyStart, "supply chamber should empty through the nozzle");
-        Assert.True(maxJet > 0, "jet should rise above the nozzle");
-        Assert.Equal(before, f.Network.TotalWater, precision: 9);
-    }
 }
 
 public class SteamTests

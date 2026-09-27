@@ -18,4 +18,9 @@
     <ProjectReference Include="../../src/HeroicInventions.Sim/HeroicInventions.Sim.csproj" />
   </ItemGroup>
 
+  <!-- The generated blueprints, so tests run the same files the game loads. -->
+  <ItemGroup>
+    <None Include="../../game/machines/*.machine" LinkBase="machines" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

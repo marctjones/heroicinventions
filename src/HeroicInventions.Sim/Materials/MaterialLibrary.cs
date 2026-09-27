@@ -43,6 +43,8 @@ public sealed class MaterialLibrary
 
     public MaterialDef this[string id] => _byId[id];
 
+    public bool TryGet(string id, out MaterialDef material) => _byId.TryGetValue(id, out material!);
+
     /// <summary>Loads the built-in material table embedded in this assembly.</summary>
     public static MaterialLibrary LoadDefault()
     {

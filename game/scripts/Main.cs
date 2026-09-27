@@ -1,4 +1,5 @@
 using Godot;
+using HeroicInventions.Sim.Machines;
 using HeroicInventions.Sim.Materials;
 
 namespace HeroicInventions;
@@ -6,56 +7,63 @@ namespace HeroicInventions;
 public enum Mode { Build, Run }
 
 /// <summary>
-/// Demo workshop: an aeolipile, Heron's fountain, and material blocks.
-/// Build mode freezes everything (the part editor will live here);
-/// Run mode steps the sim core and lets Jolt move the rigid bodies.
+/// The workshop. Loads every machine in res://machines (written in
+/// #lang heroic and compiled by racket/build.rkt) and lays them out in a row.
+/// Build mode freezes everything; Run mode steps each machine's solvers
+/// and lets Jolt move the rigid bodies.
 ///
-/// Keys: Space = Build/Run, F = fire on/off, T = time 1×/10×, R = reset.
+/// Keys: Space = Build/Run, F = fires on/off, T = time 1×/10×,
+/// R = reload the machine files from disk.
 /// </summary>
 public partial class Main : Node3D
 {
+    private const string MachinesDir = "res://machines";
+    private const float Spacing = 1.2f;
+
     private Mode _mode = Mode.Build;
     private double _timeScale = 1;
 
-    private AeolipileView _aeolipile = null!;
-    private HeronsFountainView _fountain = null!;
-    private readonly List<MaterialBlock> _blocks = [];
+    private readonly List<MachineView> _machines = [];
+    private readonly List<string> _errors = [];
     private Label _hud = null!;
 
     public override void _Ready()
     {
         BuildEnvironment();
-
-        _aeolipile = new AeolipileView { Position = new Vector3(-0.6f, 0, 0) };
-        AddChild(_aeolipile);
-
-        _fountain = new HeronsFountainView { Position = new Vector3(0.6f, 0, 0) };
-        AddChild(_fountain);
-
-        var materials = MaterialLibrary.LoadDefault();
-        var samples = new (string id, Color color)[]
-        {
-            ("cedar", new Color(0.76f, 0.52f, 0.36f)),
-            ("oak", new Color(0.55f, 0.38f, 0.22f)),
-            ("granite", Shapes.Stone),
-            ("bronze", Shapes.Bronze),
-        };
-        for (int i = 0; i < samples.Length; i++)
-        {
-            var block = new MaterialBlock(materials[samples[i].id], 0.15f, samples[i].color)
-            {
-                Position = new Vector3(-1.6f + i * 0.25f, 1.2f + i * 0.2f, 0.6f),
-                Freeze = true,
-            };
-            AddChild(block);
-            _blocks.Add(block);
-        }
+        LoadMachines();
 
         var layer = new CanvasLayer();
         AddChild(layer);
         _hud = new Label { Position = new Vector2(16, 16) };
         _hud.AddThemeFontSizeOverride("font_size", 15);
         layer.AddChild(_hud);
+    }
+
+    private void LoadMachines()
+    {
+        var materials = MaterialLibrary.LoadDefault();
+        var files = DirAccess.GetFilesAt(MachinesDir).Where(f => f.EndsWith(".machine")).Order().ToList();
+
+        for (int i = 0; i < files.Count; i++)
+        {
+            string path = $"{MachinesDir}/{files[i]}";
+            try
+            {
+                var def = MachineDef.Parse(Godot.FileAccess.GetFileAsString(path));
+                var view = new MachineView(new MachineRuntime(def, materials), materials)
+                {
+                    Position = new Vector3((i - (files.Count - 1) / 2f) * Spacing, 0, 0),
+                };
+                AddChild(view);
+                _machines.Add(view);
+            }
+            catch (Exception e) when (e is MachineFormatException or FormatException)
+            {
+                // A broken machine file shouldn't stop the others from loading.
+                _errors.Add($"{files[i]}: {e.Message}");
+                GD.PushError($"{path}: {e.Message}");
+            }
+        }
     }
 
     private void BuildEnvironment()
@@ -70,14 +78,12 @@ public partial class Main : Node3D
         AddChild(sun);
         sun.RotationDegrees = new Vector3(-50, 30, 0);
 
-        var floor = new StaticBody3D();
+        var floor = new StaticBody3D { Position = new Vector3(0, -0.05f, 0) };
         floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(8, 0.1f, 8) } });
-        var slab = Shapes.Box(new Vector3(8, 0.1f, 8), Shapes.Mat(Shapes.Stone));
-        floor.AddChild(slab);
-        floor.Position = new Vector3(0, -0.05f, 0);
+        floor.AddChild(Shapes.Box(new Vector3(8, 0.1f, 8), Shapes.Mat(Shapes.Stone)));
         AddChild(floor);
 
-        var camera = new Camera3D { Position = new Vector3(0, 1.3f, 3.0f) };
+        var camera = new Camera3D { Position = new Vector3(0, 1.3f, 3.2f) };
         AddChild(camera);
         camera.LookAt(new Vector3(0, 0.6f, 0));
     }
@@ -89,10 +95,10 @@ public partial class Main : Node3D
         {
             case Key.Space:
                 _mode = _mode == Mode.Build ? Mode.Run : Mode.Build;
-                foreach (var b in _blocks) b.Freeze = _mode == Mode.Build;
+                foreach (var m in _machines) m.SetFrozen(_mode == Mode.Build);
                 break;
             case Key.F:
-                _aeolipile.ToggleFire();
+                foreach (var m in _machines) m.ToggleFire();
                 break;
             case Key.T:
                 _timeScale = _timeScale == 1 ? 10 : 1;
@@ -107,16 +113,15 @@ public partial class Main : Node3D
     {
         if (_mode == Mode.Run)
         {
-            // The sim core runs faster than real time when asked; Jolt stays at 1×.
+            // The machine solvers can run faster than real time; Jolt stays at 1×.
             double dt = delta * _timeScale;
-            _aeolipile.Simulate(dt);
-            _fountain.Simulate(dt);
+            foreach (var m in _machines) m.Simulate(dt);
         }
 
         _hud.Text =
             $"{(_mode == Mode.Build ? "BUILD (paused)" : "RUN")}   time ×{_timeScale}\n" +
-            $"{_aeolipile.Status}\n{_fountain.Status}\n" +
-            string.Join("   ", _blocks.Select(b => $"{b.Material.Name} {b.Mass:F1} kg")) + "\n" +
-            "Space build/run · F fire · T time ×10 · R reset";
+            string.Join("\n", _machines.Select(m => m.Status)) + "\n" +
+            string.Join("", _errors.Select(e => $"⚠ {e}\n")) +
+            "Space build/run · F fire · T time ×10 · R reload machines";
     }
 }
