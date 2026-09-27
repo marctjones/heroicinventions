@@ -76,8 +76,8 @@ public sealed class MachineRuntime
                 case "boiler":
                     _boilers[part.Id] = new Boiler(part.Number("water"), heatInputW: part.Number("fire", 0));
                     break;
-                case "rotor" or "block":
-                    break; // rotors need their steam connection first; blocks are engine-side
+                case "rotor" or "block" or "pendulum" or "lever" or "ramp":
+                    break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
             }

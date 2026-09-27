@@ -69,9 +69,11 @@ raco test racket/heroic/tests
 dotnet test tests/HeroicInventions.Sim.Tests
 ```
 
-Open `game/project.godot` in the Godot .NET editor and press Play. Every `.machine` file in `game/machines/` appears in a row.
+Open `game/project.godot` in the Godot .NET editor and press Play. You get a menu: pick a machine from the six currently defined (`aeolipile`, `herons-fountain`, `material-samples`, `pendulum-demo`, `lever-demo`, `inclined-plane-demo`), and it runs alone with its own close-up camera.
 
-Controls: **Space** switches between build and run, **F** turns fires on and off, **T** runs time at 1× or 10×, **R** reloads the machine files. After a rebuild, pressing R picks up your changes without restarting the game.
+Controls: click a machine to run it; **Restart** reloads it fresh from its `.machine` file; **Run/Pause** and the speed row (0.1×–20×) control simulated time directly — the aeolipile needs real time to boil (~30s at 1×, hence its 5× default), while the pendulum/lever/ramp demos are gravity-driven and easiest to watch at 1×. Keyboard shortcuts mirror the buttons: **Space** pause/run, **F** fire on/off, **R** restart, **Esc** back to the menu, **1**–**9** pick a machine by its menu position.
+
+Set `HEROIC_DEBUG_PHYSICS=1` to print each dynamic body's rotation and height to the console twice a second — useful for checking a new machine's physics without needing to look at the screen.
 
 ## Demo
 

@@ -1,8 +1,10 @@
 #lang racket/base
 ;; define-machine: the heart of #lang heroic.
 ;;
-;; A machine is a list of part clauses (tank, boiler, rotor, block) and
-;; link clauses (pipe, connect, sealed-air). The macro checks the whole
+;; A machine is a list of part clauses (tank, boiler, rotor, block,
+;; pendulum, lever, ramp) and link clauses (pipe, connect, sealed-air).
+;; pendulum/lever/ramp need no solver of their own — they're pure Jolt
+;; rigid-body physics, built in MachineView. The macro checks the whole
 ;; machine while the file compiles: part names, materials, port names,
 ;; port kinds, and that every rotor has steam. Errors point at the exact
 ;; clause that is wrong. Parameter values are ordinary Racket expressions,
@@ -11,7 +13,7 @@
 (require (for-syntax racket/base racket/list racket/string syntax/parse "materials.rkt"))
 
 (provide define-machine
-         tank boiler rotor block pipe connect sealed-air port
+         tank boiler rotor block pendulum lever ramp pipe connect sealed-air port
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
          take-registered-machines)
@@ -51,7 +53,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pipe connect sealed-air port)
+(define-clause-keywords tank boiler rotor block pendulum lever ramp pipe connect sealed-air port)
 
 ;; ---------------------------------------------------------------------------
 ;; Compile-time checking
@@ -90,8 +92,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pipe connect sealed-air)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp pipe connect sealed-air)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -144,6 +146,50 @@
       #:attr info (pinfo #'id 'block (attribute mat) '())
       #:with expr #`(part 'id 'block 'mat (list at.x at.y at.z)
                           (list (cons 'size size-v))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A compound pendulum: a rod hanging from a fixed pivot at #:at, with a
+    ;; bob at its far end. Jolt computes its real moment of inertia from the
+    ;; rod+bob shapes, so this swings with genuine (not idealized point-mass)
+    ;; pendulum dynamics — released from #:start-angle-deg off vertical.
+    (pattern (pendulum id:id
+                       (~alt (~once (~seq #:at at:vec3))
+                             (~once (~seq #:length length-v:expr))
+                             (~once (~seq #:material mat:id))
+                             (~optional (~seq #:start-angle-deg angle-v:expr))) ...)
+      #:attr info (pinfo #'id 'pendulum (attribute mat) '())
+      #:with expr #`(part 'id 'pendulum 'mat (list at.x at.y at.z)
+                          (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 30)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A lever/see-saw: a beam hinged at its centre (#:at). Rest weights on
+    ;; it with separate `block` parts — Jolt's own contact physics settles
+    ;; the torque balance, no separate lever equation needed.
+    (pattern (lever id:id
+                    (~alt (~once (~seq #:at at:vec3))
+                          (~once (~seq #:length length-v:expr))
+                          (~once (~seq #:material mat:id))
+                          (~optional (~seq #:start-angle-deg angle-v:expr))) ...)
+      #:attr info (pinfo #'id 'lever (attribute mat) '())
+      #:with expr #`(part 'id 'lever 'mat (list at.x at.y at.z)
+                          (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 0)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A static, immovable ramp. Drop `block` parts on it to compare
+    ;; per-material friction — this needs no new mechanics at all, since
+    ;; the existing material friction coefficients already drive the result.
+    (pattern (ramp id:id
+                   (~alt (~once (~seq #:at at:vec3))
+                         (~once (~seq #:length length-v:expr))
+                         (~once (~seq #:width width-v:expr))
+                         (~once (~seq #:angle-deg angle-v:expr))
+                         (~once (~seq #:material mat:id))) ...)
+      #:attr info (pinfo #'id 'ramp (attribute mat) '())
+      #:with expr #`(part 'id 'ramp 'mat (list at.x at.y at.z)
+                          (list (cons 'length length-v) (cons 'width width-v) (cons 'angle-deg angle-v))
                           '()
                           #,(loc-of this-syntax)))
 

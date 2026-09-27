@@ -31,15 +31,22 @@ public partial class Main : Node3D
         ["aeolipile"] = new(new Vector3(0, 0.55f, 0.85f), new Vector3(0, 0.32f, 0), 42),
         ["herons-fountain"] = new(new Vector3(0, 0.95f, 1.35f), new Vector3(0, 0.55f, 0), 42),
         ["material-samples"] = new(new Vector3(0, 1.15f, 2.0f), new Vector3(0, 0.7f, 0), 45),
+        ["pendulum-demo"] = new(new Vector3(0, 0.7f, 1.3f), new Vector3(0, 0.5f, 0), 42),
+        ["lever-demo"] = new(new Vector3(0, 0.75f, 1.5f), new Vector3(0, 0.55f, 0), 42),
+        ["inclined-plane-demo"] = new(new Vector3(0, 0.9f, 1.9f), new Vector3(0, 0.4f, -0.4f), 45),
     };
     private static readonly (double Scale, string Label)[] Speeds =
         [(0.1, "0.1×"), (0.25, "0.25×"), (1, "1×"), (5, "5×"), (20, "20×")];
+    private static readonly Dictionary<string, double> DefaultSpeeds = new() { ["aeolipile"] = 5 };
 
     private static readonly Dictionary<string, string> DisplayNames = new()
     {
         ["aeolipile"] = "Aeolipile",
         ["herons-fountain"] = "Heron's Fountain",
         ["material-samples"] = "Material Samples",
+        ["pendulum-demo"] = "Pendulum",
+        ["lever-demo"] = "Lever / See-Saw",
+        ["inclined-plane-demo"] = "Inclined Plane",
     };
 
     private MaterialLibrary _materials = null!;
@@ -50,6 +57,8 @@ public partial class Main : Node3D
     private bool _running;
     private double _timeScale = 1;
     private double? _quitAfterSimSeconds; // for scripted recording: exact, unlike --quit-after under load
+    private readonly bool _debugPhysics = OS.GetEnvironment("HEROIC_DEBUG_PHYSICS") == "1";
+    private double _debugTimer;
 
     private Camera3D _camera = null!;
     private Label _hud = null!;
@@ -148,7 +157,7 @@ public partial class Main : Node3D
         col.AddChild(speedRow);
         foreach (var (scale, label) in Speeds)
         {
-            var b = new Button { Text = label, ToggleMode = true, ButtonPressed = scale == 5 };
+            var b = new Button { Text = label, ToggleMode = true, ButtonPressed = scale == 1 };
             b.Pressed += () => SetSpeed(scale);
             speedRow.AddChild(b);
             _speedButtons.Add(b);
@@ -187,10 +196,10 @@ public partial class Main : Node3D
         SetRunning(true);
         // A real aeolipile doesn't spin until its water boils (~30s of
         // simulated time for 0.3kg at 3kW) — accurate, but a bad first
-        // impression on a freshly clicked button. Default to 5× so
-        // something visible happens within a handful of real seconds;
-        // the speed row lets you drop back to 1× or slower any time.
-        SetSpeed(5);
+        // impression on a freshly clicked button, so it defaults faster.
+        // Gravity-driven demos (pendulum, lever, ramp) act immediately and
+        // are easiest to watch at 1×; the speed row overrides either way.
+        SetSpeed(DefaultSpeeds.GetValueOrDefault(name, 1));
 
         _restartButton.Disabled = false;
         _menuButton.Disabled = false;
@@ -296,6 +305,12 @@ public partial class Main : Node3D
 
         if (_quitAfterSimSeconds is { } limit && _current is not null && _current.Runtime.Time >= limit)
             GetTree().Quit();
+
+        if (_debugPhysics && _current is not null && (_debugTimer += delta) >= 0.5)
+        {
+            _debugTimer = 0;
+            GD.Print($"[{_current.Runtime.Time:F2}s] {_current.DebugState()}");
+        }
 
         _hud.Text = _current is null
             ? "Choose a machine to run it."

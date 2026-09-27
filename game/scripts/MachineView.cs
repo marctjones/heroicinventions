@@ -22,6 +22,7 @@ public partial class MachineView : Node3D
     private readonly List<(Pipe pipe, Vector3 outlet, MeshInstance3D jet)> _jets = [];
     private readonly List<(Aeolipile rotor, Node3D node)> _rotors = [];
     private readonly List<(Boiler boiler, MeshInstance3D fire)> _fires = [];
+    private readonly List<RigidBody3D> _freezable = []; // every dynamic body: blocks, pendulums, levers
 
     public MachineView(MachineRuntime runtime, MaterialLibrary materials)
     {
@@ -45,6 +46,9 @@ public partial class MachineView : Node3D
                 case "boiler": BuildBoiler(part); break;
                 case "rotor": BuildRotor(part); break;
                 case "block": BuildBlock(part); break;
+                case "pendulum": BuildPendulum(part); break;
+                case "lever": BuildLever(part); break;
+                case "ramp": BuildRamp(part); break;
             }
         }
         foreach (var pipe in Runtime.Def.Pipes) BuildPipe(pipe);
@@ -146,6 +150,120 @@ public partial class MachineView : Node3D
         };
         AddChild(block);
         Blocks.Add(block);
+        _freezable.Add(block);
+    }
+
+    /// <summary>
+    /// A compound pendulum: a rod hanging from a fixed world anchor at
+    /// <see cref="PartSpec.At"/>, with a bob at its far end. Mass comes
+    /// from the material's real density over the rod+bob volume; Jolt
+    /// derives the actual moment of inertia from those shapes, so this is
+    /// genuine physical-pendulum dynamics, not an idealised point mass.
+    /// </summary>
+    private void BuildPendulum(PartSpec part)
+    {
+        float length = (float)part.Number("length");
+        float startAngle = (float)part.Number("start-angle-deg");
+        const float rodRadius = 0.01f;
+        float bobRadius = Mathf.Max(0.03f, length * 0.08f);
+        var mat = _materials[part.Material];
+        var surface = Surface(part.Material);
+
+        double volume = Math.PI * rodRadius * rodRadius * length + 4.0 / 3.0 * Math.PI * Math.Pow(bobRadius, 3);
+        var body = new RigidBody3D
+        {
+            Name = part.Id,
+            Position = V(part.At), // the pivot: body rotates about its own origin
+            Mass = (float)mat.MassOf(volume),
+        };
+        body.AddChild(new CollisionShape3D { Shape = new CylinderShape3D { Radius = rodRadius, Height = length }, Position = new Vector3(0, -length / 2, 0) });
+        body.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = bobRadius }, Position = new Vector3(0, -length, 0) });
+        var rod = Shapes.Cylinder(rodRadius, length, surface);
+        rod.Position = new Vector3(0, -length / 2, 0);
+        body.AddChild(rod);
+        var bob = Shapes.Sphere(bobRadius, surface);
+        bob.Position = new Vector3(0, -length, 0);
+        body.AddChild(bob);
+        AddChild(body);
+        _freezable.Add(body);
+
+        // Released from start-angle-deg off vertical; a HingeJoint3D with
+        // no NodeA pins the other end to the world at this joint's transform.
+        body.RotationDegrees = new Vector3(0, 0, startAngle);
+        var joint = new HingeJoint3D { Position = V(part.At) };
+        AddChild(joint);
+        joint.NodeB = joint.GetPathTo(body);
+    }
+
+    /// <summary>
+    /// A lever/see-saw: a beam hinged at its centre. Rest `block` parts on
+    /// the ends elsewhere in the machine file — the torque balance is
+    /// Jolt's own contact physics acting on each material's real mass,
+    /// not a hand-written lever equation.
+    /// </summary>
+    private void BuildLever(PartSpec part)
+    {
+        float length = (float)part.Number("length");
+        float startAngle = (float)part.Number("start-angle-deg");
+        // A see-saw plank has to be wider than whatever rides on it, or a
+        // block overhangs the edge and rolls off sideways once it tilts.
+        const float thickness = 0.04f, depth = 0.22f;
+        var mat = _materials[part.Material];
+        var surface = Surface(part.Material);
+
+        var body = new RigidBody3D
+        {
+            Name = part.Id,
+            Position = V(part.At), // the pivot, at the beam's centre
+            Mass = (float)mat.MassOf(length * thickness * depth),
+            // A real pivot has bearing friction; without any damping the
+            // beam snaps to its limit faster than a resting block can
+            // settle onto the rising end, and it tumbles off instead.
+            AngularDamp = 8.0f,
+        };
+        body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(length, thickness, depth) } });
+        body.AddChild(Shapes.Box(new Vector3(length, thickness, depth), surface));
+        AddChild(body);
+        _freezable.Add(body);
+
+        body.RotationDegrees = new Vector3(0, 0, startAngle);
+        var joint = new HingeJoint3D { Position = V(part.At) };
+        AddChild(joint);
+        joint.NodeB = joint.GetPathTo(body);
+
+        // A real see-saw has mechanical stops; without one, the low end
+        // just keeps rotating until it hits the floor (~55° for a 1.2m
+        // beam pivoted at 0.5m), well past the angle any of our materials'
+        // friction can hold a resting block at. ±18° keeps both weights
+        // seated (tan 18° ≈ 0.32, under every material's friction) while
+        // still showing a clear, real tilt.
+        joint.SetFlag(HingeJoint3D.Flag.UseLimit, true);
+        joint.SetParam(HingeJoint3D.Param.LimitUpper, Mathf.DegToRad(10));
+        joint.SetParam(HingeJoint3D.Param.LimitLower, Mathf.DegToRad(-10));
+    }
+
+    /// <summary>
+    /// A static, immovable ramp. Needs no new mechanics: whatever slides
+    /// or sticks does so purely from the existing material friction table.
+    /// </summary>
+    private void BuildRamp(PartSpec part)
+    {
+        float length = (float)part.Number("length");
+        float width = (float)part.Number("width");
+        float angleDeg = (float)part.Number("angle-deg");
+        float angle = Mathf.DegToRad(angleDeg);
+        const float thickness = 0.05f;
+
+        // part.At is the ramp's low edge at ground level; it rises going
+        // toward -Z. Computing the slab's centre directly in world space
+        // (rather than an offset inside a rotated local frame) keeps this
+        // easy to check by hand: at length L and angle a, the centre sits
+        // L/2 up and L/2·cos(a) back from the base.
+        var center = V(part.At) + new Vector3(0, length / 2 * Mathf.Sin(angle), -length / 2 * Mathf.Cos(angle));
+        var body = new StaticBody3D { Position = center, RotationDegrees = new Vector3(-angleDeg, 0, 0) };
+        body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(width, thickness, length) } });
+        body.AddChild(Shapes.Box(new Vector3(width, thickness, length), Surface(part.Material)));
+        AddChild(body);
     }
 
     public void Simulate(double dt)
@@ -153,6 +271,10 @@ public partial class MachineView : Node3D
         Runtime.Step(dt);
         Refresh();
     }
+
+    /// <summary>Rotation and height of every dynamic body — a quick way to confirm Jolt is actually moving them (see HEROIC_DEBUG_PHYSICS).</summary>
+    public string DebugState() =>
+        string.Join("  ", _freezable.Select(b => $"{b.Name} rotZ={b.RotationDegrees.Z:F1}° y={b.GlobalPosition.Y:F3}"));
 
     private void Refresh()
     {
@@ -183,7 +305,7 @@ public partial class MachineView : Node3D
 
     public void SetFrozen(bool frozen)
     {
-        foreach (var b in Blocks) b.Freeze = frozen;
+        foreach (var b in _freezable) b.Freeze = frozen;
     }
 
     public string Status
