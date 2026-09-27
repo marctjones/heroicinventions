@@ -1,0 +1,21 @@
+# Godot
+.godot/
+*.translation
+export_presets.cfg
+game/android/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+TestResults/
+
+# OS
+.DS_Store
+
+# Racket build outputs
+build/
+compiled/

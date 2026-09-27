@@ -1,0 +1,17 @@
+<Project Sdk="Godot.NET.Sdk/4.6.3">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <!-- Only the .NET 10 runtime is installed on this machine; let the net8.0 build run on it. -->
+    <RollForward>LatestMajor</RollForward>
+    <RootNamespace>HeroicInventions</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../src/HeroicInventions.Sim/HeroicInventions.Sim.csproj" />
+  </ItemGroup>
+
+</Project>

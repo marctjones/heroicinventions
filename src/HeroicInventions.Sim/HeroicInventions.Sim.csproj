@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Engine-agnostic simulation core. No Godot references allowed here:
+    this keeps the physics testable with plain `dotnet test` and portable
+    to another engine if we ever switch.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>HeroicInventions.Sim</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Materials/materials.json" LogicalName="materials.json" />
+  </ItemGroup>
+
+</Project>

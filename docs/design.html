@@ -1,0 +1,624 @@
+<title>Heroic Inventions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #f4f6f5;
+  --surface: #ffffff;
+  --ink: #1b2322;
+  --muted: #56615f;
+  --rule: #d5dcda;
+  --verdigris: #2d6b63;
+  --verdigris-soft: #e2eeeb;
+  --bronze: #8d5f24;
+  --bronze-soft: #f4ead9;
+  --good: #2f6b3a;
+  --warn: #8a5a00;
+  --bad: #9a2f24;
+  --code-bg: #eaefed;
+  --display: "Marcellus", "Trajan Pro", Georgia, serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111615;
+    --surface: #182120;
+    --ink: #e3e9e7;
+    --muted: #9aa8a5;
+    --rule: #2c3836;
+    --verdigris: #74b8ad;
+    --verdigris-soft: #1d302d;
+    --bronze: #d6a562;
+    --bronze-soft: #2d2518;
+    --good: #7cc48a;
+    --warn: #e0b35a;
+    --bad: #e38a7f;
+    --code-bg: #1e2928;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111615;
+  --surface: #182120;
+  --ink: #e3e9e7;
+  --muted: #9aa8a5;
+  --rule: #2c3836;
+  --verdigris: #74b8ad;
+  --verdigris-soft: #1d302d;
+  --bronze: #d6a562;
+  --bronze-soft: #2d2518;
+  --good: #7cc48a;
+  --warn: #e0b35a;
+  --bad: #e38a7f;
+  --code-bg: #1e2928;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.6;
+  padding: 0 20px;
+}
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 48px;
+  padding-block: 48px 96px;
+}
+nav.toc {
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + 24px);
+  align-self: start;
+  font-size: 13.5px;
+}
+nav.toc .label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+nav.toc a { color: var(--muted); text-decoration: none; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--verdigris); }
+nav.toc .num { font-family: var(--display); color: var(--bronze); display: inline-block; width: 2.2em; }
+
+main { min-width: 0; }
+header.doc {
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 28px;
+  margin-bottom: 8px;
+}
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--verdigris);
+}
+h1, h2, h3 { font-family: var(--display); font-weight: 400; text-wrap: balance; line-height: 1.15; }
+h1 { font-size: clamp(34px, 5vw, 50px); margin: 10px 0 14px; letter-spacing: 0.02em; }
+h2 {
+  font-size: 30px;
+  margin: 64px 0 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  letter-spacing: 0.02em;
+}
+h2 .num { color: var(--bronze); font-size: 22px; min-width: 1.6em; }
+h3 { font-size: 21px; margin: 32px 0 8px; }
+p, li { max-width: 68ch; }
+.lede { font-size: 18.5px; color: var(--muted); margin: 0; }
+.meta { font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px 22px; }
+
+a { color: var(--verdigris); text-underline-offset: 3px; }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.55;
+  background: var(--code-bg);
+  padding: 16px 18px;
+  border-radius: 6px;
+  overflow-x: auto;
+  max-width: 100%;
+}
+pre code { background: none; padding: 0; }
+
+.table-wrap { overflow-x: auto; margin: 16px 0 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+tr:last-child td { border-bottom: none; }
+th {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--bg);
+}
+td.name { font-weight: 600; white-space: nowrap; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 13px; }
+.src { font-style: italic; color: var(--muted); }
+
+.chip {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+  margin: 1px 2px 1px 0;
+}
+.chip.mech { color: var(--verdigris); }
+.chip.fluid { color: #2f6aa0; }
+.chip.thermo { color: var(--bad); }
+.chip.elec { color: var(--warn); }
+.chip.aero { color: var(--muted); }
+:root[data-theme="dark"] .chip.fluid { color: #7fb2e0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .chip.fluid { color: #7fb2e0; } }
+
+.verdict { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.verdict.yes { color: var(--good); }
+.verdict.part { color: var(--warn); }
+.verdict.no { color: var(--bad); }
+
+.callout {
+  background: var(--verdigris-soft);
+  border-radius: 6px;
+  padding: 16px 20px;
+  margin: 20px 0;
+  max-width: 72ch;
+}
+.callout.bronze { background: var(--bronze-soft); }
+.callout p { margin: 0; }
+.callout p + p { margin-top: 8px; }
+.callout strong { font-weight: 600; }
+
+.compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 16px 0; }
+.compare > div { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; }
+.compare h3 { margin-top: 0; }
+.compare h4 {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 16px 0 6px;
+}
+.compare h4.pro { color: var(--good); }
+.compare h4.con { color: var(--bad); }
+.compare ul { margin: 0; padding-left: 18px; font-size: 14.5px; }
+.compare li { margin: 4px 0; }
+
+.machines { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 16px 0; }
+.machines > div { border-top: 2px solid var(--bronze); padding-top: 10px; }
+.machines h3 { margin: 0 0 6px; }
+.machines p { font-size: 14.5px; margin: 6px 0; }
+.machines .model { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+
+pre.mermaid { background: var(--surface); border: 1px solid var(--rule); text-align: center; }
+
+footer { margin-top: 72px; padding-top: 20px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 13px; }
+
+@media (max-width: 860px) {
+  .page { grid-template-columns: 1fr; gap: 16px; padding-block: 28px 64px; }
+  nav.toc { position: static; }
+  nav.toc ol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .compare, .machines { grid-template-columns: 1fr; }
+}
+</style>
+<style>
+.layers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 16px 0; }
+.layers > div { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; }
+.layers > div.racket { border-top: 3px solid var(--verdigris); }
+.layers > div.godot { border-top: 3px solid var(--bronze); }
+.layers h3 { margin: 0 0 4px; }
+.layers .role { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+.layers ul { margin: 0; padding-left: 18px; font-size: 14.5px; }
+.layers li { margin: 4px 0; }
+.file { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 18px 0 -8px; }
+pre.err { border-left: 3px solid var(--bad); }
+@media (max-width: 860px) { .layers { grid-template-columns: 1fr; } }
+</style>
+
+<div class="page">
+  <nav class="toc" aria-label="Contents">
+    <div class="label">Contents</div>
+    <ol>
+      <li><a href="#vision"><span class="num">I</span>Vision</a></li>
+      <li><a href="#architecture"><span class="num">II</span>Architecture</a></li>
+      <li><a href="#racket"><span class="num">III</span>Racket layer</a></li>
+      <li><a href="#godot"><span class="num">IV</span>Godot layer</a></li>
+      <li><a href="#sim"><span class="num">V</span>Simulation</a></li>
+      <li><a href="#materials"><span class="num">VI</span>Materials</a></li>
+      <li><a href="#catalog"><span class="num">VII</span>Machine catalog</a></li>
+      <li><a href="#later"><span class="num">VIII</span>Leonardo &amp; Franklin</a></li>
+      <li><a href="#tech"><span class="num">IX</span>Decisions</a></li>
+      <li><a href="#repo"><span class="num">X</span>Repository</a></li>
+      <li><a href="#roadmap"><span class="num">XI</span>Roadmap</a></li>
+      <li><a href="#sources"><span class="num">XII</span>Sources</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="doc">
+      <div class="eyebrow">Design document · draft 2</div>
+      <h1>Heroic Inventions</h1>
+      <p class="lede">A workshop game where players build historical machines one part at a time from real materials, then fire the boiler, open the valve or release the counterweight to see whether the machine works. Machines are written in Racket and run in Godot.</p>
+      <div class="meta"><span>Updated 27 Sep 2026</span><span>Design and control: Racket 9</span><span>Runtime: Godot 4.6 .NET · C#</span><span>Status: C# scaffold, 8 sim tests passing</span></div>
+    </header>
+
+    <h2 id="vision"><span class="num">I</span>Vision</h2>
+    <p>Players work at two levels. In <strong>Build mode</strong> they choose parts from a palette (axles, gears, pipes, valves, tanks, ropes, pulleys) and pick a material for each, such as oak, cedar, limestone or bronze. Parts snap together at typed ports. In <strong>Run mode</strong> the assembly becomes a physical system: gravity pulls, water flows, steam builds pressure, and parts can jam or break when a material is overstressed.</p>
+    <p>Behind the game is a <strong>machine language</strong>. Every machine, whether a built-in blueprint, a player's design or a mod, is a Racket program written in <code>#lang heroic</code>. Designers and advanced players can write machines as code, change them while they run, and test them like software. Casual players never see the code: the in-game editor reads and writes the same format.</p>
+    <p>The historical designs are the levels. Hero's <span class="src">Pneumatica</span> and Vitruvius's <span class="src">De Architectura</span> Book X describe machines in enough detail to rebuild, and both are public domain.</p>
+    <div class="callout">
+      <p><strong>Closest existing game:</strong> <em>Besiege</em>, a Unity-based siege-machine builder. It has no fluids, heat, material strength, historical designs or programmable machine language. Those are what set this game apart.</p>
+    </div>
+
+    <h2 id="architecture"><span class="num">II</span>Architecture</h2>
+    <p>The design follows the pattern that has worked best in industry: <strong>a Lisp controlling a native engine</strong>. Racket does what Lisps do well: describing, generating, checking and changing structure. Godot and C# do what needs predictable speed: rendering, rigid-body physics and the per-tick simulation solvers.</p>
+    <div class="layers">
+      <div class="racket">
+        <h3>Racket</h3>
+        <p class="role">design, generation, checking, live control</p>
+        <ul>
+          <li><code>#lang heroic</code>: the language machines are written in</li>
+          <li>Compile-time checks with exact source locations</li>
+          <li>Part shapes generated from formulas (gears, screws, pulleys) and exported to glTF</li>
+          <li>Materials and part catalogues as source data</li>
+          <li>REPL connected to the running game</li>
+          <li>Machine tests with <code>rackunit</code></li>
+        </ul>
+      </div>
+      <div class="godot">
+        <h3>Godot + C#</h3>
+        <p class="role">runtime: every frame, every physics tick</p>
+        <ul>
+          <li>Rendering, camera, UI, the in-game editor</li>
+          <li>Jolt rigid bodies and joints</li>
+          <li>Fluid, thermal and electrical network solvers (<code>HeroicInventions.Sim</code>)</li>
+          <li>Reader for the <code>.machine</code> format (loads machines without Racket)</li>
+          <li>Live-link server that accepts commands from the REPL</li>
+          <li>Headless simulation host for automated tests</li>
+        </ul>
+      </div>
+    </div>
+    <pre class="mermaid">
+flowchart LR
+  subgraph R[Racket]
+    SRC["#lang heroic source"] --> EXP[macro expansion<br/>port and material checks]
+    EXP --> CAN[".machine<br/>plain data"]
+    GEO[geometry generators] --> GLTF[glTF meshes]
+    REPL[REPL]
+  end
+  subgraph G[Godot + C#]
+    RD[".machine reader"] --> ASM[Assembly graph]
+    ASM --> JOLT[Jolt bodies and joints]
+    ASM --> NET[network solvers]
+    LL[live-link server]
+    ED[in-game editor]
+  end
+  CAN --> RD
+  GLTF --> ASM
+  ED -- saves --> CAN
+  REPL <-- s-expression messages --> LL
+  LL --> ASM
+    </pre>
+    <p>The <strong>boundary between the two is a data format</strong>, not a shared runtime. Racket never runs inside the Godot process, so there is no clash between two garbage collectors, no need to ship Racket with the game, and no foreign-function interface to maintain. The shipped game needs only Godot. Racket is present during design, testing and live sessions.</p>
+
+    <h2 id="racket"><span class="num">III</span>Racket layer</h2>
+
+    <h3>A language for machines</h3>
+    <p>A machine file is a full Racket module. Parts, ports and connections are declared, and all of Racket is available when a design needs computation.</p>
+    <div class="file">machines/aeolipile.rkt</div>
+<pre><code>#lang heroic
+
+(define-machine aeolipile
+  #:source "Hero of Alexandria, Pneumatica"
+  (part boiler (cylinder #:radius 0.12 #:height 0.16) #:material bronze
+    (port steam-l pipe) (port steam-r pipe))
+  (part post-l (tube #:radius 0.008 #:length 0.21) #:material bronze
+    (port in pipe) (port out bearing))
+  (part post-r (tube #:radius 0.008 #:length 0.21) #:material bronze
+    (port in pipe) (port out bearing))
+  (part rotor (sphere #:radius 0.06) #:material bronze
+    (port axle-l axle) (port axle-r axle)
+    (nozzles 2 #:bore 0.002 #:arm 0.08))
+  (connect boiler.steam-l post-l.in)
+  (connect boiler.steam-r post-r.in)
+  (connect post-l.out rotor.axle-l)
+  (connect post-r.out rotor.axle-r)
+  (fire boiler #:watts 3000 #:water 0.3))</code></pre>
+    <p>Repeated structure is written as ordinary code. A Vitruvian <span class="src">polyspastos</span> needs a pulley block with any number of sheaves, so it is a function:</p>
+<pre><code>(define (pulley-block name sheaves #:material [wood oak])
+  (for/list ([i (in-range sheaves)])
+    (part (format-symbol "~a-sheave-~a" name i)
+          (pulley #:radius 0.12 #:groove 0.02)
+          #:material wood
+          (port axle bearing) (port rope rope-groove))))</code></pre>
+
+    <h3>Checking at compile time</h3>
+    <p><code>define-machine</code> is a macro, so its rules run while the file compiles, before anything is simulated. It checks that every port referenced exists, that connected port types are compatible, that materials are in the table, and that no part is left floating. Errors point to the exact line in DrRacket or the editor:</p>
+<pre class="err"><code>aeolipile.rkt:18:2: connect: cannot join an axle to a pipe
+  from: rotor.axle-l  (axle)
+  to:   boiler.steam-l (pipe)
+  in: (connect rotor.axle-l boiler.steam-l)</code></pre>
+    <p>Racket's <code>syntax-parse</code> library provides this kind of error reporting with little extra work, along with the arrows DrRacket draws from each name to its definition.</p>
+
+    <h3>The .machine format</h3>
+    <p>Compiling a machine produces a <code>.machine</code> file: the fully expanded design as plain S-expressions, with every loop run and every function applied. It is data only, so the C# side reads it with a small parser and needs no Racket at runtime. Each entry keeps its source location, so a failure at runtime can point back to the line that caused it.</p>
+    <div class="file">build/aeolipile.machine</div>
+<pre><code>(machine aeolipile
+  (source "Hero of Alexandria, Pneumatica")
+  (part boiler (cylinder 0.12 0.16) bronze (srcloc 4 2)
+    (port steam-l pipe) (port steam-r pipe))
+  ...
+  (connect (boiler steam-l) (post-l in))
+  (fire boiler 3000.0 0.3))</code></pre>
+    <p>The in-game editor saves the same format, and Racket loads it back with its built-in <code>read</code>. A player's design can therefore be opened in DrRacket, turned into code, and extended there. Code, save files and network messages all share one format.</p>
+
+    <h3>Geometry generated from formulas</h3>
+    <p>Many ancient machine parts have a shape that follows from a few numbers. Racket modules generate them and write glTF files that Godot imports directly:</p>
+    <ul>
+      <li><strong>Gears:</strong> involute tooth profile from tooth count and module (tooth size). Examples are the odometer train and the Antikythera mechanism.</li>
+      <li><strong>Archimedes' screws:</strong> helix from pitch, number of turns and radius.</li>
+      <li><strong>Pulleys, drums and treadwheels:</strong> radius, groove and spoke count.</li>
+      <li><strong>Torsion catapults:</strong> every dimension scaled from the bolt length, following Vitruvius's proportion tables.</li>
+    </ul>
+    <p>The build step generates a <strong>catalogue</strong> of standard sizes, such as gears from 8 to 120 teeth in three modules. The in-game editor offers parts from that catalogue. A shape outside it is generated on request over the live link during a design session and then added to the catalogue.</p>
+
+    <h3>Live link</h3>
+    <p>A Racket REPL connects to the running game over a local TCP socket. Messages in both directions are S-expressions, one per line.</p>
+<pre><code>;; REPL → game
+(load-machine "build/aeolipile.machine")
+(run)
+(set! (boiler heat) 5000)
+(subscribe (rotor rpm) (boiler pressure) #:hz 10)
+(redefine-part rotor (sphere #:radius 0.07))   ; keeps the running state
+
+;; game → REPL
+(telemetry 41.2 (rotor rpm 312.0) (boiler pressure 18400.0))
+(event 55.8 break post-l "tension 91 MPa exceeds bronze" (srcloc 7 2))</code></pre>
+    <p><code>redefine-part</code> swaps in a new part but keeps the simulation state of every part whose name is unchanged: the water temperature, the rotor's spin and the fountain's water levels. This is the Lisp habit of redefining code inside a running program, applied to machines. A <code>break</code> event carries a source location, so the REPL can jump straight to the part that failed.</p>
+
+    <h3>Machines as tests</h3>
+    <p>Behaviour claims are written as <code>rackunit</code> tests that run the real C# simulation through the headless host:</p>
+<pre><code>(test-case "Heron's fountain lifts water above its basin"
+  (define run (simulate herons-fountain #:seconds 60))
+  (check-true (> (max-of run '(nozzle jet-height)) 0.0))
+  (check-true (< (final run '(supply volume)) (initial run '(supply volume)))))
+
+(test-case "Vitruvian crane lifts a 2-tonne limestone block"
+  (define run (simulate (crane #:sheaves 5 #:walkers 2) #:seconds 30
+                        #:load (block limestone 0.8)))
+  (check-true (> (final run '(load height)) 1.0)))</code></pre>
+    <p>Each historical blueprint gets a test like this, so a change to a solver that breaks any machine is caught automatically.</p>
+
+    <h2 id="godot"><span class="num">IV</span>Godot layer</h2>
+    <p>Godot handles everything that runs every frame and must keep a steady frame rate. It works entirely from <code>.machine</code> data and generated meshes, so it has no dependency on Racket.</p>
+    <ul>
+      <li><strong>Machine reader:</strong> a short S-expression parser in C# that builds the <code>Assembly</code> graph, the same graph the editor builds.</li>
+      <li><strong>Instantiation:</strong> each part becomes a Jolt body with mass from its material and volume. Each connection becomes a joint (hinge, gear constraint, rope distance constraint) or an edge in a fluid, thermal or electrical network.</li>
+      <li><strong>Solvers:</strong> <code>HeroicInventions.Sim</code>, the engine-independent C# library from the scaffold, stepped on every physics tick at 120 Hz.</li>
+      <li><strong>Editor:</strong> drag-and-drop building with port snapping. It saves <code>.machine</code> files.</li>
+      <li><strong>Live-link server:</strong> active only in development builds. It turns incoming S-expression messages into actions on the scene and sends telemetry back.</li>
+      <li><strong>Headless host:</strong> the same solvers run without rendering, for Racket's tests and for continuous integration.</li>
+    </ul>
+
+    <h2 id="sim"><span class="num">V</span>Simulation</h2>
+    <p>No game engine simulates rigid bodies, water and steam well together. Jolt handles parts that move. The C# library handles the working fluids with <strong>lumped network models</strong>, the approach engineering tools such as Modelica and Simscape use. Couplings pass forces and flows between the two on every tick.</p>
+    <h3>Fluid network</h3>
+    <p>Each tank has an elevation, a cross-section area and a water volume. The head at a pipe port is the tank's gas pressure converted to metres of water, plus the water surface height, or the port's own height if the port sits above the water. Flow is proportional to the head difference between the pipe's ends. A sealed <code>AirPocket</code> joins tanks and follows Boyle's law (<code>P·V = constant</code>). That is all Heron's fountain needs: its jet height and the moment it stops both come out of the model rather than being scripted.</p>
+    <h3>Thermal network</h3>
+    <p>The boiler holds water and steam in equilibrium, so its pressure is the saturation pressure at its temperature (Antoine equation). Heat from the fire raises the temperature. Steam leaving the boiler removes latent heat, 2.257 MJ/kg, and that balance sets an aeolipile's top speed for a given fire.</p>
+    <h3>Couplings</h3>
+    <ul>
+      <li>Jet thrust = steam mass flow × exit velocity, capped at the speed of sound in steam (about 470 m/s).</li>
+      <li>Piston force = gauge pressure × bore area, applied to a Jolt body.</li>
+      <li>Water-wheel torque = the rate of change of the water's momentum, applied to a hinge joint.</li>
+      <li>A part breaks when stress (force ÷ cross-section) exceeds its material's strength. Wood uses its across-grain strength when loaded sideways.</li>
+    </ul>
+
+    <h2 id="materials"><span class="num">VI</span>Materials</h2>
+    <p>The material table is Racket data (<code>materials.rktd</code>) and the source of truth. The build step exports it for the C# side. Values are approximate handbook figures. Stone is strong in compression and weak in tension, which is why Roman builders used arches. Wood is ten to twenty times weaker across the grain than along it.</p>
+<pre><code>(material oak #:category wood #:density 720
+          #:tension 90 #:across-grain 5 #:compression 50 #:friction 0.45)</code></pre>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Material</th><th class="num">Density kg/m³</th><th class="num">Tension MPa</th><th class="num">Across grain MPa</th><th class="num">Compression MPa</th><th class="num">Friction μ</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Cedar</td><td class="num">380</td><td class="num">45</td><td class="num">2</td><td class="num">35</td><td class="num">0.40</td></tr>
+          <tr><td class="name">Pine</td><td class="num">500</td><td class="num">70</td><td class="num">3</td><td class="num">40</td><td class="num">0.40</td></tr>
+          <tr><td class="name">Oak</td><td class="num">720</td><td class="num">90</td><td class="num">5</td><td class="num">50</td><td class="num">0.45</td></tr>
+          <tr><td class="name">Olive</td><td class="num">950</td><td class="num">100</td><td class="num">6</td><td class="num">60</td><td class="num">0.40</td></tr>
+          <tr><td class="name">Limestone</td><td class="num">2,500</td><td class="num">5</td><td class="num">—</td><td class="num">60</td><td class="num">0.60</td></tr>
+          <tr><td class="name">Marble</td><td class="num">2,700</td><td class="num">8</td><td class="num">—</td><td class="num">100</td><td class="num">0.55</td></tr>
+          <tr><td class="name">Granite</td><td class="num">2,700</td><td class="num">10</td><td class="num">—</td><td class="num">180</td><td class="num">0.60</td></tr>
+          <tr><td class="name">Bronze</td><td class="num">8,800</td><td class="num">350</td><td class="num">—</td><td class="num">350</td><td class="num">0.30</td></tr>
+          <tr><td class="name">Wrought iron</td><td class="num">7,700</td><td class="num">330</td><td class="num">—</td><td class="num">330</td><td class="num">0.40</td></tr>
+          <tr><td class="name">Hemp rope</td><td class="num">1,100</td><td class="num">60</td><td class="num">—</td><td class="num">—</td><td class="num">0.50</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="catalog"><span class="num">VII</span>Machine catalog</h2>
+    <p>These are ancient machines with enough surviving description to reconstruct. Each becomes a <code>#lang heroic</code> blueprint with a behaviour test. The domain chips show which solvers each machine needs.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Machine</th><th>Inventor · date</th><th>How it works</th><th>Source</th><th>Domains</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Aeolipile</td><td>Hero of Alexandria · c. 50 AD</td><td>Sealed sphere on an axle over a boiler. Steam leaving two bent nozzles spins it by reaction.</td><td class="src">Pneumatica</td><td><span class="chip thermo">thermal</span><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Heron's fountain</td><td>Hero · c. 50 AD</td><td>Falling water compresses air in a sealed chamber, and that air drives a jet higher than the water's source.</td><td class="src">Pneumatica</td><td><span class="chip fluid">fluid</span></td></tr>
+          <tr><td class="name">Holy-water dispenser</td><td>Hero</td><td>A coin tips a pan lever that opens a valve until the coin slides off. The first vending machine.</td><td class="src">Pneumatica</td><td><span class="chip mech">mech</span><span class="chip fluid">fluid</span></td></tr>
+          <tr><td class="name">Temple doors</td><td>Hero</td><td>An altar fire heats air, which pushes water into a bucket. The bucket's weight turns the door axles through ropes.</td><td class="src">Pneumatica</td><td><span class="chip thermo">thermal</span><span class="chip fluid">fluid</span><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Programmable cart</td><td>Hero</td><td>A falling weight unwinds a rope around the axle. Pegs on the drum reverse the winding, which sets the cart's path.</td><td class="src">Automata</td><td><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Water clock</td><td>Ctesibius · c. 250 BC</td><td>A float valve keeps the reservoir level constant: the first known feedback controller.</td><td class="src">Vitruvius IX</td><td><span class="chip fluid">fluid</span><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Force pump · hydraulis</td><td>Ctesibius</td><td>Twin pistons with flap valves. The water organ uses water to hold its air pressure steady.</td><td class="src">Vitruvius X</td><td><span class="chip fluid">fluid</span><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Archimedes' screw</td><td>Archimedes · c. 250 BC</td><td>A helix turning inside an inclined tube lifts water pocket by pocket.</td><td class="src">Vitruvius X</td><td><span class="chip mech">mech</span><span class="chip fluid">fluid</span></td></tr>
+          <tr><td class="name">Treadwheel crane</td><td>Roman · 1st c. BC</td><td>People walking inside a wheel wind a rope through compound pulleys, lifting stones of several tonnes.</td><td class="src">Vitruvius X</td><td><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Odometer</td><td>Vitruvius, Hero</td><td>Reduction gears from a cart wheel drop one pebble per Roman mile.</td><td class="src">Vitruvius X</td><td><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Torsion catapult</td><td>Greek · 4th c. BC</td><td>Twisted sinew springs store energy. Vitruvius gives every dimension as a multiple of the bolt length.</td><td class="src">Vitruvius X · Belopoeica</td><td><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Antikythera mechanism</td><td>Unknown · c. 100 BC</td><td>A bronze gear train of about 30 surviving gears that predicted eclipses and planetary positions.</td><td class="src">CT reconstruction</td><td><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Shaduf</td><td>Egypt · c. 2000 BC</td><td>A counterweighted lever for lifting water. The best tutorial machine.</td><td class="src">tomb paintings</td><td><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">South-pointing chariot</td><td>Ma Jun · 3rd c. AD</td><td>A differential gear train keeps a figure pointing south however the cart turns.</td><td class="src">Song Shi</td><td><span class="chip mech">mech</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>To find working replicas on YouTube, search each machine name plus "replica" or "reconstruction". Chris Budiselic's <strong>Clickspring</strong> channel has a full handmade build of the Antikythera mechanism. Real builds are useful for checking the simulation against real behaviour.</p>
+
+    <h2 id="later"><span class="num">VIII</span>Leonardo &amp; Franklin</h2>
+    <p>The same system can test designs that were never built. Racket helps here: a notebook design can be written as a machine, and a test either passes or shows exactly where it fails.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Design</th><th>Would it work?</th><th>What the sim needs</th><th>Domains</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Leonardo · self-propelled cart</td><td><span class="verdict yes">Yes</span>, with a spring drive and cam steering. Museum replicas run.</td><td>Spring energy, cams, escapement</td><td><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Leonardo · self-supporting bridge</td><td><span class="verdict yes">Yes</span>. It stands on friction and weight alone.</td><td>Rigid bodies and friction per material</td><td><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Leonardo · armoured vehicle</td><td><span class="verdict part">As drawn, no</span>. The gearing makes front and rear wheels turn in opposite directions.</td><td>Gear meshes. A compile-time check on gear directions could catch the jam before running.</td><td><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Leonardo · giant crossbow</td><td><span class="verdict part">Partly</span>. The laminated bow is the weak point.</td><td>Bending stress, wood grain</td><td><span class="chip mech">mech</span></td></tr>
+          <tr><td class="name">Leonardo · parachute</td><td><span class="verdict yes">Yes</span>. Tested successfully in 2000.</td><td>Drag model</td><td><span class="chip aero">aero</span></td></tr>
+          <tr><td class="name">Leonardo · ornithopter, aerial screw</td><td><span class="verdict no">No</span>. A human cannot supply the power needed.</td><td>Blade-element lift and a power budget</td><td><span class="chip aero">aero</span></td></tr>
+          <tr><td class="name">Franklin · stove</td><td><span class="verdict yes">Yes</span></td><td>Convection and heat flow in a thermal network</td><td><span class="chip thermo">thermal</span></td></tr>
+          <tr><td class="name">Franklin · lightning rod, Leyden jar</td><td><span class="verdict yes">Yes</span></td><td>Lumped circuit: capacitors, resistances, spark gaps</td><td><span class="chip elec">electrical</span></td></tr>
+          <tr><td class="name">Franklin · glass armonica</td><td><span class="verdict yes">Yes</span></td><td>Treadle-driven rotation, plus sound synthesis from each bowl's pitch</td><td><span class="chip mech">mech</span><span class="chip aero">audio</span></td></tr>
+          <tr><td class="name">Franklin · bifocals</td><td><span class="verdict yes">Yes</span></td><td>Ray optics. Out of scope for now.</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <p><strong>Electricity is almost free.</strong> A lumped electrical circuit uses the same equations as the fluid network: voltage takes the place of head, current the place of flow, and a capacitor behaves like a tank. The Franklin domain can reuse the fluid solver with different units.</p>
+    </div>
+
+    <h2 id="tech"><span class="num">IX</span>Decisions</h2>
+
+    <h3>Why Racket for the control layer</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Lisp advantage</th><th>Where it shows up in this game</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Code is data</td><td>Machines, save files and live-link messages all use one S-expression format. Racket reads it with <code>read</code>, and a player's saved design can be opened as code.</td></tr>
+          <tr><td class="name">Macros</td><td><code>define-machine</code> checks ports, materials and connections at compile time, with the exact source location of any error.</td></tr>
+          <tr><td class="name">A full language inside the DSL</td><td>Pulley blocks, gear trains and catapults scaled from Vitruvius's tables are written as functions and loops, not copied by hand.</td></tr>
+          <tr><td class="name">Changing a running program</td><td>The REPL redefines parts in the running game while keeping their simulation state.</td></tr>
+          <tr><td class="name">Language tooling</td><td>With <code>#lang</code>, DrRacket provides syntax colouring, name arrows, error highlighting and a debugger for machine files.</td></tr>
+          <tr><td class="name">Trees are native</td><td>Machines are trees of assemblies, and generated geometry is built from nested transforms. Both are natural list structures.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Where Racket stays out</h3>
+    <ul>
+      <li><strong>The per-tick loop.</strong> Solvers and Jolt run in C# and C++ so that Racket's garbage collector can never cause a frame stutter.</li>
+      <li><strong>The shipped game.</strong> Players need only Godot. Racket is a design-time and development-time tool.</li>
+      <li><strong>The Godot process.</strong> Racket is never embedded in Godot, so there is no foreign-function bridge to maintain, and a Racket error cannot crash the game.</li>
+    </ul>
+    <p>This follows well-proven practice. Naughty Dog used Racket (then PLT Scheme) to compile game data for its PS3 games while a C++ engine ran them, as Dan Liebgold described at RacketCon 2013. AutoLISP has scripted AutoCAD's 3D engine since the 1980s.</p>
+
+    <h3>Why Godot</h3>
+    <div class="compare">
+      <div>
+        <h3>Godot 4.6 (.NET)</h3>
+        <h4 class="pro">Pros</h4>
+        <ul>
+          <li>MIT licence. No fees, royalties or revenue thresholds, ever.</li>
+          <li>Open source. Physics or rendering can be patched when needed.</li>
+          <li>Jolt ships built in and is fast and stable for jointed mechanisms.</li>
+          <li>Small, fast editor. Opening the project and pressing Play takes seconds.</li>
+          <li>The node tree maps naturally onto the machine tree that Racket produces.</li>
+        </ul>
+        <h4 class="con">Cons</h4>
+        <ul>
+          <li><strong>C# projects cannot export to the web yet</strong>. It is being worked on but has no release date.</li>
+          <li>Smaller asset ecosystem, with no off-the-shelf fluid or rope packages.</li>
+          <li>Most tutorials use GDScript, so C# examples are rarer.</li>
+          <li>Requires the separate .NET edition of the editor.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Unity 6 (not chosen)</h3>
+        <h4 class="pro">Pros</h4>
+        <ul>
+          <li>C# builds export to WebGL.</li>
+          <li>PhysX ArticulationBody gives exact jointed chains for gear trains and linkages.</li>
+          <li>Asset Store add-ons such as Obi Rope and Obi Fluid.</li>
+          <li>Very large C# tutorial base.</li>
+        </ul>
+        <h4 class="con">Cons</h4>
+        <ul>
+          <li>Closed source. The engine cannot be changed below the scripting layer.</li>
+          <li>Licensing history, including the 2023 runtime-fee reversal and revenue thresholds.</li>
+          <li>Heavier editor, with slower script reloads.</li>
+          <li>Its scripting runtime trails current .NET.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout bronze">
+      <p><strong>The engine choice stays reversible.</strong> Machines live in Racket and <code>.machine</code> files, and the solvers live in an engine-independent C# library. Only the view layer depends on Godot. For a browser demo before Godot supports C# on the web, the same solver library can run in a browser through Blazor (.NET compiled to WebAssembly) and read the same <code>.machine</code> files.</p>
+    </div>
+
+    <h2 id="repo"><span class="num">X</span>Repository</h2>
+<pre><code>heroicinventions/
+├── docs/design.html                 this document
+├── racket/heroic/                   Racket package (planned)
+│   ├── lang/reader.rkt              makes #lang heroic work
+│   ├── machine.rkt                  define-machine, part, connect (macros + checks)
+│   ├── materials.rktd               material table, the source of truth
+│   ├── geometry/                    gear, screw, pulley generators; glTF writer
+│   ├── emit.rkt                     writes .machine files
+│   ├── live.rkt                     REPL client for the live link
+│   ├── machines/                    historical blueprints (aeolipile.rkt, …)
+│   └── tests/                       rackunit machine tests
+├── src/HeroicInventions.Sim/        C# solvers (exists)
+│   └── Machine/                     .machine reader (planned)
+├── src/HeroicInventions.SimHost/    headless runner for Racket tests (planned)
+├── tests/HeroicInventions.Sim.Tests/   C# unit tests (exists, 8 passing)
+├── game/                            Godot 4.6 .NET project (exists)
+│   ├── scripts/LiveLink/            TCP S-expression server (planned)
+│   └── assets/generated/            glTF catalogue from Racket (planned)
+└── build/                           .machine outputs (ignored by git)</code></pre>
+    <p>The existing C# scaffold stays as the runtime. Its demo machines, currently built in C#, move to <code>#lang heroic</code> blueprints once the reader exists, and its <code>materials.json</code> becomes a build output of <code>materials.rktd</code>.</p>
+
+    <h2 id="roadmap"><span class="num">XI</span>Roadmap</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Milestone</th><th>Contents</th><th>Proves</th></tr></thead>
+        <tbody>
+          <tr><td class="name">0 · Scaffold</td><td>C# solvers, aeolipile and fountain demos, material blocks in Jolt</td><td>Network and coupling approach (done)</td></tr>
+          <tr><td class="name">1 · #lang heroic</td><td><code>define-machine</code> with compile-time checks, <code>.machine</code> output, C# reader, aeolipile and fountain rewritten as blueprints</td><td>Racket and Godot joined by a data format</td></tr>
+          <tr><td class="name">2 · Live link</td><td>TCP server in Godot, REPL client, run and pause commands, parameter changes, telemetry, <code>redefine-part</code></td><td>Changing machines while they run</td></tr>
+          <tr><td class="name">3 · Machine tests</td><td>Headless host, <code>simulate</code> in Racket, a behaviour test for each blueprint</td><td>Machines tested like software</td></tr>
+          <tr><td class="name">4 · Generated geometry</td><td>Involute gears, screws, pulleys, glTF export, part catalogue</td><td>Shapes computed from formulas</td></tr>
+          <tr><td class="name">5 · Build mode</td><td>In-game editor with port snapping and a material picker. It saves <code>.machine</code> files.</td><td>Part-by-part design for players</td></tr>
+          <tr><td class="name">6 · Crane, gears, piston engine</td><td>Rope and pulley constraints, gear meshes, cylinder coupling, stress breakage</td><td>The core Vitruvian and Hero machines</td></tr>
+          <tr><td class="name">7 · Leonardo &amp; Franklin</td><td>Gear-direction checks, an electrical network reusing the fluid solver, convection</td><td>Testing designs that were never built</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="sources"><span class="num">XII</span>Sources</h2>
+    <ul>
+      <li>Hero of Alexandria, <span class="src">Pneumatica</span>. Bennet Woodcroft's 1851 English translation is public domain.</li>
+      <li>Vitruvius, <span class="src">De Architectura</span>, Book X (machines). Morgan's 1914 translation is on Project Gutenberg.</li>
+      <li>Freeth et al., "A Model of the Cosmos in the ancient Greek Antikythera Mechanism", <span class="src">Scientific Reports</span>, 2021.</li>
+      <li>Dan Liebgold, "Racket on the Playstation 3? It's Not What You Think!", RacketCon 2013.</li>
+      <li>Racket documentation: <a href="https://docs.racket-lang.org/guide/languages.html">Creating Languages</a> and <a href="https://docs.racket-lang.org/syntax/stxparse.html">syntax-parse</a>.</li>
+      <li>Godot C# web export status: <a href="https://github.com/godotengine/godot/issues/70796">godotengine/godot#70796</a>, <a href="https://github.com/godotengine/godot-proposals/discussions/13076">godot-proposals discussion #13076</a>.</li>
+    </ul>
+
+    <footer>Heroic Inventions · design document · draft 2 · September 2026</footer>
+  </main>
+</div>
