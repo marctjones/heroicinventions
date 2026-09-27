@@ -1,4 +1,5 @@
 using Godot;
+using HeroicInventions.Sim;
 using HeroicInventions.Sim.Fluids;
 using HeroicInventions.Sim.Machines;
 using HeroicInventions.Sim.Materials;
@@ -23,6 +24,13 @@ public partial class MachineView : Node3D
     private readonly List<(Aeolipile rotor, Node3D node)> _rotors = [];
     private readonly List<(Boiler boiler, MeshInstance3D fire)> _fires = [];
     private readonly List<RigidBody3D> _freezable = []; // every dynamic body: blocks, pendulums, levers
+    // Local-space centre-of-mass offset for each body, for real potential
+    // energy. Blocks are centred on their own origin (no entry needed —
+    // GetValueOrDefault returns Vector3.Zero). Pendulums and levers place
+    // their RigidBody3D's origin at the pivot instead, for the joint, so
+    // their mass sits elsewhere in local space and needs the real offset.
+    private readonly Dictionary<RigidBody3D, Vector3> _comOffset = [];
+    private double? _initialMechanicalEnergy; // J, captured at rest — baseline for "energy retained"
 
     public MachineView(MachineRuntime runtime, MaterialLibrary materials)
     {
@@ -53,6 +61,12 @@ public partial class MachineView : Node3D
         }
         foreach (var pipe in Runtime.Def.Pipes) BuildPipe(pipe);
         Refresh();
+
+        // Baseline for "energy retained": mechanical energy before anything
+        // has moved (so, for a pendulum or trebuchet, whatever potential
+        // energy its starting displacement already has).
+        var e0 = Energy();
+        _initialMechanicalEnergy = e0.KineticJ + e0.PotentialJ;
     }
 
     private static Vector3 V(Vec3 v) => new((float)v.X, (float)v.Y, (float)v.Z);
@@ -169,12 +183,13 @@ public partial class MachineView : Node3D
         var mat = _materials[part.Material];
         var surface = Surface(part.Material);
 
-        double volume = Math.PI * rodRadius * rodRadius * length + 4.0 / 3.0 * Math.PI * Math.Pow(bobRadius, 3);
+        double rodVolume = Math.PI * rodRadius * rodRadius * length;
+        double bobVolume = 4.0 / 3.0 * Math.PI * Math.Pow(bobRadius, 3);
         var body = new RigidBody3D
         {
             Name = part.Id,
             Position = V(part.At), // the pivot: body rotates about its own origin
-            Mass = (float)mat.MassOf(volume),
+            Mass = (float)mat.MassOf(rodVolume + bobVolume),
         };
         body.AddChild(new CollisionShape3D { Shape = new CylinderShape3D { Radius = rodRadius, Height = length }, Position = new Vector3(0, -length / 2, 0) });
         body.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = bobRadius }, Position = new Vector3(0, -length, 0) });
@@ -186,6 +201,9 @@ public partial class MachineView : Node3D
         body.AddChild(bob);
         AddChild(body);
         _freezable.Add(body);
+        // Mass-weighted combination of the rod's centre (-L/2) and the
+        // bob's centre (-L) — the real centre of mass, for real PE.
+        _comOffset[body] = new Vector3(0, (float)((-length / 2 * rodVolume - length * bobVolume) / (rodVolume + bobVolume)), 0);
 
         // Released from start-angle-deg off vertical; a HingeJoint3D with
         // no NodeA pins the other end to the world at this joint's transform.
@@ -205,41 +223,52 @@ public partial class MachineView : Node3D
     {
         float length = (float)part.Number("length");
         float startAngle = (float)part.Number("start-angle-deg");
+        float pivotFraction = (float)part.Number("pivot-fraction", 0.5);
+        float limitDeg = (float)part.Number("limit-deg", 18);
+        float damping = (float)part.Number("damping", 8.0);
         // A see-saw plank has to be wider than whatever rides on it, or a
         // block overhangs the edge and rolls off sideways once it tilts.
         const float thickness = 0.04f, depth = 0.22f;
         var mat = _materials[part.Material];
         var surface = Surface(part.Material);
 
+        // pivot-fraction moves the hinge along the beam: 0.5 centres it
+        // (a see-saw); nearer 0 or 1 gives a short arm and a long arm (a
+        // trebuchet). The beam's own visual/collision centre sits offset
+        // from the pivot (the body's origin) to match.
+        float centerOffset = (0.5f - pivotFraction) * length;
+
         var body = new RigidBody3D
         {
             Name = part.Id,
-            Position = V(part.At), // the pivot, at the beam's centre
+            Position = V(part.At), // the pivot
             Mass = (float)mat.MassOf(length * thickness * depth),
-            // A real pivot has bearing friction; without any damping the
-            // beam snaps to its limit faster than a resting block can
+            // A real pivot has bearing friction; without any damping a
+            // see-saw snaps to its limit faster than a resting block can
             // settle onto the rising end, and it tumbles off instead.
-            AngularDamp = 8.0f,
+            AngularDamp = damping,
         };
-        body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(length, thickness, depth) } });
-        body.AddChild(Shapes.Box(new Vector3(length, thickness, depth), surface));
+        var beamOffset = new Vector3(centerOffset, 0, 0);
+        body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(length, thickness, depth) }, Position = beamOffset });
+        var beam = Shapes.Box(new Vector3(length, thickness, depth), surface);
+        beam.Position = beamOffset;
+        body.AddChild(beam);
         AddChild(body);
         _freezable.Add(body);
+        _comOffset[body] = beamOffset; // the beam is uniform, so its own centroid is its centre of mass
 
         body.RotationDegrees = new Vector3(0, 0, startAngle);
         var joint = new HingeJoint3D { Position = V(part.At) };
         AddChild(joint);
         joint.NodeB = joint.GetPathTo(body);
 
-        // A real see-saw has mechanical stops; without one, the low end
-        // just keeps rotating until it hits the floor (~55° for a 1.2m
-        // beam pivoted at 0.5m), well past the angle any of our materials'
-        // friction can hold a resting block at. ±18° keeps both weights
-        // seated (tan 18° ≈ 0.32, under every material's friction) while
-        // still showing a clear, real tilt.
+        // A real see-saw has mechanical stops (without one, the low end
+        // just keeps rotating until it hits the floor); a trebuchet arm
+        // instead wants to swing through most of its arc, so its .rkt
+        // file passes a much larger #:limit-deg.
         joint.SetFlag(HingeJoint3D.Flag.UseLimit, true);
-        joint.SetParam(HingeJoint3D.Param.LimitUpper, Mathf.DegToRad(10));
-        joint.SetParam(HingeJoint3D.Param.LimitLower, Mathf.DegToRad(-10));
+        joint.SetParam(HingeJoint3D.Param.LimitUpper, Mathf.DegToRad(limitDeg));
+        joint.SetParam(HingeJoint3D.Param.LimitLower, Mathf.DegToRad(-limitDeg));
     }
 
     /// <summary>
@@ -308,7 +337,8 @@ public partial class MachineView : Node3D
         foreach (var b in _freezable) b.Freeze = frozen;
     }
 
-    public string Status
+    /// <summary>The full raw-numbers readout — every tank, boiler, rotor and block. Verbose on purpose; see <see cref="EnergyHud"/> for the headline view.</summary>
+    public string Details
     {
         get
         {
@@ -320,7 +350,86 @@ public partial class MachineView : Node3D
                 bits.Add($"{id} {b.Temperature:F1} °C {b.GaugePressure / 1000:F1} kPa, fire {(b.HeatInput > 0 ? "on" : "off")}");
             foreach (var (id, r) in Runtime.Rotors) bits.Add($"{id} {r.Rpm:F0} rpm");
             foreach (var b in Blocks) bits.Add($"{b.Name} {b.Material.Name} {b.Mass:F1} kg");
-            return $"{Runtime.Def.Name}: " + string.Join(" · ", bits);
+            return string.Join(" · ", bits);
         }
+    }
+
+    // ------------------------------------------------------------ energy
+
+    public readonly record struct EnergySummary(
+        double KineticJ, double PotentialJ, double ThermalDeliveredJ,
+        string SpeedLabel, double? EfficiencyPercent, double? RetainedPercent);
+
+    /// <summary>
+    /// A small, curated set of headline numbers — the point is "what kind
+    /// of energy is in this machine and where did it go", not a complete
+    /// state dump. Kinetic and thermal energy are exact where the sim core
+    /// tracks them directly (the aeolipile's rotor, a boiler's cumulative
+    /// heat); for plain Jolt bodies (blocks, pendulums, levers), kinetic
+    /// energy is ½mv² from each body's centre-of-mass velocity only — a
+    /// reasonable approximation that omits each body's own spin about its
+    /// centre, so it understates the true total somewhat.
+    /// </summary>
+    public EnergySummary Energy()
+    {
+        double rotorKe = Runtime.Rotors.Values.Sum(r => r.KineticEnergy);
+        double bodyKe = _freezable.Sum(b => 0.5 * b.Mass * b.LinearVelocity.LengthSquared());
+        // The real centre of mass, not the body's own origin: a pendulum's
+        // RigidBody3D origin sits fixed at the pivot for the joint, so its
+        // Y never changes — using it directly would make PE constant and
+        // silently ignore the entire swing.
+        double pe = _freezable.Sum(b =>
+            b.Mass * (float)Physics.Gravity * (b.GlobalTransform * _comOffset.GetValueOrDefault(b, Vector3.Zero)).Y);
+        double thermal = Runtime.Boilers.Values.Sum(b => b.HeatDelivered);
+
+        string speed = Runtime.Rotors.Count > 0
+            ? $"{Runtime.Rotors.Values.First().Rpm:F0} rpm"
+            : _freezable.Count > 0
+                ? $"{_freezable.Max(b => b.LinearVelocity.Length()):F2} m/s"
+                : "—";
+
+        double? efficiency = Runtime.Boilers.Count > 0 && Runtime.Rotors.Count > 0 && thermal > 1e-6
+            ? rotorKe / thermal * 100
+            : null;
+
+        double? retained = Runtime.Boilers.Count == 0 && _initialMechanicalEnergy is { } init && init > 1e-6
+            ? (rotorKe + bodyKe + pe) / init * 100
+            : null;
+
+        return new EnergySummary(rotorKe + bodyKe, pe, thermal, speed, efficiency, retained);
+    }
+
+    private static string FormatJoules(double j)
+    {
+        double a = Math.Abs(j);
+        return a switch
+        {
+            >= 1e6 => $"{j / 1e6:F2} MJ",
+            >= 1e3 => $"{j / 1e3:F2} kJ",
+            >= 1 => $"{j:F2} J",
+            >= 1e-3 => $"{j * 1e3:F2} mJ",
+            _ => $"{j * 1e6:F2} µJ",
+        };
+    }
+
+    private static string FormatPercent(double p) =>
+        Math.Abs(p) >= 0.01 ? $"{p:F2}%" : Math.Abs(p) >= 0.0001 ? $"{p:F4}%" : $"{p:E1}%";
+
+    /// <summary>The energy dashboard as 3–4 lines: total mechanical energy and its kinetic/potential mix, heat delivered (if any), speed, and whichever of efficiency/retained energy applies.</summary>
+    public string EnergyHud()
+    {
+        var e = Energy();
+        double mech = e.KineticJ + e.PotentialJ;
+        var lines = new List<string>
+        {
+            mech > 1e-9
+                ? $"Energy: {FormatJoules(mech)} mechanical ({e.KineticJ / mech * 100:F0}% kinetic, {e.PotentialJ / mech * 100:F0}% potential)"
+                : $"Energy: {FormatJoules(mech)} mechanical",
+        };
+        if (e.ThermalDeliveredJ > 0) lines.Add($"Heat delivered: {FormatJoules(e.ThermalDeliveredJ)}");
+        lines.Add($"Speed: {e.SpeedLabel}");
+        if (e.EfficiencyPercent is { } eff) lines.Add($"Efficiency: {FormatPercent(eff)} of heat became motion");
+        if (e.RetainedPercent is { } ret) lines.Add($"Energy retained: {ret:F0}% of its starting mechanical energy");
+        return string.Join("\n", lines);
     }
 }

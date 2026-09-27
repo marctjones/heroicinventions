@@ -16,6 +16,12 @@ public readonly record struct CameraProfile(Vector3 Eye, Vector3 LookAt, float F
 /// rotor: it settles near 4,000 rpm, faster than any camera can resolve
 /// at 1×, so slow motion is what actually makes it visible spinning up.
 ///
+/// The headline HUD is deliberately small — total energy and its
+/// kinetic/potential mix, a single speed number, and whichever of
+/// efficiency or "energy retained" applies (see MachineView.EnergyHud) —
+/// with the full per-part numbers available behind a Details toggle
+/// rather than always on screen.
+///
 /// Two environment variables help headless recording and remote control:
 ///   HEROIC_AUTORUN=1              start running immediately (no click)
 ///   HEROIC_AUTOSELECT=&lt;name&gt;       select a machine at startup
@@ -34,10 +40,14 @@ public partial class Main : Node3D
         ["pendulum-demo"] = new(new Vector3(0, 0.7f, 1.3f), new Vector3(0, 0.5f, 0), 42),
         ["lever-demo"] = new(new Vector3(0, 0.75f, 1.5f), new Vector3(0, 0.55f, 0), 42),
         ["inclined-plane-demo"] = new(new Vector3(0, 0.9f, 1.9f), new Vector3(0, 0.4f, -0.4f), 45),
+        ["newtons-cradle"] = new(new Vector3(0, 0.75f, 1.0f), new Vector3(0, 0.6f, 0), 38),
+        ["trebuchet"] = new(new Vector3(0.2f, 1.3f, 3.2f), new Vector3(0.3f, 0.9f, 0), 55),
     };
     private static readonly (double Scale, string Label)[] Speeds =
         [(0.1, "0.1×"), (0.25, "0.25×"), (1, "1×"), (5, "5×"), (20, "20×")];
     private static readonly Dictionary<string, double> DefaultSpeeds = new() { ["aeolipile"] = 5 };
+    private static readonly (int Width, int Height, string Label)[] WindowSizes =
+        [(1152, 720, "Small"), (1600, 1000, "Medium"), (1920, 1200, "Large")];
 
     private static readonly Dictionary<string, string> DisplayNames = new()
     {
@@ -47,6 +57,8 @@ public partial class Main : Node3D
         ["pendulum-demo"] = "Pendulum",
         ["lever-demo"] = "Lever / See-Saw",
         ["inclined-plane-demo"] = "Inclined Plane",
+        ["newtons-cradle"] = "Newton's Cradle",
+        ["trebuchet"] = "Trebuchet",
     };
 
     private MaterialLibrary _materials = null!;
@@ -56,6 +68,7 @@ public partial class Main : Node3D
     private string? _currentName;
     private bool _running;
     private double _timeScale = 1;
+    private bool _showDetails;
     private double? _quitAfterSimSeconds; // for scripted recording: exact, unlike --quit-after under load
     private readonly bool _debugPhysics = OS.GetEnvironment("HEROIC_DEBUG_PHYSICS") == "1";
     private double _debugTimer;
@@ -65,6 +78,7 @@ public partial class Main : Node3D
     private Button _restartButton = null!;
     private Button _runButton = null!;
     private Button _menuButton = null!;
+    private Button _detailsButton = null!;
     private readonly List<Button> _speedButtons = [];
 
     public override void _Ready()
@@ -117,7 +131,7 @@ public partial class Main : Node3D
 
         var panel = new PanelContainer { Position = new Vector2(20, 20) };
         layer.AddChild(panel);
-        var col = new VBoxContainer { CustomMinimumSize = new Vector2(240, 0) };
+        var col = new VBoxContainer { CustomMinimumSize = new Vector2(260, 0) };
         col.AddThemeConstantOverride("separation", 10);
         panel.AddChild(col);
 
@@ -146,6 +160,15 @@ public partial class Main : Node3D
         _restartButton.Pressed += RestartCurrent;
         col.AddChild(_restartButton);
 
+        _detailsButton = BigButton("Show details");
+        _detailsButton.Disabled = true;
+        _detailsButton.Pressed += () =>
+        {
+            _showDetails = !_showDetails;
+            _detailsButton.Text = _showDetails ? "Hide details" : "Show details";
+        };
+        col.AddChild(_detailsButton);
+
         _menuButton = BigButton("Back to menu");
         _menuButton.Disabled = true;
         _menuButton.Pressed += DeselectMachine;
@@ -163,10 +186,25 @@ public partial class Main : Node3D
             _speedButtons.Add(b);
         }
 
-        // Fixed to the bottom-left corner of the 1600×1000 viewport set in
-        // project.godot (canvas_items stretch keeps this position correct
-        // across window sizes since Godot scales the whole canvas).
-        _hud = new Label { Position = new Vector2(20, 850), Text = "Choose a machine to run it." };
+        col.AddChild(new HSeparator());
+        col.AddChild(new Label { Text = "Window size" });
+        var sizeRow = new HBoxContainer();
+        col.AddChild(sizeRow);
+        foreach (var (w, h, label) in WindowSizes)
+        {
+            var b = new Button { Text = label };
+            b.Pressed += () => SetWindowSize(w, h);
+            sizeRow.AddChild(b);
+        }
+        var fullscreenButton = new Button { Text = "Fullscreen", ToggleMode = true };
+        fullscreenButton.Pressed += () => ToggleFullscreen(fullscreenButton.ButtonPressed);
+        col.AddChild(fullscreenButton);
+
+        // Fixed to the bottom-left corner. The stretch mode set in
+        // project.godot (canvas_items) scales this whole canvas together
+        // with the 3D view, so a fixed position here stays in the right
+        // place relative to the scene at every window size.
+        _hud = new Label { Position = new Vector2(20, 780), Text = "Choose a machine to run it." };
         _hud.AddThemeFontSizeOverride("font_size", 20);
         layer.AddChild(_hud);
     }
@@ -177,6 +215,16 @@ public partial class Main : Node3D
         b.AddThemeFontSizeOverride("font_size", 18);
         return b;
     }
+
+    private void SetWindowSize(int width, int height)
+    {
+        var window = GetWindow();
+        window.Mode = Window.ModeEnum.Windowed;
+        window.Size = new Vector2I(width, height);
+    }
+
+    private void ToggleFullscreen(bool on) =>
+        GetWindow().Mode = on ? Window.ModeEnum.Fullscreen : Window.ModeEnum.Windowed;
 
     // --------------------------------------------------------------- state
 
@@ -204,6 +252,7 @@ public partial class Main : Node3D
         _restartButton.Disabled = false;
         _menuButton.Disabled = false;
         _runButton.Disabled = false;
+        _detailsButton.Disabled = false;
     }
 
     private void RestartCurrent()
@@ -224,6 +273,7 @@ public partial class Main : Node3D
         _restartButton.Disabled = true;
         _menuButton.Disabled = true;
         _runButton.Disabled = true;
+        _detailsButton.Disabled = true;
     }
 
     private void SetRunning(bool running)
@@ -288,6 +338,9 @@ public partial class Main : Node3D
             case Key.Escape when _current is not null:
                 DeselectMachine();
                 break;
+            case Key.D when _current is not null:
+                _detailsButton.EmitSignal(BaseButton.SignalName.Pressed);
+                break;
             case >= Key.Key1 and <= Key.Key9:
             {
                 int index = (int)(key.Keycode - Key.Key1);
@@ -309,13 +362,15 @@ public partial class Main : Node3D
         if (_debugPhysics && _current is not null && (_debugTimer += delta) >= 0.5)
         {
             _debugTimer = 0;
-            GD.Print($"[{_current.Runtime.Time:F2}s] {_current.DebugState()}");
+            GD.Print($"[{_current.Runtime.Time:F2}s] {_current.DebugState()}\n{_current.EnergyHud()}");
         }
 
         _hud.Text = _current is null
             ? "Choose a machine to run it."
-            : $"{(_running ? "RUNNING" : "PAUSED")}   time ×{_timeScale:0.##}\n{_current.Status}\n{BoilingHint()}" +
-              "Space pause/run · F fire · R restart · Esc menu · 1-9 pick a machine · speed buttons above";
+            : $"{(_running ? "RUNNING" : "PAUSED")}   time ×{_timeScale:0.##}\n" +
+              $"{_current.EnergyHud()}\n{BoilingHint()}" +
+              (_showDetails ? $"{_current.Details}\n" : "") +
+              "Space pause/run · F fire · R restart · D details · Esc menu · 1-9 pick a machine";
     }
 
     /// <summary>

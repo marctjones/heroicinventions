@@ -167,14 +167,25 @@
     ;; A lever/see-saw: a beam hinged at its centre (#:at). Rest weights on
     ;; it with separate `block` parts — Jolt's own contact physics settles
     ;; the torque balance, no separate lever equation needed.
+    ;; #:pivot-fraction places the hinge along the beam: 0.5 (default) is
+    ;; a centred see-saw; nearer 0 or 1 is a lopsided beam — a short heavy
+    ;; end and a long light end, i.e. a trebuchet arm. #:limit-deg caps
+    ;; rotation each way (a real see-saw has stops); pass a large value
+    ;; (or omit near 90) to let a trebuchet swing through its full arc.
     (pattern (lever id:id
                     (~alt (~once (~seq #:at at:vec3))
                           (~once (~seq #:length length-v:expr))
                           (~once (~seq #:material mat:id))
-                          (~optional (~seq #:start-angle-deg angle-v:expr))) ...)
+                          (~optional (~seq #:start-angle-deg angle-v:expr))
+                          (~optional (~seq #:pivot-fraction pivot-v:expr))
+                          (~optional (~seq #:limit-deg limit-v:expr))
+                          (~optional (~seq #:damping damping-v:expr))) ...)
       #:attr info (pinfo #'id 'lever (attribute mat) '())
       #:with expr #`(part 'id 'lever 'mat (list at.x at.y at.z)
-                          (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 0)))
+                          (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 0))
+                                (cons 'pivot-fraction (~? pivot-v 1/2))
+                                (cons 'limit-deg (~? limit-v 18))
+                                (cons 'damping (~? damping-v 8.0)))
                           '()
                           #,(loc-of this-syntax)))
 

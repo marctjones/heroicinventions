@@ -12,6 +12,7 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
     public double Temperature { get; private set; } = temperatureC; // °C
     public double HeatInput { get; set; } = heatInputW;             // W, from the fire
     public double HeatLossCoefficient { get; init; } = 2.0;         // W/K to surrounding air at 20 °C
+    public double HeatDelivered { get; private set; }               // J, cumulative — the energy-dashboard's "input" term
 
     public double AbsolutePressure => SaturationPressure(Temperature);
     public double GaugePressure => Math.Max(0, AbsolutePressure - Physics.AtmosphericPressure);
@@ -24,6 +25,7 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
     /// <summary>Advance the boiler, given how much steam the consumers drew this step (kg/s).</summary>
     public void Step(double dt, double steamOutflowKgPerS)
     {
+        HeatDelivered += HeatInput * dt;
         if (IsDry) return;
         double steamOut = Math.Min(steamOutflowKgPerS * dt, WaterMass);
         double netHeat = HeatInput * dt

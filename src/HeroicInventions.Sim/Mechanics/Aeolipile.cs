@@ -29,6 +29,9 @@ public sealed class Aeolipile(Boiler boiler)
 
     public double Rpm => AngularVelocity * 60 / (2 * Math.PI);
 
+    /// <summary>Rotational kinetic energy, J — exact, since the sim already tracks the real moment of inertia.</summary>
+    public double KineticEnergy => 0.5 * MomentOfInertia * AngularVelocity * AngularVelocity;
+
     public void Step(double dt)
     {
         double dp = Boiler.GaugePressure;

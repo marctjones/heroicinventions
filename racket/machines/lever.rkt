@@ -6,7 +6,7 @@
 
 (define-machine lever-demo
   #:source "Classic mechanics demonstration"
-  (lever beam #:at (0 0.5 0) #:length (m 1.2) #:material oak)
+  (lever beam #:at (0 0.5 0) #:length (m 1.2) #:material oak #:limit-deg 10)
   ;; Placed in exact resting contact with the level beam (pivot 0.5 + half
   ;; thickness 0.02 + half block 0.07 = 0.59) — any initial drop turns
   ;; into an impact against a beam that's already rotating, which can

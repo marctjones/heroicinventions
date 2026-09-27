@@ -69,11 +69,13 @@ raco test racket/heroic/tests
 dotnet test tests/HeroicInventions.Sim.Tests
 ```
 
-Open `game/project.godot` in the Godot .NET editor and press Play. You get a menu: pick a machine from the six currently defined (`aeolipile`, `herons-fountain`, `material-samples`, `pendulum-demo`, `lever-demo`, `inclined-plane-demo`), and it runs alone with its own close-up camera.
+Open `game/project.godot` in the Godot .NET editor and press Play. You get a menu: pick a machine from the eight currently defined (`aeolipile`, `herons-fountain`, `material-samples`, `pendulum-demo`, `lever-demo`, `inclined-plane-demo`, `newtons-cradle`, `trebuchet`), and it runs alone with its own close-up camera.
 
-Controls: click a machine to run it; **Restart** reloads it fresh from its `.machine` file; **Run/Pause** and the speed row (0.1×–20×) control simulated time directly — the aeolipile needs real time to boil (~30s at 1×, hence its 5× default), while the pendulum/lever/ramp demos are gravity-driven and easiest to watch at 1×. Keyboard shortcuts mirror the buttons: **Space** pause/run, **F** fire on/off, **R** restart, **Esc** back to the menu, **1**–**9** pick a machine by its menu position.
+**Controls:** click a machine to run it. **Restart** reloads it fresh from its `.machine` file — a true reset, not a rewind. **Run/Pause** and the speed row (0.1×–20×) control simulated time directly: the aeolipile needs real time to boil (~30s at 1×, hence its 5× default), while the gravity-driven demos are easiest to watch at 1×. The **Window size** row and **Fullscreen** toggle resize the game window without leaving it. Keyboard shortcuts mirror the buttons: **Space** pause/run, **F** fire on/off, **R** restart, **D** toggle details, **Esc** back to the menu, **1**–**9** pick a machine by its menu position.
 
-Set `HEROIC_DEBUG_PHYSICS=1` to print each dynamic body's rotation and height to the console twice a second — useful for checking a new machine's physics without needing to look at the screen.
+**The HUD is deliberately small.** By default it shows a curated energy summary, not a dump of every raw number: total mechanical energy and its kinetic/potential split, a single headline speed, and — depending on the machine — either an **efficiency** figure (heat-driven machines: how much of the delivered heat became motion; the aeolipile's is a genuinely tiny fraction, which is real and part of the point) or an **energy retained** figure (gravity-driven machines: how much of the starting mechanical energy is still in the system, which drops as friction and bearing damping dissipate it). Click **Show details** (or press **D**) for the full per-part numbers — temperatures, pressures, litres, rpm — when you want them.
+
+Set `HEROIC_DEBUG_PHYSICS=1` to print each dynamic body's rotation/height and the energy summary to the console twice a second — useful for checking a new machine's physics without needing to look at the screen.
 
 ## Demo
 
