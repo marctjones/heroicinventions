@@ -23,6 +23,7 @@ public partial class MachineView : Node3D
     private readonly List<(Pipe pipe, Vector3 outlet, MeshInstance3D jet)> _jets = [];
     private readonly List<(Aeolipile rotor, Node3D node)> _rotors = [];
     private readonly List<(Boiler boiler, MeshInstance3D fire)> _fires = [];
+    private readonly List<(Aeolipile rotor, MeshInstance3D puff)> _steamPuffs = []; // approximate — not a modelled steam flow, just where it exits
     private readonly List<RigidBody3D> _freezable = []; // every dynamic body: blocks, pendulums, levers
     // Local-space centre-of-mass offset for each body, for real potential
     // energy. Blocks are centred on their own origin (no entry needed —
@@ -33,6 +34,7 @@ public partial class MachineView : Node3D
     private readonly Dictionary<string, RigidBody3D> _bodiesById = []; // for #:hang-from lookups
     private bool _manyIdenticalPendulums;
     private readonly List<(HingeJoint3D Joint, RigidBody3D Anchor, float ReleaseDeg, float StartDeg)> _releasable = [];
+    private readonly List<(HingeJoint3D Joint, double DisableAt)> _motorTimeouts = [];
     private double? _initialMechanicalEnergy; // J, captured at rest — baseline for "energy retained"
 
     public MachineView(MachineRuntime runtime, MaterialLibrary materials)
@@ -134,14 +136,24 @@ public partial class MachineView : Node3D
         // vessels all are) otherwise just floats in mid-air with nothing
         // visibly holding it up — a support post grounds it, and reads
         // as part of one connected apparatus instead of a loose box.
-        if (part.At.Y > 0.02)
-        {
-            var wood = Surface("oak");
-            AddChild(Shapes.Rod(new Vector3((float)part.At.X, 0, (float)part.At.Z), V(part.At), side * 0.12f, wood));
-            var footing = Shapes.Box(new Vector3(side * 0.5f, 0.03f, side * 0.5f), Surface("granite"));
-            footing.Position = new Vector3((float)part.At.X, 0.015f, (float)part.At.Z);
-            AddChild(footing);
-        }
+        AddGroundedSupport(V(part.At), side * 0.12f, side * 0.5f);
+    }
+
+    /// <summary>
+    /// A post from the ground up to a raised point, plus a small footing
+    /// pad — anything held up in mid-air (a tank, a pendulum's pivot, a
+    /// lever's fulcrum) otherwise just floats there with nothing visibly
+    /// holding it up. Skipped near ground level, where it would be a
+    /// stub too short to see.
+    /// </summary>
+    private void AddGroundedSupport(Vector3 point, float postRadius, float footingSize)
+    {
+        if (point.Y <= 0.05f) return;
+        var wood = Surface("oak");
+        AddChild(Shapes.Rod(new Vector3(point.X, 0, point.Z), point, postRadius, wood));
+        var footing = Shapes.Box(new Vector3(footingSize, 0.03f, footingSize), Surface("granite"));
+        footing.Position = new Vector3(point.X, 0.015f, point.Z);
+        AddChild(footing);
     }
 
     private Vector3 PortPosition(PortRef r)
@@ -158,7 +170,15 @@ public partial class MachineView : Node3D
         AddChild(Shapes.Rod(from, to, 0.006f, bronze));
         if (!pipe.Jet) return;
 
-        var jet = Shapes.Cylinder(0.006f, 1, Shapes.Mat(Shapes.Water, roughness: 0.2f, alpha: 0.8f));
+        // Thicker and brighter than the still water elsewhere, with a
+        // slight glow — this is the one thing in the whole machine meant
+        // to visibly catch the eye and change, so it needs to read as
+        // "moving water", not blend in as another translucent surface.
+        var jetMat = Shapes.Mat(new Color(0.35f, 0.75f, 1.0f), roughness: 0.15f, alpha: 0.9f);
+        jetMat.EmissionEnabled = true;
+        jetMat.Emission = new Color(0.3f, 0.7f, 1.0f);
+        jetMat.EmissionEnergyMultiplier = 0.6f;
+        var jet = Shapes.Cylinder(0.016f, 1, jetMat);
         AddChild(jet);
         _jets.Add((Runtime.Pipes[pipe.Id], to, jet));
     }
@@ -200,12 +220,24 @@ public partial class MachineView : Node3D
         var node = new Node3D { Position = axle };
         AddChild(node);
         node.AddChild(Shapes.Sphere(radius, surface));
+        var steamMat = Shapes.Mat(new Color(0.95f, 0.97f, 1f), roughness: 1f, alpha: 0.55f);
+        var rotor = Runtime.Rotors[part.Id];
         foreach (int s in new[] { 1, -1 })
         {
             node.AddChild(Shapes.Rod(new Vector3(0, s * radius, 0), new Vector3(0, s * arm, 0), 0.006f, surface));
             node.AddChild(Shapes.Rod(new Vector3(0, s * arm, 0), new Vector3(0, s * arm, s * 0.025f), 0.006f, surface));
+
+            // Not a modelled gas flow — just a soft puff roughly where the
+            // steam actually exits, shown only while it's actually
+            // venting. Spinning with the nozzle, it reads as a hazy ring
+            // once the rotor is going fast, which is roughly honest to
+            // what a real jet of live steam looks like from a distance.
+            var puff = Shapes.Sphere(0.022f, steamMat);
+            puff.Position = new Vector3(0, s * arm, s * 0.05f);
+            node.AddChild(puff);
+            _steamPuffs.Add((rotor, puff));
         }
-        _rotors.Add((Runtime.Rotors[part.Id], node));
+        _rotors.Add((rotor, node));
         AddLabel(part.Id, axle + new Vector3(0, radius + arm + 0.05f, 0));
     }
 
@@ -225,7 +257,14 @@ public partial class MachineView : Node3D
         // The material name alone, not the full id — several blocks are
         // often placed close together (a row of material samples, a
         // ramp's cargo), and the longer text just overlapped its neighbours.
-        AddLabel(char.ToUpper(part.Material[0]) + part.Material[1..], new Vector3(0, size / 2 + 0.05f, 0), block);
+        // Friction coefficient alongside the name — on the inclined plane
+        // in particular, "why did this one slide further?" otherwise has
+        // no visible answer besides the end result.
+        // Two lines, not one wide line — several blocks are often close
+        // together (material samples, a ramp's cargo) and a single wide
+        // label overlaps its neighbours long before the text gets small.
+        string materialName = char.ToUpper(part.Material[0]) + part.Material[1..];
+        AddLabel($"{materialName}\nμ{_materials[part.Material].Friction:F2}", new Vector3(0, size / 2 + 0.05f, 0), block);
         Blocks.Add(block);
         _freezable.Add(block);
         _bodiesById[part.Id] = block;
@@ -304,6 +343,7 @@ public partial class MachineView : Node3D
         // the bob is the part actually worth pointing at.
         if (!_manyIdenticalPendulums)
             AddLabel(part.Id, new Vector3(0, -length + bobRadius + 0.06f, 0), body);
+        AddGroundedSupport(V(part.At), 0.015f, 0.08f);
     }
 
     /// <summary>
@@ -368,11 +408,36 @@ public partial class MachineView : Node3D
         joint.SetFlag(HingeJoint3D.Flag.UseLimit, true);
         joint.SetParam(HingeJoint3D.Param.LimitUpper, Mathf.DegToRad(limitDeg));
         joint.SetParam(HingeJoint3D.Param.LimitLower, Mathf.DegToRad(-limitDeg));
+
+        // A torsion catapult's arm starts already moving — see the
+        // #:initial-spin-deg-per-sec doc comment in machine.rkt. Directly
+        // assigning RigidBody3D.AngularVelocity had no measurable effect
+        // (the joint's own constraint solving seems to treat it as drift
+        // and correct it away); driving it briefly through the hinge's
+        // own motor — a real, supported feature for exactly this — works.
+        float initialSpin = (float)part.Number("initial-spin-deg-per-sec", 0);
+        if (initialSpin != 0)
+        {
+            joint.SetFlag(HingeJoint3D.Flag.EnableMotor, true);
+            // Negated: the motor's positive direction runs opposite to
+            // RotationDegrees.Z's own sign (confirmed against the
+            // trebuchet, where positive rotZ is what raises the long/far
+            // side — a positive #:initial-spin-deg-per-sec should mean
+            // "throw the far end up", so it needs the opposite sign here.
+            joint.SetParam(HingeJoint3D.Param.MotorTargetVelocity, -Mathf.DegToRad(initialSpin));
+            joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, 500);
+            _motorTimeouts.Add((joint, Runtime.Time + 0.08)); // a brief pulse, then it coasts on momentum
+        }
         // Parented to the beam so the label tilts with it. Local (0,…,0)
         // is the pivot — body's own origin — which stays a sensible label
         // spot regardless of #:pivot-fraction, unlike the beam's own
         // (possibly far off-centre) visual midpoint.
         AddLabel(part.Id, new Vector3(0, thickness + 0.08f, 0), body);
+        // A wider footing than a pendulum's — a lever's fulcrum takes a
+        // real sideways load (the beam pushes on it, unlike a pendulum
+        // hanging straight down), and for a trebuchet's tall pivot this
+        // also reads as the tower/frame a real one is mounted on.
+        AddGroundedSupport(V(part.At), 0.03f, 0.18f);
     }
 
     /// <summary>
@@ -416,6 +481,13 @@ public partial class MachineView : Node3D
             joint.QueueFree(); // frees the constraint; the block keeps its current velocity as a projectile
             _releasable.RemoveAt(i);
         }
+        for (int i = _motorTimeouts.Count - 1; i >= 0; i--)
+        {
+            var (joint, disableAt) = _motorTimeouts[i];
+            if (Runtime.Time < disableAt) continue;
+            joint.SetFlag(HingeJoint3D.Flag.EnableMotor, false); // the spring's energy is spent; coast on momentum from here
+            _motorTimeouts.RemoveAt(i);
+        }
     }
 
     /// <summary>Rotation and height of every dynamic body — a quick way to confirm Jolt is actually moving them (see HEROIC_DEBUG_PHYSICS).</summary>
@@ -441,6 +513,8 @@ public partial class MachineView : Node3D
             node.Rotation = new Vector3((float)rotor.Angle, 0, 0);
         foreach (var (boiler, fire) in _fires)
             fire.Visible = boiler.HeatInput > 0 && !boiler.IsDry;
+        foreach (var (rotor, puff) in _steamPuffs)
+            puff.Visible = rotor.SteamFlow > 1e-6;
     }
 
     public void ToggleFire()

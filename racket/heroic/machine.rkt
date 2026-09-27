@@ -183,6 +183,12 @@
     ;; end and a long light end, i.e. a trebuchet arm. #:limit-deg caps
     ;; rotation each way (a real see-saw has stops); pass a large value
     ;; (or omit near 90) to let a trebuchet swing through its full arc.
+    ;; #:initial-spin-deg-per-sec models a torsion catapult's release: real
+    ;; twisted-sinew springs aren't a joint type Jolt has, so instead of
+    ;; modelling the spring itself, the arm simply starts already moving
+    ;; at the speed the spring would have given it at the instant of
+    ;; release — a legitimate way to model "the energy is already in the
+    ;; arm", not a fake shortcut around the mechanics.
     (pattern (lever id:id
                     (~alt (~once (~seq #:at at:vec3))
                           (~once (~seq #:length length-v:expr))
@@ -190,13 +196,15 @@
                           (~optional (~seq #:start-angle-deg angle-v:expr))
                           (~optional (~seq #:pivot-fraction pivot-v:expr))
                           (~optional (~seq #:limit-deg limit-v:expr))
-                          (~optional (~seq #:damping damping-v:expr))) ...)
+                          (~optional (~seq #:damping damping-v:expr))
+                          (~optional (~seq #:initial-spin-deg-per-sec spin-v:expr))) ...)
       #:attr info (pinfo #'id 'lever (attribute mat) '())
       #:with expr #`(part 'id 'lever 'mat (list at.x at.y at.z)
                           (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 0))
                                 (cons 'pivot-fraction (~? pivot-v 1/2))
                                 (cons 'limit-deg (~? limit-v 18))
-                                (cons 'damping (~? damping-v 8.0)))
+                                (cons 'damping (~? damping-v 8.0))
+                                (cons 'initial-spin-deg-per-sec (~? spin-v 0)))
                           '()
                           #,(loc-of this-syntax)))
 

@@ -42,10 +42,21 @@ public partial class Main : Node3D
         ["inclined-plane-demo"] = new(new Vector3(0, 1.6f, 2.8f), new Vector3(0, 0.3f, -0.6f), 55),
         ["newtons-cradle"] = new(new Vector3(0, 0.75f, 1.0f), new Vector3(0, 0.6f, 0), 38),
         ["trebuchet"] = new(new Vector3(0.3f, 2.2f, 4.8f), new Vector3(0.3f, 1.2f, 0), 60),
+        ["torsion-catapult"] = new(new Vector3(0.2f, 1.8f, 3.6f), new Vector3(0.2f, 1.0f, 0), 55),
     };
     private static readonly (double Scale, string Label)[] Speeds =
         [(0.1, "0.1×"), (0.25, "0.25×"), (1, "1×"), (5, "5×"), (20, "20×")];
-    private static readonly Dictionary<string, double> DefaultSpeeds = new() { ["aeolipile"] = 5 };
+    private static readonly Dictionary<string, double> DefaultSpeeds = new()
+    {
+        ["aeolipile"] = 5,
+        // At 1x, the jet reaches near-steady-state within the first
+        // second and then holds almost flat for many minutes before the
+        // supply vessel runs low enough to visibly matter — measured via
+        // the live link: jet height barely moved (23.7-23.9cm) over 30s
+        // of watching. 20x compresses that multi-minute drain into a
+        // watchable tens-of-seconds window.
+        ["herons-fountain"] = 20,
+    };
     private static readonly (int Width, int Height, string Label)[] WindowSizes =
         [(1152, 720, "Small"), (1600, 1000, "Medium"), (1920, 1200, "Large")];
 
@@ -59,6 +70,7 @@ public partial class Main : Node3D
         ["inclined-plane-demo"] = "Inclined Plane",
         ["newtons-cradle"] = "Newton's Cradle",
         ["trebuchet"] = "Trebuchet",
+        ["torsion-catapult"] = "Torsion Catapult",
     };
 
     private static readonly Dictionary<string, string> Descriptions = new()
@@ -71,6 +83,7 @@ public partial class Main : Node3D
         ["inclined-plane-demo"] = "Galileo's classic experiment: identical-size blocks of different materials released on the same slope. Whether each one slides — and how far — depends only on its material's friction against stone.",
         ["newtons-cradle"] = "Five identical pendulums hung in a touching row. Pull one end back and release it: momentum and energy transfer through the row via collision, animating the far ball instead.",
         ["trebuchet"] = "A medieval siege engine (not ancient, but built from the same lever principle as Vitruvius's torsion catapults). A heavy counterweight hangs from the short end of a pivoted arm; as it falls, it flings the long end — and whatever's riding it — up and around.",
+        ["torsion-catapult"] = "A Greek/Roman siege engine (Vitruvius, Book X). Twisted sinew rope at the arm's short end stores energy the way a twisted rubber band does; released, it snaps the arm up into the frame's stop, and the stone flies off on its own momentum.",
     };
 
     private MaterialLibrary _materials = null!;
