@@ -49,17 +49,15 @@ public partial class Main : Node3D
     private static readonly Dictionary<string, double> DefaultSpeeds = new()
     {
         ["aeolipile"] = 5,
-        // Because supply and receiver share the same cross-section, the
-        // litre that leaves one arrives in the other almost 1-for-1, so
-        // total air volume — and pressure, and jet height — stays nearly
-        // constant for most of the run (measured: <3% drift over 30s at
-        // 1x). That's real: a real Heron's fountain runs at roughly
-        // constant strength and then stops outright once the receiver
-        // fills, rather than fading. Confirmed via the live link that it
-        // does reach that hard stop (jet exactly 0). 10x brings the whole
-        // "runs, then suddenly stops" story — around 2 real minutes at
-        // 1x — into a watchable ~15s.
-        ["herons-fountain"] = 10,
+        // No special default here on purpose: after retuning the vessels
+        // (see herons-fountain.rkt), the whole "runs at strength, then
+        // stops abruptly once the receiver fills" story completes in
+        // ~30 real seconds at a plain 1x — measured over the live link,
+        // including the dramatic part (36.6cm to 1.8cm in the space of
+        // 5 seconds). A fast default would rush past that cliff — at
+        // 10x it happens in half a second, too quick to see happen.
+        // 1x is the speed that actually shows it; the speed row is still
+        // there for anyone who wants to skip ahead or slow it down.
     };
     private static readonly (int Width, int Height, string Label)[] WindowSizes =
         [(1152, 720, "Small"), (1600, 1000, "Medium"), (1920, 1200, "Large")];

@@ -22,7 +22,7 @@ public partial class MachineView : Node3D
     private readonly List<(Tank tank, PartSpec spec, MeshInstance3D water)> _water = [];
     private readonly List<(Pipe pipe, Vector3 outlet, MeshInstance3D jet)> _jets = [];
     private readonly List<(Aeolipile rotor, Node3D node)> _rotors = [];
-    private readonly List<(Boiler boiler, MeshInstance3D fire)> _fires = [];
+    private readonly List<(Boiler boiler, MeshInstance3D fire, StandardMaterial3D glow, GpuParticles3D flame)> _fires = [];
     private readonly List<(Aeolipile rotor, GpuParticles3D puff)> _steamPuffs = []; // approximate — not a modelled steam flow, just where it exits
     private readonly List<RigidBody3D> _freezable = []; // every dynamic body: blocks, pendulums, levers
     // Local-space centre-of-mass offset for each body, for real potential
@@ -203,10 +203,81 @@ public partial class MachineView : Node3D
             Emitting = false, // Refresh() turns this on only while steam is actually flowing
             LocalCoords = false,
             ProcessMaterial = process,
-            DrawPass1 = new SphereMesh { Radius = 0.012f, Height = 0.024f, Material = Shapes.Mat(Colors.White, roughness: 1f) },
+            DrawPass1 = new SphereMesh
+            {
+                Radius = 0.012f,
+                Height = 0.024f,
+                // alpha < 1 turns transparency on at all; VertexColorUseAsAlbedo
+                // is what actually lets the per-particle ColorRamp fade (set
+                // above) modulate it — without both, the puffs render fully
+                // solid no matter what alpha the gradient specifies.
+                Material = new StandardMaterial3D
+                {
+                    // A fixed low alpha, not relying on the per-particle
+                    // ColorRamp to carry the transparency (that combined
+                    // with VertexColorUseAsAlbedo still read as solid —
+                    // this is the guaranteed-to-work version).
+                    AlbedoColor = new Color(1, 1, 1, 0.3f),
+                    Roughness = 1f,
+                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                },
+            },
         };
         _steamPuffs.Add((rotor, particles));
         return particles;
+    }
+
+    /// <summary>
+    /// Small flickering embers rising off the fire — additive blending
+    /// (each particle brightens what's behind it instead of just
+    /// covering it) is what actually reads as "glowing", the way plain
+    /// alpha transparency does for steam but wouldn't for fire.
+    /// Visibility/emitting is tied to the boiler's HeatInput in Refresh.
+    /// </summary>
+    private GpuParticles3D BuildFlameParticles(Vector3 localPosition, float boilerRadius)
+    {
+        var gradient = new Gradient();
+        gradient.SetColor(0, new Color(1f, 0.9f, 0.3f)); // pale yellow at the base
+        gradient.AddPoint(0.5f, new Color(1f, 0.45f, 0.05f)); // orange mid-rise
+        gradient.AddPoint(1f, new Color(0.6f, 0.1f, 0.05f, 0f)); // fades out red
+
+        var process = new ParticleProcessMaterial
+        {
+            EmissionShape = ParticleProcessMaterial.EmissionShapeEnum.Sphere,
+            EmissionSphereRadius = boilerRadius * 0.7f,
+            Direction = new Vector3(0, 1, 0),
+            Spread = 20f,
+            InitialVelocityMin = 0.2f,
+            InitialVelocityMax = 0.5f,
+            Gravity = new Vector3(0, 0.6f, 0), // rises faster than steam — flames, not vapour
+            ScaleMin = 0.4f,
+            ScaleMax = 1.0f,
+            ColorRamp = new GradientTexture1D { Gradient = gradient },
+        };
+
+        return new GpuParticles3D
+        {
+            Position = localPosition,
+            Amount = 18,
+            Lifetime = 0.5,
+            Emitting = false, // Refresh() turns this on only while the fire is lit
+            LocalCoords = false,
+            ProcessMaterial = process,
+            DrawPass1 = new SphereMesh
+            {
+                Radius = 0.015f,
+                Height = 0.03f,
+                Material = new StandardMaterial3D
+                {
+                    AlbedoColor = Colors.White,
+                    EmissionEnabled = true,
+                    Emission = new Color(1f, 0.5f, 0.1f),
+                    EmissionEnergyMultiplier = 1.5f,
+                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                    BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+                },
+            },
+        };
     }
 
     private Vector3 PortPosition(PortRef r)
@@ -244,10 +315,20 @@ public partial class MachineView : Node3D
         body.Position = V(part.At) + new Vector3(0, height / 2, 0);
         AddChild(body);
 
-        var fire = Shapes.Box(new Vector3(radius * 1.8f, 0.05f, radius * 1.8f), Shapes.Mat(new Color(1f, 0.45f, 0.1f)));
-        fire.Position = V(part.At) + new Vector3(0, -0.03f, 0);
+        var firePos = V(part.At) + new Vector3(0, -0.03f, 0);
+        var emberMat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(1f, 0.35f, 0.05f),
+            EmissionEnabled = true,
+            Emission = new Color(1f, 0.4f, 0.05f),
+            EmissionEnergyMultiplier = 2.5f,
+        };
+        var fire = Shapes.Box(new Vector3(radius * 1.8f, 0.05f, radius * 1.8f), emberMat);
+        fire.Position = firePos;
         AddChild(fire);
-        _fires.Add((Runtime.Boilers[part.Id], fire));
+        var flame = BuildFlameParticles(firePos, radius);
+        AddChild(flame);
+        _fires.Add((Runtime.Boilers[part.Id], fire, emberMat, flame));
         AddLabel(part.Id, V(part.At) + new Vector3(0, height + 0.06f, 0));
     }
 
@@ -573,15 +654,27 @@ public partial class MachineView : Node3D
         }
         foreach (var (rotor, node) in _rotors)
             node.Rotation = new Vector3((float)rotor.Angle, 0, 0);
-        foreach (var (boiler, fire) in _fires)
-            fire.Visible = boiler.HeatInput > 0 && !boiler.IsDry;
+        foreach (var (boiler, fire, glow, flame) in _fires)
+        {
+            bool lit = boiler.HeatInput > 0 && !boiler.IsDry;
+            fire.Visible = lit;
+            flame.Emitting = lit;
+            // A cheap flicker: emission energy wobbling around its base
+            // value. Two sine waves at different (irrational-ish) rates
+            // so it doesn't read as a metronomic pulse.
+            if (lit)
+            {
+                double t = Runtime.Time;
+                glow.EmissionEnergyMultiplier = 2.5f + 0.7f * (float)(Math.Sin(t * 11.3) + Math.Sin(t * 5.1)) / 2f;
+            }
+        }
         foreach (var (rotor, puff) in _steamPuffs)
             puff.Emitting = rotor.SteamFlow > 1e-6;
     }
 
     public void ToggleFire()
     {
-        foreach (var (boiler, _) in _fires)
+        foreach (var (boiler, _, _, _) in _fires)
             boiler.HeatInput = boiler.HeatInput > 0 ? 0 : 3000;
     }
 
