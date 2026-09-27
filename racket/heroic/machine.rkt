@@ -139,13 +139,19 @@
                           (list (port-spec 'steam-in 'steam 0))
                           #,(loc-of this-syntax)))
 
+    ;; #:hang-from attaches the block to another part with a free hinge
+    ;; (no angular limit) instead of just resting it by friction — a real
+    ;; trebuchet counterweight hangs this way, so it stays vertical under
+    ;; gravity as the arm rotates instead of sliding off like cargo on a
+    ;; tilting ramp.
     (pattern (block id:id
                     (~alt (~once (~seq #:at at:vec3))
                           (~once (~seq #:size size-v:expr))
-                          (~once (~seq #:material mat:id))) ...)
+                          (~once (~seq #:material mat:id))
+                          (~optional (~seq #:hang-from hang:id))) ...)
       #:attr info (pinfo #'id 'block (attribute mat) '())
       #:with expr #`(part 'id 'block 'mat (list at.x at.y at.z)
-                          (list (cons 'size size-v))
+                          (list (cons 'size size-v) (cons 'hang-from '(~? hang #f)))
                           '()
                           #,(loc-of this-syntax)))
 

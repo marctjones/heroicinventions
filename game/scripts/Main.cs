@@ -35,11 +35,11 @@ public partial class Main : Node3D
     private static readonly Dictionary<string, CameraProfile> Profiles = new()
     {
         ["aeolipile"] = new(new Vector3(0, 0.55f, 0.85f), new Vector3(0, 0.32f, 0), 42),
-        ["herons-fountain"] = new(new Vector3(0, 0.95f, 1.35f), new Vector3(0, 0.55f, 0), 42),
-        ["material-samples"] = new(new Vector3(0, 1.15f, 2.0f), new Vector3(0, 0.7f, 0), 45),
+        ["herons-fountain"] = new(new Vector3(0, 1.3f, 2.2f), new Vector3(0, 0.6f, 0), 45),
+        ["material-samples"] = new(new Vector3(0, 0.7f, 1.6f), new Vector3(0, 0.3f, 0.3f), 45),
         ["pendulum-demo"] = new(new Vector3(0, 0.7f, 1.3f), new Vector3(0, 0.5f, 0), 42),
         ["lever-demo"] = new(new Vector3(0, 0.75f, 1.5f), new Vector3(0, 0.55f, 0), 42),
-        ["inclined-plane-demo"] = new(new Vector3(0, 0.9f, 1.9f), new Vector3(0, 0.4f, -0.4f), 45),
+        ["inclined-plane-demo"] = new(new Vector3(0, 1.6f, 2.8f), new Vector3(0, 0.3f, -0.6f), 55),
         ["newtons-cradle"] = new(new Vector3(0, 0.75f, 1.0f), new Vector3(0, 0.6f, 0), 38),
         ["trebuchet"] = new(new Vector3(0.2f, 1.3f, 3.2f), new Vector3(0.3f, 0.9f, 0), 55),
     };
@@ -74,7 +74,9 @@ public partial class Main : Node3D
     private double _debugTimer;
 
     private Camera3D _camera = null!;
-    private Label _hud = null!;
+    private Label _hudTitle = null!, _hudState = null!, _hudEnergy = null!, _hudSpeed = null!,
+        _hudNote = null!, _hudDetails = null!, _hudControls = null!;
+    private VBoxContainer _detailsSection = null!;
     private Button _restartButton = null!;
     private Button _runButton = null!;
     private Button _menuButton = null!;
@@ -166,6 +168,7 @@ public partial class Main : Node3D
         {
             _showDetails = !_showDetails;
             _detailsButton.Text = _showDetails ? "Hide details" : "Show details";
+            _detailsSection.Visible = _showDetails;
         };
         col.AddChild(_detailsButton);
 
@@ -200,13 +203,76 @@ public partial class Main : Node3D
         fullscreenButton.Pressed += () => ToggleFullscreen(fullscreenButton.ButtonPressed);
         col.AddChild(fullscreenButton);
 
-        // Fixed to the bottom-left corner. The stretch mode set in
-        // project.godot (canvas_items) scales this whole canvas together
-        // with the 3D view, so a fixed position here stays in the right
-        // place relative to the scene at every window size.
-        _hud = new Label { Position = new Vector2(20, 780), Text = "Choose a machine to run it." };
-        _hud.AddThemeFontSizeOverride("font_size", 20);
-        layer.AddChild(_hud);
+        BuildInfoPanel(layer);
+    }
+
+    /// <summary>
+    /// A separate panel anchored to the right edge, so it can never
+    /// overlap the left control panel no matter how tall either one
+    /// grows — the two used to share hardcoded pixel positions, which
+    /// broke as soon as the left panel gained more rows than the HUD's
+    /// fixed Y assumed. Laid out as labelled sections rather than one
+    /// run-on block of text.
+    /// </summary>
+    private void BuildInfoPanel(CanvasLayer layer)
+    {
+        var panel = new PanelContainer();
+        panel.SetAnchorsPreset(Control.LayoutPreset.TopRight);
+        panel.OffsetLeft = -380;
+        panel.OffsetRight = -20;
+        panel.OffsetTop = 20;
+        panel.OffsetBottom = -20; // bottom-bounded so it never grows past the window; Details scrolls within it
+        layer.AddChild(panel);
+
+        var col = new VBoxContainer();
+        col.AddThemeConstantOverride("separation", 6);
+        panel.AddChild(col);
+
+        _hudTitle = SectionLabel("", 20);
+        col.AddChild(_hudTitle);
+        _hudState = new Label();
+        col.AddChild(_hudState);
+
+        col.AddChild(new HSeparator());
+        col.AddChild(SectionLabel("Energy", 15));
+        _hudEnergy = new Label();
+        col.AddChild(_hudEnergy);
+
+        col.AddChild(new HSeparator());
+        col.AddChild(SectionLabel("Speed", 15));
+        _hudSpeed = new Label();
+        col.AddChild(_hudSpeed);
+
+        _hudNote = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        col.AddChild(_hudNote);
+
+        _detailsSection = new VBoxContainer();
+        _detailsSection.AddThemeConstantOverride("separation", 6);
+        col.AddChild(_detailsSection);
+        _detailsSection.AddChild(new HSeparator());
+        _detailsSection.AddChild(SectionLabel("Details", 15));
+        var detailsScroll = new ScrollContainer { SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        _detailsSection.AddChild(detailsScroll);
+        _hudDetails = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        detailsScroll.AddChild(_hudDetails);
+        _detailsSection.Visible = false;
+
+        col.AddChild(new HSeparator());
+        _hudControls = new Label
+        {
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            Text = "Space pause/run · F fire · R restart · D details · Esc menu · 1-9 pick a machine\nDrag to orbit · scroll to zoom",
+        };
+        _hudControls.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.6f));
+        _hudControls.AddThemeFontSizeOverride("font_size", 13);
+        col.AddChild(_hudControls);
+    }
+
+    private static Label SectionLabel(string text, int fontSize)
+    {
+        var l = new Label { Text = text };
+        l.AddThemeFontSizeOverride("font_size", fontSize);
+        return l;
     }
 
     private static Button BigButton(string text)
@@ -268,7 +334,7 @@ public partial class Main : Node3D
         _byName.Clear();
         SetRunning(false);
         ApplyCamera(MenuCamera);
-        _hud.Text = "Choose a machine to run it.";
+        UpdateInfoPanel();
 
         _restartButton.Disabled = true;
         _menuButton.Disabled = true;
@@ -291,11 +357,33 @@ public partial class Main : Node3D
 
     private static float ParseSpeed(string label) => float.Parse(label.TrimEnd('×'), System.Globalization.CultureInfo.InvariantCulture);
 
+    // Orbit state, in spherical coordinates around the current profile's
+    // LookAt point — drag to orbit, scroll to zoom. Reset to the profile's
+    // own framing every time a machine is (re)selected.
+    private Vector3 _orbitPivot;
+    private float _orbitDistance, _orbitYaw, _orbitPitch, _orbitFov;
+    private bool _dragging;
+
     private void ApplyCamera(CameraProfile profile)
     {
-        _camera.Position = profile.Eye;
-        _camera.LookAt(profile.LookAt, Vector3.Up);
-        _camera.Fov = profile.FovDegrees;
+        _orbitPivot = profile.LookAt;
+        _orbitFov = profile.FovDegrees;
+        var offset = profile.Eye - profile.LookAt;
+        _orbitDistance = offset.Length();
+        _orbitYaw = Mathf.Atan2(offset.X, offset.Z);
+        _orbitPitch = Mathf.Asin(Mathf.Clamp(offset.Y / Mathf.Max(_orbitDistance, 0.001f), -1, 1));
+        UpdateOrbitCamera();
+    }
+
+    private void UpdateOrbitCamera()
+    {
+        var offset = new Vector3(
+            _orbitDistance * Mathf.Cos(_orbitPitch) * Mathf.Sin(_orbitYaw),
+            _orbitDistance * Mathf.Sin(_orbitPitch),
+            _orbitDistance * Mathf.Cos(_orbitPitch) * Mathf.Cos(_orbitYaw));
+        _camera.Position = _orbitPivot + offset;
+        _camera.LookAt(_orbitPivot, Vector3.Up);
+        _camera.Fov = _orbitFov;
     }
 
     // --------------------------------------------------------------- scene
@@ -321,10 +409,43 @@ public partial class Main : Node3D
         AddChild(_camera);
     }
 
+    // Radians per pixel dragged, and the pitch range that keeps the camera
+    // from flipping over the top or bottom of its orbit.
+    private const float OrbitSensitivity = 0.008f;
+    private const float MinPitch = -1.4f, MaxPitch = 1.4f; // ≈ ±80°
+
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
-        switch (key.Keycode)
+        switch (@event)
+        {
+            case InputEventKey { Pressed: true, Echo: false } key:
+                HandleKey(key.Keycode);
+                break;
+
+            // Drag with the left or right mouse button to orbit — right
+            // works too since the left often lands on a UI button instead.
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left or MouseButton.Right } mb:
+                _dragging = mb.Pressed;
+                break;
+            case InputEventMouseButton { ButtonIndex: MouseButton.WheelUp }:
+                _orbitDistance = Mathf.Max(0.2f, _orbitDistance * 0.9f);
+                UpdateOrbitCamera();
+                break;
+            case InputEventMouseButton { ButtonIndex: MouseButton.WheelDown }:
+                _orbitDistance = Mathf.Min(20f, _orbitDistance / 0.9f);
+                UpdateOrbitCamera();
+                break;
+            case InputEventMouseMotion motion when _dragging:
+                _orbitYaw -= motion.Relative.X * OrbitSensitivity;
+                _orbitPitch = Mathf.Clamp(_orbitPitch - motion.Relative.Y * OrbitSensitivity, MinPitch, MaxPitch);
+                UpdateOrbitCamera();
+                break;
+        }
+    }
+
+    private void HandleKey(Key keycode)
+    {
+        switch (keycode)
         {
             case Key.Space when _current is not null:
                 SetRunning(!_running);
@@ -343,7 +464,7 @@ public partial class Main : Node3D
                 break;
             case >= Key.Key1 and <= Key.Key9:
             {
-                int index = (int)(key.Keycode - Key.Key1);
+                int index = (int)(keycode - Key.Key1);
                 var names = _machineFiles.Keys.ToList();
                 if (index < names.Count) SelectMachine(names[index]);
                 break;
@@ -365,12 +486,44 @@ public partial class Main : Node3D
             GD.Print($"[{_current.Runtime.Time:F2}s] {_current.DebugState()}\n{_current.EnergyHud()}");
         }
 
-        _hud.Text = _current is null
-            ? "Choose a machine to run it."
-            : $"{(_running ? "RUNNING" : "PAUSED")}   time ×{_timeScale:0.##}\n" +
-              $"{_current.EnergyHud()}\n{BoilingHint()}" +
-              (_showDetails ? $"{_current.Details}\n" : "") +
-              "Space pause/run · F fire · R restart · D details · Esc menu · 1-9 pick a machine";
+        UpdateInfoPanel();
+    }
+
+    private void UpdateInfoPanel()
+    {
+        if (_current is null)
+        {
+            _hudTitle.Text = "No machine selected";
+            _hudState.Text = "";
+            _hudEnergy.Text = "";
+            _hudSpeed.Text = "";
+            _hudNote.Text = "Pick one from the list on the left.";
+            _hudDetails.Text = "";
+            return;
+        }
+
+        _hudTitle.Text = DisplayNames.GetValueOrDefault(_currentName!, _currentName!);
+        _hudState.Text = $"{(_running ? "Running" : "Paused")} · time ×{_timeScale:0.##}";
+
+        var e = _current.Energy();
+        double mech = e.KineticJ + e.PotentialJ;
+        _hudEnergy.Text = mech > 1e-9
+            ? $"{MachineView.FormatJoules(mech)} mechanical\n{e.KineticJ / mech * 100:F0}% kinetic · {e.PotentialJ / mech * 100:F0}% potential" +
+              (e.ThermalDeliveredJ > 0 ? $"\n{MachineView.FormatJoules(e.ThermalDeliveredJ)} heat delivered" : "")
+            : e.ThermalDeliveredJ > 0
+                ? $"{MachineView.FormatJoules(e.ThermalDeliveredJ)} heat delivered"
+                : "0 J";
+
+        _hudSpeed.Text = e.SpeedLabel;
+
+        var note = new List<string>();
+        if (e.EfficiencyPercent is { } eff) note.Add($"Efficiency: {MachineView.FormatPercent(eff)} of heat became motion");
+        if (e.RetainedPercent is { } ret) note.Add($"Energy retained: {ret:F0}% of its starting mechanical energy");
+        string boiling = BoilingHint();
+        if (boiling.Length > 0) note.Add(boiling);
+        _hudNote.Text = string.Join("\n", note);
+
+        _hudDetails.Text = _current.Details.Replace(" · ", "\n");
     }
 
     /// <summary>
@@ -383,6 +536,6 @@ public partial class Main : Node3D
         var coldBoilers = _current.Runtime.Boilers.Values.Where(b => b.Temperature < 99).ToList();
         if (coldBoilers.Count == 0 || _current.Runtime.Rotors.Count == 0) return "";
         double hottest = coldBoilers.Max(b => b.Temperature);
-        return $"heating — {hottest:F0}°C of 100°C, then it starts spinning (try a higher speed above)\n";
+        return $"Heating — {hottest:F0}°C of 100°C, then it starts spinning (try a higher speed above)";
     }
 }

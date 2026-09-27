@@ -30,6 +30,7 @@ public partial class MachineView : Node3D
     // their RigidBody3D's origin at the pivot instead, for the joint, so
     // their mass sits elsewhere in local space and needs the real offset.
     private readonly Dictionary<RigidBody3D, Vector3> _comOffset = [];
+    private readonly Dictionary<string, RigidBody3D> _bodiesById = []; // for #:hang-from lookups
     private double? _initialMechanicalEnergy; // J, captured at rest — baseline for "energy retained"
 
     public MachineView(MachineRuntime runtime, MaterialLibrary materials)
@@ -165,6 +166,20 @@ public partial class MachineView : Node3D
         AddChild(block);
         Blocks.Add(block);
         _freezable.Add(block);
+        _bodiesById[part.Id] = block;
+
+        // #:hang-from <part>: a free hinge to another body instead of
+        // resting on it by friction, so this block stays hanging straight
+        // down under gravity as that body rotates — a trebuchet's
+        // counterweight, not cargo riding loose on a moving ramp.
+        if (part.Props.GetValueOrDefault("hang-from") is SSymbol hangFrom
+            && _bodiesById.TryGetValue(hangFrom.Name, out var anchor))
+        {
+            var joint = new HingeJoint3D { Position = V(part.At) };
+            AddChild(joint);
+            joint.NodeA = joint.GetPathTo(anchor);
+            joint.NodeB = joint.GetPathTo(block);
+        }
     }
 
     /// <summary>
@@ -256,6 +271,7 @@ public partial class MachineView : Node3D
         AddChild(body);
         _freezable.Add(body);
         _comOffset[body] = beamOffset; // the beam is uniform, so its own centroid is its centre of mass
+        _bodiesById[part.Id] = body;
 
         body.RotationDegrees = new Vector3(0, 0, startAngle);
         var joint = new HingeJoint3D { Position = V(part.At) };
@@ -289,7 +305,7 @@ public partial class MachineView : Node3D
         // easy to check by hand: at length L and angle a, the centre sits
         // L/2 up and L/2·cos(a) back from the base.
         var center = V(part.At) + new Vector3(0, length / 2 * Mathf.Sin(angle), -length / 2 * Mathf.Cos(angle));
-        var body = new StaticBody3D { Position = center, RotationDegrees = new Vector3(-angleDeg, 0, 0) };
+        var body = new StaticBody3D { Position = center, RotationDegrees = new Vector3(angleDeg, 0, 0) };
         body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(width, thickness, length) } });
         body.AddChild(Shapes.Box(new Vector3(width, thickness, length), Surface(part.Material)));
         AddChild(body);
@@ -303,7 +319,7 @@ public partial class MachineView : Node3D
 
     /// <summary>Rotation and height of every dynamic body — a quick way to confirm Jolt is actually moving them (see HEROIC_DEBUG_PHYSICS).</summary>
     public string DebugState() =>
-        string.Join("  ", _freezable.Select(b => $"{b.Name} rotZ={b.RotationDegrees.Z:F1}° y={b.GlobalPosition.Y:F3}"));
+        string.Join("  ", _freezable.Select(b => $"{b.Name} pos=({b.GlobalPosition.X:F2},{b.GlobalPosition.Y:F2},{b.GlobalPosition.Z:F2}) rotZ={b.RotationDegrees.Z:F1}°"));
 
     private void Refresh()
     {
@@ -380,13 +396,19 @@ public partial class MachineView : Node3D
         // silently ignore the entire swing.
         double pe = _freezable.Sum(b =>
             b.Mass * (float)Physics.Gravity * (b.GlobalTransform * _comOffset.GetValueOrDefault(b, Vector3.Zero)).Y);
+        // Water has real gravitational PE too — without this, a fluid
+        // machine like Heron's fountain (no rigid bodies, no rotor) shows
+        // zero energy and a blank speed the whole time it's running.
+        pe += Runtime.Tanks.Values.Sum(t => t.WaterVolume * Physics.WaterDensity * Physics.Gravity * (t.BaseElevation + t.Level / 2));
         double thermal = Runtime.Boilers.Values.Sum(b => b.HeatDelivered);
 
         string speed = Runtime.Rotors.Count > 0
             ? $"{Runtime.Rotors.Values.First().Rpm:F0} rpm"
             : _freezable.Count > 0
                 ? $"{_freezable.Max(b => b.LinearVelocity.Length()):F2} m/s"
-                : "—";
+                : Runtime.Pipes.Count > 0
+                    ? $"{Runtime.Pipes.Values.Max(p => Math.Abs(p.Flow)) * 1000:F2} L/s"
+                    : "—";
 
         double? efficiency = Runtime.Boilers.Count > 0 && Runtime.Rotors.Count > 0 && thermal > 1e-6
             ? rotorKe / thermal * 100
@@ -399,7 +421,7 @@ public partial class MachineView : Node3D
         return new EnergySummary(rotorKe + bodyKe, pe, thermal, speed, efficiency, retained);
     }
 
-    private static string FormatJoules(double j)
+    public static string FormatJoules(double j)
     {
         double a = Math.Abs(j);
         return a switch
@@ -412,7 +434,7 @@ public partial class MachineView : Node3D
         };
     }
 
-    private static string FormatPercent(double p) =>
+    public static string FormatPercent(double p) =>
         Math.Abs(p) >= 0.01 ? $"{p:F2}%" : Math.Abs(p) >= 0.0001 ? $"{p:F4}%" : $"{p:E1}%";
 
     /// <summary>The energy dashboard as 3–4 lines: total mechanical energy and its kinetic/potential mix, heat delivered (if any), speed, and whichever of efficiency/retained energy applies.</summary>
