@@ -73,4 +73,26 @@ Open `game/project.godot` in the Godot .NET editor and press Play. Every `.machi
 
 Controls: **Space** switches between build and run, **F** turns fires on and off, **T** runs time at 1× or 10×, **R** reloads the machine files. After a rebuild, pressing R picks up your changes without restarting the game.
 
+## Demo
+
+[docs/demo.mp4](docs/demo.mp4) — real Metal-rendered footage, all three demo machines running: the aeolipile boils and spins up, Heron's fountain jets, and four material cubes fall and settle differently by material.
+
+Two environment variables make headless recording and remote control possible without a keypress:
+
+```bash
+# Start in Run mode instead of paused (for capture, or just to skip Space)
+HEROIC_AUTORUN=1 godot-mono --path game scenes/Main.tscn
+
+# Record a movie without opening an interactive window (Godot's Movie Maker
+# mode: it renders real frames but advances simulated time, not wall time,
+# so 90 simulated seconds takes well under a minute to record)
+HEROIC_AUTORUN=1 godot-mono --path game scenes/Main.tscn \
+  --write-movie demo.avi --fixed-fps 30 --quit-after 2900
+
+# Drive the running game live from Racket (needs HEROIC_LIVE_LINK=1 at launch)
+racket -e '(require "racket/heroic/live.rkt") (live-connect)
+           (live-get (quote aeolipile) (quote kettle) (quote temperature))
+           (live-set! (quote aeolipile) (quote kettle) (quote fire) 6000)'
+```
+
 When exporting the game, add `*.machine` to the export preset's "Filters to export non-resource files" so the machine files are included.
