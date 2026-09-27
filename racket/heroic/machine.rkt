@@ -143,15 +143,20 @@
     ;; (no angular limit) instead of just resting it by friction — a real
     ;; trebuchet counterweight hangs this way, so it stays vertical under
     ;; gravity as the arm rotates instead of sliding off like cargo on a
-    ;; tilting ramp.
+    ;; tilting ramp. #:release-past-deg breaks that hinge once the anchor
+    ;; has rotated past the given angle from where it started — a rough
+    ;; stand-in for a sling's release hook, freeing the block to fly off
+    ;; on whatever velocity it has at that instant.
     (pattern (block id:id
                     (~alt (~once (~seq #:at at:vec3))
                           (~once (~seq #:size size-v:expr))
                           (~once (~seq #:material mat:id))
-                          (~optional (~seq #:hang-from hang:id))) ...)
+                          (~optional (~seq #:hang-from hang:id))
+                          (~optional (~seq #:release-past-deg release-v:expr))) ...)
       #:attr info (pinfo #'id 'block (attribute mat) '())
       #:with expr #`(part 'id 'block 'mat (list at.x at.y at.z)
-                          (list (cons 'size size-v) (cons 'hang-from '(~? hang #f)))
+                          (list (cons 'size size-v) (cons 'hang-from '(~? hang #f))
+                                (cons 'release-past-deg (~? release-v #f)))
                           '()
                           #,(loc-of this-syntax)))
 

@@ -4,11 +4,11 @@
 ;; counterweight hangs from the short arm's tip on a free hinge (a real
 ;; trebuchet's counterweight basket does the same — it stays hanging
 ;; straight down as the arm swings, instead of just resting on it), so
-;; falling it flings the long arm — and the payload — up and around.
-;; The payload still just rests on the arm: a real trebuchet releases it
-;; from a sling at the top of the swing, which needs a rope/release
-;; mechanism this project doesn't have yet, so expect it to slide or
-;; tumble off rather than being thrown cleanly.
+;; falling it flings the long arm around. The payload hangs from the long
+;; arm's tip the same way, and releases once the arm has swung 40° from
+;; level — a rough stand-in for a sling's release hook, not a modelled
+;; rope, but enough to launch the payload cleanly instead of watching it
+;; slide or tumble off partway through the swing.
 
 (define total-length (m 1.8))
 (define pivot-fraction 0.15)          ; short arm = 15% of the beam
@@ -24,7 +24,8 @@
   ;; Hangs from the short arm's tip — stays vertical under gravity as
   ;; the arm rotates, instead of sliding off like loose cargo.
   (block counterweight #:at ((- short-arm) beam-surface 0)
-         #:size (cm 18) #:material granite #:hang-from arm)
-  ;; Payload, near the far end of the long arm.
-  (block payload #:at ((- long-arm (cm 10)) (+ beam-surface (cm 4)) 0)
-         #:size (cm 8) #:material cedar))
+         #:size (cm 22) #:material granite #:hang-from arm)
+  ;; Hangs from the long arm's tip; releases once the arm passes 40° —
+  ;; the launch.
+  (block payload #:at (long-arm beam-surface 0)
+         #:size (cm 8) #:material cedar #:hang-from arm #:release-past-deg 40))

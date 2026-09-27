@@ -78,4 +78,4 @@
     (check-equal? (cadr sexp) 'row)
     (define block (assq 'part (cddr sexp)))
     (check-equal? (assq 'at (cdddr block)) '(at 0.25 0.0 0.0))
-    (check-equal? (assq 'props (cdddr block)) '(props (size 0.1) (hang-from #f)))))
+    (check-equal? (assq 'props (cdddr block)) '(props (size 0.1) (hang-from #f) (release-past-deg #f)))))

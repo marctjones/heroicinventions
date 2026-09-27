@@ -41,7 +41,7 @@ public partial class Main : Node3D
         ["lever-demo"] = new(new Vector3(0, 0.75f, 1.5f), new Vector3(0, 0.55f, 0), 42),
         ["inclined-plane-demo"] = new(new Vector3(0, 1.6f, 2.8f), new Vector3(0, 0.3f, -0.6f), 55),
         ["newtons-cradle"] = new(new Vector3(0, 0.75f, 1.0f), new Vector3(0, 0.6f, 0), 38),
-        ["trebuchet"] = new(new Vector3(0.2f, 1.3f, 3.2f), new Vector3(0.3f, 0.9f, 0), 55),
+        ["trebuchet"] = new(new Vector3(0.3f, 2.2f, 4.8f), new Vector3(0.3f, 1.2f, 0), 60),
     };
     private static readonly (double Scale, string Label)[] Speeds =
         [(0.1, "0.1×"), (0.25, "0.25×"), (1, "1×"), (5, "5×"), (20, "20×")];
@@ -61,6 +61,18 @@ public partial class Main : Node3D
         ["trebuchet"] = "Trebuchet",
     };
 
+    private static readonly Dictionary<string, string> Descriptions = new()
+    {
+        ["aeolipile"] = "Hero of Alexandria's steam turbine (c. 50 AD). A fire boils water in the sealed kettle; escaping steam jets from two bent nozzles on the sphere, spinning it by reaction — the same principle as a rocket or a lawn sprinkler.",
+        ["herons-fountain"] = "Hero of Alexandria's fountain (c. 50 AD). Water draining from the basin into the sealed receiver compresses the air trapped inside. That compressed air pushes water from the supply vessel back up through a nozzle — higher than its own source — with no pump.",
+        ["material-samples"] = "Four identical cubes of different materials, dropped from different heights. Shows how density and friction differ by material — nothing here is scripted, it's real physics reading real material properties.",
+        ["pendulum-demo"] = "A classic compound pendulum, released from 40° and left to swing. Demonstrates the exchange between potential energy (height) and kinetic energy (speed) that every mechanical clock and metronome relies on.",
+        ["lever-demo"] = "A see-saw: two different weights on either end of a beam pivoted at its centre. The heavier side sinks until the beam's own mechanical stop holds it — a direct demonstration of torque and leverage.",
+        ["inclined-plane-demo"] = "Galileo's classic experiment: identical-size blocks of different materials released on the same slope. Whether each one slides — and how far — depends only on its material's friction against stone.",
+        ["newtons-cradle"] = "Five identical pendulums hung in a touching row. Pull one end back and release it: momentum and energy transfer through the row via collision, animating the far ball instead.",
+        ["trebuchet"] = "A medieval siege engine (not ancient, but built from the same lever principle as Vitruvius's torsion catapults). A heavy counterweight hangs from the short end of a pivoted arm; as it falls, it flings the long end — and whatever's riding it — up and around.",
+    };
+
     private MaterialLibrary _materials = null!;
     private readonly SortedDictionary<string, string> _machineFiles = []; // name → res:// path
     private readonly Dictionary<string, MachineView> _byName = [];        // just the current one, for the live link
@@ -74,7 +86,7 @@ public partial class Main : Node3D
     private double _debugTimer;
 
     private Camera3D _camera = null!;
-    private Label _hudTitle = null!, _hudState = null!, _hudEnergy = null!, _hudSpeed = null!,
+    private Label _hudTitle = null!, _hudDescription = null!, _hudState = null!, _hudEnergy = null!, _hudSpeed = null!,
         _hudNote = null!, _hudDetails = null!, _hudControls = null!;
     private VBoxContainer _detailsSection = null!;
     private Button _restartButton = null!;
@@ -230,6 +242,10 @@ public partial class Main : Node3D
 
         _hudTitle = SectionLabel("", 20);
         col.AddChild(_hudTitle);
+        _hudDescription = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(340, 0) };
+        _hudDescription.AddThemeFontSizeOverride("font_size", 13);
+        _hudDescription.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.75f));
+        col.AddChild(_hudDescription);
         _hudState = new Label();
         col.AddChild(_hudState);
 
@@ -494,6 +510,7 @@ public partial class Main : Node3D
         if (_current is null)
         {
             _hudTitle.Text = "No machine selected";
+            _hudDescription.Text = "";
             _hudState.Text = "";
             _hudEnergy.Text = "";
             _hudSpeed.Text = "";
@@ -503,6 +520,7 @@ public partial class Main : Node3D
         }
 
         _hudTitle.Text = DisplayNames.GetValueOrDefault(_currentName!, _currentName!);
+        _hudDescription.Text = Descriptions.GetValueOrDefault(_currentName!, "");
         _hudState.Text = $"{(_running ? "Running" : "Paused")} · time ×{_timeScale:0.##}";
 
         var e = _current.Energy();

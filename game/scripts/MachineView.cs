@@ -31,6 +31,8 @@ public partial class MachineView : Node3D
     // their mass sits elsewhere in local space and needs the real offset.
     private readonly Dictionary<RigidBody3D, Vector3> _comOffset = [];
     private readonly Dictionary<string, RigidBody3D> _bodiesById = []; // for #:hang-from lookups
+    private bool _manyIdenticalPendulums;
+    private readonly List<(HingeJoint3D Joint, RigidBody3D Anchor, float ReleaseDeg, float StartDeg)> _releasable = [];
     private double? _initialMechanicalEnergy; // J, captured at rest — baseline for "energy retained"
 
     public MachineView(MachineRuntime runtime, MaterialLibrary materials)
@@ -47,6 +49,10 @@ public partial class MachineView : Node3D
     public override void _Ready()
     {
         if (Runtime is null) return;
+        // Several identical, closely-spaced pendulums (Newton's cradle) —
+        // labelling each one adds nothing (they're interchangeable) and
+        // the text can't fit between them anyway. One machine title is enough.
+        _manyIdenticalPendulums = Runtime.Def.Parts.Count(p => p.Kind == "pendulum") > 1;
         foreach (var part in Runtime.Def.Parts)
         {
             switch (part.Kind)
@@ -83,19 +89,30 @@ public partial class MachineView : Node3D
     /// vessels, a row of material blocks) can be read at a glance instead
     /// of cross-referencing the Details panel.
     /// </summary>
-    private void AddLabel(string text, Vector3 above)
+    /// <summary>
+    /// <paramref name="offset"/> is in <paramref name="parent"/>'s local
+    /// space (default: this view, so effectively world space for static
+    /// parts). For anything that moves — a block, a pendulum, a lever —
+    /// pass the body itself as parent with a small local offset, so the
+    /// label rides along automatically instead of staying behind at
+    /// wherever the part started (which is what happened at first: a
+    /// falling block's label stayed at its drop height, ending up
+    /// off-camera once the block landed). Billboard mode keeps the text
+    /// facing the camera regardless of the parent's own rotation.
+    /// </summary>
+    private void AddLabel(string text, Vector3 offset, Node3D? parent = null)
     {
         var label = new Label3D
         {
             Text = text,
-            Position = above,
+            Position = offset,
             FontSize = 24,
             OutlineSize = 6,
-            PixelSize = 0.0035f, // most of these parts are 10-30cm across; default pixel_size made text roughly life-sized
+            PixelSize = 0.0025f, // most of these parts are 10-30cm across; default pixel_size made text roughly life-sized
             Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
             NoDepthTest = true, // always readable, even behind glass or another part
         };
-        AddChild(label);
+        (parent ?? this).AddChild(label);
     }
 
     private void BuildTank(PartSpec part)
@@ -112,6 +129,19 @@ public partial class MachineView : Node3D
         AddChild(water);
         _water.Add((Runtime.Tanks[part.Id], part, water));
         AddLabel(part.Id, V(part.At) + new Vector3(0, height + 0.06f, 0));
+
+        // A tank raised above the ground (Heron's fountain's three
+        // vessels all are) otherwise just floats in mid-air with nothing
+        // visibly holding it up — a support post grounds it, and reads
+        // as part of one connected apparatus instead of a loose box.
+        if (part.At.Y > 0.02)
+        {
+            var wood = Surface("oak");
+            AddChild(Shapes.Rod(new Vector3((float)part.At.X, 0, (float)part.At.Z), V(part.At), side * 0.12f, wood));
+            var footing = Shapes.Box(new Vector3(side * 0.5f, 0.03f, side * 0.5f), Surface("granite"));
+            footing.Position = new Vector3((float)part.At.X, 0.015f, (float)part.At.Z);
+            AddChild(footing);
+        }
     }
 
     private Vector3 PortPosition(PortRef r)
@@ -189,7 +219,13 @@ public partial class MachineView : Node3D
             Freeze = true,
         };
         AddChild(block);
-        AddLabel($"{part.Id} ({part.Material})", V(part.At) + new Vector3(0, size / 2 + 0.05f, 0));
+        // Parented to the block, so the label follows it — otherwise a
+        // block that falls (most of them do) leaves its label behind at
+        // the drop height, off-camera once the block has landed.
+        // The material name alone, not the full id — several blocks are
+        // often placed close together (a row of material samples, a
+        // ramp's cargo), and the longer text just overlapped its neighbours.
+        AddLabel(char.ToUpper(part.Material[0]) + part.Material[1..], new Vector3(0, size / 2 + 0.05f, 0), block);
         Blocks.Add(block);
         _freezable.Add(block);
         _bodiesById[part.Id] = block;
@@ -205,6 +241,16 @@ public partial class MachineView : Node3D
             AddChild(joint);
             joint.NodeA = joint.GetPathTo(anchor);
             joint.NodeB = joint.GetPathTo(block);
+
+            // #:release-past-deg: a stand-in for a sling's release hook —
+            // once the anchor (the arm) has swung this far from where it
+            // started, the hinge is freed and the block flies off on
+            // whatever velocity it has, instead of staying attached
+            // through the whole swing or (with no joint at all) just
+            // sliding off early like loose cargo.
+            double releaseDeg = part.Number("release-past-deg", double.PositiveInfinity);
+            if (double.IsFinite(releaseDeg))
+                _releasable.Add((joint, anchor, (float)releaseDeg, anchor.RotationDegrees.Z));
         }
     }
 
@@ -252,7 +298,12 @@ public partial class MachineView : Node3D
         var joint = new HingeJoint3D { Position = V(part.At) };
         AddChild(joint);
         joint.NodeB = joint.GetPathTo(body);
-        AddLabel(part.Id, V(part.At) + new Vector3(0, 0.08f, 0));
+        // Parented to the swinging body itself (not the fixed pivot point),
+        // near the bob — the pivot is often near the top of the camera's
+        // frame or crowded (Newton's cradle has five side by side), while
+        // the bob is the part actually worth pointing at.
+        if (!_manyIdenticalPendulums)
+            AddLabel(part.Id, new Vector3(0, -length + bobRadius + 0.06f, 0), body);
     }
 
     /// <summary>
@@ -270,7 +321,12 @@ public partial class MachineView : Node3D
         float damping = (float)part.Number("damping", 8.0);
         // A see-saw plank has to be wider than whatever rides on it, or a
         // block overhangs the edge and rolls off sideways once it tilts.
-        const float thickness = 0.04f, depth = 0.22f;
+        // Kept thin: for an off-centre pivot (a trebuchet arm), a uniform
+        // beam's own weight is biased toward its longer side by simple
+        // geometry (more material there) — thick enough, its own self-
+        // weight can out-torque the counterweight and swing the wrong way
+        // entirely, which is exactly what happened before this was 0.04.
+        const float thickness = 0.025f, depth = 0.22f;
         var mat = _materials[part.Material];
         var surface = Surface(part.Material);
 
@@ -312,7 +368,11 @@ public partial class MachineView : Node3D
         joint.SetFlag(HingeJoint3D.Flag.UseLimit, true);
         joint.SetParam(HingeJoint3D.Param.LimitUpper, Mathf.DegToRad(limitDeg));
         joint.SetParam(HingeJoint3D.Param.LimitLower, Mathf.DegToRad(-limitDeg));
-        AddLabel(part.Id, V(part.At) + new Vector3(0, thickness + 0.08f, 0));
+        // Parented to the beam so the label tilts with it. Local (0,…,0)
+        // is the pivot — body's own origin — which stays a sensible label
+        // spot regardless of #:pivot-fraction, unlike the beam's own
+        // (possibly far off-centre) visual midpoint.
+        AddLabel(part.Id, new Vector3(0, thickness + 0.08f, 0), body);
     }
 
     /// <summary>
@@ -344,6 +404,18 @@ public partial class MachineView : Node3D
     {
         Runtime.Step(dt);
         Refresh();
+        CheckReleases();
+    }
+
+    private void CheckReleases()
+    {
+        for (int i = _releasable.Count - 1; i >= 0; i--)
+        {
+            var (joint, anchor, releaseDeg, startDeg) = _releasable[i];
+            if (Mathf.Abs(anchor.RotationDegrees.Z - startDeg) < releaseDeg) continue;
+            joint.QueueFree(); // frees the constraint; the block keeps its current velocity as a projectile
+            _releasable.RemoveAt(i);
+        }
     }
 
     /// <summary>Rotation and height of every dynamic body — a quick way to confirm Jolt is actually moving them (see HEROIC_DEBUG_PHYSICS).</summary>
