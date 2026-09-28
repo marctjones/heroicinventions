@@ -15,7 +15,12 @@ public partial class MaterialBlock : RigidBody3D
     {
         Material = material;
         Mass = (float)material.MassOf(size * size * size);
-        PhysicsMaterialOverride = new PhysicsMaterial { Friction = (float)material.Friction };
+        PhysicsMaterialOverride = new PhysicsMaterial { Friction = (float)material.Friction, Bounce = (float)material.Restitution };
+        // A block on a slope just past its friction angle starts creeping at
+        // a fraction of a m/s² — slow enough that the engine would put it
+        // to sleep before it ever got going, and a demo about which blocks
+        // slide would quietly get the marginal one wrong.
+        CanSleep = false;
         AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One * size } });
         AddChild(Shapes.Box(Vector3.One * size, Shapes.Mat(color)));
     }

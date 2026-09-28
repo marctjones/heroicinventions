@@ -33,7 +33,8 @@
               'tensileStrength (f 'tension)
               'tensileStrengthAcrossGrain (f 'across-grain)
               'compressiveStrength (f 'compression)
-              'friction (f 'friction))))
+              'friction (f 'friction)
+              'restitution (f 'restitution))))
   (call-with-output-file materials-json #:exists 'truncate/replace
     (λ (out)
       (write-json (hasheq '_note "Generated from racket/heroic/materials.rktd by racket/build.rkt. Edit that file, not this one."

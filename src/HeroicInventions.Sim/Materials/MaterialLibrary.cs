@@ -8,7 +8,8 @@ public enum MaterialCategory { Wood, Stone, Metal, Fiber }
 /// <summary>
 /// Physical properties of a building material. Strengths are in MPa,
 /// modulus in GPa, density in kg/m³. Wood is anisotropic, so it carries a
-/// separate (much lower) tensile strength across the grain.
+/// separate (much lower) tensile strength across the grain. Restitution
+/// is the fraction of closing speed a collision returns (0 to 1).
 /// </summary>
 public sealed record MaterialDef(
     string Id,
@@ -19,7 +20,8 @@ public sealed record MaterialDef(
     double TensileStrength,
     double TensileStrengthAcrossGrain,
     double CompressiveStrength,
-    double Friction)
+    double Friction,
+    double Restitution)
 {
     /// <summary>Mass in kg of a solid of this material with the given volume in m³.</summary>
     public double MassOf(double volumeM3) => Density * volumeM3;

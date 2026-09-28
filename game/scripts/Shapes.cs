@@ -44,6 +44,7 @@ public static class Shapes
     {
         "bronze" => Bronze,
         "iron" => new Color(0.35f, 0.35f, 0.37f),
+        "steel" => new Color(0.72f, 0.74f, 0.77f),
         "oak" => new Color(0.55f, 0.38f, 0.22f),
         "pine" => new Color(0.82f, 0.66f, 0.43f),
         "cedar" => new Color(0.76f, 0.52f, 0.36f),

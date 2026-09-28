@@ -35,6 +35,9 @@ public partial class MachineView : Node3D
     private bool _manyIdenticalPendulums;
     private readonly List<(HingeJoint3D Joint, RigidBody3D Anchor, float ReleaseDeg, float StartDeg)> _releasable = [];
     private readonly List<(HingeJoint3D Joint, double DisableAt)> _motorTimeouts = [];
+    // Pendulum bobs strike each other through ResolveBobImpacts, not Jolt.
+    private readonly List<(RigidBody3D Body, float Length, float BobRadius, float Inertia, float Restitution)> _pendulums = [];
+    private const uint PendulumLayer = 4;
     // Wheels and screws: every body turning on a fixed axle, with the
     // axle's world direction and extent — for supports, rpm and spin energy.
     private readonly List<(RigidBody3D Body, Vector3 Axis, float HalfLength, float Radius, bool Driven, string Label)> _axles = [];
@@ -104,6 +107,10 @@ public partial class MachineView : Node3D
                           metallic: mat.Category == MaterialCategory.Metal ? 0.8f : 0,
                           roughness: roughness);
     }
+
+    /// <summary>How a part's material behaves in contact: its friction and how much a collision gives back.</summary>
+    private PhysicsMaterial ContactFor(string materialId) =>
+        new() { Friction = (float)_materials[materialId].Friction, Bounce = (float)_materials[materialId].Restitution };
 
     /// <summary>
     /// A part's own surface: <see cref="Surface"/> for its material, then
@@ -409,6 +416,7 @@ public partial class MachineView : Node3D
         {
             Name = part.Id,
             Position = V(part.At),
+            RotationDegrees = new Vector3((float)part.Number("tilt-deg", 0), 0, 0),
             Freeze = true,
         };
         foreach (var visual in block.GetChildren().OfType<MeshInstance3D>())
@@ -479,7 +487,19 @@ public partial class MachineView : Node3D
             Name = part.Id,
             Position = V(part.At), // the pivot: body rotates about its own origin
             Mass = (float)mat.MassOf(rodVolume + bobVolume),
+            PhysicsMaterialOverride = ContactFor(part.Material),
+            // Bobs meet each other through ResolveBobImpacts; everything
+            // else (blocks, the floor) through Jolt as usual.
+            CollisionLayer = PendulumLayer,
+            CollisionMask = 1,
+            CanSleep = false, // a slow swing near the bottom would otherwise freeze mid-arc
         };
+        // About the pivot: a rod swinging from its end (mL²/3) plus a ball
+        // at distance L (its own 2/5·mr² plus the parallel-axis mL²).
+        double rodMass = mat.MassOf(rodVolume), bobMass = mat.MassOf(bobVolume);
+        float inertia = (float)(rodMass * length * length / 3
+                                + bobMass * (length * length + 0.4 * bobRadius * bobRadius));
+        _pendulums.Add((body, length, bobRadius, inertia, (float)mat.Restitution));
         body.AddChild(new CollisionShape3D { Shape = new CylinderShape3D { Radius = rodRadius, Height = length }, Position = new Vector3(0, -length / 2, 0) });
         body.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = bobRadius }, Position = new Vector3(0, -length, 0) });
         var rod = Shapes.Cylinder(rodRadius, length, surface);
@@ -544,6 +564,7 @@ public partial class MachineView : Node3D
             Name = part.Id,
             Position = V(part.At), // the pivot
             Mass = (float)mat.MassOf(length * thickness * depth),
+            PhysicsMaterialOverride = ContactFor(part.Material),
             // A real pivot has bearing friction; without any damping a
             // see-saw snaps to its limit faster than a resting block can
             // settle onto the rising end, and it tumbles off instead.
@@ -640,7 +661,12 @@ public partial class MachineView : Node3D
         // easy to check by hand: at length L and angle a, the centre sits
         // L/2 up and L/2·cos(a) back from the base.
         var center = V(part.At) + new Vector3(0, length / 2 * Mathf.Sin(angle), -length / 2 * Mathf.Cos(angle));
-        var body = new StaticBody3D { Position = center, RotationDegrees = new Vector3(angleDeg, 0, 0) };
+        var body = new StaticBody3D
+        {
+            Position = center,
+            RotationDegrees = new Vector3(angleDeg, 0, 0),
+            PhysicsMaterialOverride = new PhysicsMaterial { Friction = (float)_materials[part.Material].Friction },
+        };
         body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(width, thickness, length) } });
         body.AddChild(Shapes.Box(new Vector3(width, thickness, length), Surface(part.Material)));
         AddChild(body);
@@ -711,6 +737,7 @@ public partial class MachineView : Node3D
         {
             Name = part.Id,
             Mass = (float)(density * part.Number("volume")),
+            PhysicsMaterialOverride = ContactFor(part.Material),
             CenterOfMassMode = RigidBody3D.CenterOfMassModeEnum.Custom,
             CenterOfMass = Vector3.Zero, // every generated wheel and screw is balanced on its axle
             Inertia = new Vector3((float)(density * part.Number("inertia-x")),
@@ -856,8 +883,69 @@ public partial class MachineView : Node3D
         return 0.5 * w.Dot(invI.Inverse() * w);
     }
 
+    /// <summary>
+    /// Collisions between pendulum bobs, as a sequence of two-ball impacts —
+    /// the textbook account of a Newton's cradle. A rigid-body solver
+    /// treats a row of touching balls as one simultaneous contact and
+    /// shares the blow out among all of them, so the whole row swings off
+    /// together; resolved pair by pair, the momentum passes down the row
+    /// and leaves by the far ball, as it does on a real cradle.
+    ///
+    /// Each impact is an impulse J along the line of centres, sized so the
+    /// balls' closing speed is reversed and scaled by the restitution e:
+    ///   J = (1 + e)·v / (kᵢ²/Iᵢ + kⱼ²/Iⱼ)
+    /// where k is each ball's lever arm about its pivot for a push along
+    /// that line and I its moment of inertia about the pivot. Runs before
+    /// each physics step, so a pair about to close its gap within the
+    /// step is caught before the balls overlap.
+    /// </summary>
+    private void ResolveBobImpacts()
+    {
+        if (_pendulums.Count < 2) return;
+        float dt = (float)GetPhysicsProcessDeltaTime();
+        var bobs = _pendulums.Select(p =>
+        {
+            var centre = p.Body.GlobalTransform * new Vector3(0, -p.Length, 0);
+            return (p.Body, Arm: centre - p.Body.GlobalPosition, Centre: centre, p.BobRadius, p.Inertia, p.Restitution);
+        }).ToList();
+        // Impulses given to a body only take effect at the next physics
+        // step, so the chain of impacts is worked out on a copy of the
+        // balls' spins; each impulse is then handed to Jolt once.
+        var spin = bobs.Select(b => b.Body.AngularVelocity.Z).ToArray();
+        var impulses = new List<(RigidBody3D Body, Vector3 Impulse, Vector3 At)>();
+        Vector3 Velocity(int i) => new Vector3(0, 0, spin[i]).Cross(bobs[i].Arm);
+
+        for (int pass = 0; pass < 4 * bobs.Count; pass++)
+        {
+            bool struck = false;
+            for (int i = 0; i < bobs.Count; i++)
+            for (int j = i + 1; j < bobs.Count; j++)
+            {
+                var a = bobs[i];
+                var b = bobs[j];
+                var line = b.Centre - a.Centre;
+                float dist = line.Length();
+                var n = line / dist;
+                float closing = (Velocity(i) - Velocity(j)).Dot(n);
+                if (closing <= 1e-4f || dist - a.BobRadius - b.BobRadius > closing * dt + 0.0005f) continue;
+                float ka = a.Arm.Cross(n).Z, kb = b.Arm.Cross(n).Z;
+                float e = Mathf.Min(a.Restitution, b.Restitution);
+                float impulse = (1 + e) * closing / (ka * ka / a.Inertia + kb * kb / b.Inertia);
+                spin[i] -= impulse * ka / a.Inertia;
+                spin[j] += impulse * kb / b.Inertia;
+                var contact = a.Centre + n * a.BobRadius;
+                impulses.Add((a.Body, -n * impulse, contact - a.Body.GlobalPosition));
+                impulses.Add((b.Body, n * impulse, contact - b.Body.GlobalPosition));
+                struck = true;
+            }
+            if (!struck) break;
+        }
+        foreach (var (body, impulse, at) in impulses) body.ApplyImpulse(impulse, at);
+    }
+
     public void Simulate(double dt)
     {
+        ResolveBobImpacts();
         Runtime.Step(dt);
         Refresh();
         CheckReleases();

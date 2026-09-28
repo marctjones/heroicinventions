@@ -174,17 +174,21 @@
     ;; tilting ramp. #:release-past-deg breaks that hinge once the anchor
     ;; has rotated past the given angle from where it started — a rough
     ;; stand-in for a sling's release hook, freeing the block to fly off
-    ;; on whatever velocity it has at that instant.
+    ;; on whatever velocity it has at that instant. #:tilt-deg turns the
+    ;; block about the X axis, the way a ramp tilts — so it can start
+    ;; resting flat on a slope instead of being dropped onto it.
     (pattern (block id:id
                     (~alt (~once (~seq #:at at:vec3))
                           (~once (~seq #:size size-v:expr))
                           (~once (~seq #:material mat:id))
                           (~optional (~seq #:hang-from hang:id))
-                          (~optional (~seq #:release-past-deg release-v:expr))) ...)
+                          (~optional (~seq #:release-past-deg release-v:expr))
+                          (~optional (~seq #:tilt-deg tilt-v:expr))) ...)
       #:attr info (pinfo #'id 'block (attribute mat) '())
       #:with expr #`(part 'id 'block 'mat (list at.x at.y at.z)
                           (list (cons 'size size-v) (cons 'hang-from '(~? hang #f))
-                                (cons 'release-past-deg (~? release-v #f)))
+                                (cons 'release-past-deg (~? release-v #f))
+                                (cons 'tilt-deg (~? tilt-v 0)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -199,7 +203,7 @@
                              (~optional (~seq #:start-angle-deg angle-v:expr))) ...)
       #:attr info (pinfo #'id 'pendulum (attribute mat) '())
       #:with expr #`(part 'id 'pendulum 'mat (list at.x at.y at.z)
-                          (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 30)))
+                          (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 0)))
                           '()
                           #,(loc-of this-syntax)))
 
