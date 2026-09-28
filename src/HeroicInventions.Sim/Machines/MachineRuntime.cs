@@ -23,6 +23,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Aeolipile> _rotors = [];
     private readonly Dictionary<string, string> _rotorBoiler = []; // rotor id → boiler id
     private readonly List<AirPocket> _air = [];
+    private readonly Dictionary<string, WaterLift> _lifts = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
     private readonly Dictionary<string, Action<double>> _setters = [];
 
@@ -33,6 +34,7 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Boiler> Boilers => _boilers;
     public IReadOnlyDictionary<string, Aeolipile> Rotors => _rotors;
     public IReadOnlyList<AirPocket> AirPockets => _air;
+    public IReadOnlyDictionary<string, WaterLift> Lifts => _lifts;
     public double Time { get; private set; }
 
     /// <summary>
@@ -123,7 +125,45 @@ public sealed class MachineRuntime
             };
         }
 
+        foreach (var lift in def.Lifts) _lifts[lift.Id] = BuildLift(def, lift);
+
         RegisterFields();
+    }
+
+    /// <summary>
+    /// A lift's water per turn and where it draws and delivers, from the
+    /// shape of the machine doing it. A screw's axle runs along X tilted up
+    /// by tilt-deg, so its ends sit half its length either side of At; a
+    /// noria scoops at the bottom of its rim and empties at the top.
+    /// </summary>
+    private WaterLift BuildLift(MachineDef def, LiftSpec spec)
+    {
+        var by = def.Part(spec.By) ?? throw new MachineFormatException($"lift {spec.Id}: no part {spec.By}", spec.Location);
+        var from = TankNamed(spec.From, spec.Location);
+        var to = TankNamed(spec.To, spec.Location);
+        switch (by.Kind, by.Symbol("shape", ""))
+        {
+            case ("screw", _):
+            {
+                double tilt = by.Number("tilt-deg", 0), radius = by.Number("radius");
+                double half = by.Number("length") / 2 * Math.Sin(tilt * Math.PI / 180);
+                double perTurn = by.Number("starts") * WaterLift.ScrewPocketVolume(
+                    radius, by.Number("core-radius"), by.Number("pitch"), (int)by.Number("starts"),
+                    by.Number("blade-thickness"), tilt);
+                return new WaterLift(spec.Id, from, to, perTurn,
+                                     intakeElevation: by.At.Y - half - radius, intakeDepth: 2 * radius,
+                                     dischargeElevation: by.At.Y + half);
+            }
+            case ("wheel", "noria"):
+            {
+                double radius = by.Number("radius");
+                return new WaterLift(spec.Id, from, to, by.Number("buckets") * by.Number("bucket-volume"),
+                                     intakeElevation: by.At.Y - radius, intakeDepth: by.Number("bucket-depth"),
+                                     dischargeElevation: by.At.Y + radius);
+            }
+            default:
+                throw new MachineFormatException($"lift {spec.Id}: {spec.By} is a {by.Symbol("shape", by.Kind)}, which can't lift water (a screw or a noria can)", spec.Location);
+        }
     }
 
     private void RegisterFields()
@@ -152,6 +192,14 @@ public sealed class MachineRuntime
             _getters[$"{id}.flow"] = () => pipe.Flow * 1000;               // L/s
             _getters[$"{id}.jet-height"] = () => pipe.Flow > 0 ? pipe.JetHeight * 100 : 0; // cm
         }
+        foreach (var (id, lift) in _lifts)
+        {
+            _getters[$"{id}.flow"] = () => lift.Flow * 1000;           // L/s
+            _getters[$"{id}.rpm"] = () => lift.Rpm;
+            _getters[$"{id}.load-torque"] = () => lift.LoadTorque;     // N·m
+            _getters[$"{id}.per-turn"] = () => lift.VolumePerTurn * 1000; // L
+            _setters[$"{id}.rpm"] = rpm => lift.Rpm = rpm;
+        }
         foreach (var air in _air)
             foreach (var tank in _tanks.Values.Where(t => t.Air == air))
                 _getters[$"{tank.Name}.air-pressure"] = () => air.GaugePressure / 1000; // kPa
@@ -160,6 +208,7 @@ public sealed class MachineRuntime
     public void Step(double dt)
     {
         Fluids.Step(dt);
+        foreach (var lift in _lifts.Values) lift.Step(dt);
         foreach (var rotor in _rotors.Values) rotor.Step(dt); // steps its own boiler
         foreach (var (id, boiler) in _boilers)
             if (!_rotorBoiler.ContainsValue(id)) boiler.Step(dt, 0);

@@ -8,7 +8,7 @@ using HeroicInventions.Sim.Materials;
 // touches HeroicInventions.Sim, so it can run in `raco test` or CI
 // without Godot installed.
 //
-// Command:  (simulate "<path-to>.machine" <seconds> <step> <sample-dt>)
+// Command:  (simulate "<path-to>.machine" <seconds> <step> <sample-dt> [(set (<target> <field> <value>) ...)])
 // Reply:    (run (<time> (<target.field> <value>) ...) (<time> ...) ...)
 //        or (error "<message>")
 var materials = MaterialLibrary.LoadDefault();
@@ -39,14 +39,21 @@ static string Handle(string line, MaterialLibrary materials)
         throw new FormatException($"unknown command '{form.Head}'; only (simulate ...) is supported");
 
     var items = form.Items;
-    if (items.Count != 5 || items[1] is not SString path || items[2] is not SNumber seconds
+    if (items.Count is not (5 or 6) || items[1] is not SString path || items[2] is not SNumber seconds
         || items[3] is not SNumber step || items[4] is not SNumber sampleDt)
-        throw new FormatException("usage: (simulate \"<path>.machine\" <seconds> <step> <sample-dt>)");
+        throw new FormatException("usage: (simulate \"<path>.machine\" <seconds> <step> <sample-dt> [(set (<target> <field> <value>) ...)])");
     if (step.Value <= 0) throw new FormatException("step must be positive");
     if (sampleDt.Value <= 0) throw new FormatException("sample-dt must be positive");
 
     var def = MachineDef.Parse(File.ReadAllText(path.Value));
     var run = new MachineRuntime(def, materials);
+    // Settings applied before the first step — what the game's engine side
+    // or a player would otherwise supply (a screw's turning speed, a fire).
+    if (items.Count == 6)
+        foreach (var setting in ((SList)items[5]).Items.Skip(1).OfType<SList>())
+            if (setting.Items is [SSymbol target, SSymbol field, SNumber value])
+                run.SetField(target.Name, field.Name, value.Value);
+            else throw new FormatException("each setting is (target field value)");
 
     int totalSteps = (int)Math.Round(seconds.Value / step.Value);
     var frames = new List<string>(capacity: (int)(seconds.Value / sampleDt.Value) + 2);

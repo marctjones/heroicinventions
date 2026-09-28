@@ -60,14 +60,20 @@
 ;; frames, each (time (target.field value) ...). The real physics steps
 ;; every #:step seconds; a frame is recorded only every #:sample-dt
 ;; seconds, so a long or fine-grained run doesn't have to send back one
-;; line per physics tick.
-(define (simulate machine-name #:seconds seconds #:step [step 0.01] #:sample-dt [sample-dt step])
+;; line per physics tick. #:set gives fields a value before the first step,
+;; standing in for what the game's engine side supplies: '((lift rpm 12)).
+(define (simulate machine-name #:seconds seconds #:step [step 0.01] #:sample-dt [sample-dt step]
+                  #:set [settings '()])
   (define path (build-path machines-dir (format "~a.machine" machine-name)))
   (unless (file-exists? path)
     (error 'simulate "no such machine file: ~a (run `racket racket/build.rkt` first?)" path))
   (define reply
-    (send-command! (list 'simulate (path->string path)
-                          (exact->inexact seconds) (exact->inexact step) (exact->inexact sample-dt))))
+    (send-command! (append (list 'simulate (path->string path)
+                                 (exact->inexact seconds) (exact->inexact step) (exact->inexact sample-dt))
+                           (if (null? settings)
+                               '()
+                               (list (cons 'set (for/list ([s settings])
+                                                  (list (car s) (cadr s) (exact->inexact (caddr s))))))))))
   (cond
     [(and (pair? reply) (eq? (car reply) 'run)) (cdr reply)]
     [(and (pair? reply) (eq? (car reply) 'error)) (error 'simulate "~a" (cadr reply))]

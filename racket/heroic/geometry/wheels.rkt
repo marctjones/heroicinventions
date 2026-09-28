@@ -95,6 +95,9 @@
             (for/list ([i (in-range buckets)])
               (placed-box (+ pd (* 0.5 rim-depth)) plate w (v3 (+ r (/ pd 2) (* -0.25 rim-depth)) 0 0)
                           (/ (* 2 pi (+ i 0.5)) buckets)))))
+  ;; the water one bucket holds: inside its walls
+  (define bucket-volume (* (- bd (* 2 plate)) (- bucket-len plate) (- inner-w (* 2 plate))))
   (composite 'noria pieces
              `((radius . ,r) (width . ,w) (spokes . ,spokes) (buckets . ,buckets)
-               (bucket-depth . ,bd) (bucket-length . ,bucket-len) (paddle-depth . ,pd))))
+               (bucket-depth . ,bd) (bucket-length . ,bucket-len) (paddle-depth . ,pd)
+               (bucket-volume . ,bucket-volume))))

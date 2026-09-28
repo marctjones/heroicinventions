@@ -58,6 +58,9 @@ public sealed record PipeSpec(string Id, PortRef From, PortRef To, double Conduc
 public sealed record ConnectSpec(PortRef A, PortRef B, SourceLocation? Location);
 public sealed record SealedAirSpec(IReadOnlyList<string> Tanks, double TubeVolume, SourceLocation? Location);
 
+/// <summary>Water lifted by a screw or noria (By) from one tank to another; Current is a river's speed for a noria.</summary>
+public sealed record LiftSpec(string Id, string By, string From, string To, double? Current, SourceLocation? Location);
+
 /// <summary>Two gears in mesh.</summary>
 public sealed record MeshSpec(string A, string B, SourceLocation? Location);
 
@@ -94,6 +97,7 @@ public sealed class MachineDef
     public IReadOnlyList<RopeSpec> Ropes { get; init; } = [];
     public IReadOnlyList<ArborSpec> Arbors { get; init; } = [];
     public IReadOnlyList<MeshSpec> Meshes { get; init; } = [];
+    public IReadOnlyList<LiftSpec> Lifts { get; init; } = [];
 
     public PartSpec? Part(string id) => Parts.FirstOrDefault(p => p.Id == id);
 
@@ -113,6 +117,13 @@ public sealed class MachineDef
             Connects = clauses.Where(c => c.Head == "connect").Select(ParseConnect).ToList(),
             SealedAir = clauses.Where(c => c.Head == "sealed-air").Select(ParseSealedAir).ToList(),
             Ropes = clauses.Where(c => c.Head == "rope").Select(ParseRope).ToList(),
+            Lifts = clauses.Where(c => c.Head == "lift").Select(c =>
+            {
+                var loc = ParseLoc(c);
+                string Field(string f) => c.Field(f) is { } l ? Sym(l, 1, loc) : throw new MachineFormatException($"lift has no {f}", loc);
+                return new LiftSpec(Sym(c, 1, loc), Field("by"), Field("from"), Field("to"),
+                                    c.Field("current")?.Items.ElementAtOrDefault(1) is SNumber n ? n.Value : null, loc);
+            }).ToList(),
             Meshes = clauses.Where(c => c.Head == "mesh").Select(c =>
             {
                 var loc = ParseLoc(c);

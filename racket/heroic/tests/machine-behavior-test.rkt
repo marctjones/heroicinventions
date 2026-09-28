@@ -24,3 +24,18 @@
               "the boiler should reach the boiling point")
   (check-true (> (final-of run '(ball rpm)) 100)
               "the rotor should be spinning fast once the water is boiling"))
+
+(test-case "The Vitruvian screw carries its pocket volume up every turn"
+  ;; the game feeds the screw's real turning speed in; here, 12 rpm
+  (define run (simulate 'archimedes-screw #:seconds 20 #:step 0.01 #:sample-dt 1 #:set '((raise rpm 12))))
+  (define per-turn (final-of run '(raise per-turn)))          ; litres
+  (check-= per-turn 23.2 0.5 "Vitruvius's 4 m screw at a 3-4-5 slope: ~23 L a turn")
+  ;; while the intake is fully under water the flow is per-turn × rpm / 60
+  (check-= (max-of run '(raise flow)) (/ (* per-turn 12) 60) 0.05)
+  ;; and every litre that leaves the pool arrives in the trough
+  (check-= (+ (final-of run '(pool water)) (final-of run '(trough water))) 900 1e-6)
+  (check-true (> (final-of run '(trough water)) 50)))
+
+(test-case "A screw that isn't turning lifts nothing"
+  (define run (simulate 'archimedes-screw #:seconds 5 #:step 0.01 #:sample-dt 1))
+  (check-= (final-of run '(trough water)) 0 1e-9))

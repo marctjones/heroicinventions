@@ -85,3 +85,32 @@ public class AssemblyTests
         Assert.Throws<InvalidOperationException>(() => asm.Connect(axle, "end", pipe, "in"));
     }
 }
+
+public class WaterLiftTests
+{
+    // Vitruvius's 4 m screw: core 0.25 m across, whole 0.5 m, pitch = core
+    // circumference, eight starts, blades a fifth of their spacing thick.
+    private const double R = 0.25, Core = 0.125, Pitch = Math.PI * 0.25, Blade = Pitch / 8 / 5;
+    private static double Pocket(double tiltDeg) =>
+        Mechanics.WaterLift.ScrewPocketVolume(R, Core, Pitch, 8, Blade, tiltDeg);
+
+    [Fact]
+    public void AVitruvianScrewHoldsWaterButLessThanItsChannels()
+    {
+        double pocket = Pocket(36.87); // the 3-4-5 slope
+        double channelPerTurn = Math.PI * (R * R - Core * Core) * (Pitch / 8 - Blade);
+        Assert.InRange(pocket, 0.05 * channelPerTurn, channelPerTurn);
+    }
+
+    [Fact]
+    public void SteeperScrewsCarryLess() =>
+        Assert.True(Pocket(20) > Pocket(30) && Pocket(30) > Pocket(40));
+
+    [Fact]
+    public void PastTheCriticalSlopeTheChannelNeverDipsAndNothingIsCarried()
+    {
+        // pitch = 2π·core, so tan θ = 2π·core/pitch = 1 at 45°
+        Assert.True(Pocket(44) > 0);
+        Assert.Equal(0, Pocket(46));
+    }
+}

@@ -16,16 +16,16 @@
 
 (provide define-machine
          tank boiler rotor block pendulum lever ramp wheel screw fixture
-         pipe connect sealed-air port rope world arbor mesh
+         pipe connect sealed-air port rope world arbor mesh lift
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
-         (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec)
+         (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec) (struct-out lift-spec)
          take-registered-machines)
 
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source parts pipes connects airs ropes arbors meshes) #:transparent)
+(struct machine (name source parts pipes connects airs ropes arbors meshes lifts) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -42,6 +42,9 @@
 (struct arbor-spec (parts loc) #:transparent)
 ;; a, b: two gears whose teeth engage.
 (struct mesh-spec (a b loc) #:transparent)
+;; by: the screw or noria that lifts; from, to: tanks; current: a river's
+;; speed (m/s) pushing a noria's paddles, or #f.
+(struct lift-spec (id by from to current loc) #:transparent)
 
 (define (make-machine name source items)
   (machine name source
@@ -51,7 +54,8 @@
            (filter air-spec? items)
            (filter rope-spec? items)
            (filter arbor-spec? items)
-           (filter mesh-spec? items)))
+           (filter mesh-spec? items)
+           (filter lift-spec? items)))
 
 ;; Machines register themselves when their module runs, so the build
 ;; script can collect every machine in a file without knowing their names.
@@ -70,7 +74,7 @@
     ...))
 
 (define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture
-  pipe connect sealed-air port rope world arbor mesh)
+  pipe connect sealed-air port rope world arbor mesh lift)
 
 ;; A part built from a generated shape (see heroic/geometry). The shape is
 ;; an ordinary runtime value, so whether it suits the clause is checked
@@ -103,6 +107,7 @@
   (struct rinfo (id ends drum))      ; ends: identifiers naming parts (or world); drum: identifier or #f
   (struct arinfo (parts))            ; identifiers of wheels on one axle
   (struct minfo (a b))               ; two gears in mesh
+  (struct linfo2 (id by from to))    ; a water lift
 
   (define known-materials (material-ids))
 
@@ -141,7 +146,7 @@
 
   (define-syntax-class clause
     #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture pipe connect sealed-air rope arbor mesh)
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture pipe connect sealed-air rope arbor mesh lift)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -373,6 +378,20 @@
     ;; Two gears whose teeth engage: turning one turns the other the
     ;; opposite way, at the inverse ratio of their tooth counts. The game
     ;; checks they're cut to one module and set at the right distance.
+    ;; Water lifted by a turning machine — an Archimedes' screw or a noria —
+    ;; from one tank to another. How much each turn carries comes from the
+    ;; machine's own shape; how fast it turns, from whatever turns it.
+    ;; Lifting water takes torque, so the machine feels the load.
+    ;; #:current gives a noria a river to stand in: water flowing at that
+    ;; speed (m/s) past its paddles, which is what turns it.
+    (pattern (lift id:id
+                   (~alt (~once (~seq #:by by:id))
+                         (~once (~seq #:from from:id))
+                         (~once (~seq #:to to:id))
+                         (~optional (~seq #:current cur-v:expr))) ...)
+      #:attr info (linfo2 #'id #'by #'from #'to)
+      #:with expr #`(lift-spec 'id 'by 'from 'to (~? cur-v #f) #,(loc-of this-syntax)))
+
     (pattern (mesh a:id b:id)
       #:attr info (minfo #'a #'b)
       #:with expr #`(mesh-spec 'a 'b #,(loc-of this-syntax)))
@@ -497,6 +516,16 @@
         (define p (hash-ref parts (syntax-e g) #f))
         (unless (and p (eq? (pinfo-kind p) 'wheel))
           (fail (format "~a is not a wheel; mesh joins two gears" (syntax-e g)) g))))
+
+    (for ([l infos] #:when (linfo2? l))
+      (define by (hash-ref parts (syntax-e (linfo2-by l)) #f))
+      (unless (and by (memq (pinfo-kind by) '(screw wheel)))
+        (fail (format "~a can't lift water: a lift is done #:by a screw or a noria wheel" (syntax-e (linfo2-by l)))
+              (linfo2-by l)))
+      (for ([t (list (linfo2-from l) (linfo2-to l))])
+        (define p (hash-ref parts (syntax-e t) #f))
+        (unless (and p (eq? (pinfo-kind p) 'tank))
+          (fail (format "~a is not a tank; a lift carries water between tanks" (syntax-e t)) t))))
 
     (define sealed (make-hasheq))
     (for ([a infos] #:when (ainfo? a))

@@ -82,6 +82,7 @@ public partial class MachineView : Node3D
         BuildGearTrains();
         BuildAxleSupports();
         foreach (var rope in Runtime.Def.Ropes) BuildRope(rope);
+        BuildLifts();
         Refresh();
 
         // Baseline for "energy retained": mechanical energy before anything
@@ -1000,6 +1001,7 @@ public partial class MachineView : Node3D
         ResolveBobImpacts();
         ResolveRopes();
         DriveGearTrains();
+        DriveLifts();
         Runtime.Step(dt);
         Refresh();
         CheckReleases();
@@ -1027,7 +1029,8 @@ public partial class MachineView : Node3D
     public string DebugState() =>
         string.Join("  ", _freezable.Select(b => $"{b.Name} pos=({b.GlobalPosition.X:F2},{b.GlobalPosition.Y:F2},{b.GlobalPosition.Z:F2}) rotZ={b.RotationDegrees.Z:F1}°")
                           .Concat(_ropes.Select(r => r.Describe()))
-                          .Concat(GearReport()));
+                          .Concat(GearReport())
+                          .Concat(_liftDrives.Select(d => $"{d.Spec.Id} {d.Lift.Rpm:F1}rpm {d.Lift.Flow * 1000:F2}L/s {d.Spec.From}={d.Lift.From.WaterVolume * 1000:F0}L {d.Spec.To}={d.Lift.To.WaterVolume * 1000:F0}L")));
 
     private void Refresh()
     {
@@ -1063,6 +1066,7 @@ public partial class MachineView : Node3D
         foreach (var (rotor, puff) in _steamPuffs)
             puff.Emitting = rotor.SteamFlow > 1e-6;
         foreach (var rope in _ropes) DrawRope(rope);
+        DrawLiftStreams();
     }
 
     public void ToggleFire()
@@ -1140,9 +1144,9 @@ public partial class MachineView : Node3D
             ? rotorKe / thermal * 100
             : null;
 
-        // Not for a driven machine: whoever turns the crank keeps adding
-        // energy, so "retained" would climb past 100% and mean nothing.
-        double? retained = Runtime.Boilers.Count == 0 && !_axles.Any(a => a.Driven)
+        // Not for a driven machine: whoever turns the crank (or the river
+        // under a noria) keeps adding energy, so "retained" means nothing.
+        double? retained = Runtime.Boilers.Count == 0 && !_axles.Any(a => a.Driven) && _liftDrives.Count == 0
                            && _initialMechanicalEnergy is { } init && init > 1e-6
             ? (rotorKe + bodyKe + pe) / init * 100
             : null;

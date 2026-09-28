@@ -36,7 +36,12 @@
   (define thick (or blade (/ pitch starts 5)))
   (define half (/ len 2))
   (define inner (* 0.97 core)) ; blades root a little inside the core, so no seam shows
-  (define k (/ (* 2 pi) pitch))
+  ;; Negative: a left-handed helix, so turning the screw forward
+  ;; (positive about its axle, which points uphill) carries the pockets
+  ;; up it. A blade at angle θ(s) in the screw sits, once the screw has
+  ;; turned by ψ, at world angle θ(s) + ψ; a pocket stays at the bottom
+  ;; angle, so its s moves by −ψ/k — uphill only if k < 0.
+  (define k (- (/ (* 2 pi) pitch)))
   (define steps (max 8 (inexact->exact (ceiling (* per-turn (/ len pitch))))))
   (define radii (list inner outer)) ; a helicoid is straight along its radius
   (define blades
@@ -44,8 +49,10 @@
       (define phase (/ (* 2 pi b) starts))
       (define (theta s) (+ phase (* k s)))
       (define (pt r s dz) (v3 (* r (cos (theta s))) (* r (sin (theta s))) (+ s dz)))
-      (define (sheet-normal r s up?) ; ∂P/∂r × ∂P/∂s = (sin θ, −cos θ, r·k)
-        (define n (v3 (sin (theta s)) (- (cos (theta s))) (* r k)))
+      (define (sheet-normal r s up?)
+        ;; ∂P/∂r × ∂P/∂s = (sin θ, −cos θ, r·k); its z part has k's sign,
+        ;; so for the upper face (+Z side) flip it when k < 0
+        (define n (v* (v3 (sin (theta s)) (- (cos (theta s))) (* r k)) (if (> k 0) 1 -1)))
         (if up? n (v* n -1)))
       (define (radial s sign) (v3 (* sign (cos (theta s))) (* sign (sin (theta s))) 0))
       (define bld (make-builder))
@@ -66,7 +73,10 @@
       ;; the two cut ends of the blade
       (for ([s (list half (- half))] [sign '(1 -1)])
         (define h (/ thick 2))
-        (define n (v3 (* sign (- (sin (theta s)))) (* sign (cos (theta s))) 0))
+        ;; outward is the way the helix angle runs past this end: +θ at the
+        ;; upper end for a right-handed helix, −θ for this left-handed one
+        (define out (* sign (if (> k 0) 1 -1)))
+        (define n (v3 (* out (- (sin (theta s)))) (* out (cos (theta s))) 0))
         (for ([r0 radii] [r1 (cdr radii)])
           (builder-quad! bld (pt r0 s (- h)) (pt r1 s (- h)) (pt r1 s h) (pt r0 s h) n n n n)))
       (builder->mesh bld)))
@@ -77,4 +87,5 @@
                                   (v3 0 0 (* side (+ half (* 0.05 len)))))))
   (define parts (append (list core-mesh) stubs blades))
   (make-shape 'screw (apply mesh-append parts)
-              `((length . ,len) (radius . ,outer) (core-radius . ,core) (pitch . ,pitch) (starts . ,starts))))
+              `((length . ,len) (radius . ,outer) (core-radius . ,core) (pitch . ,pitch) (starts . ,starts)
+                (blade-thickness . ,thick))))
