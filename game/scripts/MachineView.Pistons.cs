@@ -17,6 +17,9 @@ public partial class MachineView
 {
     private readonly Dictionary<string, (RigidBody3D Body, float Bottom, PartSpec Part)> _pistons = [];
     private readonly List<(AtmosphericCylinder Cylinder, RigidBody3D Piston, float Bottom, StandardMaterial3D Casing)> _cylinderDrives = [];
+    // What shows the steam and the cold water: puffs at the steam valve while
+    // steam flows into the cylinder; spray inside it while the jet runs.
+    private readonly List<(AtmosphericCylinder Cylinder, GpuParticles3D Steam, GpuParticles3D Spray)> _cylinderPlumbing = [];
     private readonly List<(WaterLift Lift, RigidBody3D Piston, float LastY)> _pumpDrives = [];
 
     private void BuildPiston(PartSpec part)
@@ -72,8 +75,10 @@ public partial class MachineView
     {
         foreach (var spec in Runtime.Def.Cylinders)
         {
-            var (body, bottom, _) = _pistons[spec.Piston];
-            _cylinderDrives.Add((Runtime.Cylinders[spec.Id], body, bottom, _casings[spec.Piston]));
+            var (body, bottom, piston) = _pistons[spec.Piston];
+            var cylinder = Runtime.Cylinders[spec.Id];
+            _cylinderDrives.Add((cylinder, body, bottom, _casings[spec.Piston]));
+            _cylinderPlumbing.Add((cylinder, BuildSteamMain(spec, piston), BuildInjection(piston)));
         }
         foreach (var spec in Runtime.Def.Lifts.Where(l => _pistons.ContainsKey(l.By)))
         {
@@ -104,5 +109,82 @@ public partial class MachineView
     {
         foreach (var (cylinder, _, _, casing) in _cylinderDrives)
             casing.AlbedoColor = cylinder.Injecting ? new Color(0.35f, 0.55f, 0.95f, 0.45f) : new Color(0.95f, 0.95f, 0.95f, 0.45f);
+        foreach (var (cylinder, steam, spray) in _cylinderPlumbing)
+        {
+            steam.Emitting = cylinder.SteamDraw > 1e-4; // only while steam is really flowing in
+            spray.Emitting = cylinder.Injecting;
+        }
     }
+
+    /// <summary>
+    /// The steam main: a pipe from the boiler's dome up to the bottom of the
+    /// cylinder, with the steam valve (the "regulator") in it. Newcomen's
+    /// cylinder stood directly over its boiler, so the pipe is short.
+    /// </summary>
+    private GpuParticles3D BuildSteamMain(CylinderSpec spec, PartSpec piston)
+    {
+        var boiler = Runtime.Def.Part(spec.Boiler)!;
+        var boilerTop = V(boiler.At) + Vector3.Up * (float)boiler.Number("height");
+        var cylinderBase = V(piston.At) - Vector3.Up * 0.1f;
+        var iron = Surface("iron");
+        var from = new Vector3(cylinderBase.X, boilerTop.Y, cylinderBase.Z);
+        AddChild(Shapes.Rod(from, cylinderBase, 0.08f, iron));
+        var valve = Shapes.Box(new Vector3(0.3f, 0.12f, 0.3f), Surface("bronze"));
+        valve.Position = (from + cylinderBase) / 2;
+        AddChild(valve);
+        AddLabel("steam valve", valve.Position + new Vector3(0.45f, 0, 0), pixelSize: 0.004f);
+        var puffs = Particles(valve.Position + new Vector3(0.18f, 0, 0), new Color(1, 1, 1, 0.3f), 0.05f,
+                              Vector3.Up, rise: 0.4f, speed: 0.5f);
+        AddChild(puffs);
+        return puffs;
+    }
+
+    /// <summary>
+    /// The injection: a cistern of cold water up beside the cylinder (kept
+    /// full by the engine's own pump in a real engine house) and a pipe
+    /// down into the cylinder's base, where the jet sprays up into the
+    /// steam to condense it.
+    /// </summary>
+    private GpuParticles3D BuildInjection(PartSpec piston)
+    {
+        float bore = (float)piston.Number("bore"), stroke = (float)piston.Number("stroke");
+        var bottom = V(piston.At);
+        var cistern = bottom + new Vector3(-(bore + 0.5f), stroke + 0.4f, 0);
+        AddChild(Place(Shapes.Box(new Vector3(0.6f, 0.4f, 0.6f), Shapes.Mat(new Color(0.85f, 0.92f, 0.95f), roughness: 0.1f, alpha: 0.25f)), cistern));
+        AddChild(Place(Shapes.Box(new Vector3(0.56f, 0.28f, 0.56f), Shapes.Mat(Shapes.Water, roughness: 0.2f, alpha: 0.8f)), cistern - new Vector3(0, 0.05f, 0)));
+        AddGroundedSupport(cistern - new Vector3(0, 0.2f, 0), 0.04f, 0.3f);
+        AddLabel("injection cistern", cistern + new Vector3(0, 0.4f, 0), pixelSize: 0.004f);
+        var iron = Surface("iron");
+        var elbow = new Vector3(cistern.X, bottom.Y - 0.05f, cistern.Z);
+        AddChild(Shapes.Rod(cistern - new Vector3(0, 0.2f, 0), elbow, 0.03f, iron));
+        AddChild(Shapes.Rod(elbow, bottom - new Vector3(0, 0.05f, 0), 0.03f, iron));
+        var spray = Particles(bottom + new Vector3(0, 0.02f, 0), new Color(0.4f, 0.6f, 1f, 0.6f), 0.02f,
+                              Vector3.Up, rise: -9.8f, speed: 3.5f);
+        AddChild(spray);
+        return spray;
+    }
+
+    private static MeshInstance3D Place(MeshInstance3D mesh, Vector3 at) { mesh.Position = at; return mesh; }
+
+    /// <summary>A plain particle stream: see-through balls of one colour, fired along dir, rising (or falling) as they go.</summary>
+    private static GpuParticles3D Particles(Vector3 at, Color color, float size, Vector3 dir, float rise, float speed) => new()
+    {
+        Position = at,
+        Amount = 24,
+        Lifetime = 0.8,
+        Emitting = false,
+        LocalCoords = false,
+        ProcessMaterial = new ParticleProcessMaterial
+        {
+            Direction = dir, Spread = 30f,
+            InitialVelocityMin = speed * 0.6f, InitialVelocityMax = speed,
+            Gravity = new Vector3(0, rise, 0),
+            ScaleMin = 0.6f, ScaleMax = 1.5f,
+        },
+        DrawPass1 = new SphereMesh
+        {
+            Radius = size, Height = size * 2,
+            Material = new StandardMaterial3D { AlbedoColor = color, Roughness = 1f, Transparency = BaseMaterial3D.TransparencyEnum.Alpha },
+        },
+    };
 }

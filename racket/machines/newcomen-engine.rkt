@@ -42,7 +42,9 @@
 
 (define-machine newcomen-engine
   #:source "Thomas Newcomen, the Dudley Castle engine, 1712"
-  (boiler boiler #:at (cylinder-x 0 0) #:radius (m 1.1) #:height (m 1.8) #:material iron
+;; the boiler sits over its fire on a stone firebox; the cylinder stands on
+  ;; top of it, fed by a short steam pipe through the steam valve
+  (boiler boiler #:at (cylinder-x (m 0.6) 0) #:radius (m 1.1) #:height (m 1.2) #:material iron
           #:water (kg 2000) #:fire (kW 250) #:temperature 104)
   (piston engine-piston #:at (cylinder-x piston-bottom 0) #:bore (cm 53) #:stroke stroke #:material iron)
   (atmospheric-cylinder cylinder #:piston engine-piston #:steam-from boiler)

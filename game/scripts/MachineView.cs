@@ -379,6 +379,17 @@ public partial class MachineView : Node3D
         AddChild(flame);
         _fires.Add((Runtime.Boilers[part.Id], fire, emberMat, flame));
         AddLabel(part.Id, V(part.At) + new Vector3(0, height + 0.06f, 0));
+        // A boiler set up over its fire stands on stone piers round the
+        // firebox, so the fire under it can be seen.
+        if (part.At.Y > 0.05)
+            for (int i = 0; i < 4; i++)
+            {
+                float a = Mathf.Pi / 4 + i * Mathf.Pi / 2;
+                var rim = V(part.At) + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * radius * 0.85f;
+                var pier = Shapes.Box(new Vector3(radius * 0.3f, (float)part.At.Y, radius * 0.3f), Surface("granite"));
+                pier.Position = new Vector3(rim.X, (float)part.At.Y / 2, rim.Z);
+                AddChild(pier);
+            }
     }
 
     private void BuildRotor(PartSpec part)
