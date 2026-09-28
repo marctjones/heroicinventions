@@ -51,35 +51,21 @@ public class MachineFileTests
         Assert.Equal(new PortRef("kettle", "steam"), Assert.Single(def.Connects).A);
     }
 
+    // HeronsFountainBlueprintLiftsWaterAboveTheBasin and
+    // AeolipileBlueprintSpinsOnceTheWaterBoils used to live here. They
+    // asserted simulated *behaviour* (jet height, rpm), not this file's
+    // format/reference concerns, so they moved to
+    // racket/heroic/tests/machine-behavior-test.rkt, run through the
+    // headless HeroicInventions.SimHost instead of MachineRuntime
+    // directly — see docs/design.html §III "Machines as tests".
+
     [Fact]
-    public void HeronsFountainBlueprintLiftsWaterAboveTheBasin()
+    public void ConservesWaterAcrossASimulatedRun()
     {
         var run = new MachineRuntime(Load("herons-fountain"), Materials);
-        var nozzle = run.Pipes["nozzle"];
         double before = run.Fluids.TotalWater;
-        double supplyStart = run.Tanks["supply"].WaterVolume;
-
-        double maxJet = 0;
-        for (int i = 0; i < 1200; i++)
-        {
-            run.Step(0.05);
-            if (nozzle.Flow > 0) maxJet = Math.Max(maxJet, nozzle.JetHeight);
-        }
-
-        Assert.True(run.AirPockets[0].GaugePressure > 0, "air should be compressed");
-        Assert.True(run.Tanks["supply"].WaterVolume < supplyStart, "supply vessel should empty through the nozzle");
-        Assert.True(maxJet > 0, "jet should rise above the nozzle");
+        for (int i = 0; i < 1200; i++) run.Step(0.05);
         Assert.Equal(before, run.Fluids.TotalWater, precision: 9);
-    }
-
-    [Fact]
-    public void AeolipileBlueprintSpinsOnceTheWaterBoils()
-    {
-        var run = new MachineRuntime(Load("aeolipile"), Materials);
-        for (int i = 0; i < 20_000; i++) run.Step(0.01); // 200 s
-
-        Assert.True(run.Boilers["kettle"].Temperature >= 100);
-        Assert.True(run.Rotors["ball"].Rpm > 100, $"expected a spinning rotor, got {run.Rotors["ball"].Rpm:F0} rpm");
     }
 
     [Fact]
