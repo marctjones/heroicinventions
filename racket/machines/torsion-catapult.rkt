@@ -1,33 +1,34 @@
 #lang heroic
-;; A single-armed torsion catapult — the onager, a late-Roman engine
-;; described by Ammianus Marcellinus (4th century AD). (Vitruvius's
-;; proportion tables are for the earlier two-armed engines; see
-;; vitruvian-catapulta.rkt.) A bundle of
-;; twisted sinew rope at the arm's short end stores energy by torsion,
-;; the same way twisting a rubber band does. Released, it snaps the long
-;; arm upward until it slams into the frame's crossbar — modelled here
-;; as a hard stop (#:limit-deg) — and the stone in its sling keeps
-;; going on its own momentum.
+;; The onager: a late-Roman one-armed stone-thrower (Ammianus Marcellinus,
+;; Res Gestae XXIII.4, 4th century AD), named for the wild ass's kick.
+;; A single arm stands in a horizontal skein of twisted sinew rope. The
+;; crew winch the arm down and back, twisting the skein further; loosed,
+;; the skein flings the arm up until it slams into a padded crossbeam near
+;; upright, and the stone, in a sling on the arm's tip, whips round and
+;; flies on.
 ;;
-;; Jolt has no torsion-spring joint to model the twisted skein directly,
-;; so the release is modelled at the moment it happens: the arm simply
-;; starts already spinning at the speed the skein would have given it
-;; (#:initial-spin-deg-per-sec) — the energy is real, just not the spring
-;; that produced it.
+;; The skein is a torsion spring: it pulls the arm back toward where it
+;; would rest untwisted, with torque −k·(θ − rest). It's wound so that
+;; rest lies past the crossbeam — the skein still pulls when the arm is
+;; against it. The sling lets go once it has whipped round close to in
+;; line with the arm (#:release-deg), like a trebuchet's. Ammianus gives no
+;; skein stiffness; 150 N·m per radian is an estimate. Throws toward −X.
+(require racket/math)
 
-(define arm-length (m 0.7))
-(define pivot-fraction 0.1)   ; the skein anchors near one end, not the centre
-(define short-arm (* pivot-fraction arm-length))
-(define long-arm (- arm-length short-arm))
-(define pivot-y (m 0.8))
-(define beam-surface (+ pivot-y (cm 1.25))) ; pivot + half beam thickness
+(define pivot-y (m 0.6))
+(define arm-length (m 1.0))
+(define stop-deg 85)                     ; the padded crossbeam, just short of upright
+(define rest-deg 120)                    ; untwisted: past the crossbeam
+(define sling (m 0.45))
+(define stone-size (cm 10))              ; granite: 2.7 kg
 
 (define-machine torsion-catapult
   #:source "Ammianus Marcellinus, Res Gestae XXIII.4 (the onager)"
-  (lever arm #:at (0 pivot-y 0) #:length arm-length #:material oak
-         #:pivot-fraction pivot-fraction #:limit-deg 80 #:damping 1.0
-         #:initial-spin-deg-per-sec 480)
-  ;; The stone, in a sling near the arm's far end — releases as the arm
-  ;; nears the frame's stop, same mechanism as the trebuchet's payload.
-  (block stone #:at ((- long-arm (cm 8)) beam-surface 0)
-         #:size (cm 10) #:material granite #:hang-from arm #:release-past-deg 65))
+  ;; the arm starts winched down level, pointing back (+X)
+  (lever arm #:at (0 pivot-y 0) #:length arm-length #:material oak #:pivot-fraction 0
+         #:section (cm 6) #:start-angle-deg 0 #:limit-lower-deg -5 #:limit-upper-deg stop-deg
+         #:spring-stiffness 150 #:spring-rest-deg rest-deg #:damping 0.1)
+  ;; the stone hangs in the sling below the arm's tip, just clear of the ground
+  (block stone #:at (arm-length (- pivot-y sling) 0) #:size stone-size #:material granite)
+  (rope sling-rope #:from (arm arm-length 0 0) #:to (stone 0 0 0) #:length sling
+        #:release-deg 30 #:diameter (cm 1)))

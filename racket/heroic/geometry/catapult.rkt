@@ -94,8 +94,15 @@
 ;; post), the channel running fore and aft through it, and the column,
 ;; base and braces it stands on. Origin on the ground under the column,
 ;; +Y up, the bolt flying toward +Z.
-(define (catapulta-frame #:bolt-length bolt-length)
+(define (catapulta-frame #:bolt-length bolt-length #:arm-stop-deg [stop-deg 20])
   (define-values (D d hole capital-len y0 cap-y0 spring-xs) (layout bolt-length))
+  ;; The side posts stand just in front of the arms' sweep: each arm, at its
+  ;; forward stop, rests against the back of its post (where the padding
+  ;; went) and swings away behind it when drawn — never through it.
+  (define post-inner-x (- (/ capital-len 2) (d 'side-post-thickness)))
+  (define post-z (+ (* (- post-inner-x (second spring-xs)) (tan (degrees->radians stop-deg)))
+                    (/ (d 'arm-section) 2)
+                    (/ (d 'board-width) 2)))
   (define board-t (d 'board-thickness))
   (define board-w (d 'board-width))
   (define post-h (d 'side-post-height))
@@ -108,7 +115,7 @@
        (placed-box capital-len board-t board-w 0 y 0))
      (for/list ([side '(-1 1)])
        (placed-box (d 'side-post-thickness) post-h board-w
-                   (* side (- (/ capital-len 2) (/ (d 'side-post-thickness) 2))) mid-y 0))
+                   (* side (- (/ capital-len 2) (/ (d 'side-post-thickness) 2))) mid-y post-z))
      ;; the middle post, with an opening where the bolt and string pass through
      (let* ([post-bottom (+ cap-y0 board-t)]
             [post-top (+ post-bottom post-h)]
@@ -139,7 +146,7 @@
                        (v3 0 (/ top 2) (* side (/ reach 2)))))))
   (make-shape 'catapult-frame (apply mesh-append pieces)
               `((bolt-length . ,bolt-length) (hole . ,hole) (capital-length . ,capital-len)
-                (channel-height . ,y0))))
+                (channel-height . ,y0) (arm-stop-deg . ,stop-deg))))
 
 ;; The two twisted-sinew springs, standing upright through the capital —
 ;; the machine's whole store of energy. Same origin as the frame.

@@ -97,7 +97,7 @@ public partial class Main : Node3D
         ["inclined-plane-demo"] = "Galileo's classic experiment: identical-size blocks of different materials released on the same slope. Whether each one slides — and how far — depends only on its material's friction against stone.",
         ["newtons-cradle"] = "Five identical pendulums hung in a touching row. Pull one end back and release it: momentum and energy transfer through the row via collision, animating the far ball instead.",
         ["trebuchet"] = "A counterweight trebuchet (medieval, but Archimedes' lever taken as far as it goes). A 73 kg counterweight hangs on a chain from the short arm; the long arm carries a sling, with the stone lying on the ground behind. The falling weight whips the arm over, the sling whips the stone round faster still, and it flies ~6 m forward. Only rope, hinge and gravity — nothing scripts the flight.",
-        ["torsion-catapult"] = "The onager, a late-Roman one-armed siege engine (Ammianus Marcellinus, 4th c. AD). Twisted sinew rope at the arm's short end stores energy the way a twisted rubber band does; released, it snaps the arm up into the frame's stop, and the stone flies off on its own momentum.",
+        ["torsion-catapult"] = "The onager, a late-Roman one-armed stone-thrower (Ammianus Marcellinus, 4th c. AD). Its arm stands in a horizontal skein of twisted sinew — a torsion spring — winched down level. Loosed, the skein flings the arm up against a padded crossbeam near upright, and the stone, in a sling at the tip, whips round and flies ~15 m. The skein's stiffness is our estimate; Ammianus gives none.",
         ["antikythera-lunar-train"] = "Six bronze gears from the Antikythera mechanism (c. 100 BC), with their real tooth counts: 64→38, 48→24, 127→32. One turn of the first is a year; the last then turns 254/19 times — the Moon's circuits of the sky in that year. Triangular teeth, as the originals have. Here a crank turns b2 at 2 rpm and the train does the rest: each mesh reverses the sense and scales the speed by the tooth ratio, so e2 runs at 26.7 rpm.",
         ["archimedes-screw"] = "A water screw built only from Vitruvius's rules (De Architectura X.6) — core a sixteenth of its length, eight helical blades, whole an eighth of its length across, set on a 3-4-5 slope. A man treading it turns it at 12 rpm; its lower end stands in a pool, and each turn carries the water in each dip of its channels one pitch higher, 23 L a turn, pouring into the trough at the top. As the pool drops below the intake the scoops come up part-full and the flow falls off.",
         ["newcomen-engine"] = "Thomas Newcomen's atmospheric engine (1712), after the one at Dudley Castle — the first practical piston engine, built to pump water out of mines. Steam fills the cylinder (white) and the pump rod's weight draws the piston up; at the top a jet of cold water condenses the steam (blue), and the atmosphere — 18 kN on the 53 cm piston — drives it down, rocking the beam and lifting ~47 L of water 48 m up the mine shaft each stroke. It's the air that does the work. About 5% of the fire's heat becomes lifted water here; real engines managed under 1%, because each cold jet also chilled the cylinder walls — the waste Watt's separate condenser later cured.",
@@ -116,6 +116,7 @@ public partial class Main : Node3D
     private bool _showDetails;
     private double? _quitAfterSimSeconds; // for scripted recording: exact, unlike --quit-after under load
     private readonly bool _debugPhysics = OS.GetEnvironment("HEROIC_DEBUG_PHYSICS") == "1";
+    private readonly bool _audit = OS.GetEnvironment("HEROIC_AUDIT") == "1"; // see MachineView.Audit.cs
     private double _debugTimer;
 
     private Camera3D _camera = null!;
@@ -435,6 +436,13 @@ public partial class Main : Node3D
         _orbitDistance = offset.Length();
         _orbitYaw = Mathf.Atan2(offset.X, offset.Z);
         _orbitPitch = Mathf.Asin(Mathf.Clamp(offset.Y / Mathf.Max(_orbitDistance, 0.001f), -1, 1));
+        // HEROIC_ORBIT="yaw pitch" (degrees) swings the camera round from the
+        // machine's usual view — for checking a machine from another side.
+        if (OS.GetEnvironment("HEROIC_ORBIT").Split(' ', StringSplitOptions.RemoveEmptyEntries) is [var yaw, var pitch])
+        {
+            _orbitYaw += Mathf.DegToRad(float.Parse(yaw, System.Globalization.CultureInfo.InvariantCulture));
+            _orbitPitch = Mathf.Clamp(_orbitPitch + Mathf.DegToRad(float.Parse(pitch, System.Globalization.CultureInfo.InvariantCulture)), MinPitch, MaxPitch);
+        }
         UpdateOrbitCamera();
     }
 
@@ -553,8 +561,13 @@ public partial class Main : Node3D
         if (_running && _current is not null)
             _current.Simulate(delta); // already scaled: see SetSpeed
 
+        if (_audit && _running && _current is not null) _current.AuditTick(delta);
+
         if (_quitAfterSimSeconds is { } limit && _current is not null && _current.Runtime.Time >= limit)
+        {
+            if (_audit) GD.Print(_current.AuditReport());
             GetTree().Quit();
+        }
 
         if (_debugPhysics && _current is not null && (_debugTimer += delta) >= 0.5)
         {

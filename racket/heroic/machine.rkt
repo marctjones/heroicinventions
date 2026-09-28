@@ -198,28 +198,20 @@
                           (list (port-spec 'steam-in 'steam 0))
                           #,(loc-of this-syntax)))
 
-    ;; #:hang-from attaches the block to another part with a free hinge
-    ;; (no angular limit) instead of just resting it by friction — a real
-    ;; trebuchet counterweight hangs this way, so it stays vertical under
-    ;; gravity as the arm rotates instead of sliding off like cargo on a
-    ;; tilting ramp. #:release-past-deg breaks that hinge once the anchor
-    ;; has rotated past the given angle from where it started — a rough
-    ;; stand-in for a sling's release hook, freeing the block to fly off
-    ;; on whatever velocity it has at that instant. #:tilt-deg turns the
-    ;; block about the X axis, the way a ramp tilts — so it can start
-    ;; resting flat on a slope instead of being dropped onto it.
+    ;; A cube of #:size of the given material, its mass and friction from
+    ;; the material table. #:tilt-deg turns it about the X axis, the way a
+    ;; ramp tilts — so it can start resting flat on a slope instead of being
+    ;; dropped onto it. #:dimensions (x y z) makes it a box of that size
+    ;; instead (a catapult's bolt).
     (pattern (block id:id
                     (~alt (~once (~seq #:at at:vec3))
                           (~once (~seq #:size size-v:expr))
                           (~once (~seq #:material mat:id))
-                          (~optional (~seq #:hang-from hang:id))
-                          (~optional (~seq #:release-past-deg release-v:expr))
                           (~optional (~seq #:tilt-deg tilt-v:expr))
                           (~optional (~seq #:dimensions dims:vec3))) ...)
       #:attr info (pinfo #'id 'block (attribute mat) '())
       #:with expr #`(part 'id 'block 'mat (list at.x at.y at.z)
-                          (list (cons 'size size-v) (cons 'hang-from '(~? hang #f))
-                                (cons 'release-past-deg (~? release-v #f))
+                          (list (cons 'size size-v)
                                 (cons 'tilt-deg (~? tilt-v 0))
                                 (~@ . (~? ((cons 'dim-x dims.x) (cons 'dim-y dims.y) (cons 'dim-z dims.z)) ())))
                           '()
@@ -254,12 +246,6 @@
     ;; (N·m per radian) pulling the lever toward #:spring-rest-deg.
     ;; #:section makes the beam square, that many metres a side, instead of
     ;; the default plank (2.5 cm × 22 cm) — a catapult's arm is a stout rod.
-    ;; #:initial-spin-deg-per-sec models a torsion catapult's release: real
-    ;; twisted-sinew springs aren't a joint type Jolt has, so instead of
-    ;; modelling the spring itself, the arm simply starts already moving
-    ;; at the speed the spring would have given it at the instant of
-    ;; release — a legitimate way to model "the energy is already in the
-    ;; arm", not a fake shortcut around the mechanics.
     (pattern (lever id:id
                     (~alt (~once (~seq #:at at:vec3))
                           (~once (~seq #:length length-v:expr))
@@ -268,7 +254,6 @@
                           (~optional (~seq #:pivot-fraction pivot-v:expr))
                           (~optional (~seq #:limit-deg limit-v:expr))
                           (~optional (~seq #:damping damping-v:expr))
-                          (~optional (~seq #:initial-spin-deg-per-sec spin-v:expr))
                           (~optional (~seq #:axis ax:axis-name))
                           (~optional (~seq #:limit-lower-deg lo-v:expr))
                           (~optional (~seq #:limit-upper-deg hi-v:expr))
@@ -281,7 +266,6 @@
                                 (cons 'pivot-fraction (~? pivot-v 1/2))
                                 (cons 'limit-deg (~? limit-v 18))
                                 (cons 'damping (~? damping-v 8.0))
-                                (cons 'initial-spin-deg-per-sec (~? spin-v 0))
                                 (cons 'axis '(~? ax z))
                                 (cons 'limit-lower-deg (~? lo-v #f))
                                 (cons 'limit-upper-deg (~? hi-v #f))

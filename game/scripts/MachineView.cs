@@ -31,10 +31,8 @@ public partial class MachineView : Node3D
     // their RigidBody3D's origin at the pivot instead, for the joint, so
     // their mass sits elsewhere in local space and needs the real offset.
     private readonly Dictionary<RigidBody3D, Vector3> _comOffset = [];
-    private readonly Dictionary<string, RigidBody3D> _bodiesById = []; // for #:hang-from lookups
+    private readonly Dictionary<string, RigidBody3D> _bodiesById = []; // parts by name, for ropes, gears and lifts
     private bool _manyIdenticalPendulums;
-    private readonly List<(HingeJoint3D Joint, RigidBody3D Anchor, float ReleaseDeg, float StartDeg)> _releasable = [];
-    private readonly List<(HingeJoint3D Joint, double DisableAt)> _motorTimeouts = [];
     // Pendulum bobs strike each other through ResolveBobImpacts, not Jolt.
     private readonly List<(RigidBody3D Body, float Length, float BobRadius, float Inertia, float Restitution)> _pendulums = [];
     private const uint PendulumLayer = 4;
@@ -79,6 +77,7 @@ public partial class MachineView : Node3D
             }
         }
         foreach (var pipe in Runtime.Def.Pipes) BuildPipe(pipe);
+        BuildPendulumFrames();
         BuildArbors();
         BuildGearTrains();
         BuildAxleSupports();
@@ -453,29 +452,6 @@ public partial class MachineView : Node3D
         Blocks.Add(block);
         _freezable.Add(block);
         _bodiesById[part.Id] = block;
-
-        // #:hang-from <part>: a free hinge to another body instead of
-        // resting on it by friction, so this block stays hanging straight
-        // down under gravity as that body rotates — a trebuchet's
-        // counterweight, not cargo riding loose on a moving ramp.
-        if (part.Props.GetValueOrDefault("hang-from") is SSymbol hangFrom
-            && _bodiesById.TryGetValue(hangFrom.Name, out var anchor))
-        {
-            var joint = new HingeJoint3D { Position = V(part.At) };
-            AddChild(joint);
-            joint.NodeA = joint.GetPathTo(anchor);
-            joint.NodeB = joint.GetPathTo(block);
-
-            // #:release-past-deg: a stand-in for a sling's release hook —
-            // once the anchor (the arm) has swung this far from where it
-            // started, the hinge is freed and the block flies off on
-            // whatever velocity it has, instead of staying attached
-            // through the whole swing or (with no joint at all) just
-            // sliding off early like loose cargo.
-            double releaseDeg = part.Number("release-past-deg", double.PositiveInfinity);
-            if (double.IsFinite(releaseDeg))
-                _releasable.Add((joint, anchor, (float)releaseDeg, anchor.RotationDegrees.Z));
-        }
     }
 
     /// <summary>
@@ -542,7 +518,7 @@ public partial class MachineView : Node3D
         // the bob is the part actually worth pointing at.
         if (!_manyIdenticalPendulums)
             AddLabel(part.Id, new Vector3(0, -length + bobRadius + 0.06f, 0), body);
-        AddGroundedSupport(V(part.At), 0.015f, 0.08f);
+        _pendulumMounts.Add((V(part.At), bobRadius)); // hung from a frame beside the swing, built once all are placed
     }
 
     /// <summary>
@@ -643,41 +619,20 @@ public partial class MachineView : Node3D
                 Angle = Mathf.DegToRad(startAngle), LastRaw = RawAngle(body, axis),
             });
 
-        // A torsion catapult's arm starts already moving — see the
-        // #:initial-spin-deg-per-sec doc comment in machine.rkt. Directly
-        // assigning RigidBody3D.AngularVelocity had no measurable effect
-        // (the joint's own constraint solving seems to treat it as drift
-        // and correct it away); driving it briefly through the hinge's
-        // own motor — a real, supported feature for exactly this — works.
-        float initialSpin = (float)part.Number("initial-spin-deg-per-sec", 0);
-        if (initialSpin != 0)
+        // A torsion spring's skein, drawn where it holds an arm on a level
+        // axle (an onager): a wound drum of twisted rope crossing the arm at
+        // its pivot between two washers, turning with the arm as the real
+        // skein twists. (A catapulta's upright springs are part of its frame.)
+        if (stiffness != 0 && Mathf.Abs(axis.Y) < 0.5f)
         {
-            joint.SetFlag(HingeJoint3D.Flag.EnableMotor, true);
-            // Negated: the motor's positive direction runs opposite to
-            // RotationDegrees.Z's own sign (confirmed against the
-            // trebuchet, where positive rotZ is what raises the long/far
-            // side — a positive #:initial-spin-deg-per-sec should mean
-            // "throw the far end up", so it needs the opposite sign here.
-            joint.SetParam(HingeJoint3D.Param.MotorTargetVelocity, -Mathf.DegToRad(initialSpin));
-            joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, 500);
-            _motorTimeouts.Add((joint, Runtime.Time + 0.08)); // a brief pulse, then it coasts on momentum
-
-            // A visible stand-in for the twisted sinew skein the arm is
-            // actually anchored to — without this, a torsion catapult's
-            // pivot looks like a bare hinge with no hint of what powers
-            // it, unlike the trebuchet where the counterweight itself
-            // makes the mechanism obvious at a glance. Two washers
-            // (the skein's real frames) with a wound rope-textured drum
-            // between them, crossing the arm at the pivot.
-            var rope = Surface("hemp");
-            var skein = Shapes.Cylinder(0.05f, 0.16f, rope);
-            skein.RotationDegrees = new Vector3(0, 0, 90);
-            body.AddChild(skein); // child of the arm: twists with it, as the real skein does
-            foreach (float side in new[] { -0.08f, 0.08f })
+            var skein = Shapes.Cylinder(0.07f, 0.24f, Surface("hemp"));
+            skein.RotationDegrees = new Vector3(90, 0, 0); // along the axle (local Z)
+            body.AddChild(skein);
+            foreach (float side in new[] { -0.12f, 0.12f })
             {
-                var washer = Shapes.Cylinder(0.065f, 0.015f, Surface("oak"));
-                washer.RotationDegrees = new Vector3(0, 0, 90);
-                washer.Position = new Vector3(side, 0, 0);
+                var washer = Shapes.Cylinder(0.09f, 0.02f, Surface("bronze"));
+                washer.RotationDegrees = new Vector3(90, 0, 0);
+                washer.Position = new Vector3(0, 0, side);
                 body.AddChild(washer);
             }
         }
@@ -692,10 +647,50 @@ public partial class MachineView : Node3D
         // hanging straight down), and for a trebuchet's tall pivot this
         // also reads as the tower/frame a real one is mounted on. A sprung
         // arm is held by its spring's frame instead.
-        if (stiffness == 0) AddGroundedSupport(V(part.At), 0.03f, 0.18f);
+        // An upright each side of the beam, with the axle between them: a
+        // post straight under the pivot would stand in the way of whatever
+        // swings below it (a trebuchet's counterweight passes right there).
+        // An arm turning about a vertical axis is held by its own frame.
+        if (Mathf.Abs(axis.Y) < 0.5f)
+        {
+            float beside = depth / 2 + 0.12f;
+            var near = V(part.At) - axis * beside;
+            var far = V(part.At) + axis * beside;
+            AddGroundedSupport(near, 0.03f, 0.18f);
+            AddGroundedSupport(far, 0.03f, 0.18f);
+            AddChild(Shapes.Rod(near, far, 0.02f, Surface("iron")));
+        }
     }
 
     private const uint FixtureLayer = 8, SprungArmLayer = 16;
+    private readonly List<(Vector3 Pivot, float BobRadius)> _pendulumMounts = [];
+
+    /// <summary>
+    /// Pendulums hang from a frame beside their swing, never from a post
+    /// beneath the pivot (which is exactly where the bob hangs). Pendulums
+    /// in a row (a Newton's cradle) share one frame: a post at each end on
+    /// each side, a rail along each side at pivot height, and an axle
+    /// across the rails at each pivot.
+    /// </summary>
+    private void BuildPendulumFrames()
+    {
+        var wood = Surface("oak");
+        var iron = Surface("iron");
+        foreach (var row in _pendulumMounts.GroupBy(m => (Mathf.Snapped(m.Pivot.Y, 0.01f), Mathf.Snapped(m.Pivot.Z, 0.01f))))
+        {
+            float y = row.First().Pivot.Y, z = row.First().Pivot.Z;
+            float side = row.Max(m => m.BobRadius) + 0.04f;
+            float left = row.Min(m => m.Pivot.X) - 0.06f, right = row.Max(m => m.Pivot.X) + 0.06f;
+            foreach (float dz in new[] { -side, side })
+            {
+                AddGroundedSupport(new Vector3(left, y, z + dz), 0.012f, 0.06f);
+                AddGroundedSupport(new Vector3(right, y, z + dz), 0.012f, 0.06f);
+                AddChild(Shapes.Rod(new Vector3(left, y, z + dz), new Vector3(right, y, z + dz), 0.01f, wood));
+            }
+            foreach (var (pivot, _) in row)
+                AddChild(Shapes.Rod(pivot - new Vector3(0, 0, side), pivot + new Vector3(0, 0, side), 0.005f, iron));
+        }
+    }
     private readonly List<TorsionSpring> _springs = [];
 
     /// <summary>A lever held by a torsion spring (twisted sinew): torque −k·(θ − rest) about its hinge.</summary>
@@ -1074,25 +1069,6 @@ public partial class MachineView : Node3D
         DriveSprings();
         Runtime.Step(dt);
         Refresh();
-        CheckReleases();
-    }
-
-    private void CheckReleases()
-    {
-        for (int i = _releasable.Count - 1; i >= 0; i--)
-        {
-            var (joint, anchor, releaseDeg, startDeg) = _releasable[i];
-            if (Mathf.Abs(anchor.RotationDegrees.Z - startDeg) < releaseDeg) continue;
-            joint.QueueFree(); // frees the constraint; the block keeps its current velocity as a projectile
-            _releasable.RemoveAt(i);
-        }
-        for (int i = _motorTimeouts.Count - 1; i >= 0; i--)
-        {
-            var (joint, disableAt) = _motorTimeouts[i];
-            if (Runtime.Time < disableAt) continue;
-            joint.SetFlag(HingeJoint3D.Flag.EnableMotor, false); // the spring's energy is spent; coast on momentum from here
-            _motorTimeouts.RemoveAt(i);
-        }
     }
 
     /// <summary>Rotation and height of every dynamic body — a quick way to confirm Jolt is actually moving them (see HEROIC_DEBUG_PHYSICS).</summary>

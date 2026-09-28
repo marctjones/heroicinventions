@@ -2,7 +2,7 @@
 (machine inclined-plane-demo
   (source "Classic mechanics demonstration")
   (part slope ramp (material limestone) (at 0.0 0.0 -0.4) (props (length 1.4) (width 1.0) (angle-deg 25.0)) (ports) (srcloc "racket/machines/inclined-plane.rkt" 35 2))
-  (part cedar-block block (material cedar) (at -0.33 0.5005607314258513 -1.2699626165269498) (props (size 0.12) (hang-from #f) (release-past-deg #f) (tilt-deg 25.0)) (ports) (srcloc "racket/machines/inclined-plane.rkt" 36 2))
-  (part oak-block block (material oak) (at -0.11 0.5005607314258513 -1.2699626165269498) (props (size 0.12) (hang-from #f) (release-past-deg #f) (tilt-deg 25.0)) (ports) (srcloc "racket/machines/inclined-plane.rkt" 38 2))
-  (part granite-block block (material granite) (at 0.11 0.5005607314258513 -1.2699626165269498) (props (size 0.12) (hang-from #f) (release-past-deg #f) (tilt-deg 25.0)) (ports) (srcloc "racket/machines/inclined-plane.rkt" 40 2))
-  (part bronze-block block (material bronze) (at 0.33 0.5005607314258513 -1.2699626165269498) (props (size 0.12) (hang-from #f) (release-past-deg #f) (tilt-deg 25.0)) (ports) (srcloc "racket/machines/inclined-plane.rkt" 42 2)))
+  (part cedar-block block (material cedar) (at -0.33 0.5005607314258513 -1.2699626165269498) (props (size 0.12) (tilt-deg 25.0)) (ports) (srcloc "racket/machines/inclined-plane.rkt" 36 2))
+  (part oak-block block (material oak) (at -0.11 0.5005607314258513 -1.2699626165269498) (props (size 0.12) (tilt-deg 25.0)) (ports) (srcloc "racket/machines/inclined-plane.rkt" 38 2))
+  (part granite-block block (material granite) (at 0.11 0.5005607314258513 -1.2699626165269498) (props (size 0.12) (tilt-deg 25.0)) (ports) (srcloc "racket/machines/inclined-plane.rkt" 40 2))
+  (part bronze-block block (material bronze) (at 0.33 0.5005607314258513 -1.2699626165269498) (props (size 0.12) (tilt-deg 25.0)) (ports) (srcloc "racket/machines/inclined-plane.rkt" 42 2)))

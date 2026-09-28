@@ -45,7 +45,7 @@
 
 (define-machine vitruvian-catapulta
   #:source "Vitruvius, De Architectura X.10"
-  (fixture frame   #:shape (catapulta-frame #:bolt-length bolt-length)   #:at (0 0 0) #:material oak)
+  (fixture frame   #:shape (catapulta-frame #:bolt-length bolt-length #:arm-stop-deg stop-deg) #:at (0 0 0) #:material oak)
   (fixture springs #:shape (catapulta-springs #:bolt-length bolt-length) #:at (0 0 0) #:material hemp)
   ;; right arm: along +x from its spring, turning about the vertical;
   ;; positive angles sweep it back (−z)

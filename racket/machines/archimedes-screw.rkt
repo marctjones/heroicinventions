@@ -5,7 +5,7 @@
 ;; strips are built up until the whole is length/8 across, and it is set
 ;; on a 3-4-5 slope. A man treading it turns it; its lower end stands in a
 ;; pool and each turn carries water one pitch further up, pouring out
-;; into a trough at the top.
+;; into a trough at the top that channels it off to a field.
 ;;
 ;; How much each turn carries comes from the screw's own shape: tilted,
 ;; each channel dips and rises as it winds, and water pools in each dip
@@ -29,5 +29,12 @@
          #:at (0 centre-y 0)
          #:material pine #:tilt-deg tilt #:drive-rpm 12 #:drive-torque 150)
   (tank pool #:at ((m -1.9) 0 0) #:area 1.2 #:height (cm 80) #:water (L 900))
-  (tank trough #:at ((m 1.9) (m 2.1) 0) #:area 0.8 #:height (cm 50))
+  ;; The trough sits under the spout where the blades end (x 1.6, 2.8 m
+  ;; up), below the screw's body and clear of the post at its axle's end;
+  ;; a channel carries the water off to the field.
+  (tank trough #:at ((m 1.6) (m 1.6) 0) #:area 0.36 #:height (cm 50)
+        (port channel #:height 0))
+  (tank field #:at ((m 3.4) 0 0) #:area 2 #:height (m 1)
+        (port inlet #:height (m 1)))
+  (pipe channel trough.channel field.inlet #:conductance 6e-3)
   (lift raise #:by cochlea #:from pool #:to trough))
