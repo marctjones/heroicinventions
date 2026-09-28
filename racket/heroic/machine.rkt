@@ -16,16 +16,16 @@
 
 (provide define-machine
          tank boiler rotor block pendulum lever ramp wheel screw fixture
-         pipe connect sealed-air port rope world arbor mesh lift
+         pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
-         (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec) (struct-out lift-spec)
+         (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec) (struct-out lift-spec) (struct-out cylinder-spec)
          take-registered-machines)
 
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source parts pipes connects airs ropes arbors meshes lifts) #:transparent)
+(struct machine (name source parts pipes connects airs ropes arbors meshes lifts cylinders) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -42,6 +42,8 @@
 (struct arbor-spec (parts loc) #:transparent)
 ;; a, b: two gears whose teeth engage.
 (struct mesh-spec (a b loc) #:transparent)
+;; piston: the piston part it drives; boiler: where its steam comes from.
+(struct cylinder-spec (id piston boiler injection-temperature loc) #:transparent)
 ;; by: the screw or noria that lifts; from, to: tanks; current: a river's
 ;; speed (m/s) pushing a noria's paddles, or #f.
 (struct lift-spec (id by from to current loc) #:transparent)
@@ -55,7 +57,8 @@
            (filter rope-spec? items)
            (filter arbor-spec? items)
            (filter mesh-spec? items)
-           (filter lift-spec? items)))
+           (filter lift-spec? items)
+           (filter cylinder-spec? items)))
 
 ;; Machines register themselves when their module runs, so the build
 ;; script can collect every machine in a file without knowing their names.
@@ -74,7 +77,7 @@
     ...))
 
 (define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture
-  pipe connect sealed-air port rope world arbor mesh lift)
+  pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder)
 
 ;; A part built from a generated shape (see heroic/geometry). The shape is
 ;; an ordinary runtime value, so whether it suits the clause is checked
@@ -108,6 +111,7 @@
   (struct arinfo (parts))            ; identifiers of wheels on one axle
   (struct minfo (a b))               ; two gears in mesh
   (struct linfo2 (id by from to))    ; a water lift
+  (struct cinfo (id piston boiler))  ; an atmospheric cylinder
 
   (define known-materials (material-ids))
 
@@ -146,7 +150,7 @@
 
   (define-syntax-class clause
     #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture pipe connect sealed-air rope arbor mesh lift)
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -169,11 +173,13 @@
                            (~once (~seq #:height height-v:expr))
                            (~once (~seq #:water water-v:expr))
                            (~optional (~seq #:fire fire-v:expr))
+                           (~optional (~seq #:temperature temp-v:expr))
                            (~optional (~seq #:material mat:id))) ...)
       #:attr info (pinfo #'id 'boiler (attribute mat) (list (cons 'steam 'steam)))
       #:with expr #`(part 'id 'boiler '(~? mat bronze) (list at.x at.y at.z)
                           (list (cons 'radius radius-v) (cons 'height height-v)
-                                (cons 'water water-v) (cons 'fire (~? fire-v 0)))
+                                (cons 'water water-v) (cons 'fire (~? fire-v 0))
+                                (cons 'temperature (~? temp-v 20)))
                           (list (port-spec 'steam 'steam height-v))
                           #,(loc-of this-syntax)))
 
@@ -396,6 +402,38 @@
       #:attr info (minfo #'a #'b)
       #:with expr #`(mesh-spec 'a 'b #,(loc-of this-syntax)))
 
+    ;; A piston sliding up and down in a cylinder of #:bore, over #:stroke.
+    ;; #:at is the bottom of its travel; #:start is where along it it
+    ;; starts (0 bottom, 1 top). A pump's piston hangs on a long, heavy rod
+    ;; down the shaft: #:rod-mass adds that weight.
+    (pattern (piston id:id
+                     (~alt (~once (~seq #:at at:vec3))
+                           (~once (~seq #:bore bore-v:expr))
+                           (~once (~seq #:stroke stroke-v:expr))
+                           (~once (~seq #:material mat:id))
+                           (~optional (~seq #:start start-v:expr))
+                           (~optional (~seq #:rod-mass rod-v:expr))) ...)
+      #:attr info (pinfo #'id 'piston (attribute mat) '())
+      #:with expr #`(part 'id 'piston 'mat (list at.x at.y at.z)
+                          (list (cons 'bore bore-v) (cons 'stroke stroke-v)
+                                (cons 'start (~? start-v 0)) (cons 'rod-mass (~? rod-v 0)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; Newcomen's atmospheric engine cylinder (1712). Steam from the boiler
+    ;; fills it below the piston at about atmospheric pressure; at the top
+    ;; of the stroke a jet of cold water condenses the steam, leaving a
+    ;; partial vacuum, and the atmosphere pushes the piston down — that is
+    ;; the working stroke. Tappets on a rod hanging from the beam switch the
+    ;; valves at each end of the stroke. #:injection-temperature is how warm
+    ;; the injection water gets (°C), which sets how good the vacuum is.
+    (pattern (atmospheric-cylinder id:id
+                                   (~alt (~once (~seq #:piston p:id))
+                                         (~once (~seq #:steam-from b:id))
+                                         (~optional (~seq #:injection-temperature inj-v:expr))) ...)
+      #:attr info (cinfo #'id #'p #'b)
+      #:with expr #`(cylinder-spec 'id 'p 'b (~? inj-v 60) #,(loc-of this-syntax)))
+
     (pattern (pipe id:id from:ref to:ref
                    (~alt (~once (~seq #:conductance c:expr))
                          (~optional (~seq #:jet jet:expr))) ...)
@@ -519,13 +557,21 @@
 
     (for ([l infos] #:when (linfo2? l))
       (define by (hash-ref parts (syntax-e (linfo2-by l)) #f))
-      (unless (and by (memq (pinfo-kind by) '(screw wheel)))
-        (fail (format "~a can't lift water: a lift is done #:by a screw or a noria wheel" (syntax-e (linfo2-by l)))
+      (unless (and by (memq (pinfo-kind by) '(screw wheel piston)))
+        (fail (format "~a can't lift water: a lift is done #:by a screw, a noria wheel or a pump's piston" (syntax-e (linfo2-by l)))
               (linfo2-by l)))
       (for ([t (list (linfo2-from l) (linfo2-to l))])
         (define p (hash-ref parts (syntax-e t) #f))
         (unless (and p (eq? (pinfo-kind p) 'tank))
           (fail (format "~a is not a tank; a lift carries water between tanks" (syntax-e t)) t))))
+
+    (for ([c infos] #:when (cinfo? c))
+      (define p (hash-ref parts (syntax-e (cinfo-piston c)) #f))
+      (unless (and p (eq? (pinfo-kind p) 'piston))
+        (fail (format "~a is not a piston" (syntax-e (cinfo-piston c))) (cinfo-piston c)))
+      (define b (hash-ref parts (syntax-e (cinfo-boiler c)) #f))
+      (unless (and b (eq? (pinfo-kind b) 'boiler))
+        (fail (format "~a is not a boiler; the cylinder needs one for steam" (syntax-e (cinfo-boiler c))) (cinfo-boiler c))))
 
     (define sealed (make-hasheq))
     (for ([a infos] #:when (ainfo? a))

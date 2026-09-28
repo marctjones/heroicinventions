@@ -163,9 +163,41 @@ public partial class MachineView
         return iCom + body.Mass * perp.LengthSquared();
     }
 
+    /// <summary>
+    /// All ropes at once, a few passes per tick (sequential impulses): ropes
+    /// that pull on the same part — a beam with a chain at each end — see
+    /// each other's pull within the tick. Solved one at a time and once,
+    /// each over-corrected for the other and the chains chattered between
+    /// taut and slack. Impulses only reach the bodies at the next physics
+    /// step, so each pass works on a running tally of how every impulse so
+    /// far has changed the bodies' speeds; each rope's total impulse is kept
+    /// at or above zero, since a rope can't push.
+    /// </summary>
     private void ResolveRopes()
     {
         float dt = (float)GetPhysicsProcessDeltaTime();
+        var linear = new Dictionary<RigidBody3D, Vector3>();   // velocity changes so far this tick
+        var angular = new Dictionary<RigidBody3D, Vector3>();
+        Vector3 Velocity(RigidBody3D? body, Vector3 point) =>
+            body is null || body.Freeze ? Vector3.Zero
+            : PointVelocity(body, point) + linear.GetValueOrDefault(body)
+              + angular.GetValueOrDefault(body).Cross(point - CentreOfMass(body));
+        void Push(RigidBody3D? body, Vector3 point, Vector3 impulse)
+        {
+            if (body is null || body.Freeze) return;
+            if (_hinges.TryGetValue(body, out var hinge))
+            {
+                // turns about its hinge only: Δω = (r × J)·axis / I, along the axis
+                float inertia = InertiaAbout(body, hinge) + _arborMates.GetValueOrDefault(body, []).Sum(m => InertiaAbout(m, hinge));
+                angular[body] = angular.GetValueOrDefault(body) + hinge.Axis * ((point - hinge.Pivot).Cross(impulse).Dot(hinge.Axis) / inertia);
+                return;
+            }
+            var state = PhysicsServer3D.BodyGetDirectState(body.GetRid());
+            linear[body] = linear.GetValueOrDefault(body) + impulse / body.Mass;
+            angular[body] = angular.GetValueOrDefault(body) + state.InverseInertiaTensor * (point - CentreOfMass(body)).Cross(impulse);
+        }
+
+        var active = new List<(Rope Rope, List<Vector3> Path, Vector3 A, Vector3 B, Vector3 Ua, Vector3 Ub, float Stretch, float W)>();
         foreach (var r in _ropes)
         {
             if (!r.Active) continue;
@@ -173,36 +205,50 @@ public partial class MachineView
                 r.Wound += r.DrumRadius * drum.AngularVelocity.Dot(r.DrumAxis) * dt;
             if (r.A is { } armBody && _hinges.TryGetValue(armBody, out var armHinge))
                 r.ArmTurned += Mathf.Abs(armBody.AngularVelocity.Dot(armHinge.Axis)) * dt;
-
             var path = RopePath(r);
             float length = 0;
             for (int i = 1; i < path.Count; i++) length += path[i].DistanceTo(path[i - 1]);
-            float stretch = length - ((float)r.Spec.Length - r.Wound);
-
             var a = path[0];
             var b = path[^1];
             var ua = (path[1] - a).Normalized();   // the rope pulls A this way
             var ub = (path[^2] - b).Normalized();  // and B this way
-            // how fast the rope's ends are pulling apart along it
-            float separating = -ua.Dot(PointVelocity(r.A, a)) - ub.Dot(PointVelocity(r.B, b));
-            // Slack: let the gap close within this step, no further. Taut or
-            // stretched: allow no separation, and take back a third of any
-            // stretch per step.
-            float allowed = stretch < 0 ? -stretch / dt : -0.3f * stretch / dt;
             float w = InverseMassAlong(r.A, a, ua) + InverseMassAlong(r.B, b, ub);
-            float impulse = w > 0 ? Mathf.Max(0, (separating - allowed) / w) : 0;
-            r.Tension = impulse / dt;
+            active.Add((r, path, a, b, ua, ub, length - ((float)r.Spec.Length - r.Wound), w));
+        }
 
+        var total = new float[active.Count];
+        for (int pass = 0; pass < 8; pass++)
+            for (int i = 0; i < active.Count; i++)
+            {
+                var (r, _, a, b, ua, ub, stretch, w) = active[i];
+                if (w <= 0) continue;
+                // how fast the ends are pulling apart along the rope, with every impulse so far
+                float separating = -ua.Dot(Velocity(r.A, a)) - ub.Dot(Velocity(r.B, b));
+                // slack: let the gap close within this step, no further; taut or
+                // stretched: no separation, and take back a third of the stretch
+                float allowed = stretch < 0 ? -stretch / dt : -0.3f * stretch / dt;
+                float delta = (separating - allowed) / w;
+                float before = total[i];
+                total[i] = Mathf.Max(0, before + delta);
+                float applied = total[i] - before;
+                Push(r.A, a, ua * applied);
+                Push(r.B, b, ub * applied);
+            }
+
+        for (int i = 0; i < active.Count; i++)
+        {
+            var (r, _, a, b, ua, ub, _, _) = active[i];
+            r.Tension = total[i] / dt;
             if (r.Tension > r.Strength)
             {
                 r.Broken = true;
                 GD.Print($"rope {r.Spec.Id} broke: {r.Tension:F0} N exceeds its {r.Strength:F0} N breaking load");
                 continue;
             }
-            if (impulse > 0)
+            if (total[i] > 0)
             {
-                r.A?.ApplyImpulse(ua * impulse, a - r.A.GlobalPosition);
-                r.B?.ApplyImpulse(ub * impulse, b - r.B.GlobalPosition);
+                r.A?.ApplyImpulse(ua * total[i], a - r.A.GlobalPosition);
+                r.B?.ApplyImpulse(ub * total[i], b - r.B.GlobalPosition);
             }
             CheckRelease(r, a, b);
         }

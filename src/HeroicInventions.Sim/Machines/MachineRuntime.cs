@@ -24,6 +24,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, string> _rotorBoiler = []; // rotor id → boiler id
     private readonly List<AirPocket> _air = [];
     private readonly Dictionary<string, WaterLift> _lifts = [];
+    private readonly Dictionary<string, AtmosphericCylinder> _cylinders = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
     private readonly Dictionary<string, Action<double>> _setters = [];
 
@@ -35,6 +36,7 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Aeolipile> Rotors => _rotors;
     public IReadOnlyList<AirPocket> AirPockets => _air;
     public IReadOnlyDictionary<string, WaterLift> Lifts => _lifts;
+    public IReadOnlyDictionary<string, AtmosphericCylinder> Cylinders => _cylinders;
     public double Time { get; private set; }
 
     /// <summary>
@@ -76,9 +78,9 @@ public sealed class MachineRuntime
                     _tanks[part.Id] = Fluids.AddTank(new Tank(part.Id, part.At.Y, part.Number("area"), part.Number("height"), part.Number("water", 0)));
                     break;
                 case "boiler":
-                    _boilers[part.Id] = new Boiler(part.Number("water"), heatInputW: part.Number("fire", 0));
+                    _boilers[part.Id] = new Boiler(part.Number("water"), part.Number("temperature", 20), heatInputW: part.Number("fire", 0));
                     break;
-                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture":
+                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -126,6 +128,17 @@ public sealed class MachineRuntime
         }
 
         foreach (var lift in def.Lifts) _lifts[lift.Id] = BuildLift(def, lift);
+        foreach (var c in def.Cylinders)
+        {
+            var piston = def.Part(c.Piston) ?? throw new MachineFormatException($"cylinder {c.Id}: no piston {c.Piston}", c.Location);
+            if (!_boilers.TryGetValue(c.Boiler, out var boiler))
+                throw new MachineFormatException($"cylinder {c.Id}: {c.Boiler} is not a boiler", c.Location);
+            _cylinders[c.Id] = new AtmosphericCylinder(c.Id, boiler, piston.Number("bore"), piston.Number("stroke"), c.InjectionTemperature)
+            {
+                PistonHeight = piston.Number("start", 0) * piston.Number("stroke"),
+            };
+            _cylinders[c.Id].Prime();
+        }
 
         RegisterFields();
     }
@@ -153,6 +166,15 @@ public sealed class MachineRuntime
                 return new WaterLift(spec.Id, from, to, perTurn,
                                      intakeElevation: by.At.Y - half - radius, intakeDepth: 2 * radius,
                                      dischargeElevation: by.At.Y + half);
+            }
+            case ("piston", _):
+            {
+                double bore = by.Number("bore");
+                // the pump draws at the bottom of the sump's water and delivers at the top of its stroke
+                return new WaterLift(spec.Id, from, to, 0,
+                                     intakeElevation: from.BaseElevation, intakeDepth: 0.05,
+                                     dischargeElevation: by.At.Y + by.Number("stroke"))
+                { VolumePerMetre = Math.PI * bore * bore / 4 };
             }
             case ("wheel", "noria"):
             {
@@ -200,6 +222,15 @@ public sealed class MachineRuntime
             _getters[$"{id}.per-turn"] = () => lift.VolumePerTurn * 1000; // L
             _setters[$"{id}.rpm"] = rpm => lift.Rpm = rpm;
         }
+        foreach (var (id, c) in _cylinders)
+        {
+            _getters[$"{id}.pressure"] = () => c.Pressure / 1000;      // kPa absolute
+            _getters[$"{id}.force"] = () => c.Force;                   // N, down
+            _getters[$"{id}.strokes"] = () => c.Strokes;
+            _getters[$"{id}.injecting"] = () => c.Injecting ? 1 : 0;
+            _getters[$"{id}.steam-used"] = () => c.SteamUsed;          // kg
+            _setters[$"{id}.piston-height"] = h => c.PistonHeight = h;
+        }
         foreach (var air in _air)
             foreach (var tank in _tanks.Values.Where(t => t.Air == air))
                 _getters[$"{tank.Name}.air-pressure"] = () => air.GaugePressure / 1000; // kPa
@@ -210,8 +241,10 @@ public sealed class MachineRuntime
         Fluids.Step(dt);
         foreach (var lift in _lifts.Values) lift.Step(dt);
         foreach (var rotor in _rotors.Values) rotor.Step(dt); // steps its own boiler
+        foreach (var c in _cylinders.Values) c.Step(dt);
         foreach (var (id, boiler) in _boilers)
-            if (!_rotorBoiler.ContainsValue(id)) boiler.Step(dt, 0);
+            if (!_rotorBoiler.ContainsValue(id))
+                boiler.Step(dt, _cylinders.Values.Where(c => c.Boiler == boiler).Sum(c => c.SteamDraw));
         Time += dt;
     }
 

@@ -75,6 +75,7 @@ public partial class MachineView : Node3D
                 case "wheel": BuildWheel(part); break;
                 case "screw": BuildScrew(part); break;
                 case "fixture": BuildFixture(part); break;
+                case "piston": BuildPiston(part); break;
             }
         }
         foreach (var pipe in Runtime.Def.Pipes) BuildPipe(pipe);
@@ -83,6 +84,7 @@ public partial class MachineView : Node3D
         BuildAxleSupports();
         foreach (var rope in Runtime.Def.Ropes) BuildRope(rope);
         BuildLifts();
+        BuildPistonDrives();
         Refresh();
 
         // Baseline for "energy retained": mechanical energy before anything
@@ -1002,6 +1004,7 @@ public partial class MachineView : Node3D
         ResolveRopes();
         DriveGearTrains();
         DriveLifts();
+        DrivePistons();
         Runtime.Step(dt);
         Refresh();
         CheckReleases();
@@ -1030,7 +1033,9 @@ public partial class MachineView : Node3D
         string.Join("  ", _freezable.Select(b => $"{b.Name} pos=({b.GlobalPosition.X:F2},{b.GlobalPosition.Y:F2},{b.GlobalPosition.Z:F2}) rotZ={b.RotationDegrees.Z:F1}°")
                           .Concat(_ropes.Select(r => r.Describe()))
                           .Concat(GearReport())
-                          .Concat(_liftDrives.Select(d => $"{d.Spec.Id} {d.Lift.Rpm:F1}rpm {d.Lift.Flow * 1000:F2}L/s {d.Spec.From}={d.Lift.From.WaterVolume * 1000:F0}L {d.Spec.To}={d.Lift.To.WaterVolume * 1000:F0}L")));
+                          .Concat(_liftDrives.Select(d => $"{d.Spec.Id} {d.Lift.Rpm:F1}rpm {d.Lift.Flow * 1000:F2}L/s {d.Spec.From}={d.Lift.From.WaterVolume * 1000:F0}L {d.Spec.To}={d.Lift.To.WaterVolume * 1000:F0}L"))
+                          .Concat(_cylinderDrives.Select(c => $"{c.Cylinder.Name} P={c.Cylinder.Pressure / 1000:F0}kPa F={c.Cylinder.Force / 1000:F1}kN {(c.Cylinder.Injecting ? "INJECT" : "steam")} strokes={c.Cylinder.Strokes} boiler={c.Cylinder.Boiler.Temperature:F1}C steam-used={c.Cylinder.SteamUsed:F1}kg"))
+                          .Concat(_pumpDrives.Select(p => $"{p.Lift.Name} {p.Lift.To.Name}={p.Lift.To.WaterVolume * 1000:F0}L")));
 
     private void Refresh()
     {
@@ -1067,6 +1072,7 @@ public partial class MachineView : Node3D
             puff.Emitting = rotor.SteamFlow > 1e-6;
         foreach (var rope in _ropes) DrawRope(rope);
         DrawLiftStreams();
+        DrawCylinders();
     }
 
     public void ToggleFire()

@@ -114,3 +114,50 @@ public class WaterLiftTests
         Assert.Equal(0, Pocket(46));
     }
 }
+
+public class AtmosphericCylinderTests
+{
+    // Dudley Castle, 1712: a 21-inch (0.53 m) cylinder
+    private static Mechanics.AtmosphericCylinder Cylinder(Boiler boiler) =>
+        new("cyl", boiler, bore: 0.53, stroke: 1.8, injectionTemperatureC: 60);
+
+    [Fact]
+    public void SteamFillsTheCylinderToTheBoilersPressure()
+    {
+        var boiler = new Boiler(2000, temperatureC: 105, heatInputW: 0);
+        var c = Cylinder(boiler);
+        c.PistonHeight = 1.0;
+        c.Prime();
+        for (int i = 0; i < 1000; i++) c.Step(0.01);
+        Assert.InRange(c.Pressure, 0.97 * boiler.AbsolutePressure, 1.01 * boiler.AbsolutePressure);
+        Assert.True(c.SteamUsed > 0);
+    }
+
+    [Fact]
+    public void InjectionLeavesAVacuumAndTheAtmospherePushesThePistonDown()
+    {
+        var c = Cylinder(new Boiler(2000, temperatureC: 105, heatInputW: 0));
+        c.PistonHeight = 1.8;       // at the top: the tappet opens the injection
+        c.Prime();
+        for (int i = 0; i < 100; i++) c.Step(0.01); // 1 s, several condensation time constants
+        Assert.True(c.Injecting);
+        // what's left is vapour at 60 °C: ~20 kPa
+        Assert.InRange(c.Pressure, 18_000, 22_000);
+        // so ~81 kPa of atmosphere on 0.22 m² of piston: ~18 kN down
+        Assert.InRange(c.Force, 17_000, 19_000);
+        Assert.Equal(1, c.Strokes);
+    }
+
+    [Fact]
+    public void ThePlugRodSwitchesToSteamAtTheBottomOfTheStroke()
+    {
+        var c = Cylinder(new Boiler(2000, temperatureC: 105, heatInputW: 0));
+        c.PistonHeight = 1.8;
+        c.Prime();
+        c.Step(0.01);
+        Assert.True(c.Injecting);
+        c.PistonHeight = 0;
+        c.Step(0.01);
+        Assert.False(c.Injecting);
+    }
+}

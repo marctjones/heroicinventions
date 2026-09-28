@@ -23,6 +23,19 @@ public sealed class WaterLift(string name, Tank from, Tank to, double volumePerT
 
     /// <summary>Turning speed in the lifting sense (set by the engine); backwards counts as zero.</summary>
     public double Rpm { get; set; }
+
+    /// <summary>
+    /// For a pump, which works by stroke rather than turning: water per
+    /// metre its piston rises (its bore's area). The engine side calls
+    /// <see cref="Stroke"/> with how far the piston rose each step.
+    /// </summary>
+    public double VolumePerMetre { get; init; }
+    public bool IsPump => VolumePerMetre > 0;
+    private double _strokeThisStep;
+    public void Stroke(double metresUp) => _strokeThisStep += Math.Max(0, metresUp);
+
+    /// <summary>A pump's rod carries the weight of the water column it's raising: ρ·g·H·A. N.</summary>
+    public double LoadForce => IsPump ? Physics.WaterDensity * Physics.Gravity * Head * VolumePerMetre * Fill : 0;
     public double Flow { get; private set; }                   // m³/s, last step
 
     /// <summary>How full each scoop is: the intake's depth under the source's surface, over what a full scoop needs.</summary>
@@ -41,7 +54,10 @@ public sealed class WaterLift(string name, Tank from, Tank to, double volumePerT
 
     public void Step(double dt)
     {
-        double want = VolumePerTurn * Fill * Math.Max(0, Rpm) / 60 * dt;
+        double want = IsPump
+            ? VolumePerMetre * Fill * _strokeThisStep
+            : VolumePerTurn * Fill * Math.Max(0, Rpm) / 60 * dt;
+        _strokeThisStep = 0;
         double moved = Math.Min(want, Math.Min(From.WaterVolume, To.Capacity - To.WaterVolume));
         moved = Math.Max(0, moved);
         From.WaterVolume -= moved;

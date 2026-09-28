@@ -61,6 +61,9 @@ public sealed record SealedAirSpec(IReadOnlyList<string> Tanks, double TubeVolum
 /// <summary>Water lifted by a screw or noria (By) from one tank to another; Current is a river's speed for a noria.</summary>
 public sealed record LiftSpec(string Id, string By, string From, string To, double? Current, SourceLocation? Location);
 
+/// <summary>A Newcomen atmospheric cylinder driving Piston, with steam from Boiler.</summary>
+public sealed record CylinderSpec(string Id, string Piston, string Boiler, double InjectionTemperature, SourceLocation? Location);
+
 /// <summary>Two gears in mesh.</summary>
 public sealed record MeshSpec(string A, string B, SourceLocation? Location);
 
@@ -98,6 +101,7 @@ public sealed class MachineDef
     public IReadOnlyList<ArborSpec> Arbors { get; init; } = [];
     public IReadOnlyList<MeshSpec> Meshes { get; init; } = [];
     public IReadOnlyList<LiftSpec> Lifts { get; init; } = [];
+    public IReadOnlyList<CylinderSpec> Cylinders { get; init; } = [];
 
     public PartSpec? Part(string id) => Parts.FirstOrDefault(p => p.Id == id);
 
@@ -123,6 +127,13 @@ public sealed class MachineDef
                 string Field(string f) => c.Field(f) is { } l ? Sym(l, 1, loc) : throw new MachineFormatException($"lift has no {f}", loc);
                 return new LiftSpec(Sym(c, 1, loc), Field("by"), Field("from"), Field("to"),
                                     c.Field("current")?.Items.ElementAtOrDefault(1) is SNumber n ? n.Value : null, loc);
+            }).ToList(),
+            Cylinders = clauses.Where(c => c.Head == "atmospheric-cylinder").Select(c =>
+            {
+                var loc = ParseLoc(c);
+                string Field(string f) => c.Field(f) is { } l ? Sym(l, 1, loc) : throw new MachineFormatException($"atmospheric-cylinder has no {f}", loc);
+                return new CylinderSpec(Sym(c, 1, loc), Field("piston"), Field("steam-from"),
+                                        c.Field("injection-temperature") is { } t ? Num(t, 1, loc) : 60, loc);
             }).ToList(),
             Meshes = clauses.Where(c => c.Head == "mesh").Select(c =>
             {
