@@ -15,7 +15,7 @@
 ;;   'reconstructed — Vitruvius gives no number; chosen to fit the parts
 ;;                  he does size (noted in the entry)
 (require racket/math racket/list "mesh.rkt" "shape.rkt")
-(provide catapulta-proportions catapulta-dimensions catapulta-hole
+(provide catapulta-proportions catapulta-dimensions catapulta-hole catapulta-geometry
          catapulta-frame catapulta-springs catapulta-arm
          ballista-hole-digits roman-digit roman-foot greek-span)
 
@@ -34,6 +34,7 @@
     (middle-post-width     5/4   vitruvius "middle post (mesostates)")
     (middle-post-thickness 1     vitruvius "")
     (spring-gap            3/2   reconstructed "room between posts for a spring one hole across")
+    (bolt-window           3/5   reconstructed "height of the opening through the middle post for the bolt and string")
     (channel-length        19    vitruvius "the channel (canalis) the bolt slides in")
     (channel-section       3/4   vitruvius "width and depth of the channel's base")
     (arm-length            7     vitruvius "each arm (bracchium)")
@@ -65,9 +66,29 @@
   (define mid-w (d 'middle-post-width))
   (define capital-len (+ (* 2 post-t) (* 2 gap) mid-w)) ; across, along X
   (define y0 (d 'column-height))                         ; underside of the channel
-  (define cap-y0 (+ y0 (d 'channel-section)))           ; bottom board sits on the channel
+  ;; The stock passes through the capital: the springs' middle, where the
+  ;; arms come out, is level with the bolt lying on the channel, so the
+  ;; string pulls straight along it.
+  (define spring-mid (+ y0 (d 'channel-section) (* 0.16 hole)))
+  (define cap-y0 (- spring-mid (d 'board-thickness) (/ (d 'side-post-height) 2)))
   (values D d hole capital-len y0 cap-y0
           (for/list ([side '(-1 1)]) (* side (+ (/ mid-w 2) (/ gap 2)))))) ; spring x positions
+
+;; Where the working parts go, for a machine built on this frame: each
+;; spring's axis (x, and the height of its middle), the top of the channel
+;; the bolt slides on, and the channel's front and back ends (z).
+(define (catapulta-geometry bolt-length)
+  (define-values (D d hole capital-len y0 cap-y0 spring-xs) (layout bolt-length))
+  (define len (d 'channel-length))
+  (define mid-z (* -0.3 len))
+  (hasheq 'hole hole
+          'spring-x (second spring-xs)
+          'spring-y (+ cap-y0 (d 'board-thickness) (/ (d 'side-post-height) 2))
+          'channel-top (+ y0 (d 'channel-section))
+          'channel-front (+ mid-z (/ len 2))
+          'channel-back (- mid-z (/ len 2))
+          'arm-length (d 'arm-length)
+          'arm-section (d 'arm-section)))
 
 ;; The static wooden frame: capital (two boards, two side posts, a middle
 ;; post), the channel running fore and aft through it, and the column,
@@ -88,7 +109,16 @@
      (for/list ([side '(-1 1)])
        (placed-box (d 'side-post-thickness) post-h board-w
                    (* side (- (/ capital-len 2) (/ (d 'side-post-thickness) 2))) mid-y 0))
-     (list (placed-box (d 'middle-post-width) post-h (d 'middle-post-thickness) 0 mid-y 0)
+     ;; the middle post, with an opening where the bolt and string pass through
+     (let* ([post-bottom (+ cap-y0 board-t)]
+            [post-top (+ post-bottom post-h)]
+            [gap-bottom y0]
+            [gap-top (+ y0 cs (d 'bolt-window))])
+       (list (placed-box (d 'middle-post-width) (- gap-bottom post-bottom) (d 'middle-post-thickness)
+                         0 (/ (+ post-bottom gap-bottom) 2) 0)
+             (placed-box (d 'middle-post-width) (- post-top gap-top) (d 'middle-post-thickness)
+                         0 (/ (+ gap-top post-top) 2) 0)))
+     (list
            ;; channel: most of it behind the capital, where the bolt is drawn back
            (placed-box cs cs (d 'channel-length) 0 (+ y0 (/ cs 2)) (* -0.3 (d 'channel-length)))
            ;; column and a cross-shaped base

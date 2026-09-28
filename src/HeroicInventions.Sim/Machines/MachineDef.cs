@@ -82,7 +82,11 @@ public sealed record RopeEnd(string Part, Vec3 Local);
 /// </summary>
 public sealed record RopeSpec(
     string Id, RopeEnd From, RopeEnd To, double Length, IReadOnlyList<Vec3> Over,
-    string? WindOn, double? ReleaseDeg, string Material, double Diameter, SourceLocation? Location);
+    string? WindOn, double? ReleaseDeg, string Material, double Diameter, SourceLocation? Location)
+{
+    /// <summary>The To end is nocked, not tied: the rope can drive it but lets go rather than pull it back.</summary>
+    public bool Nocked { get; init; }
+}
 
 /// <summary>
 /// A machine as written by #lang heroic: parts with positions, materials
@@ -211,7 +215,8 @@ public sealed class MachineDef
             c.Field("release-deg")?.Items.ElementAtOrDefault(1) is SNumber r ? r.Value : null,
             c.Field("material") is { } m ? Sym(m, 1, loc) : "hemp",
             c.Field("diameter") is { } d ? Num(d, 1, loc) : 0.02,
-            loc);
+            loc)
+        { Nocked = c.Field("nocked")?.Items.ElementAtOrDefault(1) is SBool { Value: true } };
     }
 
     // (sealed-air (tanks a b …) (tube-volume v) (srcloc …))

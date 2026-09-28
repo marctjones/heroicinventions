@@ -77,6 +77,7 @@
                        (release-deg ,(let ([d (rope-spec-release-deg r)]) (if d (num "rope #:release-deg" d) #f)))
                        (material ,(rope-spec-material r))
                        (diameter ,(num (format "rope ~a #:diameter" id) (rope-spec-diameter r)))
+                       (nocked ,(rope-spec-nocked r))
                        ,(loc->sexp (rope-spec-loc r) root)))
             ,@(for/list ([c (machine-cylinders m)])
                 `(atmospheric-cylinder ,(cylinder-spec-id c) (piston ,(cylinder-spec-piston c))

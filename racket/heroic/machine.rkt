@@ -37,7 +37,7 @@
 ;; (for world, in world coordinates); over: fixed points the rope runs
 ;; over (pulleys); wind-on: a wheel the from end winds onto, or #f;
 ;; release-deg: see the rope clause; diameter in m.
-(struct rope-spec (id from to length over wind-on release-deg material diameter loc) #:transparent)
+(struct rope-spec (id from to length over wind-on release-deg material diameter nocked loc) #:transparent)
 ;; parts: wheels fixed on one axle, first one first — they turn as one.
 (struct arbor-spec (parts loc) #:transparent)
 ;; a, b: two gears whose teeth engage.
@@ -214,12 +214,14 @@
                           (~once (~seq #:material mat:id))
                           (~optional (~seq #:hang-from hang:id))
                           (~optional (~seq #:release-past-deg release-v:expr))
-                          (~optional (~seq #:tilt-deg tilt-v:expr))) ...)
+                          (~optional (~seq #:tilt-deg tilt-v:expr))
+                          (~optional (~seq #:dimensions dims:vec3))) ...)
       #:attr info (pinfo #'id 'block (attribute mat) '())
       #:with expr #`(part 'id 'block 'mat (list at.x at.y at.z)
                           (list (cons 'size size-v) (cons 'hang-from '(~? hang #f))
                                 (cons 'release-past-deg (~? release-v #f))
-                                (cons 'tilt-deg (~? tilt-v 0)))
+                                (cons 'tilt-deg (~? tilt-v 0))
+                                (~@ . (~? ((cons 'dim-x dims.x) (cons 'dim-y dims.y) (cons 'dim-z dims.z)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -246,6 +248,12 @@
     ;; end and a long light end, i.e. a trebuchet arm. #:limit-deg caps
     ;; rotation each way (a real see-saw has stops); pass a large value
     ;; (or omit near 90) to let a trebuchet swing through its full arc.
+    ;; #:axis turns the hinge to x, y or z (default z, facing the camera);
+    ;; #:limit-lower-deg / #:limit-upper-deg give uneven stops. A torsion
+    ;; spring — twisted sinew, like a catapult's — is #:spring-stiffness
+    ;; (N·m per radian) pulling the lever toward #:spring-rest-deg.
+    ;; #:section makes the beam square, that many metres a side, instead of
+    ;; the default plank (2.5 cm × 22 cm) — a catapult's arm is a stout rod.
     ;; #:initial-spin-deg-per-sec models a torsion catapult's release: real
     ;; twisted-sinew springs aren't a joint type Jolt has, so instead of
     ;; modelling the spring itself, the arm simply starts already moving
@@ -260,14 +268,26 @@
                           (~optional (~seq #:pivot-fraction pivot-v:expr))
                           (~optional (~seq #:limit-deg limit-v:expr))
                           (~optional (~seq #:damping damping-v:expr))
-                          (~optional (~seq #:initial-spin-deg-per-sec spin-v:expr))) ...)
+                          (~optional (~seq #:initial-spin-deg-per-sec spin-v:expr))
+                          (~optional (~seq #:axis ax:axis-name))
+                          (~optional (~seq #:limit-lower-deg lo-v:expr))
+                          (~optional (~seq #:limit-upper-deg hi-v:expr))
+                          (~optional (~seq #:spring-stiffness k-v:expr))
+                          (~optional (~seq #:spring-rest-deg rest-v:expr))
+                          (~optional (~seq #:section section-v:expr))) ...)
       #:attr info (pinfo #'id 'lever (attribute mat) '())
       #:with expr #`(part 'id 'lever 'mat (list at.x at.y at.z)
                           (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 0))
                                 (cons 'pivot-fraction (~? pivot-v 1/2))
                                 (cons 'limit-deg (~? limit-v 18))
                                 (cons 'damping (~? damping-v 8.0))
-                                (cons 'initial-spin-deg-per-sec (~? spin-v 0)))
+                                (cons 'initial-spin-deg-per-sec (~? spin-v 0))
+                                (cons 'axis '(~? ax z))
+                                (cons 'limit-lower-deg (~? lo-v #f))
+                                (cons 'limit-upper-deg (~? hi-v #f))
+                                (cons 'spring-stiffness (~? k-v 0))
+                                (cons 'spring-rest-deg (~? rest-v 0))
+                                (cons 'section (~? section-v #f)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -353,6 +373,9 @@
     ;;             end) — how a trebuchet's sling slips off its release pin
     ;;   #:diameter, #:material  set its breaking strength: tensile
     ;;             strength × cross-section
+    ;;   #:nocked #t  the #:to end sits in a notch rather than being tied —
+    ;;             a bowstring on a bolt: the rope can drive it forward, and
+    ;;             lets go the moment it would pull it back
     (pattern (rope id:id
                    (~alt (~optional (~seq #:from from:rope-end))
                          (~optional (~seq #:wind-on drum:id))
@@ -361,7 +384,8 @@
                          (~optional (~seq #:over (over:vec3 ...)))
                          (~optional (~seq #:release-deg rel-v:expr))
                          (~optional (~seq #:diameter dia-v:expr))
-                         (~optional (~seq #:material mat:id))) ...)
+                         (~optional (~seq #:material mat:id))
+                         (~optional (~seq #:nocked nocked-v:expr))) ...)
       #:fail-unless (or (attribute from) (attribute drum)) "a rope needs a #:from end or a #:wind-on drum"
       #:fail-when (and (attribute from) (attribute drum) #'drum) "give a rope #:from or #:wind-on, not both (#:wind-on is its from end)"
       #:attr info (rinfo #'id (filter values (list (and (attribute from) #'from.part) #'to.part)) (attribute drum))
@@ -371,6 +395,7 @@
       #:with expr #`(rope-spec 'id from-expr (list 'to.part to.x to.y to.z) len-v
                                (~? (list (list over.x over.y over.z) ...) '())
                                '(~? drum #f) (~? rel-v #f) '(~? mat hemp) (~? dia-v 0.02)
+                               (and (~? nocked-v #f) #t)
                                #,(loc-of this-syntax)))
 
     ;; Wheels fixed on one axle (an arbor): a treadwheel and the drum its

@@ -245,6 +245,18 @@ public partial class MachineView
                 GD.Print($"rope {r.Spec.Id} broke: {r.Tension:F0} N exceeds its {r.Strength:F0} N breaking load");
                 continue;
             }
+            // A nocked end (a bolt on a bowstring) is driven, never held
+            // back: once the string would pull it against its own motion,
+            // the bolt has outrun the string, and they part.
+            if (r.Spec.Nocked && total[i] > 0 && r.B is { } nockedBody
+                && PointVelocity(nockedBody, b) is var vb && vb.Length() > 0.5f   // really moving, not settling
+                && ub.Dot(vb.Normalized()) < -0.2f)
+            {
+                r.Released = true;
+                foreach (var seg in r.Segments) seg.Visible = false;
+                GD.Print($"rope {r.Spec.Id} let go of {nockedBody.Name} at {Runtime.Time:F3}s, moving {nockedBody.LinearVelocity.Length():F1} m/s");
+                continue;
+            }
             if (total[i] > 0)
             {
                 r.A?.ApplyImpulse(ua * total[i], a - r.A.GlobalPosition);

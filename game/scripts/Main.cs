@@ -103,7 +103,7 @@ public partial class Main : Node3D
         ["newcomen-engine"] = "Thomas Newcomen's atmospheric engine (1712), after the one at Dudley Castle — the first practical piston engine, built to pump water out of mines. Steam fills the cylinder (white) and the pump rod's weight draws the piston up; at the top a jet of cold water condenses the steam (blue), and the atmosphere — 18 kN on the 53 cm piston — drives it down, rocking the beam and lifting ~47 L of water 48 m up the mine shaft each stroke. It's the air that does the work. About 5% of the fire's heat becomes lifted water here; real engines managed under 1%, because each cold jet also chilled the cylinder walls — the waste Watt's separate condenser later cured.",
         ["hama-noria"] = "A noria, like those that have watered the fields of Hama on the Orontes since Roman times: the river turns it and it lifts the river. The current drags on the paddles dipping into it; buckets in the rim fill at the bottom and tip out at the top into an aqueduct that carries the water off to the fields. Nothing sets its speed — it settles where the river's push balances the weight of water it's lifting, about 1.2 rpm.",
         ["roman-crane"] = "A Roman building crane (Vitruvius X.2): two men walking in a 4.5 m treadwheel turn a 25 cm drum on the same axle, winding a rope over the jib's pulley to lift 580 kg of granite. The wheel and axle is the lever that makes it possible: the men push at 2.25 m, the stone pulls at 0.25 m, so they need only a ninth of its weight. Their ~1,550 N·m just beats the stone's ~1,430 N·m — one man alone couldn't lift it.",
-        ["vitruvian-catapulta"] = "A two-armed bolt-shooter proportioned entirely from Vitruvius's table (X.10): every part is a multiple of the spring hole, and the hole is a ninth of the bolt. This is the common 3-span piece — a 69 cm bolt, so a 7.7 cm hole, 54 cm arms and a 1.46 m channel. The frame, springs and arms at rest.",
+        ["vitruvian-catapulta"] = "A two-armed bolt-shooter proportioned entirely from Vitruvius's table (X.10) — every part a multiple of the spring hole, the hole a ninth of the bolt: here a 69 cm bolt, 7.7 cm hole, 54 cm arms. Each arm turns in an upright spring of twisted sinew; drawn back, the springs twist further. Loosed, they throw the arms forward, the bowstring drives the bolt down the channel, the arms hit their stops and the bolt flies on at ~25 m/s, landing ~11 m away shot level. Vitruvius gives no spring stiffness; 300 N·m per radian is our estimate.",
     };
 
     private MaterialLibrary _materials = null!;
@@ -461,10 +461,10 @@ public partial class Main : Node3D
         AddChild(sun);
         sun.RotationDegrees = new Vector3(-50, 30, 0);
 
-        // Big enough for a trebuchet's stone to land on.
+        // Big enough for a trebuchet's stone, or a catapult bolt skidding on, to land on.
         var floor = new StaticBody3D { Position = new Vector3(0, -0.05f, 0) };
-        floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(60, 0.1f, 60) } });
-        floor.AddChild(Shapes.Box(new Vector3(60, 0.1f, 60), Shapes.Mat(Shapes.Stone)));
+        floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(100, 0.1f, 100) } });
+        floor.AddChild(Shapes.Box(new Vector3(100, 0.1f, 100), Shapes.Mat(Shapes.Stone)));
         AddChild(floor);
 
         _camera = new Camera3D();

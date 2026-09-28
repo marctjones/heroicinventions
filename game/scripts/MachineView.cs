@@ -418,7 +418,10 @@ public partial class MachineView : Node3D
     private void BuildBlock(PartSpec part)
     {
         float size = (float)part.Number("size");
-        var block = new MaterialBlock(_materials[part.Material], size, Shapes.ColorFor(part.Material))
+        var dims = part.Props.ContainsKey("dim-x")
+            ? new Vector3((float)part.Number("dim-x"), (float)part.Number("dim-y"), (float)part.Number("dim-z"))
+            : Vector3.One * size;
+        var block = new MaterialBlock(_materials[part.Material], dims, Shapes.ColorFor(part.Material))
         {
             Name = part.Id,
             Position = V(part.At),
@@ -557,7 +560,9 @@ public partial class MachineView : Node3D
         // geometry (more material there) — thick enough, its own self-
         // weight can out-torque the counterweight and swing the wrong way
         // entirely, which is exactly what happened before this was 0.04.
-        const float thickness = 0.025f, depth = 0.22f;
+        float thickness = 0.025f, depth = 0.22f;
+        if (part.Props.GetValueOrDefault("section") is SNumber section)
+            thickness = depth = (float)section.Value; // a square beam, e.g. a catapult arm
         var mat = _materials[part.Material];
         var surface = PartSurface(part, depth);
 
@@ -567,10 +572,13 @@ public partial class MachineView : Node3D
         // from the pivot (the body's origin) to match.
         float centerOffset = (0.5f - pivotFraction) * length;
 
+        var axis = part.Symbol("axis", "z") switch { "x" => Vector3.Right, "y" => Vector3.Up, _ => new Vector3(0, 0, 1) };
+        var toAxis = AxleBasis(axis); // the beam is built turning about local Z; this turns that onto #:axis
+        float stiffness = (float)part.Number("spring-stiffness", 0);
         var body = new RigidBody3D
         {
             Name = part.Id,
-            Position = V(part.At), // the pivot
+            Transform = new Transform3D(toAxis, V(part.At)), // the pivot, level
             Mass = (float)mat.MassOf(length * thickness * depth),
             PhysicsMaterialOverride = ContactFor(part.Material),
             // A real pivot has bearing friction; without any damping a
@@ -578,6 +586,14 @@ public partial class MachineView : Node3D
             // settle onto the rising end, and it tumbles off instead.
             AngularDamp = damping,
         };
+        if (stiffness != 0)
+        {
+            // An arm in a torsion spring runs out through openings in its
+            // frame that aren't modelled; keep it clear of fixtures (it
+            // still meets the floor and loose bodies).
+            body.CollisionLayer = SprungArmLayer;
+            body.CollisionMask = 1;
+        }
         var beamOffset = new Vector3(centerOffset, 0, 0);
         body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(length, thickness, depth) }, Position = beamOffset });
         var beam = Shapes.Box(new Vector3(length, thickness, depth), surface);
@@ -587,25 +603,40 @@ public partial class MachineView : Node3D
         _freezable.Add(body);
         _comOffset[body] = beamOffset; // the beam is uniform, so its own centroid is its centre of mass
         _bodiesById[part.Id] = body;
-        _hinges[body] = (V(part.At), new Vector3(0, 0, 1));
+        _hinges[body] = (V(part.At), axis);
 
         // The hinge takes its zero from the arm's pose when it's attached,
         // and #:limit-deg is meant from level — so attach it level, then
         // turn the arm to its starting angle. (Attached after turning, a
         // trebuchet cocked at -50° had its +75° stop at +25°, short of
         // vertical, and flung its stone backwards.)
-        var joint = new HingeJoint3D { Position = V(part.At) };
+        var joint = new HingeJoint3D { Transform = new Transform3D(toAxis, V(part.At)) };
         AddChild(joint);
         joint.NodeB = joint.GetPathTo(body);
-        body.RotationDegrees = new Vector3(0, 0, startAngle);
+        body.Transform = new Transform3D(toAxis * new Basis(new Vector3(0, 0, 1), Mathf.DegToRad(startAngle)), V(part.At));
 
         // A real see-saw has mechanical stops (without one, the low end
         // just keeps rotating until it hits the floor); a trebuchet arm
         // instead wants to swing through most of its arc, so its .rkt
-        // file passes a much larger #:limit-deg.
+        // file passes a much larger #:limit-deg. A catapult arm's stops are
+        // uneven: far back when drawn, a little forward of square at rest.
+        float lower = part.Props.GetValueOrDefault("limit-lower-deg") is SNumber lo ? (float)lo.Value : -limitDeg;
+        float upper = part.Props.GetValueOrDefault("limit-upper-deg") is SNumber hi ? (float)hi.Value : limitDeg;
+        // The hinge measures its angle the opposite way round to the arm's
+        // own rotation (the same reason its motor speeds are negated), so
+        // the arm's stops at [lower, upper] are the hinge's [−upper, −lower].
+        // Even stops (±limit) never showed it; a catapult arm's uneven ones did.
         joint.SetFlag(HingeJoint3D.Flag.UseLimit, true);
-        joint.SetParam(HingeJoint3D.Param.LimitUpper, Mathf.DegToRad(limitDeg));
-        joint.SetParam(HingeJoint3D.Param.LimitLower, Mathf.DegToRad(-limitDeg));
+        joint.SetParam(HingeJoint3D.Param.LimitUpper, Mathf.DegToRad(-lower));
+        joint.SetParam(HingeJoint3D.Param.LimitLower, Mathf.DegToRad(-upper));
+
+        if (stiffness != 0)
+            _springs.Add(new TorsionSpring
+            {
+                Body = body, Axis = axis, Stiffness = stiffness,
+                Rest = Mathf.DegToRad((float)part.Number("spring-rest-deg", 0)),
+                Angle = Mathf.DegToRad(startAngle), LastRaw = RawAngle(body, axis),
+            });
 
         // A torsion catapult's arm starts already moving — see the
         // #:initial-spin-deg-per-sec doc comment in machine.rkt. Directly
@@ -653,8 +684,32 @@ public partial class MachineView : Node3D
         // A wider footing than a pendulum's — a lever's fulcrum takes a
         // real sideways load (the beam pushes on it, unlike a pendulum
         // hanging straight down), and for a trebuchet's tall pivot this
-        // also reads as the tower/frame a real one is mounted on.
-        AddGroundedSupport(V(part.At), 0.03f, 0.18f);
+        // also reads as the tower/frame a real one is mounted on. A sprung
+        // arm is held by its spring's frame instead.
+        if (stiffness == 0) AddGroundedSupport(V(part.At), 0.03f, 0.18f);
+    }
+
+    private const uint FixtureLayer = 8, SprungArmLayer = 16;
+    private readonly List<TorsionSpring> _springs = [];
+
+    /// <summary>A lever held by a torsion spring (twisted sinew): torque −k·(θ − rest) about its hinge.</summary>
+    private sealed class TorsionSpring
+    {
+        public required RigidBody3D Body;
+        public required Vector3 Axis;
+        public required float Stiffness, Rest;
+        public double Angle, LastRaw;
+    }
+
+    private void DriveSprings()
+    {
+        foreach (var s in _springs)
+        {
+            double raw = RawAngle(s.Body, s.Axis);
+            s.Angle += Unwrap(raw - s.LastRaw);
+            s.LastRaw = raw;
+            s.Body.ApplyTorque(s.Axis * (float)(-s.Stiffness * (s.Angle - s.Rest)));
+        }
     }
 
     /// <summary>
@@ -847,7 +902,12 @@ public partial class MachineView : Node3D
     private void BuildFixture(PartSpec part)
     {
         var mesh = GeneratedMesh(part);
-        var body = new StaticBody3D { Name = part.Id, Position = V(part.At), RotationDegrees = new Vector3(0, (float)part.Number("turn-deg", 0), 0) };
+        var body = new StaticBody3D
+        {
+            Name = part.Id, Position = V(part.At), RotationDegrees = new Vector3(0, (float)part.Number("turn-deg", 0), 0),
+            CollisionLayer = FixtureLayer, CollisionMask = 1, // meets loose bodies, not sprung arms
+            PhysicsMaterialOverride = ContactFor(part.Material),
+        };
         body.AddChild(new CollisionShape3D { Shape = mesh.CreateTrimeshShape() });
         // sized by the fixture's thinnest direction, so a long frame doesn't get a heavy rim
         var extent = mesh.GetAabb().Size;
@@ -1005,6 +1065,7 @@ public partial class MachineView : Node3D
         DriveGearTrains();
         DriveLifts();
         DrivePistons();
+        DriveSprings();
         Runtime.Step(dt);
         Refresh();
         CheckReleases();
@@ -1035,7 +1096,8 @@ public partial class MachineView : Node3D
                           .Concat(GearReport())
                           .Concat(_liftDrives.Select(d => $"{d.Spec.Id} {d.Lift.Rpm:F1}rpm {d.Lift.Flow * 1000:F2}L/s {d.Spec.From}={d.Lift.From.WaterVolume * 1000:F0}L {d.Spec.To}={d.Lift.To.WaterVolume * 1000:F0}L"))
                           .Concat(_cylinderDrives.Select(c => $"{c.Cylinder.Name} P={c.Cylinder.Pressure / 1000:F0}kPa F={c.Cylinder.Force / 1000:F1}kN {(c.Cylinder.Injecting ? "INJECT" : "steam")} strokes={c.Cylinder.Strokes} boiler={c.Cylinder.Boiler.Temperature:F1}C steam-used={c.Cylinder.SteamUsed:F1}kg"))
-                          .Concat(_pumpDrives.Select(p => $"{p.Lift.Name} {p.Lift.To.Name}={p.Lift.To.WaterVolume * 1000:F0}L")));
+                          .Concat(_pumpDrives.Select(p => $"{p.Lift.Name} {p.Lift.To.Name}={p.Lift.To.WaterVolume * 1000:F0}L"))
+                          .Concat(_springs.Select(sp => $"{sp.Body.Name} θ={Mathf.RadToDeg((float)sp.Angle):F0}°")));
 
     private void Refresh()
     {
