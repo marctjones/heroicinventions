@@ -79,6 +79,7 @@ public partial class MachineView : Node3D
         }
         foreach (var pipe in Runtime.Def.Pipes) BuildPipe(pipe);
         BuildArbors();
+        BuildGearTrains();
         BuildAxleSupports();
         foreach (var rope in Runtime.Def.Ropes) BuildRope(rope);
         Refresh();
@@ -756,6 +757,10 @@ public partial class MachineView : Node3D
             CollisionLayer = AxleLayer,
             CollisionMask = 1,
             AngularDamp = 0.2f, // a little bearing friction, so an undriven wheel nudged by something eventually stops
+            // A small slow wheel — a clock gear cranked at 2 rpm, its rim
+            // moving 3 mm/s — is below the engine's "come to rest"
+            // threshold and would be put to sleep mid-turn.
+            CanSleep = false,
         };
         body.Transform = new Transform3D(toAxis * new Basis(new Vector3(0, 0, 1), Mathf.DegToRad(startAngleDeg)), V(part.At));
         body.AddChild(new CollisionShape3D { Shape = mesh.CreateConvexShape() });
@@ -776,6 +781,7 @@ public partial class MachineView : Node3D
             var joint = new HingeJoint3D { Transform = new Transform3D(toAxis, V(part.At)) };
             AddChild(joint);
             joint.NodeB = joint.GetPathTo(body);
+            _axleJoints[part.Id] = joint;
             if (rpm != 0)
             {
                 joint.SetFlag(HingeJoint3D.Flag.EnableMotor, true);
@@ -993,6 +999,7 @@ public partial class MachineView : Node3D
     {
         ResolveBobImpacts();
         ResolveRopes();
+        DriveGearTrains();
         Runtime.Step(dt);
         Refresh();
         CheckReleases();
@@ -1019,7 +1026,8 @@ public partial class MachineView : Node3D
     /// <summary>Rotation and height of every dynamic body — a quick way to confirm Jolt is actually moving them (see HEROIC_DEBUG_PHYSICS).</summary>
     public string DebugState() =>
         string.Join("  ", _freezable.Select(b => $"{b.Name} pos=({b.GlobalPosition.X:F2},{b.GlobalPosition.Y:F2},{b.GlobalPosition.Z:F2}) rotZ={b.RotationDegrees.Z:F1}°")
-                          .Concat(_ropes.Select(r => r.Describe())));
+                          .Concat(_ropes.Select(r => r.Describe()))
+                          .Concat(GearReport()));
 
     private void Refresh()
     {

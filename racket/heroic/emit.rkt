@@ -78,6 +78,8 @@
                        (material ,(rope-spec-material r))
                        (diameter ,(num (format "rope ~a #:diameter" id) (rope-spec-diameter r)))
                        ,(loc->sexp (rope-spec-loc r) root)))
+            ,@(for/list ([g (machine-meshes m)])
+                `(mesh ,(mesh-spec-a g) ,(mesh-spec-b g) ,(loc->sexp (mesh-spec-loc g) root)))
             ,@(for/list ([a (machine-arbors m)])
                 `(arbor (parts ,@(arbor-spec-parts a)) ,(loc->sexp (arbor-spec-loc a) root)))
             ,@(for/list ([a (machine-airs m)])

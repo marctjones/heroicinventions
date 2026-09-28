@@ -14,9 +14,10 @@
 ;; 127-tooth d2 sits behind the gears it would otherwise hide.
 ;;
 ;; Every gear is placed at its exact centre distance and turned to the
-;; phase where its teeth fall between its partner's (mate-angle). They
-;; stand still for now: turning one gear to drive the next needs the
-;; gear-coupling physics, not yet built.
+;; phase where its teeth fall between its partner's (mate-angle). A crank
+;; turns b2 — here at 2 rpm, standing in for once a year — and the train
+;; does the rest: each mesh reverses the sense and scales the speed by the
+;; tooth ratio, so e2 turns at 2 × 254/19 ≈ 26.7 rpm.
 
 (require racket/math racket/list)
 
@@ -46,9 +47,15 @@
 
 (define-machine antikythera-lunar-train
   #:source "Antikythera mechanism, c. 100 BC (Freeth et al., Nature 2006)"
-  (wheel b2 #:shape (gear 64)  #:at ((first B) (second B) (* 2 layer))   #:material bronze #:angle-deg b2-angle)
+  (wheel b2 #:shape (gear 64)  #:at ((first B) (second B) (* 2 layer))   #:material bronze #:angle-deg b2-angle
+         #:drive-rpm 2)
   (wheel c1 #:shape (gear 38)  #:at ((first C) (second C) (* 2 layer))   #:material bronze #:angle-deg c1-angle)
   (wheel c2 #:shape (gear 48)  #:at ((first C) (second C) layer)         #:material bronze #:angle-deg c2-angle)
   (wheel d1 #:shape (gear 24)  #:at ((first D) (second D) layer)         #:material bronze #:angle-deg d1-angle)
   (wheel d2 #:shape (gear 127) #:at ((first D) (second D) 0)             #:material bronze #:angle-deg d2-angle)
-  (wheel e2 #:shape (gear 32)  #:at ((first E) (second E) 0)             #:material bronze #:angle-deg e2-angle))
+  (wheel e2 #:shape (gear 32)  #:at ((first E) (second E) 0)             #:material bronze #:angle-deg e2-angle)
+  (arbor c1 c2)
+  (arbor d1 d2)
+  (mesh b2 c1)
+  (mesh c2 d1)
+  (mesh d2 e2))

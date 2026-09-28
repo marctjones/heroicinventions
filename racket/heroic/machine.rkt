@@ -16,16 +16,16 @@
 
 (provide define-machine
          tank boiler rotor block pendulum lever ramp wheel screw fixture
-         pipe connect sealed-air port rope world arbor
+         pipe connect sealed-air port rope world arbor mesh
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
-         (struct-out rope-spec) (struct-out arbor-spec)
+         (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec)
          take-registered-machines)
 
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source parts pipes connects airs ropes arbors) #:transparent)
+(struct machine (name source parts pipes connects airs ropes arbors meshes) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -40,6 +40,8 @@
 (struct rope-spec (id from to length over wind-on release-deg material diameter loc) #:transparent)
 ;; parts: wheels fixed on one axle, first one first — they turn as one.
 (struct arbor-spec (parts loc) #:transparent)
+;; a, b: two gears whose teeth engage.
+(struct mesh-spec (a b loc) #:transparent)
 
 (define (make-machine name source items)
   (machine name source
@@ -48,7 +50,8 @@
            (filter connect-spec? items)
            (filter air-spec? items)
            (filter rope-spec? items)
-           (filter arbor-spec? items)))
+           (filter arbor-spec? items)
+           (filter mesh-spec? items)))
 
 ;; Machines register themselves when their module runs, so the build
 ;; script can collect every machine in a file without knowing their names.
@@ -67,7 +70,7 @@
     ...))
 
 (define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture
-  pipe connect sealed-air port rope world arbor)
+  pipe connect sealed-air port rope world arbor mesh)
 
 ;; A part built from a generated shape (see heroic/geometry). The shape is
 ;; an ordinary runtime value, so whether it suits the clause is checked
@@ -99,6 +102,7 @@
   (struct ainfo (tanks))             ; tanks: (listof identifier)
   (struct rinfo (id ends drum))      ; ends: identifiers naming parts (or world); drum: identifier or #f
   (struct arinfo (parts))            ; identifiers of wheels on one axle
+  (struct minfo (a b))               ; two gears in mesh
 
   (define known-materials (material-ids))
 
@@ -137,7 +141,7 @@
 
   (define-syntax-class clause
     #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture pipe connect sealed-air rope arbor)
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture pipe connect sealed-air rope arbor mesh)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -366,6 +370,13 @@
       #:attr info (arinfo (syntax->list #'(w ...)))
       #:with expr #`(arbor-spec '(w ...) #,(loc-of this-syntax)))
 
+    ;; Two gears whose teeth engage: turning one turns the other the
+    ;; opposite way, at the inverse ratio of their tooth counts. The game
+    ;; checks they're cut to one module and set at the right distance.
+    (pattern (mesh a:id b:id)
+      #:attr info (minfo #'a #'b)
+      #:with expr #`(mesh-spec 'a 'b #,(loc-of this-syntax)))
+
     (pattern (pipe id:id from:ref to:ref
                    (~alt (~once (~seq #:conductance c:expr))
                          (~optional (~seq #:jet jet:expr))) ...)
@@ -480,6 +491,12 @@
         (when (hash-ref on-arbor (syntax-e w) #f)
           (fail (format "wheel ~a is already on another arbor" (syntax-e w)) w))
         (hash-set! on-arbor (syntax-e w) #t)))
+
+    (for ([mi infos] #:when (minfo? mi))
+      (for ([g (list (minfo-a mi) (minfo-b mi))])
+        (define p (hash-ref parts (syntax-e g) #f))
+        (unless (and p (eq? (pinfo-kind p) 'wheel))
+          (fail (format "~a is not a wheel; mesh joins two gears" (syntax-e g)) g))))
 
     (define sealed (make-hasheq))
     (for ([a infos] #:when (ainfo? a))

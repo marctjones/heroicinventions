@@ -58,6 +58,9 @@ public sealed record PipeSpec(string Id, PortRef From, PortRef To, double Conduc
 public sealed record ConnectSpec(PortRef A, PortRef B, SourceLocation? Location);
 public sealed record SealedAirSpec(IReadOnlyList<string> Tanks, double TubeVolume, SourceLocation? Location);
 
+/// <summary>Two gears in mesh.</summary>
+public sealed record MeshSpec(string A, string B, SourceLocation? Location);
+
 /// <summary>Wheels fixed on one axle; the first carries the bearing and any drive.</summary>
 public sealed record ArborSpec(IReadOnlyList<string> Parts, SourceLocation? Location);
 
@@ -90,6 +93,7 @@ public sealed class MachineDef
     public required IReadOnlyList<SealedAirSpec> SealedAir { get; init; }
     public IReadOnlyList<RopeSpec> Ropes { get; init; } = [];
     public IReadOnlyList<ArborSpec> Arbors { get; init; } = [];
+    public IReadOnlyList<MeshSpec> Meshes { get; init; } = [];
 
     public PartSpec? Part(string id) => Parts.FirstOrDefault(p => p.Id == id);
 
@@ -109,6 +113,11 @@ public sealed class MachineDef
             Connects = clauses.Where(c => c.Head == "connect").Select(ParseConnect).ToList(),
             SealedAir = clauses.Where(c => c.Head == "sealed-air").Select(ParseSealedAir).ToList(),
             Ropes = clauses.Where(c => c.Head == "rope").Select(ParseRope).ToList(),
+            Meshes = clauses.Where(c => c.Head == "mesh").Select(c =>
+            {
+                var loc = ParseLoc(c);
+                return new MeshSpec(Sym(c, 1, loc), Sym(c, 2, loc), loc);
+            }).ToList(),
             Arbors = clauses.Where(c => c.Head == "arbor").Select(c =>
             {
                 var loc = ParseLoc(c);
