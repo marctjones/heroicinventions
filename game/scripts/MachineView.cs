@@ -444,7 +444,12 @@ public partial class MachineView : Node3D
         // together (material samples, a ramp's cargo) and a single wide
         // label overlaps its neighbours long before the text gets small.
         string materialName = char.ToUpper(part.Material[0]) + part.Material[1..];
-        AddLabel($"{materialName}\nμ{_materials[part.Material].Friction:F2}", new Vector3(0, size / 2 + 0.05f, 0), block);
+        // A shaped block (a catapult bolt) is a part with a job, named for it;
+        // a plain cube is a material sample, labelled with its friction.
+        if (part.Props.ContainsKey("dim-x"))
+            AddLabel(part.Id, new Vector3(0, dims.Y / 2 + 0.05f, 0), block);
+        else
+            AddLabel($"{materialName}\nμ{_materials[part.Material].Friction:F2}", new Vector3(0, size / 2 + 0.05f, 0), block);
         Blocks.Add(block);
         _freezable.Add(block);
         _bodiesById[part.Id] = block;
@@ -680,7 +685,8 @@ public partial class MachineView : Node3D
         // is the pivot — body's own origin — which stays a sensible label
         // spot regardless of #:pivot-fraction, unlike the beam's own
         // (possibly far off-centre) visual midpoint.
-        AddLabel(part.Id, new Vector3(0, thickness + 0.08f, 0), body);
+        if (stiffness == 0) // a sprung arm sits inside its frame, which carries the label
+            AddLabel(part.Id, new Vector3(0, thickness + 0.08f, 0), body);
         // A wider footing than a pendulum's — a lever's fulcrum takes a
         // real sideways load (the beam pushes on it, unlike a pendulum
         // hanging straight down), and for a trebuchet's tall pivot this
@@ -1196,6 +1202,9 @@ public partial class MachineView : Node3D
         // machine like Heron's fountain (no rigid bodies, no rotor) shows
         // zero energy and a blank speed the whole time it's running.
         pe += Runtime.Tanks.Values.Sum(t => t.WaterVolume * Physics.WaterDensity * Physics.Gravity * (t.BaseElevation + t.Level / 2));
+        // A twisted torsion spring stores ½·k·(θ − rest)²: counted, or a
+        // catapult would seem to make energy from nothing when loosed.
+        pe += _springs.Sum(sp => 0.5 * sp.Stiffness * Math.Pow(sp.Angle - sp.Rest, 2));
         double thermal = Runtime.Boilers.Values.Sum(b => b.HeatDelivered);
 
         string speed = Runtime.Rotors.Count > 0

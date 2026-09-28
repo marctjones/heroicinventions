@@ -47,7 +47,8 @@
   (piston engine-piston #:at (cylinder-x piston-bottom 0) #:bore (cm 53) #:stroke stroke #:material iron)
   (atmospheric-cylinder cylinder #:piston engine-piston #:steam-from boiler)
   (lever beam #:at ((car pivot) (cadr pivot) 0) #:length (* 2 half-beam) #:material oak
-         #:start-angle-deg swing-deg #:limit-deg 20 #:damping 0.2)
+         #:start-angle-deg swing-deg #:limit-deg 20 #:damping 0.2
+         #:section (cm 30))                   ; the great oak beam: ~390 kg
   (rope engine-chain #:from (beam (- half-beam) 0 0) #:to (engine-piston 0 disc 0) #:length chain-1
         #:material iron #:diameter (cm 3))
   (piston pump-rod #:at (pump-x pump-bottom 0) #:bore (cm 18.5) #:stroke stroke #:start 1
