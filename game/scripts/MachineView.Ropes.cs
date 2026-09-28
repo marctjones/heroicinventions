@@ -39,6 +39,7 @@ public partial class MachineView
         public float Strength;          // breaking load, N
         public float Tension;           // last tick, N
         public float ArmTurned;         // how far the From part has turned, rad (for release)
+        public float MostLag;           // most the load has lagged the arm, degrees (negative)
         public bool Released, Broken;
         public readonly List<MeshInstance3D> Segments = [];
         public bool Active => !Released && !Broken;
@@ -210,8 +211,10 @@ public partial class MachineView
     /// <summary>
     /// A sling lets go when the rope has swung round to within ReleaseDeg of
     /// pointing straight out along the arm (pivot through the rope's end) —
-    /// how the loop slips off a trebuchet's release pin. Only once the arm
-    /// has actually swung, so the sling lying slack at the start can't trip it.
+    /// how the loop slips off a trebuchet's release pin. The load has to
+    /// have lagged behind the arm first and then whipped round: at the
+    /// start the sling lies flat along the ground, which can already look
+    /// "nearly in line" with an arm pointing down, and must not count.
     /// </summary>
     private void CheckRelease(Rope r, Vector3 a, Vector3 b)
     {
@@ -222,7 +225,8 @@ public partial class MachineView
         float turning = Mathf.Sign(r.A.AngularVelocity.Dot(hinge.Axis));
         // negative while the load lags behind the arm, 0 when in line with it
         float angle = Mathf.RadToDeg(Mathf.Atan2(hinge.Axis.Dot(arm.Cross(rope)), arm.Dot(rope))) * turning;
-        if (angle < -(float)releaseDeg) return;
+        r.MostLag = Mathf.Min(r.MostLag, angle);
+        if (r.MostLag > -(float)releaseDeg - 20 || angle < -(float)releaseDeg) return;
         r.Released = true;
         foreach (var seg in r.Segments) seg.Visible = false;
         GD.Print($"rope {r.Spec.Id} released at {Runtime.Time:F2}s");

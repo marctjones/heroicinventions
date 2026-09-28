@@ -41,7 +41,7 @@ public partial class Main : Node3D
         ["lever-demo"] = new(new Vector3(0, 0.75f, 1.5f), new Vector3(0, 0.55f, 0), 42),
         ["inclined-plane-demo"] = new(new Vector3(0, 1.6f, 2.8f), new Vector3(0, 0.3f, -0.6f), 55),
         ["newtons-cradle"] = new(new Vector3(0, 0.75f, 1.0f), new Vector3(0, 0.6f, 0), 38),
-        ["trebuchet"] = new(new Vector3(0.3f, 2.2f, 4.8f), new Vector3(0.3f, 1.2f, 0), 60),
+        ["trebuchet"] = new(new Vector3(-2.2f, 3.0f, 9.5f), new Vector3(-2.2f, 1.5f, 0), 60), // wide enough to watch the stone land
         ["torsion-catapult"] = new(new Vector3(0.2f, 1.8f, 3.6f), new Vector3(0.2f, 1.0f, 0), 55),
         ["antikythera-lunar-train"] = new(new Vector3(0.13f, 0.19f, 0.19f), new Vector3(0.022f, 0.09f, 0.004f), 38),
         ["archimedes-screw"] = new(new Vector3(0.5f, 2.0f, 6.0f), new Vector3(0, 1.6f, 0), 50),
@@ -75,7 +75,7 @@ public partial class Main : Node3D
         ["lever-demo"] = "Lever / See-Saw",
         ["inclined-plane-demo"] = "Inclined Plane",
         ["newtons-cradle"] = "Newton's Cradle",
-        ["trebuchet"] = "Trebuchet",
+        ["trebuchet"] = "A counterweight trebuchet (medieval, but Archimedes' lever taken as far as it goes). A 73 kg counterweight hangs on a chain from the short arm; the long arm carries a sling, with the stone lying on the ground behind. The falling weight whips the arm over, the sling whips the stone round faster still, and it flies ~6 m forward. Only rope, hinge and gravity — nothing scripts the flight.",
         ["torsion-catapult"] = "Torsion Catapult (Onager)",
         ["antikythera-lunar-train"] = "Antikythera Lunar Train",
         ["archimedes-screw"] = "Archimedes' Screw",
@@ -92,7 +92,7 @@ public partial class Main : Node3D
         ["lever-demo"] = "A see-saw: two different weights on either end of a beam pivoted at its centre. The heavier side sinks until the beam's own mechanical stop holds it — a direct demonstration of torque and leverage.",
         ["inclined-plane-demo"] = "Galileo's classic experiment: identical-size blocks of different materials released on the same slope. Whether each one slides — and how far — depends only on its material's friction against stone.",
         ["newtons-cradle"] = "Five identical pendulums hung in a touching row. Pull one end back and release it: momentum and energy transfer through the row via collision, animating the far ball instead.",
-        ["trebuchet"] = "A medieval siege engine (not ancient, but built from the same lever principle as Vitruvius's torsion catapults). A heavy counterweight hangs from the short end of a pivoted arm; as it falls, it flings the long end — and whatever's riding it — up and around.",
+        ["trebuchet"] = "A counterweight trebuchet (medieval, but Archimedes' lever taken as far as it goes). A 73 kg counterweight hangs on a chain from the short arm; the long arm carries a sling, with the stone lying on the ground behind. The falling weight whips the arm over, the sling whips the stone round faster still, and it flies ~6 m forward. Only rope, hinge and gravity — nothing scripts the flight.",
         ["torsion-catapult"] = "The onager, a late-Roman one-armed siege engine (Ammianus Marcellinus, 4th c. AD). Twisted sinew rope at the arm's short end stores energy the way a twisted rubber band does; released, it snaps the arm up into the frame's stop, and the stone flies off on its own momentum.",
         ["antikythera-lunar-train"] = "Six bronze gears from the Antikythera mechanism (c. 100 BC), with their real tooth counts: 64→38, 48→24, 127→32. One turn of the first is a year; the last then turns 254/19 times — the Moon's circuits of the sky in that year. Triangular teeth, as the originals have. Each gear is cut and phased to mesh with its partner; they stand still until gear coupling is added.",
         ["archimedes-screw"] = "A water screw built only from Vitruvius's rules (De Architectura X.6): core a sixteenth of the length thick, eight helical blades, whole screw an eighth of its length across, set on a 3-4-5 slope. Men treading turned it; each turn lifts a pocket of water one pitch higher. Shown turning at a treading pace without its plank casing, so the helix shows.",
@@ -455,9 +455,10 @@ public partial class Main : Node3D
         AddChild(sun);
         sun.RotationDegrees = new Vector3(-50, 30, 0);
 
+        // Big enough for a trebuchet's stone to land on.
         var floor = new StaticBody3D { Position = new Vector3(0, -0.05f, 0) };
-        floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(8, 0.1f, 8) } });
-        floor.AddChild(Shapes.Box(new Vector3(8, 0.1f, 8), Shapes.Mat(Shapes.Stone)));
+        floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(60, 0.1f, 60) } });
+        floor.AddChild(Shapes.Box(new Vector3(60, 0.1f, 60), Shapes.Mat(Shapes.Stone)));
         AddChild(floor);
 
         _camera = new Camera3D();

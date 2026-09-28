@@ -585,10 +585,15 @@ public partial class MachineView : Node3D
         _bodiesById[part.Id] = body;
         _hinges[body] = (V(part.At), new Vector3(0, 0, 1));
 
-        body.RotationDegrees = new Vector3(0, 0, startAngle);
+        // The hinge takes its zero from the arm's pose when it's attached,
+        // and #:limit-deg is meant from level — so attach it level, then
+        // turn the arm to its starting angle. (Attached after turning, a
+        // trebuchet cocked at -50° had its +75° stop at +25°, short of
+        // vertical, and flung its stone backwards.)
         var joint = new HingeJoint3D { Position = V(part.At) };
         AddChild(joint);
         joint.NodeB = joint.GetPathTo(body);
+        body.RotationDegrees = new Vector3(0, 0, startAngle);
 
         // A real see-saw has mechanical stops (without one, the low end
         // just keeps rotating until it hits the floor); a trebuchet arm

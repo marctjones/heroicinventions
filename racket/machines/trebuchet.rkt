@@ -1,31 +1,53 @@
 #lang heroic
-;; A counterweight trebuchet: the same lever mechanism as the see-saw,
-;; but pivoted near one end instead of the centre. The granite
-;; counterweight hangs from the short arm's tip on a free hinge (a real
-;; trebuchet's counterweight basket does the same — it stays hanging
-;; straight down as the arm swings, instead of just resting on it), so
-;; falling it flings the long arm around. The payload hangs from the long
-;; arm's tip the same way, and releases once the arm has swung 40° from
-;; level — a rough stand-in for a sling's release hook, not a modelled
-;; rope, but enough to launch the payload cleanly instead of watching it
-;; slide or tumble off partway through the swing.
+;; A counterweight trebuchet (medieval — not ancient, but the same lever
+;; as the machines before it, taken as far as it goes). A heavy
+;; counterweight hangs on a short chain from the arm's short end; the
+;; long end carries a sling, and the stone lies on the ground behind the
+;; machine at the sling's end.
+;;
+;; Let go, the counterweight falls and whips the arm round; the sling
+;; lets the stone trail behind the arm's tip, then swing round faster
+;; than the tip itself — the sling is a second, longer lever on the end
+;; of the first. The sling's loop slips off its release pin once it has
+;; swung close to in line with the arm (#:release-deg), and the stone
+;; flies on its own momentum. In practice this one's stone overtakes the
+;; tip when the arm reaches its stop and the sling goes slack, so it flies
+;; free whenever the pin is set anywhere from 10° to 90°: it lands ~6.4 m
+;; out, about four arm-lengths. That's ~13% of the counterweight's energy
+;; in the stone; real trebuchets reach 30–60%, mostly because their arms
+;; don't slam into a stop mid-throw.
+;;
+;; Throws toward -X. Everything here is rope, hinge and falling weight —
+;; nothing scripts the flight.
+(require racket/math)
 
-(define total-length (m 1.8))
-(define pivot-fraction 0.15)          ; short arm = 15% of the beam
-(define short-arm (* pivot-fraction total-length))
-(define long-arm (- total-length short-arm))
-(define pivot-y (m 1.0))
-(define beam-surface (+ pivot-y (cm 2))) ; pivot + half beam thickness
+(define arm-length (m 1.8))
+(define pivot-fraction 0.15)                         ; short arm = 15% of the beam
+(define short-arm (* pivot-fraction arm-length))     ; 0.27 m
+(define long-arm (- arm-length short-arm))           ; 1.53 m
+(define pivot (list 0 (m 1.4)))
+(define cocked-deg -50)                              ; long end down and back, ready to throw
+(define c (degrees->radians cocked-deg))
+(define (on-arm d) (list (+ (car pivot) (* d (cos c))) (+ (cadr pivot) (* d (sin c)))))
+
+(define cw-size (m 0.3))                             ; granite: 73 kg
+(define chain (cm 35))                                ; long enough that the weight clears the beam
+(define short-end (on-arm (- short-arm)))
+(define cw-at (list (car short-end) (- (cadr short-end) chain (/ cw-size 2))))
+
+(define stone-size (cm 8))                           ; granite: 1.4 kg — about 1:50 to the counterweight
+(define sling (m 1.2))
+(define tip (on-arm long-arm))
+(define stone-y (/ stone-size 2))
+(define stone-at (list (+ (car tip) (sqrt (- (sqr sling) (sqr (- (cadr tip) stone-y))))) stone-y))
 
 (define-machine trebuchet
-  #:source "Classic mechanics demonstration (not ancient, but Hero and Vitruvius's torsion catapults are its cousins)"
-  (lever arm #:at (0 pivot-y 0) #:length total-length #:material oak
-         #:pivot-fraction pivot-fraction #:limit-deg 70 #:damping 5.0)
-  ;; Hangs from the short arm's tip — stays vertical under gravity as
-  ;; the arm rotates, instead of sliding off like loose cargo.
-  (block counterweight #:at ((- short-arm) beam-surface 0)
-         #:size (cm 22) #:material granite #:hang-from arm)
-  ;; Hangs from the long arm's tip; releases once the arm passes 40° —
-  ;; the launch.
-  (block payload #:at (long-arm beam-surface 0)
-         #:size (cm 8) #:material cedar #:hang-from arm #:release-past-deg 40))
+  #:source "Classic mechanics demonstration (medieval; its lever is Archimedes')"
+  (lever arm #:at ((car pivot) (cadr pivot) 0) #:length arm-length #:material oak
+         #:pivot-fraction pivot-fraction #:start-angle-deg cocked-deg #:limit-deg 140 #:damping 0.2)
+  (block counterweight #:at ((car cw-at) (cadr cw-at) 0) #:size cw-size #:material granite)
+  (rope cw-chain #:from (arm (- short-arm) 0 0) #:to (counterweight 0 (/ cw-size 2) 0)
+        #:length chain #:material iron #:diameter (cm 1.5))
+  (block stone #:at ((car stone-at) (cadr stone-at) 0) #:size stone-size #:material granite)
+  (rope sling-rope #:from (arm long-arm 0 0) #:to (stone 0 0 0) #:length sling
+        #:release-deg 60 #:diameter (cm 1)))
