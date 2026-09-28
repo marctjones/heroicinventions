@@ -4,7 +4,7 @@
 ;; really mesh, the historical proportions are Vitruvius's, and the .glb
 ;; files are well-formed glTF.
 (require rackunit racket/math racket/list json
-         heroic/geometry heroic/geometry/mesh heroic/units heroic/machine heroic/emit)
+         heroic/geometry heroic/geometry/mesh heroic/units (except-in heroic/machine mesh) heroic/emit)
 
 ;; ---------------------------------------------------------------------------
 ;; Closed, outward-facing solids
