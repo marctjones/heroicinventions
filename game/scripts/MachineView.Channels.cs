@@ -1,0 +1,178 @@
+using Godot;
+using HeroicInventions.Sim.Fluids;
+using HeroicInventions.Sim.Machines;
+
+namespace HeroicInventions;
+
+/// <summary>
+/// Open water you can watch move. A channel is drawn as a stone trough
+/// from its tank's wall down to the next tank's wall (or away out of the
+/// scene), with water standing in it at the depth the sim works out and
+/// flecks of foam riding the surface at the speed it works out — so a
+/// race that runs fast and shallow looks it, and one choked off drains
+/// and stills. Where a channel ends above the water it runs into, it
+/// spills down as a falling sheet.
+///
+/// An inflow — water arriving from beyond the scene — is drawn the same
+/// way: a short trough coming in from outside (away from the machine's
+/// middle), spilling into its tank.
+/// </summary>
+public partial class MachineView
+{
+    private readonly List<(Channel? channel, WaterSource? source, Trough trough)> _troughs = [];
+
+    private sealed class Trough
+    {
+        public required Node3D Frame;          // x along the flow, y up, z across; origin at the start, on the bed
+        public required float Length, Width;
+        public required MeshInstance3D Water;
+        public required MeshInstance3D Fall;
+        public required float FallTop;         // world height the water leaves the end at
+        public required Tank? Into;            // what it spills into, if anything in the scene
+        public required Vector3 FallAt;        // world point just inside that tank's wall
+        public required Vector3 Along;         // world direction of flow, level
+        public required List<(MeshInstance3D node, float lateral)> Flecks;
+        public required float[] Phase;         // distance each fleck has travelled
+        public double LastTime;
+    }
+
+    private void BuildChannels()
+    {
+        foreach (var spec in Runtime.Def.Channels)
+        {
+            var channel = Runtime.Channels[spec.Id];
+            var fromPart = Runtime.Def.Part(spec.From.Part)!;
+            var fromC = new Vector3((float)fromPart.At.X, 0, (float)fromPart.At.Z);
+            Vector3 farC;
+            float farHalf = 0;
+            PartSpec? toPart = spec.To is { } t ? Runtime.Def.Part(t.Part) : null;
+            if (toPart is not null) { farC = new Vector3((float)toPart.At.X, 0, (float)toPart.At.Z); farHalf = Half(toPart); }
+            else farC = new Vector3((float)spec.End!.Value.X, 0, (float)spec.End.Value.Z);
+            var along = (farC - fromC).Normalized();
+            var start = fromC + along * Half(fromPart) + Vector3.Up * (float)channel.LipElevation;
+            var end = (toPart is null ? farC : farC - along * farHalf) + Vector3.Up * (float)channel.EndElevation;
+            // the channel's own length sets its slope; drawn, it runs wall to wall
+            var trough = MakeTrough(start, end, (float)channel.Width, channel.To, end + along * 0.05f);
+            _troughs.Add((channel, null, trough));
+            AddLabel(spec.Id, (start + end) / 2 + Vector3.Up * (trough.Width / 3 + 0.15f));
+        }
+
+        foreach (var spec in Runtime.Def.Sources)
+        {
+            var source = Runtime.Sources[spec.Id];
+            var part = Runtime.Def.Part(spec.Into)!;
+            var centre = new Vector3((float)part.At.X, 0, (float)part.At.Z);
+            // upstream is away from the middle of the machine
+            var mid = Runtime.Def.Parts.Aggregate(Vector3.Zero, (acc, p) => acc + new Vector3((float)p.At.X, 0, (float)p.At.Z)) / Runtime.Def.Parts.Count;
+            var outward = centre - mid;
+            outward = outward.LengthSquared() > 1e-4f ? outward.Normalized() : Vector3.Right;
+            float half = Half(part), top = (float)(part.At.Y + part.Number("height"));
+            float width = Mathf.Min(half * 1.2f, 0.25f + 1.5f * Mathf.Sqrt((float)source.Rate)); // a spring's runnel, a river's breadth
+            var end = centre + outward * half + Vector3.Up * (top + 0.02f);
+            var start = end + outward * 1.5f + Vector3.Up * 0.03f;
+            var trough = MakeTrough(start, end, width, source.Into, end - outward * 0.05f);
+            _troughs.Add((null, source, trough));
+            AddLabel(spec.Id, start + Vector3.Up * (width / 3 + 0.15f));
+        }
+
+        static float Half(PartSpec tank) => Mathf.Sqrt((float)tank.Number("area")) / 2;
+    }
+
+    private Trough MakeTrough(Vector3 start, Vector3 end, float width, Tank? into, Vector3 fallAt)
+    {
+        var run = end - start;
+        float length = run.Length();
+        var dir = run / length;
+        var side = dir.Cross(Vector3.Up).Normalized();
+        var up = side.Cross(dir);
+        var frame = new Node3D { Transform = new Transform3D(new Basis(dir, up, side), start) };
+        AddChild(frame);
+
+        const float wall = 0.06f;
+        float height = Mathf.Max(0.1f, width / 3);
+        var stone = Shapes.Mat(Shapes.Stone, roughness: 0.9f);
+        var bed = Shapes.Box(new Vector3(length, wall, width + 2 * wall), stone);
+        bed.Position = new Vector3(length / 2, -wall / 2, 0);
+        frame.AddChild(bed);
+        foreach (float s in new[] { -1f, 1f })
+        {
+            var w = Shapes.Box(new Vector3(length, height, wall), stone);
+            w.Position = new Vector3(length / 2, height / 2, s * (width + wall) / 2);
+            frame.AddChild(w);
+        }
+
+        var water = Shapes.Box(new Vector3(length, 1, width * 0.98f), Shapes.Mat(Shapes.Water, roughness: 0.15f, alpha: 0.8f));
+        water.Visible = false;
+        frame.AddChild(water);
+
+        var foam = Shapes.Mat(new Color(0.9f, 0.95f, 1f), roughness: 0.4f, alpha: 0.85f);
+        int count = Math.Clamp((int)(length * width * 8), 6, 60);
+        var rng = new Random(start.GetHashCode());
+        var flecks = new List<(MeshInstance3D, float)>();
+        var phase = new float[count];
+        for (int i = 0; i < count; i++)
+        {
+            var f = Shapes.Box(new Vector3(0.14f, 0.006f, 0.035f), foam);
+            f.Visible = false;
+            frame.AddChild(f);
+            flecks.Add((f, (float)(rng.NextDouble() - 0.5) * width * 0.85f));
+            phase[i] = (float)rng.NextDouble() * length;
+        }
+
+        var fall = Shapes.Box(new Vector3(0.05f, 1, width * 0.9f), Shapes.Mat(Shapes.Water, roughness: 0.2f, alpha: 0.7f));
+        fall.Visible = false;
+        var level = (dir with { Y = 0 }).Normalized();
+        fall.Basis = new Basis(level, Vector3.Up, level.Cross(Vector3.Up));
+        AddChild(fall);
+
+        return new Trough
+        {
+            Frame = frame, Length = length, Width = width, Water = water, Fall = fall, FallTop = end.Y,
+            Into = into, FallAt = fallAt, Along = (dir with { Y = 0 }).Normalized(), Flecks = flecks, Phase = phase,
+            LastTime = Runtime.Time,
+        };
+    }
+
+    private void DrawChannels()
+    {
+        foreach (var (channel, source, t) in _troughs)
+        {
+            double flow, depth, velocity;
+            if (channel is not null) (flow, depth, velocity) = (channel.Flow, channel.Depth, channel.Velocity);
+            else
+            {
+                // an inflow's runnel: however deep and fast its flow runs down a gentle (1%) slope
+                flow = source!.Flow;
+                depth = Channel.NormalDepth(flow, t.Width, 0.01);
+                velocity = depth > 0 ? flow / (t.Width * depth) : 0;
+            }
+            bool running = flow > 1e-6;
+            float d = Mathf.Max((float)depth, 0.004f);
+            t.Water.Visible = running;
+            t.Water.Scale = new Vector3(1, d, 1);
+            t.Water.Position = new Vector3(t.Length / 2, d / 2, 0);
+
+            // flecks ride the surface at the water's speed, wrapping round to the start
+            float moved = (float)(velocity * (Runtime.Time - t.LastTime));
+            t.LastTime = Runtime.Time;
+            for (int i = 0; i < t.Flecks.Count; i++)
+            {
+                var (node, lateral) = t.Flecks[i];
+                t.Phase[i] = (t.Phase[i] + moved) % t.Length;
+                node.Visible = running;
+                node.Position = new Vector3(t.Phase[i], d + 0.004f, lateral);
+            }
+
+            // spilling off the end into a lower pool
+            float bottom = t.Into is { } into ? (float)into.SurfaceElevation : float.NaN;
+            bool falls = running && t.Into is not null && t.FallTop - bottom > 0.01f;
+            t.Fall.Visible = falls;
+            if (falls)
+            {
+                float top = t.FallTop + d, h = top - bottom;
+                t.Fall.Scale = new Vector3(Mathf.Clamp(d, 0.02f, 0.3f) / 0.05f, h, 1);
+                t.Fall.Position = new Vector3(t.FallAt.X, bottom + h / 2, t.FallAt.Z);
+            }
+        }
+    }
+}

@@ -25,6 +25,8 @@ public sealed class MachineRuntime
     private readonly List<AirPocket> _air = [];
     private readonly Dictionary<string, WaterLift> _lifts = [];
     private readonly Dictionary<string, AtmosphericCylinder> _cylinders = [];
+    private readonly Dictionary<string, WaterSource> _sources = [];
+    private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
     private readonly Dictionary<string, Action<double>> _setters = [];
 
@@ -37,6 +39,8 @@ public sealed class MachineRuntime
     public IReadOnlyList<AirPocket> AirPockets => _air;
     public IReadOnlyDictionary<string, WaterLift> Lifts => _lifts;
     public IReadOnlyDictionary<string, AtmosphericCylinder> Cylinders => _cylinders;
+    public IReadOnlyDictionary<string, WaterSource> Sources => _sources;
+    public IReadOnlyDictionary<string, Channel> Channels => _channels;
     public double Time { get; private set; }
 
     /// <summary>
@@ -128,6 +132,9 @@ public sealed class MachineRuntime
         }
 
         foreach (var lift in def.Lifts) _lifts[lift.Id] = BuildLift(def, lift);
+        foreach (var src in def.Sources)
+            _sources[src.Id] = new WaterSource(src.Id, TankNamed(src.Into, src.Location), src.Flow);
+        foreach (var ch in def.Channels) _channels[ch.Id] = BuildChannel(def, ch);
         foreach (var c in def.Cylinders)
         {
             var piston = def.Part(c.Piston) ?? throw new MachineFormatException($"cylinder {c.Id}: no piston {c.Piston}", c.Location);
@@ -141,6 +148,41 @@ public sealed class MachineRuntime
         }
 
         RegisterFields();
+    }
+
+    /// <summary>
+    /// A channel runs from its tank's port lip either to another tank's port
+    /// or out of the scene to an end point. Its length, unless given, is the
+    /// gap between the two tanks' walls (tanks are square, side √area) or
+    /// from the wall to the end point.
+    /// </summary>
+    private Channel BuildChannel(MachineDef def, ChannelSpec spec)
+    {
+        var (from, lip) = TankPort(spec.From, spec.Location);
+        var fromPart = def.Part(spec.From.Part)!;
+        double Half(PartSpec tank) => Math.Sqrt(tank.Number("area")) / 2;
+        Tank? to = null;
+        double endY;
+        (double X, double Z) far;
+        double farHalf = 0;
+        if (spec.To is { } toRef)
+        {
+            (to, endY) = TankPort(toRef, spec.Location);
+            var toPart = def.Part(toRef.Part)!;
+            far = (toPart.At.X, toPart.At.Z);
+            farHalf = Half(toPart);
+        }
+        else if (spec.End is { } end)
+        {
+            endY = end.Y;
+            far = (end.X, end.Z);
+        }
+        else throw new MachineFormatException($"channel {spec.Id} needs a tank to run into, or an end point", spec.Location);
+        double apart = Math.Sqrt(Math.Pow(far.X - fromPart.At.X, 2) + Math.Pow(far.Z - fromPart.At.Z, 2));
+        double length = spec.Length ?? Math.Max(0.1, apart - Half(fromPart) - farHalf);
+        if (endY > lip)
+            throw new MachineFormatException($"channel {spec.Id} would run uphill: its lip is at {lip:F2} m, its end at {endY:F2} m", spec.Location);
+        return new Channel(spec.Id, from, lip, to, endY, spec.Width, length);
     }
 
     /// <summary>
@@ -222,6 +264,14 @@ public sealed class MachineRuntime
             _getters[$"{id}.per-turn"] = () => lift.VolumePerTurn * 1000; // L
             _setters[$"{id}.rpm"] = rpm => lift.Rpm = rpm;
         }
+        foreach (var (id, src) in _sources)
+            _getters[$"{id}.flow"] = () => src.Flow * 1000;            // L/s
+        foreach (var (id, ch) in _channels)
+        {
+            _getters[$"{id}.flow"] = () => ch.Flow * 1000;             // L/s
+            _getters[$"{id}.depth"] = () => ch.Depth * 100;            // cm
+            _getters[$"{id}.velocity"] = () => ch.Velocity;            // m/s
+        }
         foreach (var (id, c) in _cylinders)
         {
             _getters[$"{id}.pressure"] = () => c.Pressure / 1000;      // kPa absolute
@@ -239,6 +289,14 @@ public sealed class MachineRuntime
     public void Step(double dt)
     {
         Fluids.Step(dt);
+        // Springs and open channels, in steps short enough that a weir can't
+        // overshoot: a pool's level answers its own outflow within a second.
+        int n = Math.Max(1, (int)Math.Ceiling(dt / 0.01));
+        for (int i = 0; i < n; i++)
+        {
+            foreach (var src in _sources.Values) src.Step(dt / n);
+            foreach (var ch in _channels.Values) ch.Step(dt / n);
+        }
         foreach (var lift in _lifts.Values) lift.Step(dt);
         foreach (var rotor in _rotors.Values) rotor.Step(dt); // steps its own boiler
         foreach (var c in _cylinders.Values) c.Step(dt);

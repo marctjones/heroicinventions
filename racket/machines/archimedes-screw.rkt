@@ -28,6 +28,10 @@
   (screw cochlea #:shape (vitruvian-screw #:length len)
          #:at (0 centre-y 0)
          #:material pine #:tilt-deg tilt #:drive-rpm 12 #:drive-torque 150)
+;; A spring feeds the pool, so the screw lifts from water that keeps
+  ;; coming rather than draining a fixed pool dry. The screw takes more the
+  ;; deeper its intake stands, so the pool settles where the two match.
+  (inflow spring #:into pool #:flow (L/s 4.5))
   (tank pool #:at ((m -1.9) 0 0) #:area 1.2 #:height (cm 80) #:water (L 900))
   ;; The trough sits under the spout where the blades end (x 1.6, 2.8 m
   ;; up), below the screw's body and clear of the post at its axle's end;

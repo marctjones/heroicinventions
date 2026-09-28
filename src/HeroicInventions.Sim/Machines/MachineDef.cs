@@ -58,8 +58,21 @@ public sealed record PipeSpec(string Id, PortRef From, PortRef To, double Conduc
 public sealed record ConnectSpec(PortRef A, PortRef B, SourceLocation? Location);
 public sealed record SealedAirSpec(IReadOnlyList<string> Tanks, double TubeVolume, SourceLocation? Location);
 
-/// <summary>Water lifted by a screw or noria (By) from one tank to another; Current is a river's speed for a noria.</summary>
-public sealed record LiftSpec(string Id, string By, string From, string To, double? Current, SourceLocation? Location);
+/// <summary>
+/// Water lifted by a screw, noria or pump (By) from one tank to another.
+/// A noria's current is either a fixed speed (Current) or the speed of the
+/// water in a channel (CurrentFrom) running at its paddles.
+/// </summary>
+public sealed record LiftSpec(string Id, string By, string From, string To, double? Current, SourceLocation? Location)
+{
+    public string? CurrentFrom { get; init; }
+}
+
+/// <summary>Water arriving from outside the scene at a steady Flow (m³/s) into a tank.</summary>
+public sealed record SourceSpec(string Id, string Into, double Flow, SourceLocation? Location);
+
+/// <summary>An open channel from a tank's port to another's (To), or out of the scene to End.</summary>
+public sealed record ChannelSpec(string Id, PortRef From, PortRef? To, Vec3? End, double Width, double? Length, SourceLocation? Location);
 
 /// <summary>A Newcomen atmospheric cylinder driving Piston, with steam from Boiler.</summary>
 public sealed record CylinderSpec(string Id, string Piston, string Boiler, double InjectionTemperature, SourceLocation? Location);
@@ -107,6 +120,8 @@ public sealed class MachineDef
     public IReadOnlyList<ArborSpec> Arbors { get; init; } = [];
     public IReadOnlyList<MeshSpec> Meshes { get; init; } = [];
     public IReadOnlyList<LiftSpec> Lifts { get; init; } = [];
+    public IReadOnlyList<SourceSpec> Sources { get; init; } = [];
+    public IReadOnlyList<ChannelSpec> Channels { get; init; } = [];
     public IReadOnlyList<CylinderSpec> Cylinders { get; init; } = [];
 
     public PartSpec? Part(string id) => Parts.FirstOrDefault(p => p.Id == id);
@@ -132,7 +147,27 @@ public sealed class MachineDef
                 var loc = ParseLoc(c);
                 string Field(string f) => c.Field(f) is { } l ? Sym(l, 1, loc) : throw new MachineFormatException($"lift has no {f}", loc);
                 return new LiftSpec(Sym(c, 1, loc), Field("by"), Field("from"), Field("to"),
-                                    c.Field("current")?.Items.ElementAtOrDefault(1) is SNumber n ? n.Value : null, loc);
+                                    c.Field("current")?.Items.ElementAtOrDefault(1) is SNumber n ? n.Value : null, loc)
+                { CurrentFrom = c.Field("current-from")?.Items.ElementAtOrDefault(1) is SSymbol cf ? cf.Name : null };
+            }).ToList(),
+            Sources = clauses.Where(c => c.Head == "inflow").Select(c =>
+            {
+                var loc = ParseLoc(c);
+                return new SourceSpec(Sym(c, 1, loc),
+                    c.Field("into") is { } i ? Sym(i, 1, loc) : throw new MachineFormatException("inflow has no tank to flow into", loc),
+                    c.Field("flow") is { } f ? Num(f, 1, loc) : throw new MachineFormatException("inflow has no flow", loc), loc);
+            }).ToList(),
+            Channels = clauses.Where(c => c.Head == "channel").Select(c =>
+            {
+                var loc = ParseLoc(c);
+                var to = c.Field("to");
+                return new ChannelSpec(Sym(c, 1, loc),
+                    Ref(c.Field("from"), 1, loc),
+                    to is { Items.Count: 3 } ? Ref(to, 1, loc) : null,
+                    c.Field("end") is { Items.Count: 4 } e ? new Vec3(Num(e, 1, loc), Num(e, 2, loc), Num(e, 3, loc)) : null,
+                    c.Field("width") is { } w ? Num(w, 1, loc) : throw new MachineFormatException("channel has no width", loc),
+                    c.Field("length")?.Items.ElementAtOrDefault(1) is SNumber l ? l.Value : null,
+                    loc);
             }).ToList(),
             Cylinders = clauses.Where(c => c.Head == "atmospheric-cylinder").Select(c =>
             {

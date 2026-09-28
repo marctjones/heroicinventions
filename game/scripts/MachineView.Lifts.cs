@@ -11,7 +11,8 @@ namespace HeroicInventions;
 /// of lifting that water pushes back on the machine — so a screw trodden
 /// too slowly, or a noria in too slow a river, lifts less or stalls.
 ///
-/// A noria stands in a river: water flowing at #:current past the paddles
+/// A noria stands in a river: water flowing past the paddles — at a fixed
+/// #:current, or as fast as the channel named by #:current-from runs —
 /// dipping into it drags them round. Each submerged paddle feels
 /// ½·ρ·Cd·A·(v − u)·|v − u|, where u is the paddle's own speed (so the
 /// push fades as the wheel speeds up toward the current), acting at the
@@ -58,7 +59,9 @@ public partial class MachineView
             float omega = d.Body.AngularVelocity.Dot(d.Axis);
             d.Lift.Rpm = Math.Max(0, omega * 60 / Math.Tau);
             if (omega > 0) d.Body.ApplyTorque(-d.Axis * (float)d.Lift.LoadTorque);
-            if (d.Spec.Current is { } current) d.Body.ApplyTorque(d.Axis * CurrentTorque(d, (float)current, omega));
+            // a fixed current, or the speed the channel feeding the wheel's pool actually runs at
+            double? current = d.Spec.CurrentFrom is { } race ? Runtime.Channels[race].Velocity : d.Spec.Current;
+            if (current is { } v) d.Body.ApplyTorque(d.Axis * CurrentTorque(d, (float)v, omega));
         }
     }
 

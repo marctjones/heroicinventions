@@ -161,3 +161,41 @@ public class AtmosphericCylinderTests
         Assert.False(c.Injecting);
     }
 }
+
+public class OpenChannelTests
+{
+    [Fact]
+    public void NormalDepthCarriesTheFlowByManning()
+    {
+        double q = 0.5, w = 1.2, s = 0.006;
+        double d = Channel.NormalDepth(q, w, s);
+        double area = w * d, radius = area / (w + 2 * d);
+        Assert.Equal(q, area * Math.Pow(radius, 2.0 / 3) * Math.Sqrt(s) / Channel.Roughness, precision: 6);
+    }
+
+    [Fact]
+    public void APoolFedSteadilySettlesWhereItsWeirPassesTheSameFlow()
+    {
+        // a spring of 200 L/s into a 4 m² pool that spills over a 1 m lip, 0.5 m up
+        var pool = new Tank("pool", 0, 4, 2);
+        var spring = new WaterSource("spring", pool, 0.2);
+        var weir = new Channel("weir", pool, 0.5, null, 0.4, width: 1, length: 5);
+        for (int i = 0; i < 60_000; i++) { spring.Step(0.01); weir.Step(0.01); } // 10 min
+        double expectedHead = Math.Pow(0.2 / (1.705 * 1), 2.0 / 3);           // h = (Q/1.705b)^(2/3)
+        // read just after the weir's step: one step's inflow (0.2·0.01/4 = 0.5 mm) below the balance level
+        Assert.InRange(pool.SurfaceElevation, 0.5 + expectedHead - 0.001, 0.5 + expectedHead + 0.0001);
+        Assert.Equal(0.2, weir.Flow, precision: 4);
+        Assert.True(weir.Velocity > 0 && weir.Depth > 0);
+    }
+
+    [Fact]
+    public void WaterIsNeitherMadeNorLostBetweenTwoTanks()
+    {
+        var upper = new Tank("upper", 1, 2, 1, waterVolume: 1.5);
+        var lower = new Tank("lower", 0, 2, 2);
+        var race = new Channel("race", upper, 1.2, lower, 1.0, width: 0.5, length: 3);
+        for (int i = 0; i < 10_000; i++) race.Step(0.01);
+        Assert.Equal(1.5, upper.WaterVolume + lower.WaterVolume, precision: 9);
+        Assert.Equal(1.2, upper.SurfaceElevation, precision: 2); // drained to the lip, no further
+    }
+}

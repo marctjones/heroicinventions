@@ -83,6 +83,7 @@ public partial class MachineView : Node3D
         BuildAxleSupports();
         foreach (var rope in Runtime.Def.Ropes) BuildRope(rope);
         BuildLifts();
+        BuildChannels();
         BuildPistonDrives();
         Refresh();
 
@@ -1087,6 +1088,7 @@ public partial class MachineView : Node3D
         string.Join("  ", _freezable.Select(b => $"{b.Name} pos=({b.GlobalPosition.X:F2},{b.GlobalPosition.Y:F2},{b.GlobalPosition.Z:F2}) rotZ={b.RotationDegrees.Z:F1}°")
                           .Concat(_ropes.Select(r => r.Describe()))
                           .Concat(GearReport())
+                          .Concat(Runtime.Channels.Values.Select(c => $"{c.Name} {c.Flow * 1000:0.#}L/s {c.Depth * 100:F1}cm {c.Velocity:F2}m/s"))
                           .Concat(_liftDrives.Select(d => $"{d.Spec.Id} {d.Lift.Rpm:F1}rpm {d.Lift.Flow * 1000:F2}L/s {d.Spec.From}={d.Lift.From.WaterVolume * 1000:F0}L {d.Spec.To}={d.Lift.To.WaterVolume * 1000:F0}L"))
                           .Concat(_cylinderDrives.Select(c => $"{c.Cylinder.Name} P={c.Cylinder.Pressure / 1000:F0}kPa F={c.Cylinder.Force / 1000:F1}kN {(c.Cylinder.Injecting ? "INJECT" : "steam")} strokes={c.Cylinder.Strokes} boiler={c.Cylinder.Boiler.Temperature:F1}C steam-used={c.Cylinder.SteamUsed:F1}kg"))
                           .Concat(_pumpDrives.Select(p => $"{p.Lift.Name} {p.Lift.To.Name}={p.Lift.To.WaterVolume * 1000:F0}L"))
@@ -1127,6 +1129,7 @@ public partial class MachineView : Node3D
             puff.Emitting = rotor.SteamFlow > 1e-6;
         foreach (var rope in _ropes) DrawRope(rope);
         DrawLiftStreams();
+        DrawChannels();
         DrawCylinders();
     }
 
@@ -1148,6 +1151,8 @@ public partial class MachineView : Node3D
         {
             var bits = new List<string>();
             foreach (var (id, t) in Runtime.Tanks) bits.Add($"{id} {t.WaterVolume * 1000:F1} L");
+            foreach (var (id, src) in Runtime.Sources) bits.Add($"{id} brings {src.Flow * 1000:0.#} L/s");
+            foreach (var (id, c) in Runtime.Channels) bits.Add($"{id} {c.Flow * 1000:0.#} L/s, {c.Depth * 100:0.#} cm deep at {c.Velocity:F2} m/s");
             foreach (var air in Runtime.AirPockets) bits.Add($"air {air.GaugePressure / 1000:F2} kPa");
             foreach (var (pipe, _, _) in _jets) bits.Add($"{pipe.Name} jet {(pipe.Flow > 0 ? pipe.JetHeight * 100 : 0):F1} cm");
             foreach (var (id, b) in Runtime.Boilers)

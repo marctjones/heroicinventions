@@ -17,15 +17,17 @@
 (provide define-machine
          tank boiler rotor block pendulum lever ramp wheel screw fixture
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
+         inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
          (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec) (struct-out lift-spec) (struct-out cylinder-spec)
+         (struct-out inflow-spec) (struct-out channel-spec)
          take-registered-machines)
 
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source parts pipes connects airs ropes arbors meshes lifts cylinders) #:transparent)
+(struct machine (name source parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -46,7 +48,12 @@
 (struct cylinder-spec (id piston boiler injection-temperature loc) #:transparent)
 ;; by: the screw or noria that lifts; from, to: tanks; current: a river's
 ;; speed (m/s) pushing a noria's paddles, or #f.
-(struct lift-spec (id by from to current loc) #:transparent)
+(struct lift-spec (id by from to current current-from loc) #:transparent)
+;; into: a tank; flow in m³/s.
+(struct inflow-spec (id into flow loc) #:transparent)
+;; from: (list tank port); to: (list tank port) or 'off; end: (list x y z) or #f;
+;; length: m or #f (worked out from the tanks' positions).
+(struct channel-spec (id from to end width length loc) #:transparent)
 
 (define (make-machine name source items)
   (machine name source
@@ -58,7 +65,9 @@
            (filter arbor-spec? items)
            (filter mesh-spec? items)
            (filter lift-spec? items)
-           (filter cylinder-spec? items)))
+           (filter cylinder-spec? items)
+           (filter inflow-spec? items)
+           (filter channel-spec? items)))
 
 ;; Machines register themselves when their module runs, so the build
 ;; script can collect every machine in a file without knowing their names.
@@ -77,7 +86,8 @@
     ...))
 
 (define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture
-  pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder)
+  pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
+  inflow channel off)
 
 ;; A part built from a generated shape (see heroic/geometry). The shape is
 ;; an ordinary runtime value, so whether it suits the clause is checked
@@ -112,6 +122,8 @@
   (struct minfo (a b))               ; two gears in mesh
   (struct linfo2 (id by from to))    ; a water lift
   (struct cinfo (id piston boiler))  ; an atmospheric cylinder
+  (struct iinfo (id into))           ; an inflow
+  (struct chinfo (id from to))       ; a channel: from a ref, to a ref or #f (off the scene)
 
   (define known-materials (material-ids))
 
@@ -150,7 +162,7 @@
 
   (define-syntax-class clause
     #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder)
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -407,9 +419,38 @@
                    (~alt (~once (~seq #:by by:id))
                          (~once (~seq #:from from:id))
                          (~once (~seq #:to to:id))
-                         (~optional (~seq #:current cur-v:expr))) ...)
+                         (~optional (~seq #:current cur-v:expr))
+                         (~optional (~seq #:current-from race:id))) ...)
       #:attr info (linfo2 #'id #'by #'from #'to)
-      #:with expr #`(lift-spec 'id 'by 'from 'to (~? cur-v #f) #,(loc-of this-syntax)))
+      #:with expr #`(lift-spec 'id 'by 'from 'to (~? cur-v #f) '(~? race #f) #,(loc-of this-syntax)))
+
+    ;; Water arriving from outside the scene — a spring, a river from
+    ;; upstream — into a tank at a steady #:flow (m³/s; (L/s 500) reads
+    ;; better). The world beyond the machine isn't modelled; this is what it
+    ;; provides.
+    (pattern (inflow id:id
+                     (~alt (~once (~seq #:into into:id))
+                           (~once (~seq #:flow flow-v:expr))) ...)
+      #:attr info (iinfo #'id #'into)
+      #:with expr #`(inflow-spec 'id 'into flow-v #,(loc-of this-syntax)))
+
+    ;; An open channel — a millrace, a conduit, a tailrace — from a tank's
+    ;; port, over whose lip the water spills, down to another tank's port or
+    ;; #:to off, out of the scene at #:end (x y z). How much flows is the
+    ;; weir over the lip; how deep and fast it runs, the slope and width.
+    ;; #:length defaults to the gap between the tanks' walls.
+    (pattern (channel id:id
+                      (~alt (~once (~seq #:from from:ref))
+                            (~once (~seq #:to (~or* (~and off-kw off) to:ref)))
+                            (~optional (~seq #:end end:vec3))
+                            (~once (~seq #:width width-v:expr))
+                            (~optional (~seq #:length len-v:expr))) ...)
+      #:fail-when (and (attribute off-kw) (not (attribute end)) #'id) "a channel running off the scene needs an #:end (x y z)"
+      #:attr info (chinfo #'id #'from (and (attribute to) #'to))
+      #:with expr #`(channel-spec 'id (list 'from.part-id 'from.port-id)
+                                  (~? (list 'to.part-id 'to.port-id) 'off)
+                                  (~? (list end.x end.y end.z) #f)
+                                  width-v (~? len-v #f) #,(loc-of this-syntax)))
 
     (pattern (mesh a:id b:id)
       #:attr info (minfo #'a #'b)
@@ -585,6 +626,16 @@
       (define b (hash-ref parts (syntax-e (cinfo-boiler c)) #f))
       (unless (and b (eq? (pinfo-kind b) 'boiler))
         (fail (format "~a is not a boiler; the cylinder needs one for steam" (syntax-e (cinfo-boiler c))) (cinfo-boiler c))))
+
+    (for ([i infos] #:when (iinfo? i))
+      (define p (hash-ref parts (syntax-e (iinfo-into i)) #f))
+      (unless (and p (eq? (pinfo-kind p) 'tank))
+        (fail (format "~a is not a tank; an inflow runs into a tank" (syntax-e (iinfo-into i))) (iinfo-into i))))
+    (for ([c infos] #:when (chinfo? c))
+      (for ([r (filter values (list (chinfo-from c) (chinfo-to c)))])
+        (define-values (p kind) (resolve r))
+        (unless (eq? (pinfo-kind p) 'tank)
+          (fail (format "a channel runs between tanks' ports; ~a is a ~a" (syntax-e r) (pinfo-kind p)) r))))
 
     (define sealed (make-hasheq))
     (for ([a infos] #:when (ainfo? a))
