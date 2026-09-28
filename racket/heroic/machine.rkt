@@ -2,7 +2,8 @@
 ;; define-machine: the heart of #lang heroic.
 ;;
 ;; A machine is a list of part clauses (tank, boiler, rotor, block,
-;; pendulum, lever, ramp) and link clauses (pipe, connect, sealed-air).
+;; pendulum, lever, ramp, and the generated-geometry parts wheel, screw,
+;; fixture) and link clauses (pipe, connect, sealed-air).
 ;; pendulum/lever/ramp need no solver of their own — they're pure Jolt
 ;; rigid-body physics, built in MachineView. The macro checks the whole
 ;; machine while the file compiles: part names, materials, port names,
@@ -10,10 +11,12 @@
 ;; clause that is wrong. Parameter values are ordinary Racket expressions,
 ;; evaluated when the module runs.
 
-(require (for-syntax racket/base racket/list racket/string syntax/parse "materials.rkt"))
+(require (for-syntax racket/base racket/list racket/string syntax/parse "materials.rkt")
+         "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp pipe connect sealed-air port
+         tank boiler rotor block pendulum lever ramp wheel screw fixture
+         pipe connect sealed-air port
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
          take-registered-machines)
@@ -53,7 +56,28 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp pipe connect sealed-air port)
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture
+  pipe connect sealed-air port)
+
+;; A part built from a generated shape (see heroic/geometry). The shape is
+;; an ordinary runtime value, so whether it suits the clause is checked
+;; here, when the machine's module runs, and reported at the clause.
+(define (shaped-part id kind mat at s props loc)
+  (define (fail fmt . args)
+    (error 'define-machine "~a:~a:~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2)
+           (apply format fmt args)))
+  (unless (shape? s)
+    (fail "~a ~a: #:shape must be a generated shape (spur-gear, pulley, vitruvian-screw, ...), got ~e"
+          kind id s))
+  (case kind
+    [(wheel) (unless (memq (shape-kind s) wheel-kinds)
+               (fail "wheel ~a: a ~a shape is not a wheel (wheels are ~a)~a" id (shape-kind s) wheel-kinds
+                     (if (eq? (shape-kind s) 'screw) "; use the screw clause" "")))]
+    [(screw) (unless (eq? (shape-kind s) 'screw)
+               (fail "screw ~a: needs a screw shape (archimedes-screw, vitruvian-screw), got a ~a"
+                     id (shape-kind s)))]
+    [else (void)])
+  (part id kind mat at (cons (cons 'shape s) props) '() loc))
 
 ;; ---------------------------------------------------------------------------
 ;; Compile-time checking
@@ -78,6 +102,10 @@
     #:description "a position (x y z)"
     (pattern (x:expr y:expr z:expr)))
 
+  (define-syntax-class axis-name
+    #:description "an axle direction: x, y or z"
+    (pattern a:id #:when (memq (syntax-e #'a) '(x y z))))
+
   (define-syntax-class port-clause
     #:literals (port)
     #:description "(port name #:height h)"
@@ -92,8 +120,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp pipe connect sealed-air)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture pipe connect sealed-air)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -222,6 +250,53 @@
                           (list (cons 'length length-v) (cons 'width width-v) (cons 'angle-deg angle-v))
                           '()
                           #,(loc-of this-syntax)))
+
+    ;; Parts with generated geometry. #:shape is any expression producing
+    ;; a shape — (spur-gear #:teeth 64 ...), (noria ...), a catalogue
+    ;; entry — so shapes can be named, shared and computed like any value.
+    ;;
+    ;; A wheel turns on an axle through #:at along #:axis (z, the default,
+    ;; faces the camera). #:angle-deg sets where it starts turned to — how
+    ;; meshing gears are phased (see mate-angle). #:drive-rpm turns it at
+    ;; that steady speed, as a man at a crank or a treadmill would; without
+    ;; it the wheel turns only if something pushes it.
+    (pattern (wheel id:id
+                    (~alt (~once (~seq #:shape shape-v:expr))
+                          (~once (~seq #:at at:vec3))
+                          (~once (~seq #:material mat:id))
+                          (~optional (~seq #:axis ax:axis-name))
+                          (~optional (~seq #:angle-deg angle-v:expr))
+                          (~optional (~seq #:drive-rpm rpm-v:expr))) ...)
+      #:attr info (pinfo #'id 'wheel (attribute mat) '())
+      #:with expr #`(shaped-part 'id 'wheel 'mat (list at.x at.y at.z) shape-v
+                                 (list (cons 'axis '(~? ax z)) (cons 'angle-deg (~? angle-v 0))
+                                       (cons 'drive-rpm (~? rpm-v 0)))
+                                 #,(loc-of this-syntax)))
+
+    ;; An Archimedes' screw, its axle running along X and raised
+    ;; #:tilt-deg from level (Vitruvius sets it at vitruvian-screw-incline-deg).
+    (pattern (screw id:id
+                    (~alt (~once (~seq #:shape shape-v:expr))
+                          (~once (~seq #:at at:vec3))
+                          (~once (~seq #:material mat:id))
+                          (~optional (~seq #:tilt-deg tilt-v:expr))
+                          (~optional (~seq #:drive-rpm rpm-v:expr))) ...)
+      #:attr info (pinfo #'id 'screw (attribute mat) '())
+      #:with expr #`(shaped-part 'id 'screw 'mat (list at.x at.y at.z) shape-v
+                                 (list (cons 'tilt-deg (~? tilt-v 0)) (cons 'drive-rpm (~? rpm-v 0)))
+                                 #,(loc-of this-syntax)))
+
+    ;; Generated geometry that doesn't move: a catapult's frame, a stand.
+    ;; #:turn-deg turns it about the vertical.
+    (pattern (fixture id:id
+                      (~alt (~once (~seq #:shape shape-v:expr))
+                            (~once (~seq #:at at:vec3))
+                            (~once (~seq #:material mat:id))
+                            (~optional (~seq #:turn-deg turn-v:expr))) ...)
+      #:attr info (pinfo #'id 'fixture (attribute mat) '())
+      #:with expr #`(shaped-part 'id 'fixture 'mat (list at.x at.y at.z) shape-v
+                                 (list (cons 'turn-deg (~? turn-v 0)))
+                                 #,(loc-of this-syntax)))
 
     (pattern (pipe id:id from:ref to:ref
                    (~alt (~once (~seq #:conductance c:expr))

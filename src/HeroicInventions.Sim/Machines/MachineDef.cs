@@ -39,6 +39,16 @@ public sealed record PartSpec(
     public double Number(string key, double fallback) =>
         Props.TryGetValue(key, out var v) && v is SNumber n ? n.Value : fallback;
 
+    /// <summary>A string prop, such as a generated shape's mesh file stem.</summary>
+    public string Text(string key) =>
+        Props.TryGetValue(key, out var v) && v is SString s
+            ? s.Value
+            : throw new MachineFormatException($"{Kind} {Id} needs a string {key}", Location);
+
+    /// <summary>A symbol prop, such as a wheel's axis (x, y or z).</summary>
+    public string Symbol(string key, string fallback) =>
+        Props.TryGetValue(key, out var v) && v is SSymbol s ? s.Name : fallback;
+
     public PortSpec Port(string name, SourceLocation? usedAt) =>
         Ports.FirstOrDefault(p => p.Name == name)
         ?? throw new MachineFormatException($"{Kind} {Id} has no port named {name}", usedAt);

@@ -2,7 +2,7 @@
 ;; Turns a machine value into the .machine format: plain S-expressions
 ;; with every number a finite flonum, so the C# reader never meets exact
 ;; rationals (3/100) or infinities.
-(require racket/path "machine.rkt")
+(require racket/path "machine.rkt" "geometry/shape.rkt")
 (provide machine->sexp write-machine-file)
 
 (define (num who v)
@@ -26,12 +26,27 @@
   `(part ,id ,(part-kind p)
          (material ,(part-material p))
          (at ,@(for/list ([x (part-at p)]) (num (format "~a position" id) x)))
-         (props ,@(for/list ([kv (part-props p)])
-                    (list (car kv) (value (format "~a #:~a" id (car kv)) (cdr kv)))))
+         (props ,@(for*/list ([kv (part-props p)] [item (prop->items id kv)]) item))
          (ports ,@(for/list ([pt (part-ports p)])
                     (list (port-spec-name pt) (port-spec-kind pt)
                           (num (format "~a port height" id) (port-spec-height pt)))))
          ,(loc->sexp (part-loc p) root)))
+
+;; A generated shape becomes the name of its mesh file (build.rkt writes
+;; it to game/meshes/<stem>.glb), its material volume, and the numbers
+;; that describe it — a gear's pitch radius, a screw's pitch — so the game
+;; never has to measure a mesh to learn them.
+(define (prop->items id kv)
+  (define v (cdr kv))
+  (if (shape? v)
+      `((shape ,(shape-kind v))
+        (mesh ,(shape-file-stem v))
+        (volume ,(num (format "~a shape volume" id) (shape-volume v)))
+        ,@(for/list ([axis '(inertia-x inertia-y inertia-z)] [i (shape-inertia v)])
+            (list axis (num (format "~a shape ~a" id axis) i)))
+        ,@(for/list ([sp (shape-props v)])
+            (list (car sp) (value (format "~a shape ~a" id (car sp)) (cdr sp)))))
+      (list (list (car kv) (value (format "~a #:~a" id (car kv)) v)))))
 
 ;; root: when given, source paths are written relative to it.
 (define (machine->sexp m #:root [root #f])

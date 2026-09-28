@@ -1,6 +1,8 @@
 #lang heroic
-;; A Greek/Roman torsion catapult (an onager-style single-arm engine, the
-;; kind Vitruvius's Book X gives proportion tables for): a bundle of
+;; A single-armed torsion catapult — the onager, a late-Roman engine
+;; described by Ammianus Marcellinus (4th century AD). (Vitruvius's
+;; proportion tables are for the earlier two-armed engines; see
+;; vitruvian-catapulta.rkt.) A bundle of
 ;; twisted sinew rope at the arm's short end stores energy by torsion,
 ;; the same way twisting a rubber band does. Released, it snaps the long
 ;; arm upward until it slams into the frame's crossbar — modelled here
@@ -21,7 +23,7 @@
 (define beam-surface (+ pivot-y (cm 1.25))) ; pivot + half beam thickness
 
 (define-machine torsion-catapult
-  #:source "Vitruvius, De Architectura Book X; Philo of Byzantium, Belopoeica"
+  #:source "Ammianus Marcellinus, Res Gestae XXIII.4 (the onager)"
   (lever arm #:at (0 pivot-y 0) #:length arm-length #:material oak
          #:pivot-fraction pivot-fraction #:limit-deg 80 #:damping 1.0
          #:initial-spin-deg-per-sec 480)

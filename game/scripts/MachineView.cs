@@ -35,6 +35,9 @@ public partial class MachineView : Node3D
     private bool _manyIdenticalPendulums;
     private readonly List<(HingeJoint3D Joint, RigidBody3D Anchor, float ReleaseDeg, float StartDeg)> _releasable = [];
     private readonly List<(HingeJoint3D Joint, double DisableAt)> _motorTimeouts = [];
+    // Wheels and screws: every body turning on a fixed axle, with the
+    // axle's world direction and extent — for supports, rpm and spin energy.
+    private readonly List<(RigidBody3D Body, Vector3 Axis, float HalfLength, float Radius, bool Driven, string Label)> _axles = [];
     private double? _initialMechanicalEnergy; // J, captured at rest — baseline for "energy retained"
 
     public MachineView(MachineRuntime runtime, MaterialLibrary materials)
@@ -66,9 +69,13 @@ public partial class MachineView : Node3D
                 case "pendulum": BuildPendulum(part); break;
                 case "lever": BuildLever(part); break;
                 case "ramp": BuildRamp(part); break;
+                case "wheel": BuildWheel(part); break;
+                case "screw": BuildScrew(part); break;
+                case "fixture": BuildFixture(part); break;
             }
         }
         foreach (var pipe in Runtime.Def.Pipes) BuildPipe(pipe);
+        BuildAxleSupports();
         Refresh();
 
         // Baseline for "energy retained": mechanical energy before anything
@@ -99,6 +106,36 @@ public partial class MachineView : Node3D
     }
 
     /// <summary>
+    /// A part's own surface: <see cref="Surface"/> for its material, then
+    /// two things so neighbouring parts of the same material don't merge
+    /// into one shape. Its brightness is nudged up to ±6%, fixed by its
+    /// name so it's the same every run — real castings and timbers vary
+    /// that much anyway. And it gets a thin dark outline: a second pass
+    /// drawing the part's back faces pushed slightly outward along their
+    /// normals, unlit, so only a rim shows past the silhouette (the
+    /// "inverted hull" technique). The rim's width scales with the part,
+    /// from under a millimetre on a clock gear to ~1 cm on a big wheel.
+    /// </summary>
+    private StandardMaterial3D PartSurface(PartSpec part, float size)
+    {
+        var mat = Surface(part.Material);
+        uint hash = 2166136261; // FNV-1a: string.GetHashCode changes from run to run
+        foreach (char c in part.Id) hash = (hash ^ c) * 16777619;
+        float shade = 0.94f + 0.12f * (hash % 1000) / 999f;
+        var c0 = mat.AlbedoColor;
+        mat.AlbedoColor = new Color(c0.R * shade, c0.G * shade, c0.B * shade, c0.A);
+        mat.NextPass = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            CullMode = BaseMaterial3D.CullModeEnum.Front,
+            Grow = true,
+            GrowAmount = Mathf.Clamp(size * 0.012f, 0.0002f, 0.012f),
+            AlbedoColor = new Color(0.08f, 0.06f, 0.05f),
+        };
+        return mat;
+    }
+
+    /// <summary>
     /// A small floating name tag above a part — always faces the camera,
     /// so a scene of several similar boxes (Heron's fountain's three
     /// vessels, a row of material blocks) can be read at a glance instead
@@ -115,7 +152,7 @@ public partial class MachineView : Node3D
     /// off-camera once the block landed). Billboard mode keeps the text
     /// facing the camera regardless of the parent's own rotation.
     /// </summary>
-    private void AddLabel(string text, Vector3 offset, Node3D? parent = null)
+    private void AddLabel(string text, Vector3 offset, Node3D? parent = null, float pixelSize = 0.0025f)
     {
         var label = new Label3D
         {
@@ -123,7 +160,7 @@ public partial class MachineView : Node3D
             Position = offset,
             FontSize = 24,
             OutlineSize = 6,
-            PixelSize = 0.0025f, // most of these parts are 10-30cm across; default pixel_size made text roughly life-sized
+            PixelSize = pixelSize, // default suits 10-30cm parts; generated parts pass one scaled to their own size
             Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
             NoDepthTest = true, // always readable, even behind glass or another part
         };
@@ -374,6 +411,8 @@ public partial class MachineView : Node3D
             Position = V(part.At),
             Freeze = true,
         };
+        foreach (var visual in block.GetChildren().OfType<MeshInstance3D>())
+            visual.MaterialOverride = PartSurface(part, size);
         AddChild(block);
         // Parented to the block, so the label follows it — otherwise a
         // block that falls (most of them do) leaves its label behind at
@@ -431,7 +470,7 @@ public partial class MachineView : Node3D
         const float rodRadius = 0.01f;
         float bobRadius = Mathf.Max(0.03f, length * 0.08f);
         var mat = _materials[part.Material];
-        var surface = Surface(part.Material);
+        var surface = PartSurface(part, bobRadius * 2);
 
         double rodVolume = Math.PI * rodRadius * rodRadius * length;
         double bobVolume = 4.0 / 3.0 * Math.PI * Math.Pow(bobRadius, 3);
@@ -492,7 +531,7 @@ public partial class MachineView : Node3D
         // entirely, which is exactly what happened before this was 0.04.
         const float thickness = 0.025f, depth = 0.22f;
         var mat = _materials[part.Material];
-        var surface = Surface(part.Material);
+        var surface = PartSurface(part, depth);
 
         // pivot-fraction moves the hinge along the beam: 0.5 centres it
         // (a see-saw); nearer 0 or 1 gives a short arm and a long arm (a
@@ -608,6 +647,215 @@ public partial class MachineView : Node3D
         AddLabel(part.Id, V(part.At) + new Vector3(0, 0.1f, 0));
     }
 
+    // ------------------------------------------------ generated geometry
+
+    // Parts on axles collide with ordinary bodies (layer 1) but never with
+    // each other: a meshing pair's outlines overlap by design, and contact
+    // between teeth would just shove them apart. Turning one gear to drive
+    // the next is a gear-coupling constraint, not tooth collisions.
+    private const uint AxleLayer = 2;
+
+    private static readonly Dictionary<string, ArrayMesh> GeneratedMeshes = [];
+
+    /// <summary>
+    /// A part's generated mesh — racket/heroic/geometry, written to
+    /// game/meshes/&lt;stem&gt;.glb by racket/build.rkt — read with Godot's
+    /// runtime glTF loader rather than the editor's importer, so it works
+    /// headless with no import step. Cached per file: every part built from
+    /// the same numbers shares one mesh.
+    /// </summary>
+    private static ArrayMesh GeneratedMesh(PartSpec part)
+    {
+        string path = $"res://meshes/{part.Text("mesh")}.glb";
+        if (GeneratedMeshes.TryGetValue(path, out var cached)) return cached;
+        var doc = new GltfDocument();
+        var state = new GltfState();
+        var err = doc.AppendFromFile(ProjectSettings.GlobalizePath(path), state);
+        if (err != Error.Ok || state.GetMeshes().Count == 0)
+            throw new MachineFormatException(
+                $"{part.Kind} {part.Id}: couldn't load its mesh {path} ({err}); run `racket racket/build.rkt`", part.Location);
+        var mesh = state.GetMeshes()[0].Mesh.GetMesh();
+        GeneratedMeshes[path] = mesh;
+        return mesh;
+    }
+
+    /// <summary>Text sized to the part: millimetre gears and a 4.5 m treadwheel can't share one label size.</summary>
+    private static float LabelSizeFor(float size) => Mathf.Clamp(size * 0.002f, 0.00012f, 0.01f);
+    private static float LabelSizeFor(Aabb box) => LabelSizeFor(Mathf.Max(box.Size.X, Mathf.Max(box.Size.Y, box.Size.Z)));
+
+    /// <summary>The rotation taking a generated part's local +Z (its axle) onto <paramref name="axis"/>.</summary>
+    private static Basis AxleBasis(Vector3 axis)
+    {
+        var z = new Vector3(0, 0, 1);
+        var cross = z.Cross(axis);
+        if (cross.LengthSquared() < 1e-10f) return axis.Z >= 0 ? Basis.Identity : new Basis(Vector3.Up, Mathf.Pi);
+        return new Basis(cross.Normalized(), z.AngleTo(axis));
+    }
+
+    /// <summary>
+    /// A body turning on a fixed axle through part.At along
+    /// <paramref name="axis"/>. #:drive-rpm turns it steadily through the
+    /// hinge's motor, like a man at a crank; without it, it turns only if
+    /// pushed. Mass and moments of inertia are the material's density times
+    /// the shape's exact volume and second moments, computed from the mesh
+    /// in Racket. Left to derive them itself from the (simplified,
+    /// slightly lopsided) collision hull, Jolt put a gear's centre of mass
+    /// off its axle, and an undriven gear swung round like a pendulum.
+    /// </summary>
+    private RigidBody3D BuildOnAxle(PartSpec part, Vector3 axis, float startAngleDeg, string labelText)
+    {
+        var mesh = GeneratedMesh(part);
+        var toAxis = AxleBasis(axis);
+        double density = _materials[part.Material].Density;
+        var body = new RigidBody3D
+        {
+            Name = part.Id,
+            Mass = (float)(density * part.Number("volume")),
+            CenterOfMassMode = RigidBody3D.CenterOfMassModeEnum.Custom,
+            CenterOfMass = Vector3.Zero, // every generated wheel and screw is balanced on its axle
+            Inertia = new Vector3((float)(density * part.Number("inertia-x")),
+                                  (float)(density * part.Number("inertia-y")),
+                                  (float)(density * part.Number("inertia-z"))),
+            CollisionLayer = AxleLayer,
+            CollisionMask = 1,
+            AngularDamp = 0.2f, // a little bearing friction, so an undriven wheel nudged by something eventually stops
+        };
+        body.Transform = new Transform3D(toAxis * new Basis(new Vector3(0, 0, 1), Mathf.DegToRad(startAngleDeg)), V(part.At));
+        body.AddChild(new CollisionShape3D { Shape = mesh.CreateConvexShape() });
+        var extent = mesh.GetAabb().Size;
+        body.AddChild(new MeshInstance3D { Mesh = mesh, MaterialOverride = PartSurface(part, Mathf.Max(extent.X, extent.Y)) });
+        AddChild(body);
+        _freezable.Add(body);
+        _bodiesById[part.Id] = body;
+
+        // A HingeJoint3D turns about its own local Z, so it gets the same basis.
+        var joint = new HingeJoint3D { Transform = new Transform3D(toAxis, V(part.At)) };
+        AddChild(joint);
+        joint.NodeB = joint.GetPathTo(body);
+        double rpm = part.Number("drive-rpm", 0);
+        if (rpm != 0)
+        {
+            joint.SetFlag(HingeJoint3D.Flag.EnableMotor, true);
+            // Negated for the same reason as BuildLever's spin: the motor's
+            // positive sense runs opposite to a positive turn about the axle.
+            joint.SetParam(HingeJoint3D.Param.MotorTargetVelocity, -(float)(rpm * Math.Tau / 60));
+            joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, 1e6f);
+        }
+
+        var box = mesh.GetAabb();
+        _axles.Add((body, axis, box.Size.Z / 2, Mathf.Max(box.Size.X, box.Size.Y) / 2, rpm != 0, labelText));
+        return body; // labelled per axle in BuildAxleSupports, so parts sharing one don't print on top of each other
+    }
+
+    private void BuildWheel(PartSpec part)
+    {
+        var axis = part.Symbol("axis", "z") switch { "x" => Vector3.Right, "y" => Vector3.Up, _ => new Vector3(0, 0, 1) };
+        string label = part.Symbol("shape", "") == "gear" ? $"{part.Id} · {part.Number("teeth"):F0} teeth" : part.Id;
+        BuildOnAxle(part, axis, (float)part.Number("angle-deg", 0), label);
+    }
+
+    /// <summary>An Archimedes' screw: its axle runs along X, raised #:tilt-deg from level.</summary>
+    private void BuildScrew(PartSpec part)
+    {
+        float tilt = Mathf.DegToRad((float)part.Number("tilt-deg", 0));
+        BuildOnAxle(part, new Vector3(Mathf.Cos(tilt), Mathf.Sin(tilt), 0), 0, part.Id);
+    }
+
+    /// <summary>Generated geometry that stays put, standing on the ground at part.At.</summary>
+    private void BuildFixture(PartSpec part)
+    {
+        var mesh = GeneratedMesh(part);
+        var body = new StaticBody3D { Name = part.Id, Position = V(part.At), RotationDegrees = new Vector3(0, (float)part.Number("turn-deg", 0), 0) };
+        body.AddChild(new CollisionShape3D { Shape = mesh.CreateTrimeshShape() });
+        // sized by the fixture's thinnest direction, so a long frame doesn't get a heavy rim
+        var extent = mesh.GetAabb().Size;
+        body.AddChild(new MeshInstance3D { Mesh = mesh, MaterialOverride = PartSurface(part, Mathf.Min(extent.X, Mathf.Min(extent.Y, extent.Z))) });
+        AddChild(body);
+        var box = mesh.GetAabb();
+        // Springs and arms sit inside the frame; one label for the whole engine reads better than four.
+        if (part.Symbol("shape", "") == "catapult-frame")
+            AddLabel(part.Id, V(part.At) + new Vector3(0, box.End.Y + 0.1f, 0), pixelSize: LabelSizeFor(box));
+    }
+
+    /// <summary>
+    /// What holds each axle up, and its label. Parts sharing one axle line
+    /// (a treadwheel and its drum, two gears fixed on one arbor) are
+    /// treated as one axle. Clockwork-scale axles (under 10 cm) run from a
+    /// dark wooden backboard — the Antikythera mechanism sat in a wooden
+    /// case, and a bronze plate behind bronze gears hid them completely;
+    /// larger ones get an axle rod and a post at each end.
+    /// </summary>
+    private void BuildAxleSupports()
+    {
+        var groups = _axles
+            .GroupBy(a =>
+            {
+                var c = a.Body.Position;
+                var across = c - a.Axis * c.Dot(a.Axis); // where the axle line pierces the plane square to it
+                return (Mathf.Snapped(a.Axis.X, 0.001f), Mathf.Snapped(a.Axis.Y, 0.001f), Mathf.Snapped(a.Axis.Z, 0.001f),
+                        Mathf.Snapped(across.X, 0.001f), Mathf.Snapped(across.Y, 0.001f), Mathf.Snapped(across.Z, 0.001f));
+            })
+            .Select(g =>
+            {
+                var axis = g.First().Axis;
+                float lo = g.Min(a => a.Body.Position.Dot(axis) - a.HalfLength);
+                float hi = g.Max(a => a.Body.Position.Dot(axis) + a.HalfLength);
+                var c = g.First().Body.Position;
+                var across = c - axis * c.Dot(axis);
+                return (Axis: axis, Back: across + axis * lo, Front: across + axis * hi, Radius: g.Max(a => a.Radius),
+                        Label: string.Join("\n", g.Select(a => a.Label)));
+            })
+            .ToList();
+
+        foreach (var g in groups)
+        {
+            // one line per part on the axle, above its largest wheel
+            var middle = (g.Back + g.Front) / 2;
+            AddLabel(g.Label, middle + Vector3.Up * g.Radius * 1.25f, pixelSize: LabelSizeFor(2 * g.Radius));
+        }
+
+        var small = groups.Where(g => g.Radius < 0.1f && Mathf.Abs(g.Axis.Z) > 0.999f).ToList();
+        if (small.Count > 0)
+        {
+            float margin = small.Max(g => g.Radius) * 0.3f;
+            float left = small.Min(g => g.Back.X - g.Radius) - margin;
+            float right = small.Max(g => g.Back.X + g.Radius) + margin;
+            float top = small.Max(g => g.Back.Y + g.Radius) + margin;
+            float plateZ = small.Min(g => g.Back.Z) - 0.003f;
+            const float thick = 0.002f;
+            var plate = Shapes.Box(new Vector3(right - left, top, thick), Shapes.Mat(new Color(0.22f, 0.15f, 0.10f), roughness: 0.7f));
+            plate.Position = new Vector3((left + right) / 2, top / 2, plateZ - thick / 2);
+            AddChild(plate);
+            foreach (var g in small)
+            {
+                float rod = Mathf.Max(0.0006f, g.Radius * 0.04f);
+                AddChild(Shapes.Rod(new Vector3(g.Back.X, g.Back.Y, plateZ), g.Front + g.Axis * rod * 2, rod, Surface("bronze"))); // the arbor
+            }
+        }
+        foreach (var g in groups.Except(small))
+        {
+            float gap = Mathf.Clamp(g.Radius * 0.1f, 0.01f, 0.15f);
+            var back = g.Back - g.Axis * gap;
+            var front = g.Front + g.Axis * gap;
+            float rod = Mathf.Clamp(g.Radius * 0.04f, 0.005f, 0.08f);
+            AddChild(Shapes.Rod(back, front, rod, Surface("iron")));
+            AddGroundedSupport(back, rod * 1.6f, rod * 8);
+            AddGroundedSupport(front, rod * 1.6f, rod * 8);
+        }
+    }
+
+    /// <summary>Signed turning speed of an axle body about its own axle, in rpm.</summary>
+    private static double AxleRpm(RigidBody3D body, Vector3 axis) => body.AngularVelocity.Dot(axis) * 60 / Math.Tau;
+
+    /// <summary>½ωᵀIω, with the world-space inertia from the physics server.</summary>
+    private static double SpinEnergy(RigidBody3D body)
+    {
+        var inv = PhysicsServer3D.BodyGetDirectState(body.GetRid())?.InverseInertiaTensor;
+        if (inv is not { } invI || Mathf.Abs(invI.Determinant()) < 1e-20f) return 0;
+        var w = body.AngularVelocity;
+        return 0.5 * w.Dot(invI.Inverse() * w);
+    }
+
     public void Simulate(double dt)
     {
         Runtime.Step(dt);
@@ -719,7 +967,8 @@ public partial class MachineView : Node3D
     public EnergySummary Energy()
     {
         double rotorKe = Runtime.Rotors.Values.Sum(r => r.KineticEnergy);
-        double bodyKe = _freezable.Sum(b => 0.5 * b.Mass * b.LinearVelocity.LengthSquared());
+        double bodyKe = _freezable.Sum(b => 0.5 * b.Mass * b.LinearVelocity.LengthSquared())
+                        + _axles.Sum(a => SpinEnergy(a.Body)); // wheels only turn, so all their energy is spin
         // The real centre of mass, not the body's own origin: a pendulum's
         // RigidBody3D origin sits fixed at the pivot for the joint, so its
         // Y never changes — using it directly would make PE constant and
@@ -734,6 +983,8 @@ public partial class MachineView : Node3D
 
         string speed = Runtime.Rotors.Count > 0
             ? $"{Runtime.Rotors.Values.First().Rpm:F0} rpm"
+            : _axles.Count > 0
+                ? $"{_axles.Max(a => Math.Abs(AxleRpm(a.Body, a.Axis))):F1} rpm"
             : _freezable.Count > 0
                 ? $"{_freezable.Max(b => b.LinearVelocity.Length()):F2} m/s"
                 : Runtime.Pipes.Count > 0
@@ -744,7 +995,10 @@ public partial class MachineView : Node3D
             ? rotorKe / thermal * 100
             : null;
 
-        double? retained = Runtime.Boilers.Count == 0 && _initialMechanicalEnergy is { } init && init > 1e-6
+        // Not for a driven machine: whoever turns the crank keeps adding
+        // energy, so "retained" would climb past 100% and mean nothing.
+        double? retained = Runtime.Boilers.Count == 0 && !_axles.Any(a => a.Driven)
+                           && _initialMechanicalEnergy is { } init && init > 1e-6
             ? (rotorKe + bodyKe + pe) / init * 100
             : null;
 

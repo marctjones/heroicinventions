@@ -19,3 +19,6 @@ TestResults/
 # Racket build outputs
 build/
 compiled/
+
+# Standard-parts catalogue meshes: rebuilt by racket/build.rkt, not committed
+game/meshes/catalogue/

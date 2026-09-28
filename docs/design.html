@@ -397,15 +397,15 @@ flowchart LR
   (connect (kettle steam) (ball steam-in) (srcloc "racket/machines/aeolipile.rkt" 15 2)))</code></pre>
     <p>The C# runtime checks every reference again, because the in-game editor and hand edits will also produce these files. Its errors quote the Racket location, for example <code>racket/machines/broken.rkt:4:2: nowhere is not a tank in this machine</code>. Racket reads the same files back with its built-in <code>read</code>, so a machine saved by the editor can be opened in DrRacket and turned into code.</p>
 
-    <h3>Geometry generated from formulas <span class="chip aero">planned · M4</span></h3>
-    <p>Many ancient machine parts have a shape that follows from a few numbers. Racket modules will generate them and write glTF files that Godot imports directly:</p>
+    <h3>Geometry generated from formulas <span class="chip mech">built · M4</span></h3>
+    <p>Many ancient machine parts have a shape that follows from a few numbers. <code>heroic/geometry</code> generates them, and <code>racket/build.rkt</code> writes each as a binary glTF file (<code>game/meshes/&lt;stem&gt;.glb</code>) that the game loads at runtime:</p>
     <ul>
-      <li><strong>Gears:</strong> involute tooth profile from tooth count and module (tooth size). Examples are the odometer train and the Antikythera mechanism.</li>
-      <li><strong>Archimedes' screws:</strong> helix from pitch, number of turns and radius.</li>
-      <li><strong>Pulleys, drums and treadwheels:</strong> radius, groove and spoke count.</li>
-      <li><strong>Torsion catapults:</strong> every dimension scaled from the bolt length, following Vitruvius's proportion tables.</li>
+      <li><strong>Gears:</strong> tooth profile from tooth count and module. Involute teeth (constant ratio; worked out in the 1700s) or triangular teeth, which is what the Antikythera mechanism's gears actually have. <code>mate-angle</code> phases a gear so its teeth fall between its partner's; the tests check involute pairs stay in mesh through two teeth of rolling.</li>
+      <li><strong>Archimedes' screws:</strong> helix from pitch, starts, turns and radius; <code>vitruvian-screw</code> derives all of them from the length alone (X.6).</li>
+      <li><strong>Pulleys, drums, treadwheels and norias:</strong> radius, groove, spokes, treads, buckets and paddles.</li>
+      <li><strong>Torsion catapults:</strong> every dimension of the two-armed catapulta scaled from the bolt length by Vitruvius's table (X.10). Each entry records whether the number is as the text reads, emended, or reconstructed.</li>
     </ul>
-    <p>The build step will generate a <strong>catalogue</strong> of standard sizes. The in-game editor offers parts from that catalogue, and a shape outside it is generated on request over the live link.</p>
+    <p>Every mesh is a closed solid, and its volume and moments of inertia are computed exactly from it, so the game's mass and rotational inertia are the material's density times the real shape. Parts use them through the <code>wheel</code>, <code>screw</code> and <code>fixture</code> clauses. The build also writes a <strong>catalogue</strong> of standard sizes (<code>game/meshes/catalogue/</code>) for the in-game editor to offer.</p>
 
     <h3>Live link <span class="chip aero">planned · M2</span></h3>
     <p>A Racket REPL will connect to the running game over a local TCP socket. Messages in both directions are S-expressions, one per line.</p>
@@ -421,22 +421,22 @@ flowchart LR
 (event 55.8 break post-l "tension 91 MPa exceeds bronze" (srcloc "racket/machines/aeolipile.rkt" 7 2))</code></pre>
     <p><code>redefine-part</code> swaps in a new part but keeps the simulation state of every part whose name is unchanged. A <code>break</code> event carries a source location, so the REPL can jump to the part that failed. Until the live link exists, rebuild with <code>racket racket/build.rkt</code> and press <strong>R</strong> in the game to reload.</p>
 
-    <h3>Machines as tests <span class="chip aero">planned · M3</span></h3>
+    <h3>Machines as tests <span class="chip mech">built · M3</span></h3>
     <p>Behaviour claims will be written as <code>rackunit</code> tests that run the real C# simulation through a headless host:</p>
 <pre><code>(test-case "Heron's fountain lifts water above its basin"
   (define run (simulate herons-fountain #:seconds 60))
   (check-true (> (max-of run '(nozzle jet-height)) 0.0)))</code></pre>
-    <p>Today the same checks run in C#: the xUnit suite loads the generated <code>herons-fountain.machine</code> and <code>aeolipile.machine</code> files and simulates them.</p>
+    <p><code>simulate</code> (<code>heroic/simhost</code>) runs the machine in <code>HeroicInventions.SimHost</code>, a console host for the C# solvers with no Godot, and returns sampled telemetry.</p>
 
     <h2 id="godot"><span class="num">IV</span>Godot layer</h2>
     <p>Godot handles everything that runs every frame and must keep a steady frame rate. It works entirely from <code>.machine</code> data and generated meshes, so it has no dependency on Racket.</p>
     <ul>
       <li><strong>Machine reader</strong> (built): a short S-expression parser in C# that produces a <code>MachineDef</code>.</li>
-      <li><strong>Instantiation</strong> (built for tanks, pipes, sealed air, boilers, rotors and blocks): <code>MachineRuntime</code> builds the solvers, and <code>MachineView</code> builds the scene for any machine without machine-specific code. Joints (hinge, gear, rope) come with the crane milestone.</li>
+      <li><strong>Instantiation</strong> (built for tanks, pipes, sealed air, boilers, rotors, blocks, levers, pendulums, ramps and generated wheels, screws and fixtures): <code>MachineRuntime</code> builds the solvers, and <code>MachineView</code> builds the scene for any machine without machine-specific code. Joints (hinge, gear, rope) come with the crane milestone.</li>
       <li><strong>Solvers:</strong> <code>HeroicInventions.Sim</code>, the engine-independent C# library from the scaffold, stepped on every physics tick at 120 Hz.</li>
       <li><strong>Editor</strong> (planned): drag-and-drop building with port snapping. It saves <code>.machine</code> files.</li>
       <li><strong>Live-link server</strong> (planned): active only in development builds. It turns incoming S-expression messages into actions on the scene and sends telemetry back.</li>
-      <li><strong>Headless host</strong> (planned): the same solvers run without rendering, for Racket's tests and for continuous integration.</li>
+      <li><strong>Headless host</strong> (built): the same solvers run without rendering, for Racket's tests and for continuous integration.</li>
     </ul>
 
     <h2 id="sim"><span class="num">V</span>Simulation</h2>

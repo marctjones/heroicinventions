@@ -31,8 +31,10 @@ aeolipile.rkt:6:24: define-machine: cannot join kettle.steam (steam port) to vat
 | Path | What |
 |---|---|
 | `racket/heroic/` | The `#lang heroic` package: `define-machine`, compile-time checks, `.machine` emitter, units, material table. |
-| `racket/machines/` | Blueprints: `aeolipile.rkt`, `herons-fountain.rkt`, `material-samples.rkt`. |
-| `racket/build.rkt` | Writes `game/machines/*.machine` and `materials.json` from the Racket sources. |
+| `racket/heroic/geometry/` | Generated part shapes: gears, Archimedes' screws, pulleys, drums, treadwheels, norias, Vitruvian catapults; glTF writer; standard-parts catalogue. |
+| `racket/machines/` | Blueprints, one machine per file (Antikythera gear train, Vitruvian screw and catapult, Heron's machines, ...). |
+| `racket/build.rkt` | Writes `game/machines/*.machine`, `game/meshes/*.glb`, the catalogue, and `materials.json` from the Racket sources. |
+| `src/HeroicInventions.SimHost/` | Runs a machine's solvers without Godot, for `simulate` in Racket tests. |
 | `src/HeroicInventions.Sim/` | Engine-independent C# solvers plus the `.machine` reader and `MachineRuntime`. |
 | `tests/HeroicInventions.Sim.Tests/` | xUnit tests, including simulations of the generated blueprints. |
 | `game/` | Godot 4.6 .NET project. `MachineView` builds any machine's scene from its definition. |
