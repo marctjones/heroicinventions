@@ -58,4 +58,4 @@
   (block stone #:at ((car stone-at) (cadr stone-at) rope-z) #:size stone-size #:material granite)
   (rope hoist #:wind-on drum #:to (stone 0 (/ stone-size 2) 0) #:length rope-length
         #:over (((car over-top) (cadr over-top) rope-z) ((car over-side) (cadr over-side) rope-z))
-        #:diameter (cm 4)))
+        #:diameter (cm 4) #:turns pulley))

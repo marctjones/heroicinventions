@@ -398,9 +398,23 @@ public partial class Main : Node3D
         _runButton.Text = running ? "Pause" : "Run";
     }
 
+    private const int BaseTicksPerSecond = 120;
+
+    /// <summary>
+    /// Runs the whole simulation faster or slower — rigid bodies, ropes and
+    /// gears in the physics engine as well as the fluid and steam solvers —
+    /// by raising the engine's time scale and its physics tick rate
+    /// together. Every step stays 1/120 s of simulated time; there are just
+    /// more or fewer of them each real second. (Scaling only the solvers'
+    /// time step, as this used to, left the rigid bodies at real time: a
+    /// screw at "10×" delivered ten times its water per actual turn.)
+    /// </summary>
     private void SetSpeed(double scale)
     {
         _timeScale = scale;
+        Engine.TimeScale = scale;
+        Engine.PhysicsTicksPerSecond = (int)Math.Max(1, Math.Round(BaseTicksPerSecond * scale));
+        Engine.MaxPhysicsStepsPerFrame = Math.Max(8, (int)Math.Ceiling(8 * scale));
         foreach (var b in _speedButtons) b.SetPressedNoSignal(Mathf.IsEqualApprox((float)scale, ParseSpeed(b.Text)));
     }
 
@@ -537,7 +551,7 @@ public partial class Main : Node3D
     public override void _PhysicsProcess(double delta)
     {
         if (_running && _current is not null)
-            _current.Simulate(delta * _timeScale);
+            _current.Simulate(delta); // already scaled: see SetSpeed
 
         if (_quitAfterSimSeconds is { } limit && _current is not null && _current.Runtime.Time >= limit)
             GetTree().Quit();

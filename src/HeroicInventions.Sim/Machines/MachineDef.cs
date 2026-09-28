@@ -86,6 +86,8 @@ public sealed record RopeSpec(
 {
     /// <summary>The To end is nocked, not tied: the rope can drive it but lets go rather than pull it back.</summary>
     public bool Nocked { get; init; }
+    /// <summary>A pulley wheel the rope runs over (at its first Over point), turned to keep pace with the rope.</summary>
+    public string? Turns { get; init; }
 }
 
 /// <summary>
@@ -216,7 +218,10 @@ public sealed class MachineDef
             c.Field("material") is { } m ? Sym(m, 1, loc) : "hemp",
             c.Field("diameter") is { } d ? Num(d, 1, loc) : 0.02,
             loc)
-        { Nocked = c.Field("nocked")?.Items.ElementAtOrDefault(1) is SBool { Value: true } };
+        {
+            Nocked = c.Field("nocked")?.Items.ElementAtOrDefault(1) is SBool { Value: true },
+            Turns = c.Field("turns")?.Items.ElementAtOrDefault(1) is SSymbol t ? t.Name : null,
+        };
     }
 
     // (sealed-air (tanks a b …) (tube-volume v) (srcloc …))

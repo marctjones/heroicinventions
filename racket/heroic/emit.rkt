@@ -78,6 +78,7 @@
                        (material ,(rope-spec-material r))
                        (diameter ,(num (format "rope ~a #:diameter" id) (rope-spec-diameter r)))
                        (nocked ,(rope-spec-nocked r))
+                       (turns ,(rope-spec-turns r))
                        ,(loc->sexp (rope-spec-loc r) root)))
             ,@(for/list ([c (machine-cylinders m)])
                 `(atmospheric-cylinder ,(cylinder-spec-id c) (piston ,(cylinder-spec-piston c))

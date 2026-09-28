@@ -263,7 +263,33 @@ public partial class MachineView
                 r.B?.ApplyImpulse(ub * total[i], b - r.B.GlobalPosition);
             }
             CheckRelease(r, a, b);
+            TurnPulley(r, active[i].Path);
         }
+    }
+
+    /// <summary>
+    /// A pulley the rope runs over turns with it: its rim, where the rope
+    /// touches it (the first #:over point), moves at the rope's speed —
+    /// how fast the load end is being hauled in along the rope — heading
+    /// back along the rope toward its From end.
+    /// </summary>
+    private void TurnPulley(Rope r, List<Vector3> path)
+    {
+        if (r.Spec.Turns is not { } sheaveId || path.Count < 3 || r.B is null) return;
+        var sheave = _bodiesById[sheaveId];
+        var (centre, axis) = _hinges[sheave];
+        var contact = path[1];
+        var along = (path[0] - contact).Normalized();                // rope heading back toward its From end
+        var ub = (path[^2] - path[^1]).Normalized();
+        float haul = ub.Dot(PointVelocity(r.B, path[^1]));           // load end moving along the rope
+        var arm = contact - centre;
+        // a rope that doesn't slip moves the rim at the full rope speed;
+        // the geometry only says which way round that is
+        float omega = Mathf.Sign(arm.Cross(along).Dot(axis)) * haul / arm.Length();
+        var joint = _axleJoints[sheaveId];
+        joint.SetFlag(HingeJoint3D.Flag.EnableMotor, true);
+        joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, 1e4f);
+        joint.SetParam(HingeJoint3D.Param.MotorTargetVelocity, -omega); // negated, as for every hinge motor here
     }
 
     /// <summary>

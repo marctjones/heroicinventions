@@ -37,7 +37,7 @@
 ;; (for world, in world coordinates); over: fixed points the rope runs
 ;; over (pulleys); wind-on: a wheel the from end winds onto, or #f;
 ;; release-deg: see the rope clause; diameter in m.
-(struct rope-spec (id from to length over wind-on release-deg material diameter nocked loc) #:transparent)
+(struct rope-spec (id from to length over wind-on release-deg material diameter nocked turns loc) #:transparent)
 ;; parts: wheels fixed on one axle, first one first — they turn as one.
 (struct arbor-spec (parts loc) #:transparent)
 ;; a, b: two gears whose teeth engage.
@@ -376,6 +376,8 @@
     ;;   #:nocked #t  the #:to end sits in a notch rather than being tied —
     ;;             a bowstring on a bolt: the rope can drive it forward, and
     ;;             lets go the moment it would pull it back
+    ;;   #:turns   the pulley wheel whose rim the rope runs over, at the
+    ;;             first #:over point: turned so its rim moves with the rope
     (pattern (rope id:id
                    (~alt (~optional (~seq #:from from:rope-end))
                          (~optional (~seq #:wind-on drum:id))
@@ -385,7 +387,8 @@
                          (~optional (~seq #:release-deg rel-v:expr))
                          (~optional (~seq #:diameter dia-v:expr))
                          (~optional (~seq #:material mat:id))
-                         (~optional (~seq #:nocked nocked-v:expr))) ...)
+                         (~optional (~seq #:nocked nocked-v:expr))
+                         (~optional (~seq #:turns sheave:id))) ...)
       #:fail-unless (or (attribute from) (attribute drum)) "a rope needs a #:from end or a #:wind-on drum"
       #:fail-when (and (attribute from) (attribute drum) #'drum) "give a rope #:from or #:wind-on, not both (#:wind-on is its from end)"
       #:attr info (rinfo #'id (filter values (list (and (attribute from) #'from.part) #'to.part)) (attribute drum))
@@ -396,6 +399,7 @@
                                (~? (list (list over.x over.y over.z) ...) '())
                                '(~? drum #f) (~? rel-v #f) '(~? mat hemp) (~? dia-v 0.02)
                                (and (~? nocked-v #f) #t)
+                               '(~? sheave #f)
                                #,(loc-of this-syntax)))
 
     ;; Wheels fixed on one axle (an arbor): a treadwheel and the drum its
