@@ -445,12 +445,16 @@ flowchart LR
     <p>Each tank has an elevation, a cross-section area and a water volume. The head at a pipe port is the tank's gas pressure converted to metres of water, plus the water surface height, or the port's own height if the port sits above the water. Flow is proportional to the head difference between the pipe's ends. A sealed <code>AirPocket</code> joins tanks and follows Boyle's law (<code>P·V = constant</code>). That is all Heron's fountain needs: its jet height and the moment it stops both come out of the model rather than being scripted.</p>
     <h3>Thermal network</h3>
     <p>The boiler holds water and steam in equilibrium, so its pressure is the saturation pressure at its temperature (Antoine equation). Heat from the fire raises the temperature. Steam leaving the boiler removes latent heat, 2.257 MJ/kg, and that balance sets an aeolipile's top speed for a given fire.</p>
-    <h3>Couplings</h3>
+    <h3>Couplings <span class="chip mech">built · M6</span></h3>
     <ul>
-      <li>Jet thrust = steam mass flow × exit velocity, capped at the speed of sound in steam (about 470 m/s).</li>
-      <li>Piston force = gauge pressure × bore area, applied to a Jolt body.</li>
-      <li>Water-wheel torque = the rate of change of the water's momentum, applied to a hinge joint.</li>
-      <li>A part breaks when stress (force ÷ cross-section) exceeds its material's strength. Wood uses its across-grain strength when loaded sideways.</li>
+      <li><strong>Jet thrust</strong> = steam mass flow × exit velocity, capped at the speed of sound in steam (about 470 m/s).</li>
+      <li><strong>Ropes and chains</strong> (<code>rope</code>): one-sided length constraints between two parts or a part and a fixed point, optionally over pulleys, winding onto a drum, released as a sling, or nocked like a bowstring. Jolt has no rope joint, so all ropes are solved together each tick by sequential impulses, sized by each end's effective mass (its inertia about its hinge for a hinged part). A rope breaks when its tension exceeds its material's tensile strength × cross-section.</li>
+      <li><strong>Arbors and gears</strong> (<code>arbor</code>, <code>mesh</code>): wheels keyed to one shaft turn as one; a gear driven by a crank drives every gear meshed with it at −(teeth ratio), phase-locked so teeth stay interleaved. The game checks meshing gears share a module and sit their pitch radii apart. Driven gears don't load the crank (right for clockwork, not a power train).</li>
+      <li><strong>Torque-limited drives</strong> (<code>#:drive-torque</code>): men in a treadwheel or at a screw can only push so hard; a load too heavy for them wins.</li>
+      <li><strong>Water lifting</strong> (<code>lift</code>): a screw's pockets are computed from its tilted helical channel (each dip fills to the lowest crest on its downhill side); a noria's buckets from their shape; a pump's piston by bore × stroke. The torque of lifting (ρ·g·H·V/2π) acts back on the machine. A noria's river pushes its submerged paddles with ½·ρ·Cd·A·(v − u)².</li>
+      <li><strong>Atmospheric cylinder</strong> (<code>atmospheric-cylinder</code>, Newcomen): steam flows in from the boiler; cold injection condenses it toward the vapour pressure of water at the injection temperature; the piston feels (atmosphere − cylinder pressure) × area. The heat lost re-warming the cylinder walls isn't modelled, so it's ~5× more efficient than real Newcomen engines.</li>
+      <li><strong>Torsion springs</strong> (<code>#:spring-stiffness</code> on a lever): torque −k·(θ − rest), counted in the energy dashboard.</li>
+      <li>Not yet: stress-based breaking of solid parts (only ropes break), a gear train that carries load back to its driver, and a world-level river or wind that parts can stand in (a noria's current is its own parameter).</li>
     </ul>
 
     <h2 id="materials"><span class="num">VI</span>Materials</h2>

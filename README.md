@@ -32,7 +32,7 @@ aeolipile.rkt:6:24: define-machine: cannot join kettle.steam (steam port) to vat
 |---|---|
 | `racket/heroic/` | The `#lang heroic` package: `define-machine`, compile-time checks, `.machine` emitter, units, material table. |
 | `racket/heroic/geometry/` | Generated part shapes: gears, Archimedes' screws, pulleys, drums, treadwheels, norias, Vitruvian catapults; glTF writer; standard-parts catalogue. |
-| `racket/machines/` | Blueprints, one machine per file (Antikythera gear train, Vitruvian screw and catapult, Heron's machines, ...). |
+| `racket/machines/` | Blueprints, one machine per file: Heron's aeolipile and fountain, the Antikythera lunar train, Vitruvius's screw, crane and catapulta, a noria, a trebuchet, Newcomen's engine, and classic mechanics demos. |
 | `racket/build.rkt` | Writes `game/machines/*.machine`, `game/meshes/*.glb`, the catalogue, and `materials.json` from the Racket sources. |
 | `src/HeroicInventions.SimHost/` | Runs a machine's solvers without Godot, for `simulate` in Racket tests. |
 | `src/HeroicInventions.Sim/` | Engine-independent C# solvers plus the `.machine` reader and `MachineRuntime`. |
