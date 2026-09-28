@@ -58,6 +58,23 @@ public sealed record PipeSpec(string Id, PortRef From, PortRef To, double Conduc
 public sealed record ConnectSpec(PortRef A, PortRef B, SourceLocation? Location);
 public sealed record SealedAirSpec(IReadOnlyList<string> Tanks, double TubeVolume, SourceLocation? Location);
 
+/// <summary>Wheels fixed on one axle; the first carries the bearing and any drive.</summary>
+public sealed record ArborSpec(IReadOnlyList<string> Parts, SourceLocation? Location);
+
+/// <summary>A point on a part, in the part's own frame; Part is "world" for a fixed point in world coordinates.</summary>
+public sealed record RopeEnd(string Part, Vec3 Local);
+
+/// <summary>
+/// A rope or chain: pulls its two ends together once taut, never pushes.
+/// Runs over fixed <see cref="Over"/> points in order. WindOn names a wheel
+/// the From end winds onto; ReleaseDeg, when set, lets go of the To end
+/// once the rope points within that many degrees of straight out along the
+/// From part (a trebuchet sling slipping off its pin).
+/// </summary>
+public sealed record RopeSpec(
+    string Id, RopeEnd From, RopeEnd To, double Length, IReadOnlyList<Vec3> Over,
+    string? WindOn, double? ReleaseDeg, string Material, double Diameter, SourceLocation? Location);
+
 /// <summary>
 /// A machine as written by #lang heroic: parts with positions, materials
 /// and ports, plus the pipes, steam connections and sealed-air groups
@@ -71,6 +88,8 @@ public sealed class MachineDef
     public required IReadOnlyList<PipeSpec> Pipes { get; init; }
     public required IReadOnlyList<ConnectSpec> Connects { get; init; }
     public required IReadOnlyList<SealedAirSpec> SealedAir { get; init; }
+    public IReadOnlyList<RopeSpec> Ropes { get; init; } = [];
+    public IReadOnlyList<ArborSpec> Arbors { get; init; } = [];
 
     public PartSpec? Part(string id) => Parts.FirstOrDefault(p => p.Id == id);
 
@@ -89,6 +108,13 @@ public sealed class MachineDef
             Pipes = clauses.Where(c => c.Head == "pipe").Select(ParsePipe).ToList(),
             Connects = clauses.Where(c => c.Head == "connect").Select(ParseConnect).ToList(),
             SealedAir = clauses.Where(c => c.Head == "sealed-air").Select(ParseSealedAir).ToList(),
+            Ropes = clauses.Where(c => c.Head == "rope").Select(ParseRope).ToList(),
+            Arbors = clauses.Where(c => c.Head == "arbor").Select(c =>
+            {
+                var loc = ParseLoc(c);
+                var parts = c.Field("parts") ?? throw new MachineFormatException("arbor has no parts", loc);
+                return new ArborSpec(parts.Items.Skip(1).Select((_, i) => Sym(parts, i + 1, loc)).ToList(), loc);
+            }).ToList(),
         };
     }
 
@@ -132,6 +158,29 @@ public sealed class MachineDef
     {
         var loc = ParseLoc(c);
         return new ConnectSpec(Ref(c.Items.ElementAtOrDefault(1) as SList, 0, loc), Ref(c.Items.ElementAtOrDefault(2) as SList, 0, loc), loc);
+    }
+
+    // (rope id (from part x y z) (to part x y z) (length l) (over (x y z) …)
+    //       (wind-on part|#f) (release-deg d|#f) (material m) (diameter d) (srcloc …))
+    private static RopeSpec ParseRope(SList c)
+    {
+        var loc = ParseLoc(c);
+        string id = Sym(c, 1, loc);
+        RopeEnd End(string field)
+        {
+            var e = c.Field(field) ?? throw new MachineFormatException($"rope {id} has no {field} end", loc);
+            return new RopeEnd(Sym(e, 1, loc), new Vec3(Num(e, 2, loc), Num(e, 3, loc), Num(e, 4, loc)));
+        }
+        return new RopeSpec(
+            id, End("from"), End("to"),
+            c.Field("length") is { } l ? Num(l, 1, loc) : throw new MachineFormatException($"rope {id} has no length", loc),
+            (c.Field("over")?.Items.Skip(1) ?? []).OfType<SList>()
+                .Select(p => new Vec3(Num(p, 0, loc), Num(p, 1, loc), Num(p, 2, loc))).ToList(),
+            c.Field("wind-on")?.Items.ElementAtOrDefault(1) is SSymbol w ? w.Name : null,
+            c.Field("release-deg")?.Items.ElementAtOrDefault(1) is SNumber r ? r.Value : null,
+            c.Field("material") is { } m ? Sym(m, 1, loc) : "hemp",
+            c.Field("diameter") is { } d ? Num(d, 1, loc) : 0.02,
+            loc);
     }
 
     // (sealed-air (tanks a b …) (tube-volume v) (srcloc …))

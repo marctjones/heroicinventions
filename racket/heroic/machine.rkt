@@ -16,15 +16,16 @@
 
 (provide define-machine
          tank boiler rotor block pendulum lever ramp wheel screw fixture
-         pipe connect sealed-air port
+         pipe connect sealed-air port rope world arbor
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
+         (struct-out rope-spec) (struct-out arbor-spec)
          take-registered-machines)
 
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source parts pipes connects airs) #:transparent)
+(struct machine (name source parts pipes connects airs ropes arbors) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -32,13 +33,22 @@
 (struct pipe-spec (id from to conductance jet? loc) #:transparent) ; from/to: (list part port)
 (struct connect-spec (from to loc) #:transparent)
 (struct air-spec (tanks tube-volume loc) #:transparent)
+;; from/to: (list part-or-world x y z), the point in that part's own frame
+;; (for world, in world coordinates); over: fixed points the rope runs
+;; over (pulleys); wind-on: a wheel the from end winds onto, or #f;
+;; release-deg: see the rope clause; diameter in m.
+(struct rope-spec (id from to length over wind-on release-deg material diameter loc) #:transparent)
+;; parts: wheels fixed on one axle, first one first — they turn as one.
+(struct arbor-spec (parts loc) #:transparent)
 
 (define (make-machine name source items)
   (machine name source
            (filter part? items)
            (filter pipe-spec? items)
            (filter connect-spec? items)
-           (filter air-spec? items)))
+           (filter air-spec? items)
+           (filter rope-spec? items)
+           (filter arbor-spec? items)))
 
 ;; Machines register themselves when their module runs, so the build
 ;; script can collect every machine in a file without knowing their names.
@@ -57,7 +67,7 @@
     ...))
 
 (define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture
-  pipe connect sealed-air port)
+  pipe connect sealed-air port rope world arbor)
 
 ;; A part built from a generated shape (see heroic/geometry). The shape is
 ;; an ordinary runtime value, so whether it suits the clause is checked
@@ -87,6 +97,8 @@
   (struct pinfo (id kind mat ports)) ; ports: (listof (cons symbol kind))
   (struct linfo (type id from to))   ; type: 'pipe | 'connect
   (struct ainfo (tanks))             ; tanks: (listof identifier)
+  (struct rinfo (id ends drum))      ; ends: identifiers naming parts (or world); drum: identifier or #f
+  (struct arinfo (parts))            ; identifiers of wheels on one axle
 
   (define known-materials (material-ids))
 
@@ -106,6 +118,10 @@
     #:description "an axle direction: x, y or z"
     (pattern a:id #:when (memq (syntax-e #'a) '(x y z))))
 
+  (define-syntax-class rope-end
+    #:description "a rope end (part x y z) — a point in that part's own frame, or (world x y z)"
+    (pattern (part:id x:expr y:expr z:expr)))
+
   (define-syntax-class port-clause
     #:literals (port)
     #:description "(port name #:height h)"
@@ -121,7 +137,7 @@
 
   (define-syntax-class clause
     #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture pipe connect sealed-air)
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture pipe connect sealed-air rope arbor)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -263,18 +279,23 @@
     ;; faces the camera). #:angle-deg sets where it starts turned to — how
     ;; meshing gears are phased (see mate-angle). #:drive-rpm turns it at
     ;; that steady speed, as a man at a crank or a treadmill would; without
-    ;; it the wheel turns only if something pushes it.
+    ;; it the wheel turns only if something pushes it. #:drive-torque caps
+    ;; what that drive can deliver (N·m) — men walking in a treadwheel can
+    ;; only push so hard — so a load too heavy for it wins and runs the
+    ;; wheel backwards. Without it, the drive holds its speed whatever it
+    ;; takes.
     (pattern (wheel id:id
                     (~alt (~once (~seq #:shape shape-v:expr))
                           (~once (~seq #:at at:vec3))
                           (~once (~seq #:material mat:id))
                           (~optional (~seq #:axis ax:axis-name))
                           (~optional (~seq #:angle-deg angle-v:expr))
-                          (~optional (~seq #:drive-rpm rpm-v:expr))) ...)
+                          (~optional (~seq #:drive-rpm rpm-v:expr))
+                          (~optional (~seq #:drive-torque torque-v:expr))) ...)
       #:attr info (pinfo #'id 'wheel (attribute mat) '())
       #:with expr #`(shaped-part 'id 'wheel 'mat (list at.x at.y at.z) shape-v
                                  (list (cons 'axis '(~? ax z)) (cons 'angle-deg (~? angle-v 0))
-                                       (cons 'drive-rpm (~? rpm-v 0)))
+                                       (cons 'drive-rpm (~? rpm-v 0)) (cons 'drive-torque (~? torque-v #f)))
                                  #,(loc-of this-syntax)))
 
     ;; An Archimedes' screw, its axle running along X and raised
@@ -284,10 +305,12 @@
                           (~once (~seq #:at at:vec3))
                           (~once (~seq #:material mat:id))
                           (~optional (~seq #:tilt-deg tilt-v:expr))
-                          (~optional (~seq #:drive-rpm rpm-v:expr))) ...)
+                          (~optional (~seq #:drive-rpm rpm-v:expr))
+                          (~optional (~seq #:drive-torque torque-v:expr))) ...)
       #:attr info (pinfo #'id 'screw (attribute mat) '())
       #:with expr #`(shaped-part 'id 'screw 'mat (list at.x at.y at.z) shape-v
-                                 (list (cons 'tilt-deg (~? tilt-v 0)) (cons 'drive-rpm (~? rpm-v 0)))
+                                 (list (cons 'tilt-deg (~? tilt-v 0)) (cons 'drive-rpm (~? rpm-v 0))
+                                       (cons 'drive-torque (~? torque-v #f)))
                                  #,(loc-of this-syntax)))
 
     ;; Generated geometry that doesn't move: a catapult's frame, a stand.
@@ -301,6 +324,47 @@
       #:with expr #`(shaped-part 'id 'fixture 'mat (list at.x at.y at.z) shape-v
                                  (list (cons 'turn-deg (~? turn-v 0)))
                                  #,(loc-of this-syntax)))
+
+    ;; A rope (or chain) between two parts. It only pulls, never pushes: it
+    ;; goes slack when its ends come closer than its length. Each end is a
+    ;; point on a part, in that part's own frame — (arm 0.9 0 0) is 0.9 m
+    ;; along the arm from its pivot — or a fixed point, (world x y z).
+    ;;   #:over    fixed points it runs over, in order: the tops of pulleys
+    ;;   #:wind-on a wheel (a drum) whose turning winds the rope on,
+    ;;             shortening it by radius × angle; replaces #:from
+    ;;   #:release-deg  lets go of the #:to end once the rope has swung to
+    ;;             within this many degrees of pointing straight out along
+    ;;             the #:from part (from its pivot through the rope's
+    ;;             end) — how a trebuchet's sling slips off its release pin
+    ;;   #:diameter, #:material  set its breaking strength: tensile
+    ;;             strength × cross-section
+    (pattern (rope id:id
+                   (~alt (~optional (~seq #:from from:rope-end))
+                         (~optional (~seq #:wind-on drum:id))
+                         (~once (~seq #:to to:rope-end))
+                         (~once (~seq #:length len-v:expr))
+                         (~optional (~seq #:over (over:vec3 ...)))
+                         (~optional (~seq #:release-deg rel-v:expr))
+                         (~optional (~seq #:diameter dia-v:expr))
+                         (~optional (~seq #:material mat:id))) ...)
+      #:fail-unless (or (attribute from) (attribute drum)) "a rope needs a #:from end or a #:wind-on drum"
+      #:fail-when (and (attribute from) (attribute drum) #'drum) "give a rope #:from or #:wind-on, not both (#:wind-on is its from end)"
+      #:attr info (rinfo #'id (filter values (list (and (attribute from) #'from.part) #'to.part)) (attribute drum))
+      #:with from-expr (if (attribute drum)
+                           #'(list 'drum 0 0 0)
+                           #'(list 'from.part from.x from.y from.z))
+      #:with expr #`(rope-spec 'id from-expr (list 'to.part to.x to.y to.z) len-v
+                               (~? (list (list over.x over.y over.z) ...) '())
+                               '(~? drum #f) (~? rel-v #f) '(~? mat hemp) (~? dia-v 0.02)
+                               #,(loc-of this-syntax)))
+
+    ;; Wheels fixed on one axle (an arbor): a treadwheel and the drum its
+    ;; rope winds on, two gears keyed to one shaft. They turn as one piece,
+    ;; so a load on one is felt by all. The first holds the axle's bearing
+    ;; and any drive; the rest ride on it.
+    (pattern (arbor w:id ...+)
+      #:attr info (arinfo (syntax->list #'(w ...)))
+      #:with expr #`(arbor-spec '(w ...) #,(loc-of this-syntax)))
 
     (pattern (pipe id:id from:ref to:ref
                    (~alt (~once (~seq #:conductance c:expr))
@@ -389,6 +453,33 @@
       (unless (hash-ref steam-feeds sym #f)
         (fail (format "rotor ~a has no steam supply; add (connect <boiler>.steam ~a.steam-in)" sym sym)
               (pinfo-id p))))
+
+    (for ([r infos] #:when (rinfo? r))
+      (define rid (syntax-e (rinfo-id r)))
+      (when (hash-ref parts rid #f)
+        (fail (format "rope ~a has the same name as a part" rid) (rinfo-id r)))
+      (for ([end (rinfo-ends r)] #:unless (eq? (syntax-e end) 'world))
+        (unless (hash-ref parts (syntax-e end) #f)
+          (fail (format "no part named ~a (rope ends are parts, or world for a fixed point)" (syntax-e end)) end)))
+      (define drum (rinfo-drum r))
+      (when drum
+        (define p (hash-ref parts (syntax-e drum) #f))
+        (unless (and p (eq? (pinfo-kind p) 'wheel))
+          (fail (format "#:wind-on needs a wheel to wind onto; ~a is ~a" (syntax-e drum)
+                        (if p (format "a ~a" (pinfo-kind p)) "not a part"))
+                drum))))
+
+    (define on-arbor (make-hasheq))
+    (for ([a infos] #:when (arinfo? a))
+      (when (< (length (arinfo-parts a)) 2)
+        (fail "an arbor joins two or more wheels" (car (arinfo-parts a))))
+      (for ([w (arinfo-parts a)])
+        (define p (hash-ref parts (syntax-e w) #f))
+        (unless (and p (eq? (pinfo-kind p) 'wheel))
+          (fail (format "~a is not a wheel; an arbor fixes wheels together on one axle" (syntax-e w)) w))
+        (when (hash-ref on-arbor (syntax-e w) #f)
+          (fail (format "wheel ~a is already on another arbor" (syntax-e w)) w))
+        (hash-set! on-arbor (syntax-e w) #t)))
 
     (define sealed (make-hasheq))
     (for ([a infos] #:when (ainfo? a))

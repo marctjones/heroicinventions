@@ -78,7 +78,9 @@ public partial class MachineView : Node3D
             }
         }
         foreach (var pipe in Runtime.Def.Pipes) BuildPipe(pipe);
+        BuildArbors();
         BuildAxleSupports();
+        foreach (var rope in Runtime.Def.Ropes) BuildRope(rope);
         Refresh();
 
         // Baseline for "energy retained": mechanical energy before anything
@@ -500,6 +502,8 @@ public partial class MachineView : Node3D
         float inertia = (float)(rodMass * length * length / 3
                                 + bobMass * (length * length + 0.4 * bobRadius * bobRadius));
         _pendulums.Add((body, length, bobRadius, inertia, (float)mat.Restitution));
+        _bodiesById[part.Id] = body;
+        _hinges[body] = (V(part.At), new Vector3(0, 0, 1));
         body.AddChild(new CollisionShape3D { Shape = new CylinderShape3D { Radius = rodRadius, Height = length }, Position = new Vector3(0, -length / 2, 0) });
         body.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = bobRadius }, Position = new Vector3(0, -length, 0) });
         var rod = Shapes.Cylinder(rodRadius, length, surface);
@@ -579,6 +583,7 @@ public partial class MachineView : Node3D
         _freezable.Add(body);
         _comOffset[body] = beamOffset; // the beam is uniform, so its own centroid is its centre of mass
         _bodiesById[part.Id] = body;
+        _hinges[body] = (V(part.At), new Vector3(0, 0, 1));
 
         body.RotationDegrees = new Vector3(0, 0, startAngle);
         var joint = new HingeJoint3D { Position = V(part.At) };
@@ -754,19 +759,29 @@ public partial class MachineView : Node3D
         AddChild(body);
         _freezable.Add(body);
         _bodiesById[part.Id] = body;
+        _hinges[body] = (V(part.At), axis);
 
-        // A HingeJoint3D turns about its own local Z, so it gets the same basis.
-        var joint = new HingeJoint3D { Transform = new Transform3D(toAxis, V(part.At)) };
-        AddChild(joint);
-        joint.NodeB = joint.GetPathTo(body);
-        double rpm = part.Number("drive-rpm", 0);
-        if (rpm != 0)
+        // A wheel riding on another's arbor is locked to it (BuildArbors),
+        // not hinged to the world, and any drive belongs to the arbor's first.
+        bool rides = Runtime.Def.Arbors.Any(a => a.Parts.Skip(1).Contains(part.Id));
+        double rpm = rides ? 0 : part.Number("drive-rpm", 0);
+        if (!rides)
         {
-            joint.SetFlag(HingeJoint3D.Flag.EnableMotor, true);
-            // Negated for the same reason as BuildLever's spin: the motor's
-            // positive sense runs opposite to a positive turn about the axle.
-            joint.SetParam(HingeJoint3D.Param.MotorTargetVelocity, -(float)(rpm * Math.Tau / 60));
-            joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, 1e6f);
+            // A HingeJoint3D turns about its own local Z, so it gets the same basis.
+            var joint = new HingeJoint3D { Transform = new Transform3D(toAxis, V(part.At)) };
+            AddChild(joint);
+            joint.NodeB = joint.GetPathTo(body);
+            if (rpm != 0)
+            {
+                joint.SetFlag(HingeJoint3D.Flag.EnableMotor, true);
+                // Negated for the same reason as BuildLever's spin: the motor's
+                // positive sense runs opposite to a positive turn about the axle.
+                joint.SetParam(HingeJoint3D.Param.MotorTargetVelocity, -(float)(rpm * Math.Tau / 60));
+                // #:drive-torque caps the motor: the most torque it can give
+                // in one physics tick is that torque times the tick's length.
+                double torque = part.Props.GetValueOrDefault("drive-torque") is SNumber t ? t.Value : 1e8;
+                joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, (float)(torque / Engine.PhysicsTicksPerSecond));
+            }
         }
 
         var box = mesh.GetAabb();
@@ -786,6 +801,32 @@ public partial class MachineView : Node3D
     {
         float tilt = Mathf.DegToRad((float)part.Number("tilt-deg", 0));
         BuildOnAxle(part, new Vector3(Mathf.Cos(tilt), Mathf.Sin(tilt), 0), 0, part.Id);
+    }
+
+    /// <summary>
+    /// Wheels on one arbor turn as one piece: each after the first is
+    /// locked to the first by a hinge allowed no rotation at all. Each
+    /// remembers its arbor-mates, so a rope pulling on one knows it has
+    /// the whole shaft's inertia to turn.
+    /// </summary>
+    private void BuildArbors()
+    {
+        foreach (var arbor in Runtime.Def.Arbors)
+        {
+            var bodies = arbor.Parts.Select(p => _bodiesById[p]).ToList();
+            var lead = bodies[0];
+            foreach (var rider in bodies.Skip(1))
+            {
+                var lock_ = new HingeJoint3D { Transform = new Transform3D(AxleBasis(_hinges[lead].Axis), rider.GlobalPosition) };
+                AddChild(lock_);
+                lock_.NodeA = lock_.GetPathTo(lead);
+                lock_.NodeB = lock_.GetPathTo(rider);
+                lock_.SetFlag(HingeJoint3D.Flag.UseLimit, true);
+                lock_.SetParam(HingeJoint3D.Param.LimitUpper, 0);
+                lock_.SetParam(HingeJoint3D.Param.LimitLower, 0);
+            }
+            foreach (var b in bodies) _arborMates[b] = bodies.Where(o => o != b).ToList();
+        }
     }
 
     /// <summary>Generated geometry that stays put, standing on the ground at part.At.</summary>
@@ -946,6 +987,7 @@ public partial class MachineView : Node3D
     public void Simulate(double dt)
     {
         ResolveBobImpacts();
+        ResolveRopes();
         Runtime.Step(dt);
         Refresh();
         CheckReleases();
@@ -971,7 +1013,8 @@ public partial class MachineView : Node3D
 
     /// <summary>Rotation and height of every dynamic body — a quick way to confirm Jolt is actually moving them (see HEROIC_DEBUG_PHYSICS).</summary>
     public string DebugState() =>
-        string.Join("  ", _freezable.Select(b => $"{b.Name} pos=({b.GlobalPosition.X:F2},{b.GlobalPosition.Y:F2},{b.GlobalPosition.Z:F2}) rotZ={b.RotationDegrees.Z:F1}°"));
+        string.Join("  ", _freezable.Select(b => $"{b.Name} pos=({b.GlobalPosition.X:F2},{b.GlobalPosition.Y:F2},{b.GlobalPosition.Z:F2}) rotZ={b.RotationDegrees.Z:F1}°")
+                          .Concat(_ropes.Select(r => r.Describe())));
 
     private void Refresh()
     {
@@ -1006,6 +1049,7 @@ public partial class MachineView : Node3D
         }
         foreach (var (rotor, puff) in _steamPuffs)
             puff.Emitting = rotor.SteamFlow > 1e-6;
+        foreach (var rope in _ropes) DrawRope(rope);
     }
 
     public void ToggleFire()

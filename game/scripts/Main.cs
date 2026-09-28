@@ -45,7 +45,7 @@ public partial class Main : Node3D
         ["torsion-catapult"] = new(new Vector3(0.2f, 1.8f, 3.6f), new Vector3(0.2f, 1.0f, 0), 55),
         ["antikythera-lunar-train"] = new(new Vector3(0.13f, 0.19f, 0.19f), new Vector3(0.022f, 0.09f, 0.004f), 38),
         ["archimedes-screw"] = new(new Vector3(0.5f, 2.0f, 6.0f), new Vector3(0, 1.6f, 0), 50),
-        ["roman-treadwheel"] = new(new Vector3(4.0f, 3.2f, 7.5f), new Vector3(0, 2.4f, 0.4f), 50),
+        ["roman-crane"] = new(new Vector3(3.0f, 3.8f, 10.5f), new Vector3(0.3f, 3.2f, 0.5f), 50),
         ["vitruvian-catapulta"] = new(new Vector3(1.7f, 1.4f, 2.0f), new Vector3(0, 0.7f, -0.3f), 50),
     };
     private static readonly (double Scale, string Label)[] Speeds =
@@ -79,7 +79,7 @@ public partial class Main : Node3D
         ["torsion-catapult"] = "Torsion Catapult (Onager)",
         ["antikythera-lunar-train"] = "Antikythera Lunar Train",
         ["archimedes-screw"] = "Archimedes' Screw",
-        ["roman-treadwheel"] = "Roman Treadwheel",
+        ["roman-crane"] = "Roman Crane",
         ["vitruvian-catapulta"] = "Vitruvian Catapulta",
     };
 
@@ -96,7 +96,7 @@ public partial class Main : Node3D
         ["torsion-catapult"] = "The onager, a late-Roman one-armed siege engine (Ammianus Marcellinus, 4th c. AD). Twisted sinew rope at the arm's short end stores energy the way a twisted rubber band does; released, it snaps the arm up into the frame's stop, and the stone flies off on its own momentum.",
         ["antikythera-lunar-train"] = "Six bronze gears from the Antikythera mechanism (c. 100 BC), with their real tooth counts: 64→38, 48→24, 127→32. One turn of the first is a year; the last then turns 254/19 times — the Moon's circuits of the sky in that year. Triangular teeth, as the originals have. Each gear is cut and phased to mesh with its partner; they stand still until gear coupling is added.",
         ["archimedes-screw"] = "A water screw built only from Vitruvius's rules (De Architectura X.6): core a sixteenth of the length thick, eight helical blades, whole screw an eighth of its length across, set on a 3-4-5 slope. Men treading turned it; each turn lifts a pocket of water one pitch higher. Shown turning at a treading pace without its plank casing, so the helix shows.",
-        ["roman-treadwheel"] = "The wheel and axle at its largest: a Roman crane's 4.5 m treadwheel with a 20 cm drum on the same axle. The ratio of the radii, about 11 to 1, is the mechanical advantage — a man's weight on the treads holds about 780 kg on the rope, before the crane's pulleys multiply it again.",
+        ["roman-crane"] = "A Roman building crane (Vitruvius X.2): two men walking in a 4.5 m treadwheel turn a 25 cm drum on the same axle, winding a rope over the jib's pulley to lift 580 kg of granite. The wheel and axle is the lever that makes it possible: the men push at 2.25 m, the stone pulls at 0.25 m, so they need only a ninth of its weight. Their ~1,550 N·m just beats the stone's ~1,430 N·m — one man alone couldn't lift it.",
         ["vitruvian-catapulta"] = "A two-armed bolt-shooter proportioned entirely from Vitruvius's table (X.10): every part is a multiple of the spring hole, and the hole is a ninth of the bolt. This is the common 3-span piece — a 69 cm bolt, so a 7.7 cm hole, 54 cm arms and a 1.46 m channel. The frame, springs and arms at rest.",
     };
 
