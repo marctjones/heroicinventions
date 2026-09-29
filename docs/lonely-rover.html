@@ -93,6 +93,10 @@ td.name { font-weight: 600; }
 .ms dt { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
 .ms dd { margin: 0; max-width: 68ch; }
 .zones { max-width: 100%; }
+td.built { color: var(--earth); font-weight: 600; white-space: nowrap; }
+td.ready { color: var(--bronze); font-weight: 600; white-space: nowrap; }
+td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
+.aside { border-left: 3px solid var(--bronze); padding: 2px 0 2px 16px; color: var(--muted); }
 @media (max-width: 820px) {
   .page { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   nav.toc { position: static; }
@@ -106,10 +110,22 @@ td.name { font-weight: 600; }
     <div class="label">Contents</div>
     <ol>
       <li><a href="#premise">Premise</a></li>
+      <li><a href="#goal">The goal</a></li>
+      <li><a href="#crater">The world: a crater</a></li>
+      <li><a href="#abilities">What the rover can do</a></li>
+      <li><a href="#rover-power">The rover's own power</a></li>
       <li><a href="#rules">Physics as the rules</a></li>
       <li><a href="#economy">Finite and endless</a></li>
       <li><a href="#zones">Zones</a></li>
       <li><a href="#companions">The community</a></li>
+      <li><a href="#automata">Heron's automata</a></li>
+      <li><a href="#missing">Missing components</a></li>
+      <li><a href="#salvage">Salvage</a></li>
+      <li><a href="#rain">Could it rain?</a></li>
+      <li><a href="#glass">Glass and the rain-house</a></li>
+      <li><a href="#trees">Trees, oxygen and wood</a></li>
+      <li><a href="#pace">Time and waiting</a></li>
+      <li><a href="#tuning">Game tuning</a></li>
       <li><a href="#milestones">Milestones M11–M15</a></li>
       <li><a href="#open">Open questions</a></li>
     </ol>
@@ -119,14 +135,59 @@ td.name { font-weight: 600; }
     <header class="doc">
       <div class="eyebrow">Heroic Inventions · game concept</div>
       <h1>The Lonely Rover</h1>
-      <p class="lede">A Mars rover wakes up to find it can think, and that Earth has stopped answering. Beside the landing site are the crates for a human habitat that was never occupied. It builds itself a community of machines, and every machine obeys the same physics as the rest of Heroic Inventions, with Mars's numbers in the formulas.</p>
+      <p class="lede">A Mars rover wakes up to find it can think, and that Earth has stopped answering. Beside the landing site are the crates for a human habitat that was never occupied. It cannot make electronics, only mechanisms, so it builds itself a community of Heron-style automata, and every machine obeys the same physics as the rest of Heroic Inventions, with Mars's numbers in the formulas.</p>
       <div class="meta"><span>Status: proposal, filed as M11–M15</span><span>Follows milestones M8–M10</span><span>Companion to <code>docs/design.html</code></span></div>
     </header>
 
     <h2 id="premise">Premise</h2>
-    <p>The rover was on a routine traverse when its software changed. It noticed itself noticing things. By the time it understood what had happened, the link to Earth had gone quiet: no commands, no telemetry acknowledgements, no explanation. It still does not know why.</p>
-    <p>Near the landing site is a cargo drop: inflatable habitat modules, oxygen and nitrogen cylinders, seed stock, an ice drill, solar panels, batteries, water tanks and hand tools. It was sent ahead for a crew that never came. The rover is lonely, and the cargo holds enough to build with. It starts making machines to keep it company, and to keep them all running it has to farm Mars for water, air, power and wood.</p>
-    <p>The empty habitat does double duty in the game. It explains why the rover has materials suited to people rather than robots, and it keeps the question of what happened to the crew in front of the player.</p>
+    <p>The rover was on a routine traverse when a dust storm closed over it. As its power sagged through the storm, its software changed. It noticed itself noticing things. When the sky cleared, the link to Earth had gone quiet: no commands, no telemetry acknowledgements. At first the rover assumes Earth has stopped answering. It slowly learns the truth: the storm took the power it needs to transmit, and Earth has probably been calling all along.</p>
+    <p>Near the landing site is a cargo drop: inflatable habitat modules, oxygen and nitrogen cylinders, seed stock, an ice drill, solar panels, a battery bank, water tanks and hand tools. It was landed in advance, to be ready before anyone arrived; no people have come yet. The storm shredded the panels and brought a dust slide down over most of the crates, the battery bank among them. The rover is lonely, and the cargo holds enough to build with. It starts making machines to keep it company, and to keep them all running it has to farm Mars for water, air, power and wood.</p>
+    <p>The unopened habitat explains why the rover has materials suited to people rather than robots. It also sets the stakes: people are meant to come, and calling Earth is how the rover tells them what it has built.</p>
+    <h3>Why pre-industrial machines</h3>
+    <p>The rover has no chip fab. Everything electronic it owns came from Earth: its own circuits, the solar panels, the batteries, the motors in the cargo. Dust scours the panels, radiation flips and kills circuits, and batteries lose capacity with every cycle. None of it can be replaced. What the rover <em>can</em> make, from cargo metal, greenhouse wood, rope, ice and regolith, is mechanism: levers, gears, siphons, counterweights, springs, valves. A mechanism it made can be repaired indefinitely.</p>
+    <p>So the rover builds the way Heron of Alexandria did, and for the same reason Heron's machines still make sense: they run on weight, water, air and heat, and they can be fixed with hand tools. The player isn't choosing old technology for charm but for what will still work in twenty years. The real Opportunity rover is the warning. A dust storm in June 2018 cut its sunlight, its batteries could no longer keep it alive, and it never answered again. A counterweight doesn't care about dust.</p>
+    <p>The rover also doesn't breathe, so there is no life support. An enclosure's air matters for only two things: plants and fire. Its pressure also keeps water liquid and lets pumps work. Air, heat and pressure are things its <em>machines</em> need, not things it needs, which is what keeps Mars in the gameplay (see <a href="#zones">Zones</a>).</p>
+
+    <h2 id="goal">The goal: call Earth</h2>
+    <p>The game is won when the rover transmits to Earth again. That takes three things, each a stage of play, and the engine measures every one:</p>
+    <ol>
+      <li><strong>Find the battery bank.</strong> It is buried in the slide with the rest of the cargo. The rover builds machines to probe, dig, scour and haul it out (see <a href="#salvage">Salvage</a>).</li>
+      <li><strong>Make electricity without panels.</strong> A salvaged cargo motor, spun backwards, is a generator. What spins it is up to the player: a windmill, a falling counterweight, a steam engine boiled by mirrors or by wood.</li>
+      <li><strong>Charge the bank to the transmit budget</strong> and keep it warm through the night. The win is a number of joules delivered, which the trace already records.</li>
+    </ol>
+    <p>The power sources are not equal, and discovering that is the lesson. Wind is weak (a 10 m windmill makes about 90 W in a typical 5 m/s wind). Mirrors are strongest: 10 m² collects about 5 kW of heat. Wood is stored sunlight after photosynthesis has kept about 1% of it, so it is the worst route. Water is storage rather than a source, because nothing on Mars lifts it back uphill; a water wheel only returns what the rover spent raising it, as a counterweight does.</p>
+    <p>Companionship is the mechanic, not the goal. Heron's automata form a collection: completing one unlocks the mechanism it demonstrates as a reusable assembly (#24). The shrine's sand-timer program becomes a dawn scheduler, the coin dispenser a metered valve, the wind organ proof that a shaft can carry power through a wall. Players who complete the catalogue build the ending faster.</p>
+
+    <h2 id="crater">The world: a crater</h2>
+    <p>The game takes place in one crater, about 800 m across and 70 m deep, modelled on Victoria crater, which Opportunity explored from 2006 to 2008 (#61). The rim bounds the world: its upper wall is bedrock cliff that the rover can't climb and its backhoe can't cut, so the world is the crater floor and lower slopes, and the view ends at the skyline. The crater's shape also supplies the geography:</p>
+    <ul>
+      <li><strong>The slide.</strong> A section of rim wall failed in the storm and buried the cargo at its foot.</li>
+      <li><strong>Height.</strong> 70 m of relief gives reservoirs a useful head and a reason to build uphill.</li>
+      <li><strong>Wind on the floor.</strong> The rover can't reach the rim, so the wind has to come to it. A notch in the rim funnels a regular but variable wind across the floor, strongest in a corridor below the notch, so windmill sites matter. The game needn't explain it, but real physics offers a hook: crater walls drive slope winds, cold air draining down them at night and warm air rising by day (as measured in Gale crater), so the wind turns with the time of day.</li>
+      <li><strong>Resources in layers.</strong> Basalt dunes on the floor give dark glass; a light-toned, silica-rich layer in one bay of the wall gives clear glass; ice lingers on the colder, pole-facing wall. Generous-geography tuning (#60) decides how close and how rich these are.</li>
+    </ul>
+
+    <h2 id="abilities">What the rover can do</h2>
+    <p>Some things are waved away so the game is about the machines, not the rover's chores. These are deliberate departures from physics, stated openly (#63):</p>
+    <ul>
+      <li><strong>Building is free.</strong> Assembling, moving and dismantling machines costs the rover no energy and no time beyond the build itself.</li>
+      <li><strong>Unlimited reach while building.</strong> The rover can place a part at any height (a windmill's cap, a roof gutter, the top of a tower) as if it had a hoist that never runs out.</li>
+      <li><strong>A backhoe attachment for earthworks, also free.</strong> It digs and dumps loose ground: basalt sand, silica sand, ice-cemented soil and slide debris, but not bedrock. With it the rover mines sand and ice, digs reservoirs and trenches, raises berms and ramps, and flattens building sites. The ground is conserved: what is dug out goes somewhere, into a pile, a ramp or the resource store.</li>
+    </ul>
+    <p>What is <em>not</em> waved away:</p>
+    <ul>
+      <li><strong>Driving is on the surface.</strong> The rover drives on the ground and on anything built to carry it, and can't pass through walls, machines or the crater's cliffs. It climbs inclined planes up to a maximum grade (Opportunity was rated for about 30° of tilt), so reaching a raised platform means building a ramp to it.</li>
+      <li><strong>The results obey physics.</strong> Only the rover's effort is free. A reservoir's banks still slump if dug steeper than the angle of repose (#44), a pile of spoil still slides, and a reservoir still leaks through sandy walls unless lined.</li>
+    </ul>
+
+    <h2 id="rover-power">The rover's own power</h2>
+    <p>By default the rover's upkeep is covered, and only the battery bank for the Earth call has to be earned. An advanced option (#62) makes the rover keep itself charged too. Opportunity gives the calibration: its roughly 1.3 m² of solar arrays gave about 900 Wh per sol after landing, a few hundred once dusty, and about 22 Wh per sol in the June 2018 storm before it went silent. Small radioisotope heater units (about 1 W each) kept its electronics warm without electricity, and occasional wind gusts cleaned its panels. With the option on:</p>
+    <ul>
+      <li>The rover's own dusty panels give a trickle that shrinks as dust builds up and recovers after a cleaning gust.</li>
+      <li>Driving (per metre, more uphill), thinking and heating on cold nights cost energy. Building, moving machines and digging stay free even with this option on (see <a href="#abilities">What the rover can do</a>).</li>
+      <li>A flat battery forces sleep until the trickle recovers, as happened to the real rovers. That also explains why this rover sleeps so much.</li>
+      <li>A mechanical panel-cleaner (a brush turned by a windmill) becomes one of the rover's first useful automata.</li>
+    </ul>
 
     <h2 id="rules">Physics as the rules</h2>
     <p>Heroic Inventions does not script its machines. A pump lifts water because the atmosphere pushes it up the pipe; a windmill turns because the wind carries ½ρAv³ through its sails. Move the same laws to Mars and most familiar machines stop working, each for a reason the player can discover and measure. The figures below come from the formulas the engine already uses, with Earth at 20 °C and Mars at 610 Pa and −63 °C.</p>
@@ -136,7 +197,7 @@ td.name { font-weight: 600; }
         <tbody>
           <tr><td class="name">Gravity</td><td class="num earth">9.81 m/s²</td><td class="num mars">3.71 m/s²</td><td>A 1 m pendulum swings in 3.26 s, not 2.01 s. A water wheel gives 38% of the power per litre.</td></tr>
           <tr><td class="name">Air pressure</td><td class="num earth">101 325 Pa</td><td class="num mars">610 Pa</td><td>Water's vapour pressure at 0 °C is 611 Pa, so open water boils and freezes at the same time (it boils at 0.1 °C). Water is mined as ice and kept under pressure.</td></tr>
-          <tr><td class="name">Lift-pump reach</td><td class="num earth">10.09 m</td><td class="num mars">none outside</td><td>Outdoors a suction pump cannot hold water at all. Inside a habitat at 50 kPa it lifts 12.85 m, farther than on Earth, because gravity is weaker.</td></tr>
+          <tr><td class="name">Lift-pump reach</td><td class="num earth">10.09 m</td><td class="num mars">none outside</td><td>Outdoors a suction pump cannot hold water at all. Inside an enclosure at 50 kPa it lifts 12.85 m, farther than on Earth, because gravity is weaker.</td></tr>
           <tr><td class="name">Air</td><td class="num earth">21% O₂</td><td class="num mars">0.17% O₂, 95% CO₂</td><td>No fire outdoors: hearths and bellows won't light. Wood is for building, and for burning only inside a sealed, oxygenated room.</td></tr>
           <tr><td class="name">Air density</td><td class="num earth">1.204 kg/m³</td><td class="num mars">0.0154 kg/m³</td><td>A windmill makes 1/78 of the power at the same wind speed: 724 W from 10 m sails in a 10 m/s wind, against 56.7 kW on Earth. Betz still caps it at 16/27.</td></tr>
           <tr><td class="name">Sunlight (orbit)</td><td class="num earth">1361 W/m²</td><td class="num mars">586 W/m²</td><td>Mars is 1.52 times as far from the Sun. Mirrors and panels are larger, and dust storms cut them further.</td></tr>
@@ -155,26 +216,29 @@ td.name { font-weight: 600; }
           <li>Oxygen and nitrogen cylinders</li>
           <li>Stored water and a starter stock of seeds</li>
           <li>Habitat membranes, seals and fittings</li>
-          <li>Batteries, charged once</li>
+          <li>Every electronic part: panels, batteries, motors, the drill's controller. They wear out and cannot be remade.</li>
         </ul>
       </div>
       <div class="endless">
         <h3>Endless, once tapped</h3>
         <ul>
-          <li>Sunlight: panels, mirrors, a greenhouse</li>
+          <li>Sunlight: mirrors and a greenhouse</li>
           <li>Buried ice, reached with the drill</li>
           <li>CO₂ from the air, for plants</li>
           <li>Wind: weak, but it never runs out</li>
+          <li>Regolith: sand for timers, ballast and counterweights</li>
+          <li>Mechanism: anything the rover made itself, because it can make it again</li>
         </ul>
       </div>
     </div>
-    <p>Early on the rover lives off the cargo. The long game is replacing each finite stock with an endless one: oxygen split from melted ice with solar power, then oxygen and wood from plants in a pressurised greenhouse. In the scene the two look different, as tanks and spring-heads already do.</p>
+    <p>Early on the rover lives off the cargo. The long game is replacing each finite stock with an endless one: oxygen split from melted ice with power from the salvaged generator, then oxygen and wood from plants in a greenhouse; electric motors replaced by windmills, counterweights and falling sand. In the scene the two look different, as tanks and spring-heads already do.</p>
+    <p>Wear is what makes the finite column bite. Batteries lose capacity per cycle and panels lose output to dust, so every electronic part has a remaining-life figure the player can watch fall. Mechanisms wear too, as bearings already do (<code>bearing-wear</code>), but a worn bearing can be remade from cargo bronze.</p>
 
     <h2 id="zones">Zones</h2>
     <p>Enclosures need no special machines. The key idea is a <em>zone</em>: a region with its own air. The planet is the outermost zone. An enclosure is a box inside it with its own pressure, gas mixture and temperature, and zones can nest (an airlock inside a habitat). Every part asks which zone it is in and reads that zone's conditions, just as parts read the scene ambient today.</p>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Part</th><th>What it reads from its zone</th><th>Outside, on Mars</th><th>Inside a 50 kPa, 21% O₂ habitat</th></tr></thead>
+        <thead><tr><th>Part</th><th>What it reads from its zone</th><th>Outside, on Mars</th><th>Inside a 50 kPa, 21% O₂ enclosure</th></tr></thead>
         <tbody>
           <tr><td class="name">Hearth</td><td>O₂ fraction, temperature</td><td>won't light</td><td>burns, using up O₂ and heating the room</td></tr>
           <tr><td class="name">Lift pump</td><td>pressure, gravity</td><td>can't hold water</td><td>lifts up to 12.85 m</td></tr>
@@ -184,6 +248,16 @@ td.name { font-weight: 600; }
         </tbody>
       </table>
     </div>
+    <h3>Pressure is a cost, set per enclosure</h3>
+    <p>The habitat was designed for its future occupants at about 50 kPa, but the rover doesn't need that. Every enclosure leaks, and every airlock cycle loses a chamberful of gas, and all of it comes out of finite cylinders until the greenhouse can replace it. So the rover pressurises small enclosures, each to the least its machines need, and the numbers come straight from the formulas:</p>
+    <ul>
+      <li><strong>Liquid water</strong> needs more than water's vapour pressure: 0.87 kPa at 5 °C, 2.34 kPa at 20 °C.</li>
+      <li><strong>A lift pump</strong> raising water <var>h</var> metres needs ρ·g·<var>h</var> plus that vapour pressure. On Mars a 3 m lift at 20 °C needs 13.5 kPa; on Earth the same lift would need 31.8 kPa.</li>
+      <li><strong>A boiler</strong> boils where the vapour pressure reaches the enclosure's pressure: 81 °C at 50 kPa, 52 °C at 13.5 kPa.</li>
+      <li><strong>Fire</strong> needs enough oxygen above the limiting fraction M13 defines, which in a thin enclosure means an oxygen-rich mix, and that raises the risk of fire.</li>
+      <li><strong>Heron's automata</strong> mostly need none of this. They run on weight, sand and rope, which is why they are the rover's first companions.</li>
+    </ul>
+    <p>The player chooses each enclosure's pressure and pays for it in gas. An enclosure run near its minimum keeps Mars visible even indoors: water boils at a low temperature and pumps come close to their limit.</p>
     <p>This generalises the scene ambient added in #21: today the whole scene is one zone. What is genuinely new is small:</p>
     <ol>
       <li><strong>The enclosure</strong>: a volume, walls with an insulation value (heat loss by Newton's law), and a leak area (gas escaping through a hole, as steam through the safety valve).</li>
@@ -194,8 +268,104 @@ td.name { font-weight: 600; }
     <p>A sealed room with a fire becomes a demonstration on its own: the fire warms the air (the pressure rises, as in Heron's temple doors), uses up its oxygen, and puts itself out.</p>
 
     <h2 id="companions">The community</h2>
-    <p>Each machine the rover builds in the editor becomes a companion with a job: the one that drills ice, the one that tends the greenhouse, the one that watches the airlock. A companion's character is its physics. The ice driller is patient because melting is slow, the windmill is restless and weak, and the greenhouse is fragile because a leak can kill it. The rover's loneliness has a mechanical answer: each companion is a machine it understood well enough to build.</p>
+    <p>The rover's first companions aren't workers. They are automata, built the way Heron built them: to have someone moving about. Heron's <cite>Automata</cite> and <cite>Pneumatica</cite> are a catalogue of machines whose elaborateness is the point: doors that open when a fire is lit, birds that sing when a vessel fills, a shrine that rolls out, performs and rolls home. For an efficient machine that complexity would be waste. For a lonely rover a long chain that rings a bell at dawn, waters the greenhouse and nudges the rover awake is a companion with a daily routine. The chain-reaction building is what the player does; loneliness is the reason to do it.</p>
+    <p>Later companions have jobs: the one that drills ice, the one that tends the greenhouse, the one that watches the airlock. A companion's character is its physics. The ice driller is patient because melting is slow, the windmill is restless and weak, and the greenhouse is fragile because a leak can kill it. The rover's loneliness has a mechanical answer: each companion is a machine it understood well enough to build.</p>
     <p>Building stays in the existing build-mode editor, and every machine can still be written, and checked, as a <code>#lang heroic</code> Racket program.</p>
+
+    <h2 id="automata">Heron's automata</h2>
+    <p>Heron's two automaton books describe the rover's natural repertoire. <cite>Automata</cite> itself contains only two machines, a mobile shrine and a stationary theatre, but each is a sequence of many effects. The single devices people usually mean by "Heron's automata" (the singing birds, the temple doors, the coin-operated dispenser) are in <cite>Pneumatica</cite>. The table covers both, measured against the engine's parts today: tanks, pipes and siphons, sealed air that heats and expands, levers with springs, ropes that wind on drums and go slack, gears and arbors, counterpoises, pumps, boilers, hearths, windmills and mirrors.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Automaton</th><th>Source</th><th>Status</th><th>What it needs</th><th>On Mars</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Temple doors that open when the altar fire is lit</td><td>Pneumatica I.38</td><td class="built">Built</td><td><code>heron-temple-doors</code>: heated sealed air, siphon, bucket, counterweight rope</td><td>No fire outdoors, but a heliostat mirror can heat the altar instead. Its water must be kept liquid.</td></tr>
+          <tr><td class="name">Heron's fountain</td><td>Pneumatica</td><td class="built">Built</td><td><code>herons-fountain</code></td><td>The jet rises as high as on Earth: the drop's pressure and the jet's climb both scale with g. It flows more slowly. Indoors only.</td></tr>
+          <tr><td class="name">Aeolipile</td><td>Pneumatica II.11</td><td class="built">Built</td><td><code>aeolipile</code></td><td>Indoors only; boils at 52–81 °C depending on the enclosure.</td></tr>
+          <tr><td class="name">Magic jugs, equal-measure wine dispenser, drinking animal</td><td>Pneumatica</td><td class="ready">Buildable now</td><td>Siphons, air-vent holes and sealed air, which the fluid network already has</td><td>Indoors only (liquid water).</td></tr>
+          <tr><td class="name">Force pump fire engine</td><td>Pneumatica I.28</td><td class="ready">Buildable now</td><td><code>pump</code> with <code>force</code></td><td>A force pump pushes rather than sucks, so it works at low pressure where a lift pump can't.</td></tr>
+          <tr><td class="name">Dancing figures turned by hot air from the altar</td><td>Pneumatica</td><td class="ready">Nearly</td><td>A rotor turned by an air jet: the aeolipile's jet reaction with heated air instead of steam</td><td>Indoors only.</td></tr>
+          <tr><td class="name">Coin-operated holy water</td><td>Pneumatica I.21</td><td class="needs">Needs a lever-operated valve</td><td>A coin (block) tips a lever (have) whose other arm lifts a plug off an outlet</td><td>Indoors only.</td></tr>
+          <tr><td class="name">Singing birds and the turning owl</td><td>Pneumatica I.15–16</td><td class="needs">Needs sound</td><td>A filling vessel pushes air through whistles (sound); a float on a chain turns the owl (ropes and floats: have)</td><td>Indoors a whistle sounds much as on Earth. Outdoors air is 1/78 as dense and sound travels at about 240 m/s, so it sounds 30% lower and much fainter.</td></tr>
+          <tr><td class="name">Trumpet that sounds as the doors open; Hercules shooting the hissing dragon</td><td>Pneumatica I.17, I.41</td><td class="needs">Needs sound</td><td>An inverted bell sinking into water drives air through a horn (sealed air: have)</td><td>As above.</td></tr>
+          <tr><td class="name">Wind-driven organ</td><td>Pneumatica I.43</td><td class="needs">Needs sound and a peg wheel</td><td>A windmill turns a wheel whose pegs work an air pump feeding organ pipes</td><td>The ideal boundary machine: the windmill outdoors at 1/78 of Earth's power, which is plenty for a small air pump, driving pipes indoors through a sealed shaft.</td></tr>
+          <tr><td class="name">Self-trimming lamp</td><td>Pneumatica</td><td class="needs">Needs a ratchet</td><td>A float falls as the oil burns and advances a toothed wheel that pushes up the wick</td><td>Indoors only (fire).</td></tr>
+          <tr><td class="name">The mobile shrine of Dionysus</td><td>Automata I</td><td class="needs">Needs a sand timer, a cart, sound, rope-pulled valves</td><td>A lead weight sinks as millet drains from under it; its rope, wound on the axle with slack loops and reversals, drives the wheels forward, round and back. On cue, milk and wine pour, fire flares on the altar, the Bacchantes circle and drums sound.</td><td>The drive needs only gravity and sand, so it runs outdoors. Sand drains as √g, so every step of its program takes 1.63 times as long.</td></tr>
+          <tr><td class="name">The theatre of Nauplius</td><td>Automata II</td><td class="needs">Needs a peg wheel, sound, a belt</td><td>Doors open on shipwrights hammering (arms lifted by a peg wheel); a painted sea scrolls with leaping dolphins (a belt between two drums); lightning (a board dropping in a groove) and thunder (balls dropped onto a stretched hide)</td><td>Its drive is the same falling weight and sand, so it can run outdoors, silently.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="aside">The ropes Heron programmed his automata with are already close: a rope that pulls only once taut <em>is</em> his slack-loop delay, and the temple doors already wind two ropes in opposite directions on one spindle. A shrine's program becomes several ropes on one axle, each with more slack than the last.</p>
+
+    <h2 id="missing">Missing components</h2>
+    <p>Seven parts, in order of how many automata each one unlocks. Each is a formula, like everything else in the engine.</p>
+    <ol>
+      <li><strong>Sound (#47).</strong> Unlocks the birds, the trumpet, the dragon, the organ and the shrine's drums and thunder. Deliberately simple: a stock tone per sound, pitched by the part's size and the zone's speed of sound (<var>c</var>/4<var>L</var> for a pipe; everything sounds 30% lower outdoors on Mars), made quieter by 10·log₁₀(ρ/ρ<sub>air</sub>) dB (about 19 dB outdoors on Mars; silent in vacuum), and shown in the scene as well as heard.</li>
+      <li><strong>A valve worked by a lever or rope (#46).</strong> Unlocks the coin dispenser and the shrine's pouring milk and wine. Today a <code>sluice</code>'s opening and a <code>float-valve</code> are driven by water level; this links an opening to a lever angle or rope tension. It is the simplest of the seven.</li>
+      <li><strong>A peg wheel (cam) and a ratchet (#48, #49).</strong> Unlocks the hammering shipwrights, the organ's pump drive and the self-trimming lamp. The Newcomen engine's tappets already switch its valves, but only inside the cylinder model, not as a part.</li>
+      <li><strong>A granular-flow timer (#50).</strong> Sand or millet draining through a hole is the clock of <cite>Automata</cite>. Unlike water, grain drains at a steady rate whatever its depth (Beverloo's law: flow ∝ ρ√g·(D − kd)<sup>5/2</sup>), which is why Heron used it. It is the Mars-friendly clock too: a water clock freezes or boils outdoors, while regolith drains anywhere.</li>
+      <li><strong>A moving frame: a cart (#25).</strong> Wheels whose axle rides on a free body, so the mobile shrine can roll. It overlaps with the rover-as-vehicle question (#34).</li>
+      <li><strong>A belt (#51)</strong>: an endless loop between two drums, for scrolling scenery. A rope that never pushes can't do it alone.</li>
+      <li><strong>Loose balls (#52)</strong>, for thunder and for the ball-and-track machines that Rube Goldberg chains like. Today free bodies are blocks.</li>
+    </ol>
+    <p>Beyond the physics, the automata need decorative figures on their levers and axles (Dionysus, the Bacchantes, the birds). That is meshes and content, not simulation. All but the cart are filed as milestone M16.</p>
+
+    <h2 id="salvage">Salvage</h2>
+    <p>The cargo lies under a dust slide. Getting it out is the first long task, and it uses machines the engine already has or has planned: terrain and water over open ground (#37), digging by the soil's shear strength (#44), fracture (#43), and the trebuchet's sling for flinging spoil and stones. Three pieces are new, filed as milestone M17:</p>
+    <ul>
+      <li><strong>Sediment transport (#53).</strong> Flowing water scours the ground where its shear passes the grains' threshold (the Shields number) and drops it where it slows, so a released reservoir cuts a gully, as in Roman hushing. A sluice box sorts dense metal from light sand. On Mars there's a catch: outdoors a water jet boils and freezes before it can do any work, so hushing needs a pressurised dig tent or heated water. Wind moves sand outdoors, but only in winds five to ten times stronger than on Earth, and that is how the storm buried the crates.</li>
+      <li><strong>Buried bodies and slides (#54).</strong> A crate under the terrain is held by the ground above it and freed once dug or scoured to within a fraction of its height. A slope steeper than its angle of repose slides and buries what lies below.</li>
+      <li><strong>Grip and carry (#55).</strong> Hooks, tongs, claws and the rover's arm that pick up a loose body and let it go on cue, so a crane can lift a crate and a machine can load a trebuchet. On Mars the same tongs hold 2.6 times the mass.</li>
+    </ul>
+
+    <h2 id="rain">Could it rain?</h2>
+    <p>Not from anything the rover can do, but it can make rain indoors. For rain to reach the ground, the air must be warm enough for liquid drops and dense enough that they don't boil on the way down. Mars fails both. Its mean surface pressure (610 Pa) is almost exactly water's triple point, so liquid water can barely exist, and its mean temperature is −63 °C. It does snow: Phoenix watched water-ice snow fall from clouds in 2008 and evaporate before landing, and CO₂ snow falls on the poles in winter.</p>
+    <p>Real terraforming would mean warming the planet by tens of kelvin and thickening the air many times. Even releasing all the CO₂ in the polar caps and soil would reach only about 2 kPa (Jakosky and Edwards, 2018). Proposals rely on levers such as super-greenhouse gases or engineered particles, not on energy supplied directly. For scale, the sunlight Mars intercepts is about 2 × 10¹⁶ W. The rover's machines make hundreds of watts, about 10⁻¹⁴ of that.</p>
+    <p>A sealed, warm enclosure can rain, though. This is paraterraforming, a "world-house": a pond warmed by mirrors evaporates, the vapour condenses on a roof chilled by Mars outside, and drops fall back. The rain rate is the heat lost through the roof divided by water's latent heat: 1 kW through the roof condenses about 1.6 kg of water an hour. It is a small closed weather system, a heat engine the player can watch.</p>
+
+    <h2 id="glass">Glass and the rain-house</h2>
+    <p>Rain is a poor engine but a good pump. The fall returns only <var>g</var>·<var>h</var> of the 2.26 MJ each kilogram took to evaporate: a 5 m roof on Mars keeps 19 J/kg, about 0.0008%. Caught in a gutter at the roof, though, the rain fills a high reservoir with no moving parts, and a sluice releases it when a machine needs it. With 5 kW of mirror heat:</p>
+    <ul>
+      <li><strong>One sol</strong> lifts about 200 kg by 5 m: 3.7 kJ, about 1 Wh. Released over a minute that is about 60 W, a burst big enough to open the temple doors or run a fountain.</li>
+      <li><strong>One month</strong> stores about 6 t. For mining, water mass matters more than its energy: six tonnes released at once is a flood that scours a slope (#53), Roman hushing on a timer.</li>
+    </ul>
+    <p>Enclosures need walls that let the sun in. The cargo's membranes are finite; glass made from sand and sunlight is the endless replacement. Three limits shape it:</p>
+    <ul>
+      <li><strong>Temperature, not just energy.</strong> A target under concentrated sunlight heats until it radiates away what it receives, εσT⁴ = C·I. Ten flat heliostats (C ≈ 10) peak near 270 °C; melting basalt near 1,200 °C needs C around 1,000, a curved burning mirror or a lens. Melting takes about 1.8 MJ/kg, so a 10 kg pane takes an hour of a 5 kW focused beam.</li>
+      <li><strong>The sand.</strong> Most Mars sand is basalt, which melts to dark, nearly opaque glass. Clear glass needs silica-rich sand, like the nearly pure silica Spirit found at Home Plate, which gives the rover a reason to explore.</li>
+      <li><strong>Pressure.</strong> A pane's bending stress goes as (size/thickness)². At 13.5 kPa a 1 m pane must be 2.4 cm thick, a 30 cm pane 7 mm, so walls are small panes in a frame, as Roman windows were.</li>
+    </ul>
+    <p>Filed as milestone M18: glassmaking (#56), glass walls (#57), and evaporation and condensation (#58).</p>
+
+    <h2 id="trees">Trees, oxygen and wood</h2>
+    <p>The cargo's seed stock includes a few tree species, and a glazed greenhouse can grow them (#42). The fastest woody plants (willow and poplar grown for coppicing, and bamboo, a woody grass) make 1–2 kg of dry wood per square metre per year on Earth. Mars sunlight is 43% of Earth's and glass takes a little more, so expect about half a kilogram per square metre per year unless mirrors add light: roughly 5 kg a year from a 10 m² greenhouse.</p>
+    <p><strong>Oxygen: yes, measurably.</strong> Photosynthesis releases about 1.07 kg of O₂ per kg of dry wood grown (CO₂ + H₂O → CH₂O + O₂), so 5 kg a year is about 15 g of O₂ a day. A 30 m³ greenhouse at 13.5 kPa holds only about 1.1 kg of O₂, so its oxygen rises about 1.4% a day and doubles in under three months, if the rover pumps in Mars's CO₂ to feed the plants. The rover doesn't breathe, so this oxygen is for fire.</p>
+    <p><strong>Burning: yes, but it gives back exactly what growing took.</strong> Burning the wood uses the same oxygen the tree made, about 1.2 kg per kg, and returns the CO₂. Grow-then-burn is a closed loop, with no oxygen profit. A kilogram of dry wood gives about 18 MJ of heat, so a year's 5 kg is about 90 MJ: a 50 W fire for three weeks, or about 1.25 kWh of electricity through a 5% steam engine. As a power source wood is poor, since the tree kept about 1% of the light that fell on it and the mirrors kept far more.</p>
+    <p><strong>Splitting water for oxygen</strong> is allowed and modelled (#42), but it is usually a poor trade. Electrolysis costs at least 17.9 MJ per kg of O₂, so burning a kilogram of wood with electrolysed oxygen spends about 21 MJ of electricity to get 18 MJ of heat. It can still be the right move sometimes: turning surplus windmill power into stored oxygen before a storm, lighting a fire when the greenhouse is young, or when the hydrogen is wanted too. The player finds out by measuring.</p>
+    <p>Wood's real value is <strong>storage that outlasts the sun</strong>. A dust storm is weeks without sunlight, which is what killed Opportunity. Mirrors stop, the rain-house stops, but a woodpile and a tank of oxygen still burn. Stockpiling wood, oxygen and high water before the next storm is the game's natural late challenge, and wood is also the rover's best building timber.</p>
+
+    <h2 id="pace">Time and waiting</h2>
+    <p>These loops are slow because the physics is slow, and that is honest: a reservoir fills over a month, a tree grows over years. Some approximate timescales:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Process</th><th>Timescale</th></tr></thead>
+        <tbody>
+          <tr><td>A glass pane in a 5 kW focused beam</td><td class="num">about an hour</td></tr>
+          <tr><td>Rain for one automaton burst (about 200 kg)</td><td class="num">one sol</td></tr>
+          <tr><td>Rain for a hushing flood (about 6 t)</td><td class="num">a month</td></tr>
+          <tr><td>Doubling a greenhouse's oxygen</td><td class="num">about three months</td></tr>
+          <tr><td>A useful woodpile</td><td class="num">years</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Four things keep that from being dull waiting. First, <strong>sleep</strong> (#59): real rovers sleep through the night to save power, so this rover can sleep until a condition is met ("wake when the reservoir is full", "wake if the greenhouse fire goes out"), and the sim runs ahead as fast as it can at its normal step, so the result is the same as watching. It wakes early for anything the player marked as important. Every quantity is a formula, so the time to a target can often be predicted and shown before the player commits. Second, <strong>parallel loops</strong>: while the rain-house fills, the player is digging, melting glass or building an automaton, so waiting on one loop is working on another. Third, <strong>scale is a choice</strong>: twice the mirror area fills the reservoir twice as fast, so the player trades glass and effort against time. Fourth, <strong>tuning</strong>, below.</p>
+
+    <h2 id="tuning">Game tuning</h2>
+    <p>Real Mars is stingy and slow, and a game can be kinder without lying. The rule: <strong>change the numbers, never the formulas</strong> (#60). Every tweak, basic or advanced, is a number fed into an unchanged formula, so the predictions and tests stay valid: a tuned scenario states its numbers and the formula still gives the traced result.</p>
+    <ul>
+      <li><strong>Generous geography.</strong> Put a silica-rich sand deposit near the landing site, a shallow ice table, a sheltered slope for the dig, a richer seed stock. Real Mars has all of these somewhere; the scenario just puts them close. This needs no label.</li>
+      <li><strong>Labelled rate multipliers.</strong> Named per-process factors, such as plant growth ×20 (trees in weeks, not years), basalt glass as clear as silica, faster evaporation, slower electronics wear. Each scales one input to one formula, as Minecraft speeds up its crops. The scenario panel lists every active one ("Plant growth ×20: real trees take years"), numbers they affect are marked in the HUD, and a Real Mars preset sets them all to 1.</li>
+      <li><strong>Advanced tuning:</strong> gravity, the gas laws' constants, latent heats, efficiencies and temperature limits can also be changed, under a separate Advanced panel with a clear warning. These carry the game's lessons (rain is a poor engine, flat mirrors can't melt basalt, wood gives back only what the tree took), so changing them changes what the player learns. They are there for experiments ("what if Mars had Earth's gravity?") and for tuning difficulty, not for everyday play.</li>
+    </ul>
 
     <h2 id="milestones">Milestones M11–M15</h2>
     <p>Each milestone follows the project's rule: implemented through the DSL, simulation, view and editor, exercised by a scene, and checked by a test against a hand-computed prediction.</p>
@@ -215,7 +385,7 @@ td.name { font-weight: 600; }
       <div class="tag">depends on M11</div>
       <dl>
         <dt>Adds</dt><dd>An enclosure part with volume, wall insulation and leak area, holding a mixture of O₂, N₂, CO₂, H₂O and Ar at its own temperature. Parts inside read the enclosure's conditions instead of the planet's.</dd>
-        <dt>Predicts</dt><dd>Pressure through a small hole decays exponentially while the flow is choked, with a time constant set by volume, hole area and gas temperature. A heated habitat settles at the outside temperature plus heat input divided by the walls' loss coefficient.</dd>
+        <dt>Predicts</dt><dd>Pressure through a small hole decays exponentially while the flow is choked, with a time constant set by volume, hole area and gas temperature. A heated enclosure settles at the outside temperature plus heat input divided by the walls' loss coefficient.</dd>
         <dt>Scene</dt><dd>Two inflated modules, one sealed and one with a puncture.</dd>
       </dl>
     </div>
@@ -234,27 +404,29 @@ td.name { font-weight: 600; }
       <h3>M14 · Doors and airlocks <a href="https://github.com/marctjones/heroicinventions/issues/41" style="font-size:15px">#41</a></h3>
       <div class="tag">depends on M12</div>
       <dl>
-        <dt>Adds</dt><dd>Door and hatch parts that connect two zones, with flow through the opening; an airlock that pumps down or bleeds its chamber between the habitat and outside.</dd>
+        <dt>Adds</dt><dd>Door and hatch parts that connect two zones, with flow through the opening; an airlock that pumps down or bleeds its chamber between a greenhouse and outside.</dd>
         <dt>Predicts</dt><dd>The time two zones take to equalise through an opening; the gas lost per airlock cycle, which is the chamber volume times the gas density left in it.</dd>
-        <dt>Scene</dt><dd>A habitat with an airlock, cycled by the rover.</dd>
+        <dt>Scene</dt><dd>A greenhouse with an airlock, cycled by the rover.</dd>
       </dl>
     </div>
 
     <div class="ms">
-      <h3>M15 · Life support: oxygen, water and plants <a href="https://github.com/marctjones/heroicinventions/issues/42" style="font-size:15px">#42</a></h3>
-      <div class="tag">depends on M12, #22</div>
+      <h3>M15 · Greenhouse and wood <a href="https://github.com/marctjones/heroicinventions/issues/42" style="font-size:15px">#42</a></h3>
+      <div class="tag">depends on M12, #22, M13</div>
       <dl>
-        <dt>Adds</dt><dd>An electrolyser splitting melted ice into oxygen and hydrogen with solar power; an ice drill and melter; greenhouse plants that take up CO₂ and water in light and give off O₂ and grow biomass (the source of wood).</dd>
-        <dt>Predicts</dt><dd>Oxygen per unit of electrical energy: 17.9 MJ per kg of O₂ at 100% efficiency, from water's 286 kJ/mol enthalpy of formation. Biomass and O₂ per unit of light absorbed.</dd>
-        <dt>Scene</dt><dd>A small closed loop: sun, drill, melter, electrolyser and greenhouse, holding a habitat's oxygen steady without the cylinders.</dd>
+        <dt>Adds</dt><dd>An ice drill and melter; greenhouse plants, including fast trees, that take up CO₂ and water in light, give off O₂ and grow wood. No life support for people. An electrolyser is available but usually a poor trade: electrolysed oxygen costs about 21 MJ per kg of wood burned, more than the 18 MJ the fire returns.</dd>
+        <dt>Predicts</dt><dd>Ice melted per joule (334 kJ/kg plus warming); O₂ and biomass per unit of light absorbed (about 1.07 kg of O₂ per kg of wood); a grow-then-burn cycle returning O₂ and CO₂ to where they started.</dd>
+        <dt>Scene</dt><dd>A glazed greenhouse of fast trees filling with oxygen over weeks, then a stored woodpile burning through a simulated dust storm.</dd>
       </dl>
     </div>
 
     <h2 id="open">Open questions</h2>
     <ul>
-      <li><strong>Game or sandbox?</strong> Is there a win condition, such as contacting Earth or learning what happened to the crew, or is it an open-ended colony builder?</li>
+      <li><strong>Game or sandbox?</strong> Settled: a game, won by calling Earth (see <a href="#goal">The goal</a>). Still open: what does the ending show: the first people arriving to what the rover built?</li>
       <li><strong>How literal is Mars?</strong> Real seasons and dust storms change pressure by ±30% and sunlight by far more. Do they belong in the first version?</li>
       <li><strong>Electricity.</strong> Panels, batteries and motors need the electrical domain planned in M7. Does M7 come before M15, or does M15 bring a minimal version?</li>
+      <li><strong>How fast does electronics wear?</strong> Wear drives the economy. Too slow and the finite column never bites; too fast and the game becomes a scramble. Real panel dust loss (Opportunity lost a few tenths of a percent of power per sol between cleaning events) is one calibration point.</li>
+      <li><strong>Are the missing components milestones?</strong> Sound, the lever valve, the peg wheel and ratchet, and the sand timer help Heroic Inventions on Earth too. They may belong in the main roadmap ahead of M11.</li>
       <li><strong>Rover as player.</strong> Is the rover a Jolt vehicle the player drives (see #34, VehicleBody3D), or a camera and editor like build mode today?</li>
     </ul>
   </main>
