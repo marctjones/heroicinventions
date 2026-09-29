@@ -120,7 +120,7 @@ td.name { font-weight: 600; }
       <div class="eyebrow">Heroic Inventions · game concept</div>
       <h1>The Lonely Rover</h1>
       <p class="lede">A Mars rover wakes up to find it can think, and that Earth has stopped answering. Beside the landing site are the crates for a human habitat that was never occupied. It builds itself a community of machines, and every machine obeys the same physics as the rest of Heroic Inventions, with Mars's numbers in the formulas.</p>
-      <div class="meta"><span>Status: proposal</span><span>Follows milestones M8–M10</span><span>Companion to <code>docs/design.html</code></span></div>
+      <div class="meta"><span>Status: proposal, filed as M11–M15</span><span>Follows milestones M8–M10</span><span>Companion to <code>docs/design.html</code></span></div>
     </header>
 
     <h2 id="premise">Premise</h2>
@@ -201,7 +201,7 @@ td.name { font-weight: 600; }
     <p>Each milestone follows the project's rule: implemented through the DSL, simulation, view and editor, exercised by a scene, and checked by a test against a hand-computed prediction.</p>
 
     <div class="ms">
-      <h3>M11 · Planet settings</h3>
+      <h3>M11 · Planet settings <a href="https://github.com/marctjones/heroicinventions/issues/38" style="font-size:15px">#38</a></h3>
       <div class="tag">depends on #21 ambient, #22 sunlight</div>
       <dl>
         <dt>Adds</dt><dd>A scene-level planet: gravity, surface pressure, gas composition, mean temperature and solar constant, with <code>#:planet earth</code> and <code>#:planet mars</code> presets. Gravity and atmospheric pressure stop being constants, in the C# sim and in Jolt.</dd>
@@ -211,7 +211,7 @@ td.name { font-weight: 600; }
     </div>
 
     <div class="ms">
-      <h3>M12 · Enclosures and gas mixtures</h3>
+      <h3>M12 · Enclosures and gas mixtures <a href="https://github.com/marctjones/heroicinventions/issues/39" style="font-size:15px">#39</a></h3>
       <div class="tag">depends on M11</div>
       <dl>
         <dt>Adds</dt><dd>An enclosure part with volume, wall insulation and leak area, holding a mixture of O₂, N₂, CO₂, H₂O and Ar at its own temperature. Parts inside read the enclosure's conditions instead of the planet's.</dd>
@@ -221,7 +221,7 @@ td.name { font-weight: 600; }
     </div>
 
     <div class="ms">
-      <h3>M13 · Oxygen-limited fire</h3>
+      <h3>M13 · Oxygen-limited fire <a href="https://github.com/marctjones/heroicinventions/issues/40" style="font-size:15px">#40</a></h3>
       <div class="tag">depends on M12</div>
       <dl>
         <dt>Adds</dt><dd>Hearths that draw oxygen from their zone at the fuel's stoichiometric rate (about 1.19 kg of O₂ per kg of wood), release CO₂ and water vapour into it, and go out below a limiting oxygen fraction.</dd>
@@ -231,7 +231,7 @@ td.name { font-weight: 600; }
     </div>
 
     <div class="ms">
-      <h3>M14 · Doors and airlocks</h3>
+      <h3>M14 · Doors and airlocks <a href="https://github.com/marctjones/heroicinventions/issues/41" style="font-size:15px">#41</a></h3>
       <div class="tag">depends on M12</div>
       <dl>
         <dt>Adds</dt><dd>Door and hatch parts that connect two zones, with flow through the opening; an airlock that pumps down or bleeds its chamber between the habitat and outside.</dd>
@@ -241,7 +241,7 @@ td.name { font-weight: 600; }
     </div>
 
     <div class="ms">
-      <h3>M15 · Life support: oxygen, water and plants</h3>
+      <h3>M15 · Life support: oxygen, water and plants <a href="https://github.com/marctjones/heroicinventions/issues/42" style="font-size:15px">#42</a></h3>
       <div class="tag">depends on M12, #22</div>
       <dl>
         <dt>Adds</dt><dd>An electrolyser splitting melted ice into oxygen and hydrogen with solar power; an ice drill and melter; greenhouse plants that take up CO₂ and water in light and give off O₂ and grow biomass (the source of wood).</dd>
