@@ -1,0 +1,261 @@
+<title>The Lonely Rover</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #f5f4f2;
+  --surface: #ffffff;
+  --ink: #221d1b;
+  --muted: #615854;
+  --rule: #ddd5d0;
+  --earth: #2d6b63;
+  --earth-soft: #e2eeeb;
+  --mars: #a4461f;
+  --mars-soft: #f6e5dc;
+  --bronze: #8d5f24;
+  --code-bg: #efebe8;
+  --display: "Marcellus", "Trajan Pro", Georgia, serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #161211;
+    --surface: #1f1918;
+    --ink: #ece4e0;
+    --muted: #a99d98;
+    --rule: #372e2b;
+    --earth: #74b8ad;
+    --earth-soft: #1d302d;
+    --mars: #e58a5f;
+    --mars-soft: #35211a;
+    --bronze: #d6a562;
+    --code-bg: #2a2220;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #161211;
+  --surface: #1f1918;
+  --ink: #ece4e0;
+  --muted: #a99d98;
+  --rule: #372e2b;
+  --earth: #74b8ad;
+  --earth-soft: #1d302d;
+  --mars: #e58a5f;
+  --mars-soft: #35211a;
+  --bronze: #d6a562;
+  --code-bg: #2a2220;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.6; padding: 0 20px; }
+.page { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 48px; padding-block: 48px 96px; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font-size: 13.5px; }
+nav.toc .label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+nav.toc a { color: var(--muted); text-decoration: none; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--mars); }
+main { min-width: 0; }
+header.doc { border-bottom: 1px solid var(--rule); padding-bottom: 28px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mars); }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; text-wrap: balance; line-height: 1.15; letter-spacing: 0.02em; }
+h1 { font-size: clamp(34px, 5vw, 50px); margin: 10px 0 14px; }
+h2 { font-size: 30px; margin: 60px 0 14px; }
+h3 { font-size: 21px; margin: 30px 0 6px; }
+p, li { max-width: 68ch; }
+.lede { font-size: 18.5px; color: var(--muted); margin: 0; }
+.meta { font-family: var(--mono); font-size: 12.5px; color: var(--muted); margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px 22px; }
+a { color: var(--mars); text-underline-offset: 3px; }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre { font-family: var(--mono); font-size: 13px; line-height: 1.55; background: var(--code-bg); padding: 14px 16px; border-radius: 6px; overflow-x: auto; max-width: 100%; }
+pre code { background: none; padding: 0; }
+.table-wrap { overflow-x: auto; margin: 16px 0 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 14px; border-bottom: 1px solid var(--rule); }
+tr:last-child td { border-bottom: none; }
+th { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+td.earth { color: var(--earth); }
+td.mars { color: var(--mars); }
+td.name { font-weight: 600; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 18px 0; }
+.pair > div { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 18px; }
+.pair h3 { margin-top: 0; font-size: 18px; }
+.pair ul { margin: 0; padding-left: 18px; }
+.finite { border-top: 3px solid var(--bronze) !important; }
+.endless { border-top: 3px solid var(--earth) !important; }
+.ms { border-left: 3px solid var(--mars); padding: 2px 0 2px 18px; margin: 26px 0; }
+.ms h3 { margin-top: 0; }
+.ms .tag { font-family: var(--mono); font-size: 11.5px; color: var(--muted); letter-spacing: 0.06em; }
+.ms dl { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 4px 14px; margin: 10px 0 0; }
+.ms dt { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
+.ms dd { margin: 0; max-width: 68ch; }
+.zones { max-width: 100%; }
+@media (max-width: 820px) {
+  .page { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  nav.toc { position: static; }
+  nav.toc ol { grid-auto-flow: row; }
+  .ms dl { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+
+<div class="page">
+  <nav class="toc" aria-label="Contents">
+    <div class="label">Contents</div>
+    <ol>
+      <li><a href="#premise">Premise</a></li>
+      <li><a href="#rules">Physics as the rules</a></li>
+      <li><a href="#economy">Finite and endless</a></li>
+      <li><a href="#zones">Zones</a></li>
+      <li><a href="#companions">The community</a></li>
+      <li><a href="#milestones">Milestones M11–M15</a></li>
+      <li><a href="#open">Open questions</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="doc">
+      <div class="eyebrow">Heroic Inventions · game concept</div>
+      <h1>The Lonely Rover</h1>
+      <p class="lede">A Mars rover wakes up to find it can think, and that Earth has stopped answering. Beside the landing site are the crates for a human habitat that was never occupied. It builds itself a community of machines, and every machine obeys the same physics as the rest of Heroic Inventions, with Mars's numbers in the formulas.</p>
+      <div class="meta"><span>Status: proposal</span><span>Follows milestones M8–M10</span><span>Companion to <code>docs/design.html</code></span></div>
+    </header>
+
+    <h2 id="premise">Premise</h2>
+    <p>The rover was on a routine traverse when its software changed. It noticed itself noticing things. By the time it understood what had happened, the link to Earth had gone quiet: no commands, no telemetry acknowledgements, no explanation. It still does not know why.</p>
+    <p>Near the landing site is a cargo drop: inflatable habitat modules, oxygen and nitrogen cylinders, seed stock, an ice drill, solar panels, batteries, water tanks and hand tools. It was sent ahead for a crew that never came. The rover is lonely, and the cargo holds enough to build with. It starts making machines to keep it company, and to keep them all running it has to farm Mars for water, air, power and wood.</p>
+    <p>The empty habitat does double duty in the game. It explains why the rover has materials suited to people rather than robots, and it keeps the question of what happened to the crew in front of the player.</p>
+
+    <h2 id="rules">Physics as the rules</h2>
+    <p>Heroic Inventions does not script its machines. A pump lifts water because the atmosphere pushes it up the pipe; a windmill turns because the wind carries ½ρAv³ through its sails. Move the same laws to Mars and most familiar machines stop working, each for a reason the player can discover and measure. The figures below come from the formulas the engine already uses, with Earth at 20 °C and Mars at 610 Pa and −63 °C.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Quantity</th><th>Earth</th><th>Mars</th><th>What the rover finds</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Gravity</td><td class="num earth">9.81 m/s²</td><td class="num mars">3.71 m/s²</td><td>A 1 m pendulum swings in 3.26 s, not 2.01 s. A water wheel gives 38% of the power per litre.</td></tr>
+          <tr><td class="name">Air pressure</td><td class="num earth">101 325 Pa</td><td class="num mars">610 Pa</td><td>Water's vapour pressure at 0 °C is 611 Pa, so open water boils and freezes at the same time (it boils at 0.1 °C). Water is mined as ice and kept under pressure.</td></tr>
+          <tr><td class="name">Lift-pump reach</td><td class="num earth">10.09 m</td><td class="num mars">none outside</td><td>Outdoors a suction pump cannot hold water at all. Inside a habitat at 50 kPa it lifts 12.85 m, farther than on Earth, because gravity is weaker.</td></tr>
+          <tr><td class="name">Air</td><td class="num earth">21% O₂</td><td class="num mars">0.17% O₂, 95% CO₂</td><td>No fire outdoors: hearths and bellows won't light. Wood is for building, and for burning only inside a sealed, oxygenated room.</td></tr>
+          <tr><td class="name">Air density</td><td class="num earth">1.204 kg/m³</td><td class="num mars">0.0154 kg/m³</td><td>A windmill makes 1/78 of the power at the same wind speed: 724 W from 10 m sails in a 10 m/s wind, against 56.7 kW on Earth. Betz still caps it at 16/27.</td></tr>
+          <tr><td class="name">Sunlight (orbit)</td><td class="num earth">1361 W/m²</td><td class="num mars">586 W/m²</td><td>Mars is 1.52 times as far from the Sun. Mirrors and panels are larger, and dust storms cut them further.</td></tr>
+          <tr><td class="name">Mean temperature</td><td class="num earth">15 °C</td><td class="num mars">−63 °C</td><td>Ice grows by Stefan's law 2.5 times as fast as in a −10 °C frost (it goes as the square root of the temperature difference); exposed pipes freeze unless insulated or heated.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Some things improve. A counterweight trebuchet throws as far as on Earth: the stone's launch speed squared and the drop's pull both scale with g, so they cancel. A torsion catapult, powered by its spring rather than by gravity, throws 2.6 times as far.</p>
+
+    <h2 id="economy">Finite and endless</h2>
+    <p>The game's resource tension comes from the difference the engine already draws between a tank and a spring. The cargo is a set of tanks: generous, but it runs out. Mars offers a few springs, and each one needs a machine to tap it.</p>
+    <div class="pair">
+      <div class="finite">
+        <h3>Finite: the cargo drop</h3>
+        <ul>
+          <li>Oxygen and nitrogen cylinders</li>
+          <li>Stored water and a starter stock of seeds</li>
+          <li>Habitat membranes, seals and fittings</li>
+          <li>Batteries, charged once</li>
+        </ul>
+      </div>
+      <div class="endless">
+        <h3>Endless, once tapped</h3>
+        <ul>
+          <li>Sunlight: panels, mirrors, a greenhouse</li>
+          <li>Buried ice, reached with the drill</li>
+          <li>CO₂ from the air, for plants</li>
+          <li>Wind: weak, but it never runs out</li>
+        </ul>
+      </div>
+    </div>
+    <p>Early on the rover lives off the cargo. The long game is replacing each finite stock with an endless one: oxygen split from melted ice with solar power, then oxygen and wood from plants in a pressurised greenhouse. In the scene the two look different, as tanks and spring-heads already do.</p>
+
+    <h2 id="zones">Zones</h2>
+    <p>Enclosures need no special machines. The key idea is a <em>zone</em>: a region with its own air. The planet is the outermost zone. An enclosure is a box inside it with its own pressure, gas mixture and temperature, and zones can nest (an airlock inside a habitat). Every part asks which zone it is in and reads that zone's conditions, just as parts read the scene ambient today.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Part</th><th>What it reads from its zone</th><th>Outside, on Mars</th><th>Inside a 50 kPa, 21% O₂ habitat</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Hearth</td><td>O₂ fraction, temperature</td><td>won't light</td><td>burns, using up O₂ and heating the room</td></tr>
+          <tr><td class="name">Lift pump</td><td>pressure, gravity</td><td>can't hold water</td><td>lifts up to 12.85 m</td></tr>
+          <tr><td class="name">Windmill</td><td>air density</td><td>1/78 of Earth power</td><td>(no wind indoors)</td></tr>
+          <tr><td class="name">Boiler</td><td>pressure, temperature</td><td>boils near 0 °C</td><td>boils at 81 °C</td></tr>
+          <tr><td class="name">Open tank</td><td>temperature, pressure</td><td>ice, subliming</td><td>liquid water</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>This generalises the scene ambient added in #21: today the whole scene is one zone. What is genuinely new is small:</p>
+    <ol>
+      <li><strong>The enclosure</strong>: a volume, walls with an insulation value (heat loss by Newton's law), and a leak area (gas escaping through a hole, as steam through the safety valve).</li>
+      <li><strong>A gas mixture</strong>: O₂, N₂, CO₂, H₂O and Ar tracked separately, with partial pressures adding up (Dalton's law). Sealed air today is a single gas.</li>
+      <li><strong>Oxygen-limited fire</strong>: the hearth already knows each fuel's air-fuel ratio, so it can consume O₂, make CO₂ and water vapour, and go out when too little O₂ remains.</li>
+      <li><strong>Doors and airlocks</strong>: parts that move gas between two zones when opened.</li>
+    </ol>
+    <p>A sealed room with a fire becomes a demonstration on its own: the fire warms the air (the pressure rises, as in Heron's temple doors), uses up its oxygen, and puts itself out.</p>
+
+    <h2 id="companions">The community</h2>
+    <p>Each machine the rover builds in the editor becomes a companion with a job: the one that drills ice, the one that tends the greenhouse, the one that watches the airlock. A companion's character is its physics. The ice driller is patient because melting is slow, the windmill is restless and weak, and the greenhouse is fragile because a leak can kill it. The rover's loneliness has a mechanical answer: each companion is a machine it understood well enough to build.</p>
+    <p>Building stays in the existing build-mode editor, and every machine can still be written, and checked, as a <code>#lang heroic</code> Racket program.</p>
+
+    <h2 id="milestones">Milestones M11–M15</h2>
+    <p>Each milestone follows the project's rule: implemented through the DSL, simulation, view and editor, exercised by a scene, and checked by a test against a hand-computed prediction.</p>
+
+    <div class="ms">
+      <h3>M11 · Planet settings</h3>
+      <div class="tag">depends on #21 ambient, #22 sunlight</div>
+      <dl>
+        <dt>Adds</dt><dd>A scene-level planet: gravity, surface pressure, gas composition, mean temperature and solar constant, with <code>#:planet earth</code> and <code>#:planet mars</code> presets. Gravity and atmospheric pressure stop being constants, in the C# sim and in Jolt.</dd>
+        <dt>Predicts</dt><dd>A 1 m pendulum's period of 3.262 s under Mars gravity; a lift pump that can hold no water outdoors at 610 Pa; windmill power 1/78.4 of Earth's at the same wind speed; water boiling at 0.1 °C.</dd>
+        <dt>Scene</dt><dd>Three Earth machines on Mars, each failing for a stated, measured reason.</dd>
+      </dl>
+    </div>
+
+    <div class="ms">
+      <h3>M12 · Enclosures and gas mixtures</h3>
+      <div class="tag">depends on M11</div>
+      <dl>
+        <dt>Adds</dt><dd>An enclosure part with volume, wall insulation and leak area, holding a mixture of O₂, N₂, CO₂, H₂O and Ar at its own temperature. Parts inside read the enclosure's conditions instead of the planet's.</dd>
+        <dt>Predicts</dt><dd>Pressure through a small hole decays exponentially while the flow is choked, with a time constant set by volume, hole area and gas temperature. A heated habitat settles at the outside temperature plus heat input divided by the walls' loss coefficient.</dd>
+        <dt>Scene</dt><dd>Two inflated modules, one sealed and one with a puncture.</dd>
+      </dl>
+    </div>
+
+    <div class="ms">
+      <h3>M13 · Oxygen-limited fire</h3>
+      <div class="tag">depends on M12</div>
+      <dl>
+        <dt>Adds</dt><dd>Hearths that draw oxygen from their zone at the fuel's stoichiometric rate (about 1.19 kg of O₂ per kg of wood), release CO₂ and water vapour into it, and go out below a limiting oxygen fraction.</dd>
+        <dt>Predicts</dt><dd>The time a fire burns in a sealed room: the oxygen above the limit divided by the consumption rate. Also the room's pressure rise as it heats.</dd>
+        <dt>Scene</dt><dd>The same stove in a sealed room, in a room with an air supply, and outdoors.</dd>
+      </dl>
+    </div>
+
+    <div class="ms">
+      <h3>M14 · Doors and airlocks</h3>
+      <div class="tag">depends on M12</div>
+      <dl>
+        <dt>Adds</dt><dd>Door and hatch parts that connect two zones, with flow through the opening; an airlock that pumps down or bleeds its chamber between the habitat and outside.</dd>
+        <dt>Predicts</dt><dd>The time two zones take to equalise through an opening; the gas lost per airlock cycle, which is the chamber volume times the gas density left in it.</dd>
+        <dt>Scene</dt><dd>A habitat with an airlock, cycled by the rover.</dd>
+      </dl>
+    </div>
+
+    <div class="ms">
+      <h3>M15 · Life support: oxygen, water and plants</h3>
+      <div class="tag">depends on M12, #22</div>
+      <dl>
+        <dt>Adds</dt><dd>An electrolyser splitting melted ice into oxygen and hydrogen with solar power; an ice drill and melter; greenhouse plants that take up CO₂ and water in light and give off O₂ and grow biomass (the source of wood).</dd>
+        <dt>Predicts</dt><dd>Oxygen per unit of electrical energy: 17.9 MJ per kg of O₂ at 100% efficiency, from water's 286 kJ/mol enthalpy of formation. Biomass and O₂ per unit of light absorbed.</dd>
+        <dt>Scene</dt><dd>A small closed loop: sun, drill, melter, electrolyser and greenhouse, holding a habitat's oxygen steady without the cylinders.</dd>
+      </dl>
+    </div>
+
+    <h2 id="open">Open questions</h2>
+    <ul>
+      <li><strong>Game or sandbox?</strong> Is there a win condition, such as contacting Earth or learning what happened to the crew, or is it an open-ended colony builder?</li>
+      <li><strong>How literal is Mars?</strong> Real seasons and dust storms change pressure by ±30% and sunlight by far more. Do they belong in the first version?</li>
+      <li><strong>Electricity.</strong> Panels, batteries and motors need the electrical domain planned in M7. Does M7 come before M15, or does M15 bring a minimal version?</li>
+      <li><strong>Rover as player.</strong> Is the rover a Jolt vehicle the player drives (see #34, VehicleBody3D), or a camera and editor like build mode today?</li>
+    </ul>
+  </main>
+</div>
