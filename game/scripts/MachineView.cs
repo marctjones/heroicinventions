@@ -43,6 +43,15 @@ public partial class MachineView : Node3D
     private readonly List<(RigidBody3D Body, Vector3 Axis, float HalfLength, float Radius, bool Driven, string Label)> _axles = [];
     private double? _initialMechanicalEnergy; // J, captured at rest — baseline for "energy retained"
 
+    /// <summary>
+    /// The nodes each part built, by part id: what the build-mode editor
+    /// picks, highlights and drags, so it works on exactly what runs.
+    /// Supports, pipes, ropes and frames added after the parts belong to
+    /// no single part and aren't listed.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<Node3D>> PartNodes => _partNodes;
+    private readonly Dictionary<string, IReadOnlyList<Node3D>> _partNodes = [];
+
     public MachineView(MachineRuntime runtime, MaterialLibrary materials)
     {
         Runtime = runtime;
@@ -63,6 +72,7 @@ public partial class MachineView : Node3D
         _manyIdenticalPendulums = Runtime.Def.Parts.Count(p => p.Kind == "pendulum" && !Runtime.Pendulums.ContainsKey(p.Id)) > 1;
         foreach (var part in Runtime.Def.Parts)
         {
+            int before = GetChildCount();
             switch (part.Kind)
             {
                 case "tank": BuildTank(part); break;
@@ -83,6 +93,8 @@ public partial class MachineView : Node3D
                 case "capstan": BuildCapstan(part); break;
                 case "counterpoise": BuildCounterpoise(part); break;
             }
+            _partNodes[part.Id] = Enumerable.Range(before, GetChildCount() - before)
+                .Select(i => GetChild(i)).OfType<Node3D>().ToList();
         }
         foreach (var pipe in Runtime.Def.Pipes) BuildPipe(pipe);
         BuildPendulumFrames();

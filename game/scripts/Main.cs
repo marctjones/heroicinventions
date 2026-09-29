@@ -206,6 +206,7 @@ public partial class Main : Node3D
     private double? _editorQuitAfterSeconds; // wall-clock: the editor has no simulated time of its own
     private double _editorTimer;
     private PanelContainer _leftPanel = null!; // hidden while build mode's own panel is up, so the two don't overlap
+    private PanelContainer _infoPanel = null!; // the running machine's HUD, hidden in build mode for the same reason
 
     public override void _Ready()
     {
@@ -371,7 +372,7 @@ public partial class Main : Node3D
     /// </summary>
     private void BuildInfoPanel(CanvasLayer layer)
     {
-        var panel = new PanelContainer();
+        var panel = _infoPanel = new PanelContainer();
         panel.SetAnchorsPreset(Control.LayoutPreset.TopRight);
         panel.OffsetLeft = -380;
         panel.OffsetRight = -20;
@@ -500,10 +501,11 @@ public partial class Main : Node3D
         SetRunning(false);
 
         _leftPanel.Visible = false;
+        _infoPanel.Visible = false;
         _buildMode = new BuildMode(_materials);
         _buildMode.RunRequested += RunBuiltMachine;
-        AddChild(_buildMode);
-        ApplyCamera(MenuCamera with { Eye = new Vector3(0, 3, 4), LookAt = new Vector3(0, 0.3f, 0) });
+        _buildMode.ExitRequested += () => CallDeferred(MethodName.DeselectBuildMode);
+        AddChild(_buildMode);   // it brings its own camera and takes all input while open
     }
 
     private void DeselectBuildMode()
@@ -511,6 +513,8 @@ public partial class Main : Node3D
         _buildMode?.QueueFree();
         _buildMode = null;
         _leftPanel.Visible = true;
+        _infoPanel.Visible = true;
+        _camera.MakeCurrent();
         ApplyCamera(MenuCamera);
     }
 
@@ -721,6 +725,7 @@ public partial class Main : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (_buildMode is not null) return; // build mode handles its own camera, keys and clicks
         switch (@event)
         {
             case InputEventKey { Pressed: true, Echo: false } key:
