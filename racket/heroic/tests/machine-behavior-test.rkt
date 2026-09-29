@@ -32,9 +32,10 @@
   (check-= per-turn 23.2 0.5 "Vitruvius's 4 m screw at a 3-4-5 slope: ~23 L a turn")
   ;; while the intake is fully under water the flow is per-turn × rpm / 60
   (check-= (max-of run '(raise flow)) (/ (* per-turn 12) 60) 0.05)
-  ;; and every litre that leaves the pool arrives in the trough, or has
+  ;; and every litre is accounted for: the 900 the pool started with plus
+  ;; what the spring fed it (4.5 L/s for 20 s), in the pool, the trough, or
   ;; run on down the channel to the field
-  (check-= (+ (final-of run '(pool water)) (final-of run '(trough water)) (final-of run '(field water))) 900 1e-6)
+  (check-= (+ (final-of run '(pool water)) (final-of run '(trough water)) (final-of run '(field water))) (+ 900 (* 4.5 20)) 1e-6)
   (check-true (> (+ (final-of run '(trough water)) (final-of run '(field water))) 50)))
 
 (test-case "A screw that isn't turning lifts nothing"

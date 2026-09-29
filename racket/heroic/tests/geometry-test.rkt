@@ -276,3 +276,9 @@
     (check-equal? (vector-length i) 3 (format "~a inertia is not 3 numbers" (catalogue-entry-id e)))
     (for ([axis '(x y z)] [v (vector->list i)])
       (check-true (> v 0) (format "~a inertia-~a should be positive, got ~a" (catalogue-entry-id e) axis v)))))
+
+;; What the editor's exported source says for a catalogue part.
+(test-case "catalogue-shape finds an entry by id and rejects an unknown one"
+  (define s (catalogue-shape 'involute-gear-m5-18))
+  (check-equal? (shape-inertia s) (shape-inertia (catalogue-entry-shape (findf (λ (e) (eq? (catalogue-entry-id e) 'involute-gear-m5-18)) catalogue))))
+  (check-exn #rx"no catalogue entry" (λ () (catalogue-shape 'no-such-gear))))

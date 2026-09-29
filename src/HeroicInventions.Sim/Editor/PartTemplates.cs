@@ -57,6 +57,7 @@ public static class PartTemplates
     {
         var props = new Dictionary<string, SExpr>
         {
+            ["catalogue"] = new SSymbol(entry.Id),
             ["shape"] = new SSymbol(entry.ShapeKind),
             ["mesh"] = new SString(entry.MeshStem),
             ["volume"] = new SNumber(entry.Volume),

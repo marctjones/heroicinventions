@@ -244,4 +244,28 @@ public class BuildSessionTests
         Assert.Contains("(tank a ", text);
         Assert.Contains("(pipe p1 a.outlet b.inlet", text);
     }
+
+    [Fact]
+    public void ExportsCataloguePartsWaterAndLiftsToRacket()
+    {
+        var gear = new CatalogueEntry("involute-gear-m5-18", "a gear", "gear", "gear-x", 0.001, new Vec3(1, 1, 2),
+            new Dictionary<string, SExpr> { ["teeth"] = new SNumber(18) });
+        var session = new BuildSession(Materials, catalogue: [gear], machinesDir: TempDir(), name: "mill");
+        session.Execute("(tank pool #:at (0 1 0) #:area 4.0 #:height 1.0)");
+        session.Execute("(tank basin #:at (3 0 0) #:area 4.0 #:height 1.0)");
+        session.Execute("(inflow spring #:into pool #:flow 0.0045)");
+        session.Execute("(channel race pool.outlet basin.inlet #:width 0.5)");
+        session.Execute("(channel tail basin.outlet off #:end (6 0 0) #:width 0.5)");
+        session.Execute("(wheel g1 #:catalogue involute-gear-m5-18 #:at (1 1 0) #:material bronze)");
+        session.Execute("(lift up #:by g1 #:from basin #:to pool #:current-from race)");
+        string path = Path.Combine(TempDir(), "mill.rkt");
+        session.ExportRkt(path);
+        string text = File.ReadAllText(path);
+        Assert.Contains("(inflow spring #:into pool #:flow 0.0045)", text);
+        Assert.Contains("(channel race #:from pool.outlet #:to basin.inlet", text);
+        Assert.Contains("#:to off #:end (6 0 0)", text);
+        Assert.Contains("(wheel g1 #:shape (catalogue-shape 'involute-gear-m5-18) #:at (1 1 0) #:material bronze", text);
+        Assert.Contains("(lift up #:by g1 #:from basin #:to pool #:current-from race)", text);
+        Assert.DoesNotContain("can't be exported", text);
+    }
 }

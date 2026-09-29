@@ -8,13 +8,20 @@
 ;; catapults are sized by Vitruvius's rules, treadwheels and norias by the
 ;; surviving examples.
 (require racket/list "gear.rkt" "screw.rkt" "wheels.rkt" "catapult.rkt")
-(provide catalogue catalogue-entry-id catalogue-entry-description catalogue-entry-shape)
+(provide catalogue catalogue-entry-id catalogue-entry-description catalogue-entry-shape catalogue-shape)
 
 (define (catalogue-entry-id e) (first e))
 (define (catalogue-entry-description e) (second e))
 (define (catalogue-entry-shape e) ((third e)))
 
 (define (mm x) (/ x 1000))
+
+;; The shape of the catalogue entry named id — what the in-game editor's
+;; exported source says instead of re-spelling the entry's generator call.
+(define (catalogue-shape id)
+  (define e (findf (λ (e) (eq? (catalogue-entry-id e) id)) catalogue))
+  (unless e (error 'catalogue-shape "no catalogue entry named ~a" id))
+  (catalogue-entry-shape e))
 
 ;; The Antikythera mechanism's gears are about half a millimetre per
 ;; tooth (module ≈ 0.5 mm) and ~2 mm thick plate. These tooth counts
