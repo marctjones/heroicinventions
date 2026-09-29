@@ -30,6 +30,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, (FloatValve Valve, Func<double> Flow)> _floatValves = [];
+    private readonly Dictionary<string, TankLeak> _leaks = [];
     private readonly Dictionary<string, WaterWheel> _wheels = [];
     private readonly Dictionary<string, Counterpoise> _counterpoises = [];
     private readonly Dictionary<string, Pendulum> _pendulums = [];
@@ -51,6 +52,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
     /// <summary>Float valves, each with the flow of the feed it throttles (m³/s).</summary>
     public IReadOnlyDictionary<string, (FloatValve Valve, Func<double> Flow)> FloatValves => _floatValves;
+    /// <summary>Holes in tank walls (and seeps), draining by Torricelli's law.</summary>
+    public IReadOnlyDictionary<string, TankLeak> Leaks => _leaks;
     public IReadOnlyDictionary<string, WaterWheel> WaterWheels => _wheels;
     public IReadOnlyDictionary<string, Counterpoise> Counterpoises => _counterpoises;
     /// <summary>Pendulums hung on a bearing (#:bearing-radius): swung here, not by Jolt, so their friction and wear can be checked.</summary>
@@ -110,7 +113,7 @@ public sealed class MachineRuntime
                             WearRate = part.Number("bearing-wear", 0),
                         });
                     break;
-                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice" or "float-valve":
+                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice" or "float-valve" or "leak":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -223,6 +226,7 @@ public sealed class MachineRuntime
             channel.Gate = _gates[part.Id] = new SluiceGate(part.Number("width", channel.Width), part.Number("height"), part.Number("opening", 1));
         }
         foreach (var part in def.Parts.Where(p => p.Kind == "float-valve")) BuildFloatValve(part);
+        foreach (var part in def.Parts.Where(p => p.Kind == "leak")) BuildLeak(part);
         foreach (var c in def.Cylinders)
         {
             var piston = def.Part(c.Piston) ?? throw new MachineFormatException($"cylinder {c.Id}: no piston {c.Piston}", c.Location);
@@ -236,6 +240,27 @@ public sealed class MachineRuntime
         }
 
         RegisterFields();
+    }
+
+    private void BuildLeak(PartSpec part)
+    {
+        var on = part.Symbol("on", "");
+        if (!_tanks.TryGetValue(on, out var tank))
+            throw new MachineFormatException($"leak {part.Id} is on {on}, which is not a tank", part.Location);
+        var into = part.Symbol("into", "");
+        Tank? catchTank = null;
+        if (into != "" && !_tanks.TryGetValue(into, out catchTank))
+            throw new MachineFormatException($"leak {part.Id} runs into {into}, which is not a tank", part.Location);
+        double height = part.Number("height"), area = part.Number("area", 0), evaporation = part.Number("evaporation", 0);
+        if (height < 0 || height > tank.Height)
+            throw new MachineFormatException($"leak {part.Id}: a hole at {height} m is not in {on}'s wall (0 to {tank.Height} m)", part.Location);
+        if (area < 0 || evaporation < 0)
+            throw new MachineFormatException($"leak {part.Id}: area and evaporation cannot be negative", part.Location);
+        _leaks[part.Id] = Fluids.AddLeak(new TankLeak(tank, height, area, catchTank)
+        {
+            Cd = part.Number("coefficient", TankLeak.DischargeCoefficient),
+            Evaporation = evaporation,
+        });
     }
 
     /// <summary>
@@ -433,6 +458,15 @@ public sealed class MachineRuntime
             _getters[$"{id}.flow"] = () => flow() * 1000;              // L/s let through
             _getters[$"{id}.shut"] = () => v.ShutLevel * 100;          // cm above the tank's floor
             _setters[$"{id}.shut"] = cm => v.ShutLevel = Math.Clamp(cm / 100, 0, v.Tank.Height);
+        }
+        foreach (var (id, l) in _leaks)
+        {
+            _getters[$"{id}.flow"] = () => l.Flow * 1000;              // L/s out of the hole
+            _getters[$"{id}.head"] = () => l.Head * 100;               // cm of water above the hole
+            _getters[$"{id}.lost"] = () => l.Lost * 1000;              // L leaked so far
+            _getters[$"{id}.evaporated"] = () => l.Evaporated * 1000;  // L taken from the surface so far
+            _getters[$"{id}.area"] = () => l.Area * 10000;             // cm²
+            _setters[$"{id}.area"] = cm2 => l.Area = cm2 / 10000;      // stop it with a thumb: 0
         }
         foreach (var (id, w) in _wheels)
         {

@@ -129,6 +129,10 @@ public static class RktExporter
                        Opt("width", "width") + $" {Mat()})\n";
             case "float-valve":
                 return $"  (float-valve {p.Id} {At()} #:on {Sym("on", "?")} #:shut {F(N("shut"))} #:travel {F(N("travel"))} {Mat()})\n";
+            case "leak":
+                return $"  (leak {p.Id} {At()} #:on {Sym("on", "?")} #:height {F(N("height"))} #:area {F(N("area"))} #:coefficient {F(N("coefficient", 0.6))}" +
+                       (p.Props.GetValueOrDefault("into") is SSymbol into ? $" #:into {into.Name}" : "") +
+                       (N("evaporation") > 0 ? $" #:evaporation {F(N("evaporation"))}" : "") + $" {Mat()})\n";
             case "counterpoise":
                 return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +
                        $"#:counterweight {F(N("counterweight"))} #:radius {F(N("radius"))} #:turn-deg {F(N("turn-deg"))} " +

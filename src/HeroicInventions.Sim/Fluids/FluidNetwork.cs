@@ -129,10 +129,12 @@ public sealed class FluidNetwork
 {
     public List<Tank> Tanks { get; } = [];
     public List<Pipe> Pipes { get; } = [];
+    public List<TankLeak> Leaks { get; } = [];
     public double MaxSubstep { get; init; } = 0.005; // s
 
     public Tank AddTank(Tank t) { Tanks.Add(t); return t; }
     public Pipe AddPipe(Pipe p) { Pipes.Add(p); return p; }
+    public TankLeak AddLeak(TankLeak l) { Leaks.Add(l); return l; }
 
     public double TotalWater => Tanks.Sum(t => t.WaterVolume);
 
@@ -154,6 +156,7 @@ public sealed class FluidNetwork
             if (q < 0 && !p.To.IsSubmerged(p.ToPortElevation)) q = 0;
             p.Flow = q * (p.Valve?.Opening ?? 1);
         }
+        foreach (var l in Leaks) l.Flow = l.Discharge();
 
         foreach (var p in Pipes)
         {
@@ -165,6 +168,19 @@ public sealed class FluidNetwork
             double moved = Math.Min(Math.Abs(p.Flow) * dt, Math.Min(available, room));
             src.WaterVolume -= moved;
             dst.WaterVolume += moved;
+        }
+
+        foreach (var l in Leaks)
+        {
+            double available = Math.Max(0, (l.Tank.SurfaceElevation - l.HoleElevation) * l.Tank.Area);
+            double room = l.Catch is { } c ? c.Capacity - c.WaterVolume : double.PositiveInfinity;
+            double moved = Math.Min(l.Flow * dt, Math.Min(available, room));
+            l.Tank.WaterVolume -= moved;
+            if (l.Catch is not null) l.Catch.WaterVolume += moved;
+            l.Lost += moved;
+            double seep = Math.Min(l.Evaporation * dt, l.Tank.WaterVolume);
+            l.Tank.WaterVolume -= seep;
+            l.Evaporated += seep;
         }
     }
 }

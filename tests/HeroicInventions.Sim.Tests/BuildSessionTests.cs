@@ -326,6 +326,41 @@ public class BuildSessionTests
         Assert.Contains("(float-valve ball #:at (0 1.2 0) #:on aqueduct #:shut 0.4 #:travel 0.02 #:material bronze)", File.ReadAllText(rkt));
     }
 
+    /// <summary>
+    /// A leak placed from the palette in a barrel: the level follows Torricelli's
+    /// draw-down, √(h − hole) falling at Cd·a·√(2g)/(2A), then the design
+    /// round-trips through .machine and exports as a Racket clause.
+    /// </summary>
+    [Fact]
+    public void LeakScriptDrawsTheBarrelDownByTorricelliAndRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "leaky");
+        session.Execute("(tank barrel #:at (0 0.3 0) #:area 0.25 #:height 1 #:water 0.2)");
+        session.Execute("(tank catch #:at (0.8 0 0) #:area 0.5 #:height 0.3)");
+        session.Execute("(leak hole #:at (0.25 0.4 0) #:on barrel #:height 0.1 #:area 0.0005 #:into catch)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 100)");
+
+        double rate = 0.6 * 0.0005 * Math.Sqrt(2 * 9.81) / (2 * 0.25);
+        double level = 0.1 + Math.Pow(Math.Sqrt(0.7) - rate * 100, 2);        // 42.59 cm
+        var run = session.LastRun!;
+        Assert.Equal(level, run.Tanks["barrel"].Level, precision: 3);
+        Assert.Equal(0.25 * (0.8 - level) / 0.5, run.Tanks["catch"].Level, precision: 3);
+        Assert.Equal(0.6 * 0.0005 * Math.Sqrt(2 * 9.81 * (level - 0.1)), run.Leaks["hole"].Flow, precision: 6);
+
+        string saved = Path.Combine(TempDir(), "leaky.machine");
+        session.SaveFile(saved);
+        var hole = MachineDef.Parse(File.ReadAllText(saved)).Part("hole")!;
+        Assert.Equal("leak", hole.Kind);
+        Assert.Equal("barrel", hole.Symbol("on", ""));
+        Assert.Equal("catch", hole.Symbol("into", ""));
+        Assert.Equal(0.0005, hole.Number("area"));
+
+        string rkt = Path.Combine(TempDir(), "leaky.rkt");
+        session.ExportRkt(rkt);
+        Assert.Contains("(leak hole #:at (0.25 0.4 0) #:on barrel #:height 0.1 #:area 0.0005 #:coefficient 0.6 #:into catch #:material", File.ReadAllText(rkt));
+    }
+
     /// <summary>A channel run off the scene #:onto a boiler feeds it, and the clause round-trips.</summary>
     [Fact]
     public void ChannelOntoABoilerFeedsItAndRoundTrips()

@@ -23,6 +23,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (boiler|block|pendulum|lever|ramp|piston|post id #:at (x y z) ... similarly)
 ///   (sluice id #:at (x y z) #:on channel #:height H [#:opening o] [#:width w])
 ///   (float-valve id #:at (x y z) #:on feed #:shut S #:travel T)   ; feed: an inflow, pipe or channel into a tank
+///   (leak id #:at (x y z) #:on tank #:height H #:area A [#:coefficient Cd] [#:into catch-tank] [#:evaporation m3/s])
 ///   (wheel|screw|fixture id #:catalogue entry-id #:at (x y z) [#:material M])
 ///   (pipe id from.port to.port #:conductance C)
 ///   (connect a.port b.port)
@@ -168,7 +169,7 @@ public sealed class BuildSession
                 props[key] = new SNumber(Num(cmd.Items[i + 1], context));
             else if (existing is SSymbol && cmd.Items[i + 1] is SSymbol sym)
                 props[key] = sym;                          // a name, such as a sluice's #:on channel
-            else if (existing is SBool { Value: false } && key is "tail" or "race" && cmd.Items[i + 1] is SSymbol named)
+            else if (existing is SBool { Value: false } && key is "tail" or "race" or "into" && cmd.Items[i + 1] is SSymbol named)
                 props[key] = named;                        // an optional name, such as a water wheel's #:race
             else if (existing is SBool { Value: false } && cmd.Items[i + 1] is SNumber or SSymbol)
                 props[key] = new SNumber(Num(cmd.Items[i + 1], context)); // an optional number, such as a sluice's #:width

@@ -379,3 +379,82 @@ public class FloatValveTests
         Assert.Equal(0.5 * Channel.WeirFlow(0.3, 0.1), race.Flow, precision: 9);
     }
 }
+
+public class TankLeakTests
+{
+    private const double A = 0.25, Hole = 5e-4, H0 = 0.8;
+
+    private static (FluidNetwork Net, Tank Tank, TankLeak Leak) Barrel(double holeHeight, Tank? into = null)
+    {
+        var net = new FluidNetwork();
+        var tank = net.AddTank(new Tank("barrel", 0.3, A, 1.0, waterVolume: A * H0));
+        if (into is not null) net.AddTank(into);
+        return (net, tank, net.AddLeak(new TankLeak(tank, holeHeight, Hole, into)));
+    }
+
+    /// <summary>√(h − hole) falls at Cd·a·√(2g)/(2A); the level stops at the hole after T = (A/Cd·a)·√(2H/g).</summary>
+    [Fact]
+    public void TheLevelDrawsDownAsTorricelliPredictsAndStopsAtTheHole()
+    {
+        const double hole = 0.10;
+        double rate = 0.6 * Hole * Math.Sqrt(2 * 9.81) / (2 * A);
+        double drainTime = A / (0.6 * Hole) * Math.Sqrt(2 * (H0 - hole) / 9.81);
+        var (net, tank, leak) = Barrel(hole);
+        Assert.Equal(Math.Sqrt(H0 - hole) / rate, drainTime, precision: 9);   // the two forms of the law agree
+
+        for (int i = 0; i < 100 * 200; i++) net.Step(0.005);
+        Assert.Equal(hole + Math.Pow(Math.Sqrt(H0 - hole) - rate * 100, 2), tank.Level, precision: 3);
+        Assert.Equal(0.6 * Hole * Math.Sqrt(2 * 9.81 * (tank.Level - hole)), leak.Flow, precision: 6);
+
+        for (int i = 0; i < 400 * 200; i++) net.Step(0.005);
+        Assert.Equal(hole, tank.Level, precision: 6);
+        Assert.Equal(0, leak.Flow, precision: 9);
+        Assert.Equal(A * (H0 - hole), leak.Lost, precision: 6);
+    }
+
+    [Fact]
+    public void ALowerHoleLeaksFasterAndFurtherThanAHigherOne()
+    {
+        var (netLow, tankLow, low) = Barrel(0.10);
+        var (netHigh, tankHigh, high) = Barrel(0.40);
+        netLow.Step(0.005); netHigh.Step(0.005);
+        Assert.True(low.Flow > high.Flow);
+        for (int i = 0; i < 100 * 200; i++) { netLow.Step(0.005); netHigh.Step(0.005); }
+        Assert.True(tankLow.Level < tankHigh.Level);
+        for (int i = 0; i < 500 * 200; i++) { netLow.Step(0.005); netHigh.Step(0.005); }
+        Assert.Equal(0.10, tankLow.Level, precision: 6);
+        Assert.Equal(0.40, tankHigh.Level, precision: 6);
+    }
+
+    /// <summary>A catch tank under the jet gets every litre; when it is full the hole stops.</summary>
+    [Fact]
+    public void ACatchTankReceivesWhatLeavesAndLimitsTheLeakWhenFull()
+    {
+        var catchTank = new Tank("catch", 0, 0.5, 0.3);
+        var (net, tank, leak) = Barrel(0.10, catchTank);
+        for (int i = 0; i < 60 * 200; i++) net.Step(0.005);
+        Assert.Equal(A * H0, tank.WaterVolume + catchTank.WaterVolume, precision: 9);
+        Assert.Equal(leak.Lost, catchTank.WaterVolume, precision: 9);
+        for (int i = 0; i < 400 * 200; i++) net.Step(0.005);
+        Assert.Equal(catchTank.Capacity, catchTank.WaterVolume, precision: 9);   // 0.15 m³ < what the barrel would give: full first
+        Assert.Equal(A * H0, tank.WaterVolume + catchTank.WaterVolume, precision: 9);
+    }
+
+    [Fact]
+    public void APluggedHoleOrADryTankLeaksNothingAndASeepTakesAFixedVolumeUntilDry()
+    {
+        var (net, tank, leak) = Barrel(0.10);
+        leak.Area = 0;
+        net.Step(1);
+        Assert.Equal(A * H0, tank.WaterVolume, precision: 12);
+
+        var seepNet = new FluidNetwork();
+        var seep = seepNet.AddTank(new Tank("seep", 0, A, 1.0, waterVolume: 0.01));
+        var seepLeak = seepNet.AddLeak(new TankLeak(seep, 0, 0) { Evaporation = 1e-3 });
+        seepNet.Step(4);
+        Assert.Equal(0.01 - 4e-3, seep.WaterVolume, precision: 9);
+        seepNet.Step(20);
+        Assert.Equal(0, seep.WaterVolume, precision: 12);
+        Assert.Equal(0.01, seepLeak.Evaporated, precision: 9);
+    }
+}

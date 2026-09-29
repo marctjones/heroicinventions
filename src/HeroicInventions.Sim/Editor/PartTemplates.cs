@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -59,6 +59,14 @@ public static class PartTemplates
         // a float and plug in the tank that the feed #:on (an inflow, pipe or channel) fills
         "float-valve" => new PartSpec(id, "float-valve", material, at,
             new Dictionary<string, SExpr> { ["on"] = new SSymbol("?"), ["shut"] = new SNumber(0.2), ["travel"] = new SNumber(0.02) },
+            [], null),
+        // a hole in the wall of the tank #:on, #:height above its floor; #:into names a tank under its jet
+        "leak" => new PartSpec(id, "leak", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["on"] = new SSymbol("?"), ["height"] = new SNumber(0.1), ["area"] = new SNumber(0.0005),
+                ["coefficient"] = new SNumber(0.6), ["into"] = new SBool(false), ["evaporation"] = new SNumber(0),
+            },
             [], null),
         // an overshot wheel by default: 12 buckets; give it a #:race to drive it undershot
         "waterwheel" => new PartSpec(id, "waterwheel", material, at,

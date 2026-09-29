@@ -530,3 +530,65 @@
     (check-= (value-at run '(aqueduct flow) (+ t1 dt)) (* 1000 ch-feed (exp (- (/ dt tau)))) 0.002))
   (check-true (< (max-of run '(cistern level)) (* 100 ch-shut)) "it never overfills")
   (check-= (final-of run '(receiver water)) 0 1e-12 "the tap stays shut"))
+
+;; tank-leaks.rkt: 0.25 m2 barrels 80 cm full with a 5 cm2 hole (Cd 0.6)
+;; in the wall at 10 cm ("low") or 40 cm ("high"); "plugged" is a low hole
+;; into a 0.5 m2 catch tank, stopped at 100 s; "seep" loses 0.05 L/s from a
+;; 50 cm surface.
+(define lk-g 9.81)
+(define lk-area 0.25)
+(define lk-hole-area 5e-4)
+(define lk-h0 0.80)
+;; sqrt(h - hole) falls at Cd a sqrt(2g) / 2A
+(define lk-rate (/ (* 0.6 lk-hole-area (sqrt (* 2 lk-g))) (* 2 lk-area)))
+(define (leak-level hole t)
+  (define u (- (sqrt (- lk-h0 hole)) (* lk-rate t)))
+  (+ hole (if (> u 0) (* u u) 0)))
+(define (leak-flow head) (* 1000 0.6 lk-hole-area (sqrt (* 2 lk-g head))))   ; L/s
+;; the issue's T = (A_t / Cd A_o) sqrt(2H/g), H the water above the hole
+(define (drain-time hole) (* (/ lk-area (* 0.6 lk-hole-area)) (sqrt (/ (* 2 (- lk-h0 hole)) lk-g))))
+
+(test-case "Tank leaks: the level follows Torricelli's draw-down and stops at the hole, a lower hole leaking faster and further"
+  (define run (simulate 'tank-leaks #:seconds 400 #:step 0.01 #:sample-dt 1 #:set '((plug-hole area 0 100))))
+  (check-= (drain-time 0.10) 314.8 0.1 "the hand formula gives 314.8 s")
+  (check-= (drain-time 0.40) 238.0 0.1)
+  ;; outflow at the starting head (read after the first second, 1 mm lower)
+  (check-= (value-at run '(low-hole flow) 1) (leak-flow (- (leak-level 0.10 1) 0.10)) 0.005 "1.11 L/s under 70 cm")
+  (check-= (value-at run '(high-hole flow) 1) (leak-flow (- (leak-level 0.40 1) 0.40)) 0.005 "0.84 L/s under 40 cm")
+  (for ([t '(50 100 200 300)])
+    (check-= (value-at run '(low level) t) (* 100 (leak-level 0.10 t)) 0.02 (format "low at ~a s" t))
+    (check-= (value-at run '(high level) t) (* 100 (leak-level 0.40 t)) 0.02 (format "high at ~a s" t)))
+  ;; the outflow follows sqrt(head) and the head is read off the level
+  (check-= (value-at run '(low-hole flow) 200) (leak-flow (- (leak-level 0.10 200) 0.10)) 0.01)
+  ;; the same hole higher up leaks slower at the start, and at 100 s the lower barrel is lower
+  (check-true (> (value-at run '(low-hole flow) 1) (value-at run '(high-hole flow) 1)))
+  (check-true (< (value-at run '(low level) 100) (value-at run '(high level) 100)))
+  ;; both stop at their holes and stay there
+  (define t-low (drain-time 0.10))
+  (check-= (value-at run '(low level) (+ t-low 30)) 10 0.05 "held at the hole once it gets there")
+  (check-= (value-at run '(low level) 400) 10 0.05)
+  (check-= (value-at run '(low-hole flow) 400) 0 0.01 "no flow once the level reaches the hole")
+  (check-= (value-at run '(high level) 400) 40 0.05)
+  (check-true (> (value-at run '(low level) (- t-low 20)) 10.2) "still above the hole 20 s earlier")
+  ;; litres out = litres in the barrel lost, and the lower hole drains more
+  (check-= (final-of run '(low-hole lost)) (* 1000 lk-area (- lk-h0 0.10)) 0.05 "175 L")
+  (check-= (final-of run '(high-hole lost)) (* 1000 lk-area (- lk-h0 0.40)) 0.05 "100 L"))
+
+(test-case "Tank leaks: a leak into a catch tank is conserved, and a plugged hole holds the level"
+  (define run (simulate 'tank-leaks #:seconds 300 #:step 0.01 #:sample-dt 1 #:set '((plug-hole area 0 100))))
+  (define held (* 100 (leak-level 0.10 100)))
+  (for ([t '(50 100)])
+    (check-= (value-at run '(plugged level) t) (* 100 (leak-level 0.10 t)) 0.02)
+    (check-= (value-at run '(catch level) t) (* 100 (/ (* lk-area (- lk-h0 (leak-level 0.10 t))) 0.5)) 0.02
+             (format "the catch tank holds what left the barrel at ~a s" t)))
+  (check-= (value-at run '(plugged level) 300) held 0.02 "plugged at 100 s: it stays put")
+  (check-= (value-at run '(plug-hole flow) 200) 0 1e-9)
+  (check-= (value-at run '(plug-hole area) 200) 0 1e-12)
+  (check-= (+ (final-of run '(plugged water)) (* 1000 0.5 (/ (final-of run '(catch level)) 100)))
+           (* 1000 lk-area lk-h0) 1e-6 "every litre is somewhere"))
+
+(test-case "Tank leaks: a seep takes the same volume off the surface at any level"
+  (define run (simulate 'tank-leaks #:seconds 300 #:step 0.01 #:sample-dt 50))
+  (for ([t '(0 100 300)])
+    (check-= (value-at run '(seep level)  t) (* 100 (- 0.50 (/ (* 5e-5 t) lk-area))) 1e-6 "0.2 mm/s"))
+  (check-= (final-of run '(seep-hole evaporated)) 15 1e-6 "0.05 L/s for 300 s"))

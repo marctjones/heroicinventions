@@ -90,6 +90,7 @@ public partial class MachineView : Node3D
         BuildLifts();
         BuildChannels();
         BuildFloatValves();
+        BuildLeaks();
         BuildPistonDrives();
         Refresh();
 
@@ -1158,6 +1159,7 @@ public partial class MachineView : Node3D
         DrawCounterpoises();
         DrawBearingPendulums();
         DrawFloatValves();
+        DrawLeaks();
     }
 
     public void ToggleFire()
@@ -1181,6 +1183,8 @@ public partial class MachineView : Node3D
             foreach (var (id, src) in Runtime.Sources) bits.Add($"{id} brings {src.Flow * 1000:0.#} L/s");
             foreach (var (id, (v, flow)) in Runtime.FloatValves)
                 bits.Add($"{id} {v.Opening * 100:F0}% open, {flow() * 1000:F2} L/s, holding {v.Tank.Name} at {v.Tank.Level * 100:F2} cm (shuts at {v.ShutLevel * 100:0.#})");
+            foreach (var (id, l) in Runtime.Leaks)
+                bits.Add($"{id} {l.Flow * 1000:F2} L/s, {l.Head * 100:F1} cm over the hole, {l.Lost * 1000:F1} L out" + (l.Evaporation > 0 ? $", {l.Evaporated * 1000:F1} L seeped" : ""));
             foreach (var (id, c) in Runtime.Channels) bits.Add($"{id} {c.Flow * 1000:0.#} L/s, {c.Depth * 100:0.#} cm deep at {c.Velocity:F2} m/s");
             foreach (var air in Runtime.AirPockets) bits.Add($"air {air.GaugePressure / 1000:F2} kPa");
             foreach (var (pipe, _, _) in _jets) bits.Add($"{pipe.Name} jet {(pipe.Flow > 0 ? pipe.JetHeight * 100 : 0):F1} cm");

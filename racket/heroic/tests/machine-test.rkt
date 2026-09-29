@@ -97,3 +97,26 @@
     (inflow aqueduct #:into cistern #:flow 0.002)
     (float-valve ball #:on aqueduct #:shut 0.4 #:travel 0.02)
     (float-valve cork #:on aqueduct #:shut 0.3 #:travel 0.02)))
+
+(test-case "a leak is a hole in a tank's wall"
+  (check-compile-error #rx"pier is not a tank"
+    (post pier #:at (0 0 0) #:size (1 1 1) #:material oak)
+    (leak hole #:on pier #:height 0.1 #:area 0.0005))
+  (check-compile-error #rx"jar is not a tank; a leak can only run #:into a tank"
+    (tank cask #:at (0 0 0) #:area 0.25 #:height 1)
+    (post jar #:at (1 0 0) #:size (1 1 1) #:material oak)
+    (leak hole #:on cask #:height 0.1 #:area 0.0005 #:into jar))
+  (check-compile-error #rx"cannot run into its own tank"
+    (tank cask #:at (0 0 0) #:area 0.25 #:height 1)
+    (leak hole #:on cask #:height 0.1 #:area 0.0005 #:into cask)))
+
+;; a leak's numbers are checked when the machine is built, not when it expands
+(test-case "a leak's height must be in the wall and it must leak something"
+  (define (build . clauses)
+    (parameterize ([current-namespace (make-base-namespace)])
+      (eval `(module leaky heroic (define-machine leaky ,@clauses)))
+      (dynamic-require ''leaky #f)))
+  (define cask '(tank cask #:at (0 0 0) #:area 0.25 #:height 1))
+  (check-exn #rx"height 1.5 is not in cask's wall" (λ () (build cask '(leak hole #:on cask #:height 1.5 #:area 0.0005))))
+  (check-exn #rx"leaks nothing" (λ () (build cask '(leak hole #:on cask #:height 0.1))))
+  (check-not-exn (λ () (build cask '(leak hole #:on cask #:height 0.1 #:evaporation 0.00005)))))

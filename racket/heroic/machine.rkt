@@ -16,7 +16,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve
+         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -118,9 +118,36 @@
           (struct-copy part p [at (list tx (+ ty (prop 'shut)) tz)])])]
       [else p])))
 
+;; A leak with no #:at is drilled through the wall of its tank, on the
+;; +x side at its height.
+(define (place-leaks parts)
+  (for/list ([p parts])
+    (cond
+      [(eq? (part-kind p) 'leak)
+       (define (prop k) (cdr (assq k (part-props p))))
+       (define loc (part-loc p))
+       (define (bad what)
+         (error 'define-machine "~a:~a:~a: leak ~a: ~a"
+                (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+       (define tank (for/first ([t parts] #:when (eq? (part-id t) (prop 'on))) t))
+       (define (tank-prop k) (cdr (assq k (part-props tank))))
+       (unless (and (real? (prop 'area)) (>= (prop 'area) 0)) (bad (format "#:area must be a length squared, 0 or more, got ~e" (prop 'area))))
+       (unless (and (real? (prop 'coefficient)) (> (prop 'coefficient) 0) (<= (prop 'coefficient) 1))
+         (bad (format "#:coefficient must be in (0, 1], got ~e" (prop 'coefficient))))
+       (unless (and (real? (prop 'evaporation)) (>= (prop 'evaporation) 0)) (bad (format "#:evaporation must be a flow, 0 or more, got ~e" (prop 'evaporation))))
+       (unless (> (+ (prop 'area) (prop 'evaporation)) 0) (bad "needs an #:area or an #:evaporation, or it leaks nothing"))
+       (unless (and (real? (prop 'height)) (<= 0 (prop 'height) (tank-prop 'height)))
+         (bad (format "#:height ~e is not in ~a's wall, 0 to ~e" (prop 'height) (part-id tank) (tank-prop 'height))))
+       (cond
+         [(part-at p) p]
+         [else
+          (define-values (tx ty tz) (apply values (part-at tank)))
+          (struct-copy part p [at (list (+ tx (/ (sqrt (tank-prop 'area)) 2)) (+ ty (prop 'height)) tz)])])]
+      [else p])))
+
 (define (make-machine name source items)
   (machine name source
-           (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)
+           (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -148,7 +175,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -189,6 +216,7 @@
   (struct hinfo (id heats))          ; a hearth: the boiler it heats
   (struct sinfo (id on))             ; a sluice gate: the channel it stands across
   (struct fvinfo (id feed mat))      ; a float valve: the inflow, pipe or channel it throttles
+  (struct lkinfo (id on into mat))   ; a leak: the tank it is in, the tank under it (or #f)
   (struct cpinfo (id vessel))        ; a counterpoise: the tank that hangs from it
   (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
   (struct chinfo (id from to onto))  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
@@ -234,7 +262,7 @@
 
   (define-syntax-class clause
     #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice, waterwheel, counterpoise, float-valve) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -592,6 +620,31 @@
                           '()
                           #,(loc-of this-syntax)))
 
+    ;; A hole in the wall of tank #:on, #:height (m) above its floor,
+    ;; #:area (m2) across: water leaves as an orifice jet, Q = Cd A
+    ;; sqrt(2 g h), h the water above the hole, until the level falls to the
+    ;; hole. #:coefficient is Cd (default 0.6). The jet falls to the ground
+    ;; unless a tank #:into stands under it. #:evaporation (m3/s, e.g.
+    ;; (L/s 0.0001)) is a seep off the surface, taken while any water is
+    ;; left; a leak may have either or both. #:at defaults to the tank's +x
+    ;; wall at that height. Set (hole area cm2) at run time to plug it (0).
+    (pattern (leak id:id
+                   (~alt (~once (~seq #:on tank-id:id))
+                         (~once (~seq #:height height-v:expr))
+                         (~optional (~seq #:area area-v:expr))
+                         (~optional (~seq #:coefficient cd-v:expr))
+                         (~optional (~seq #:into catch:id))
+                         (~optional (~seq #:evaporation evap-v:expr))
+                         (~optional (~seq #:at at:vec3))
+                         (~optional (~seq #:material mat:id))) ...)
+      #:attr info (lkinfo #'id #'tank-id (attribute catch) (attribute mat))
+      #:with expr #`(part 'id 'leak '(~? mat oak) (~? (list at.x at.y at.z) #f)
+                          (list (cons 'on 'tank-id) (cons 'height height-v) (cons 'area (~? area-v 0))
+                                (cons 'coefficient (~? cd-v 0.6)) (cons 'into '(~? catch #f))
+                                (cons 'evaporation (~? evap-v 0)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     ;; A rope (or chain) between two parts. It only pulls, never pushes: it
     ;; goes slack when its ends come closer than its length. Each end is a
     ;; point on a part, in that part's own frame — (arm 0.9 0 0) is 0.9 m
@@ -925,6 +978,20 @@
         (fail (format "~a already has a float valve" feed) (fvinfo-feed v)))
       (hash-set! valved feed #t)
       (define mat (fvinfo-mat v))
+      (when (and mat (not (memq (syntax-e mat) known-materials)))
+        (fail (format "unknown material ~a" (syntax-e mat)) mat)))
+
+    (for ([l infos] #:when (lkinfo? l))
+      (define (tank-named? id) (let ([p (hash-ref parts (syntax-e id) #f)]) (and p (eq? (pinfo-kind p) 'tank))))
+      (unless (tank-named? (lkinfo-on l))
+        (fail (format "~a is not a tank; a leak is a hole in a tank's wall" (syntax-e (lkinfo-on l))) (lkinfo-on l)))
+      (define into (lkinfo-into l))
+      (when into
+        (unless (tank-named? into)
+          (fail (format "~a is not a tank; a leak can only run #:into a tank" (syntax-e into)) into))
+        (when (eq? (syntax-e into) (syntax-e (lkinfo-on l)))
+          (fail "a leak cannot run into its own tank" into)))
+      (define mat (lkinfo-mat l))
       (when (and mat (not (memq (syntax-e mat) known-materials)))
         (fail (format "unknown material ~a" (syntax-e mat)) mat)))
 
