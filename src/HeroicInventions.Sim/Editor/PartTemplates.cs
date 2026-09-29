@@ -1,0 +1,88 @@
+using HeroicInventions.Sim.Machines;
+
+namespace HeroicInventions.Sim.Editor;
+
+/// <summary>
+/// Builds a freshly-placed <see cref="PartSpec"/> for one of the part kinds
+/// the palette offers, with the same default values machine.rkt's clause
+/// patterns give an omitted keyword argument (a tank's #:water defaults to
+/// 0, a lever's #:damping to 8.0, and so on) — so a part the editor places
+/// behaves exactly like the equivalent hand-written Racket clause would.
+///
+/// The "primitive" kinds (tank, boiler, block, pendulum, lever, ramp,
+/// piston) need no mesh: MachineView builds their geometry straight from
+/// these props. The catalogue kinds (wheel, screw, fixture) carry a
+/// generated mesh's numbers instead, taken from a <see cref="CatalogueEntry"/>
+/// rather than invented here, since only Racket can compute a gear's exact
+/// volume and inertia.
+/// </summary>
+public static class PartTemplates
+{
+    /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston"];
+
+    public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
+    {
+        "tank" => new PartSpec(id, "tank", material, at,
+            Props(("area", 0.05), ("height", 0.3), ("water", 0)),
+            [new PortSpec("inlet", "water", 0), new PortSpec("outlet", "water", 0)],
+            null),
+        "boiler" => new PartSpec(id, "boiler", material, at,
+            Props(("radius", 0.15), ("height", 0.3), ("water", 0.01), ("fire", 0), ("temperature", 20)),
+            [new PortSpec("steam", "steam", 0.3)],
+            null),
+        "block" => new PartSpec(id, "block", material, at, Props(("size", 0.1), ("tilt-deg", 0)), [], null),
+        "pendulum" => new PartSpec(id, "pendulum", material, at, Props(("length", 0.5), ("start-angle-deg", 30)), [], null),
+        "lever" => new PartSpec(id, "lever", material, at,
+            Props(("length", 1.0), ("start-angle-deg", 0), ("pivot-fraction", 0.5), ("limit-deg", 18),
+                  ("damping", 8.0), ("spring-stiffness", 0), ("spring-rest-deg", 0))
+                .Concat([new KeyValuePair<string, SExpr>("axis", new SSymbol("z")),
+                         new KeyValuePair<string, SExpr>("limit-lower-deg", new SBool(false)),
+                         new KeyValuePair<string, SExpr>("limit-upper-deg", new SBool(false)),
+                         new KeyValuePair<string, SExpr>("section", new SBool(false))])
+                .ToDictionary(kv => kv.Key, kv => kv.Value),
+            [], null),
+        "ramp" => new PartSpec(id, "ramp", material, at, Props(("length", 1.0), ("width", 0.5), ("angle-deg", 15)), [], null),
+        "piston" => new PartSpec(id, "piston", material, at, Props(("bore", 0.1), ("stroke", 0.3), ("start", 0), ("rod-mass", 0)), [], null),
+        _ => throw new ArgumentException($"not a primitive part kind: {kind}; catalogue kinds are placed from a CatalogueEntry instead"),
+    };
+
+    /// <summary>
+    /// A wheel/screw/fixture part from a catalogue entry — the same shape
+    /// props emit.rkt writes for a machine-authored shaped part (shape,
+    /// mesh, volume, inertia-x/y/z, then the shape's own props), plus the
+    /// clause-specific defaults (machine.rkt's #:axis, #:drive-rpm, ...).
+    /// </summary>
+    public static PartSpec Create(CatalogueEntry entry, string id, Vec3 at, string material)
+    {
+        var props = new Dictionary<string, SExpr>
+        {
+            ["shape"] = new SSymbol(entry.ShapeKind),
+            ["mesh"] = new SString(entry.MeshStem),
+            ["volume"] = new SNumber(entry.Volume),
+            ["inertia-x"] = new SNumber(entry.Inertia.X),
+            ["inertia-y"] = new SNumber(entry.Inertia.Y),
+            ["inertia-z"] = new SNumber(entry.Inertia.Z),
+        };
+        foreach (var (k, v) in entry.ShapeProps) props[k] = v;
+        foreach (var (k, v) in entry.PartKind switch
+                 {
+                     "wheel" => Props(("axis", "z"), ("angle-deg", 0), ("drive-rpm", 0)).Append(new("drive-torque", new SBool(false))),
+                     "screw" => Props(("tilt-deg", 0), ("drive-rpm", 0)).Append(new("drive-torque", new SBool(false))),
+                     _ => Props(("turn-deg", 0)),
+                 })
+            props[k] = v;
+        return new PartSpec(id, entry.PartKind, material, at, props, [], null);
+    }
+
+    private static Dictionary<string, SExpr> Props(params (string Key, object Value)[] items) =>
+        items.ToDictionary(kv => kv.Key, kv => ToSExpr(kv.Value));
+
+    private static SExpr ToSExpr(object v) => v switch
+    {
+        SExpr e => e,
+        string s => new SSymbol(s),
+        bool b => new SBool(b),
+        _ => new SNumber(Convert.ToDouble(v)),
+    };
+}

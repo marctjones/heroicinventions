@@ -1,0 +1,247 @@
+using HeroicInventions.Sim.Editor;
+using HeroicInventions.Sim.Fluids;
+using HeroicInventions.Sim.Machines;
+using HeroicInventions.Sim.Materials;
+
+namespace HeroicInventions.Sim.Tests;
+
+/// <summary>
+/// BuildSession: the command layer under the editor's UI. Every test here
+/// drives the session the same way a text console or the palette/drag-drop
+/// UI would — one command string at a time — so it also documents the
+/// command language. See BuildSession's class comment for the full grammar.
+/// </summary>
+public class BuildSessionTests
+{
+    private static readonly MaterialLibrary Materials = MaterialLibrary.LoadDefault();
+
+    private static BuildSession NewSession(string dir) =>
+        new(Materials, catalogue: [], machinesDir: dir);
+
+    private static string TempDir()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "heroic-editor-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    [Fact]
+    public void UnitsAcceptTheWhitelistAndRejectAnythingElse()
+    {
+        Assert.Equal(1.2, Units.Parse("1.2m", "test"));
+        Assert.Equal(0.8, Units.Parse("80cm", "test"));
+        Assert.Equal(0.5, Units.Parse("500L/s", "test"));
+        Assert.Equal(3000, Units.Parse("3kW", "test"));
+        Assert.Equal(5, Units.Parse("5", "test")); // bare number, already SI
+        Assert.Throws<FormatException>(() => Units.Parse("12furlongs", "test"));
+    }
+
+    /// <summary>The verification the owner asked for: a command script builds tank + pipe + tank, (run)s it, and water moves by the predicted amount.</summary>
+    [Fact]
+    public void TankPipeTankScriptMovesWaterByThePredictedAmount()
+    {
+        var session = NewSession(TempDir());
+        session.Execute("(tank high #:at (0 1.0 0) #:area 1.0 #:height 1.0 #:water 0.3)");
+        session.Execute("(tank low #:at (3 0.0 0) #:area 1.0 #:height 1.0)");
+        session.Execute("(pipe p1 high.outlet low.inlet #:conductance 0.02)");
+
+        string checkResult = session.Execute("(check)");
+        Assert.StartsWith("ok:", checkResult);
+
+        session.Execute("(run 2)");
+        Assert.NotNull(session.LastRun);
+
+        var predicted = new FluidNetwork();
+        var pHigh = predicted.AddTank(new Tank("high", 1.0, 1.0, 1.0, 0.3));
+        var pLow = predicted.AddTank(new Tank("low", 0.0, 1.0, 1.0, 0.0));
+        predicted.AddPipe(new Pipe("p1", pHigh, 1.0, pLow, 0.0, 0.02));
+        for (int i = 0; i < 200; i++) predicted.Step(0.01);
+
+        Assert.Equal(pHigh.WaterVolume, session.LastRun!.Tanks["high"].WaterVolume, precision: 9);
+        Assert.Equal(pLow.WaterVolume, session.LastRun!.Tanks["low"].WaterVolume, precision: 9);
+        Assert.True(pLow.WaterVolume > 0.01, "the prediction itself should show a clear flow");
+    }
+
+    /// <summary>A second link type: (inflow) feeding a weir pool that spills over a (channel) — water should move at the weir-formula rate, not just "some".</summary>
+    [Fact]
+    public void InflowAndChannelScriptMovesWaterAtTheWeirRate()
+    {
+        var session = NewSession(TempDir());
+        session.Execute("(tank pool #:at (0 0 0) #:area 4.0 #:height 1.6 #:water 5.0)");
+        session.Execute("(set pool #:water 5.412)"); // exercise (set) too
+        session.Execute("(tank river #:at (6.0 0.0 0.0) #:area 30.0 #:height 1.0)");
+        session.Execute("(inflow upstream #:into pool #:flow 0.5)");
+        session.Execute("(channel race pool.outlet river.inlet #:width 1.2)");
+
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 5)");
+
+        // Independent prediction: the same Fluids/OpenChannel classes,
+        // stepped in the same order MachineRuntime.Step uses (sources then
+        // channels every 0.01s substep), built straight from the numbers
+        // the commands above described — not by re-running the code under test.
+        var poolTank = new Tank("pool", 0, 4.0, 1.6, 5.412);
+        var riverTank = new Tank("river", 0, 30.0, 1.0, 0);
+        var source = new WaterSource("upstream", poolTank, 0.5);
+        var doc = session.Document;
+        double outletHeight = doc.Parts["pool"].Ports.First(p => p.Name == "outlet").Height;
+        double inletHeight = doc.Parts["river"].Ports.First(p => p.Name == "inlet").Height;
+        var channel = new Channel("race", poolTank, outletHeight, riverTank, inletHeight, 1.2,
+            length: Math.Max(0.1, 6.0 - Math.Sqrt(4.0) / 2 - Math.Sqrt(30.0) / 2));
+        for (int i = 0; i < 500; i++)
+        {
+            for (int s = 0; s < 1; s++) { source.Step(0.01); channel.Step(0.01); }
+        }
+
+        Assert.True(riverTank.WaterVolume > 0.01, "the prediction itself should show a clear flow");
+        Assert.Equal(riverTank.WaterVolume, session.LastRun!.Tanks["river"].WaterVolume, precision: 6);
+    }
+
+    [Fact]
+    public void UndoRestoresTheExactPriorStateAndRedoReplaysIt()
+    {
+        var session = NewSession(TempDir());
+        session.Execute("(tank a #:at (0 0 0) #:area 1.0 #:height 1.0)");
+        string beforeMove = MachineWriter.Write(session.Document.ToMachineDef());
+
+        session.Execute("(move a (5 0 0))");
+        Assert.Equal(5.0, session.Document.Parts["a"].At.X);
+
+        session.Execute("(undo)");
+        Assert.Equal(0.0, session.Document.Parts["a"].At.X);
+        Assert.Equal(beforeMove, MachineWriter.Write(session.Document.ToMachineDef()));
+
+        session.Execute("(redo)");
+        Assert.Equal(5.0, session.Document.Parts["a"].At.X);
+    }
+
+    [Fact]
+    public void UndoAlsoUndoesPlacingAndRemovingParts()
+    {
+        var session = NewSession(TempDir());
+        session.Execute("(tank a #:at (0 0 0) #:area 1.0 #:height 1.0)");
+        session.Execute("(tank b #:at (1 0 0) #:area 1.0 #:height 1.0)");
+        session.Execute("(remove a)");
+        Assert.False(session.Document.Parts.ContainsKey("a"));
+
+        session.Execute("(undo)"); // undoes the remove
+        Assert.True(session.Document.Parts.ContainsKey("a"));
+
+        session.Execute("(undo)"); // undoes placing b
+        Assert.False(session.Document.Parts.ContainsKey("b"));
+
+        session.Execute("(undo)"); // undoes placing a
+        Assert.Empty(session.Document.Parts);
+    }
+
+    [Fact]
+    public void UndoWithNothingToUndoRefuses() =>
+        Assert.Throws<InvalidOperationException>(() => NewSession(TempDir()).Execute("(undo)"));
+
+    [Fact]
+    public void SnapPicksAPipeForTwoWaterPortsAndRefusesIncompatibleOnes()
+    {
+        var session = NewSession(TempDir());
+        session.Execute("(tank a #:at (0 0 0) #:area 1.0 #:height 1.0)");
+        session.Execute("(tank b #:at (1 0 0) #:area 1.0 #:height 1.0)");
+        session.Execute("(boiler k #:at (2 0 0) #:radius 0.15 #:height 0.3 #:water 0.01)");
+
+        session.Execute("(snap a.outlet b.inlet)");
+        Assert.Single(session.Document.Pipes);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => session.Execute("(snap a.outlet k.steam)"));
+        Assert.Contains("water", ex.Message);
+    }
+
+    [Fact]
+    public void CheckReportsAMachineFormatExceptionWithLocationForABadReference()
+    {
+        var session = NewSession(TempDir());
+        session.Execute("(tank a #:at (0 0 0) #:area 1.0 #:height 1.0)");
+        session.Execute("(pipe bad a.outlet nowhere.inlet #:conductance 0.001)");
+        string result = session.Execute("(check)");
+        Assert.StartsWith("error:", result);
+        Assert.Contains("nowhere", result);
+    }
+
+    [Fact]
+    public void SaveThenLoadByNameRoundTrips()
+    {
+        string dir = TempDir();
+        var session = NewSession(dir);
+        session.Execute("(tank a #:at (0 0 0) #:area 1.0 #:height 1.0 #:water 0.2)");
+        session.Execute("(save bench)");
+        Assert.True(File.Exists(Path.Combine(dir, "bench.machine")));
+
+        var session2 = NewSession(dir);
+        session2.Execute("(load bench)");
+        Assert.Equal(0.2, ((SNumber)session2.Document.Parts["a"].Props["water"]).Value);
+    }
+
+    [Fact]
+    public void SetMaterialChangesAPartsMaterial()
+    {
+        var session = NewSession(TempDir());
+        session.Execute("(tank a #:at (0 0 0) #:area 1.0 #:height 1.0)");
+        session.Execute("(set a #:material oak)");
+        Assert.Equal("oak", session.Document.Parts["a"].Material);
+    }
+
+    [Fact]
+    public void PaletteListsThePrimitiveKinds()
+    {
+        string result = NewSession(TempDir()).Execute("(palette)");
+        Assert.Contains("tank", result);
+        Assert.Contains("boiler", result);
+    }
+
+    [Fact]
+    public void TheCommandLogRecordsEveryCommandInOrder()
+    {
+        var session = NewSession(TempDir());
+        session.Execute("(tank a #:at (0 0 0) #:area 1.0 #:height 1.0)");
+        session.Execute("(move a (1 0 0))");
+        Assert.Equal(["(tank a #:at (0 0 0) #:area 1.0 #:height 1.0)", "(move a (1 0 0))"], session.CommandLog);
+    }
+
+    /// <summary>Every .machine file the game ships, loaded and saved right back by name, unchanged in every field that matters — see MachineWriterTests for the field-by-field comparison this reuses.</summary>
+    public static IEnumerable<object[]> AllMachineFiles() =>
+        Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "machines"), "*.machine").Select(f => new object[] { Path.GetFileNameWithoutExtension(f) });
+
+    [Theory]
+    [MemberData(nameof(AllMachineFiles))]
+    public void LoadThenSaveRoundTripsEveryShippedMachine(string name)
+    {
+        string srcDir = Path.Combine(AppContext.BaseDirectory, "machines");
+        string dstDir = TempDir();
+        var session = NewSession(srcDir);
+        session.Execute($"(load {name})");
+        var loaded = session.Document.ToMachineDef();
+
+        var savePath = Path.Combine(dstDir, name + ".machine");
+        session.SaveFile(savePath);
+        var reparsed = MachineDef.Parse(File.ReadAllText(savePath));
+
+        Assert.Equal(loaded.Name, reparsed.Name);
+        Assert.Equal(loaded.Parts.Count, reparsed.Parts.Count);
+        Assert.Equal(loaded.Pipes.Count, reparsed.Pipes.Count);
+        Assert.Equal(loaded.Connects.Count, reparsed.Connects.Count);
+        Assert.Equal(loaded.SealedAir.Count, reparsed.SealedAir.Count);
+    }
+
+    [Fact]
+    public void ExportsRacketSourceForPrimitiveParts()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "bench");
+        session.Execute("(tank a #:at (0 1 0) #:area 1.0 #:height 1.0 #:water 0.2)");
+        session.Execute("(tank b #:at (0 0 0) #:area 1.0 #:height 1.0)");
+        session.Execute("(pipe p1 a.outlet b.inlet #:conductance 0.01)");
+        string path = Path.Combine(TempDir(), "bench.rkt");
+        session.ExportRkt(path);
+        string text = File.ReadAllText(path);
+        Assert.StartsWith("#lang heroic", text);
+        Assert.Contains("(define-machine bench", text);
+        Assert.Contains("(tank a ", text);
+        Assert.Contains("(pipe p1 a.outlet b.inlet", text);
+    }
+}
