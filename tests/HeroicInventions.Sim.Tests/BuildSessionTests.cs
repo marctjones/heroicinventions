@@ -407,6 +407,24 @@ public class BuildSessionTests
     /// burn rate by the ratio its forced air adds over the hearth's own
     /// natural draught; round-trips through .machine and exports as Racket.
     /// </summary>
+    [Fact]
+    public void AmbientIsASceneSettingThatUndoesAndExports()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "frost");
+        session.Execute("(tank pond #:at (0 0 0) #:area 1 #:height 1 #:water 0.5)");
+        session.Execute("(ambient -10)");
+        Assert.Equal(-10, session.Document.Ambient);
+        session.Execute("(run 3600)");
+        Assert.True(session.LastRun!.Tanks["pond"].Ice > 0.02);
+
+        string rkt = Path.Combine(TempDir(), "frost.rkt");
+        session.ExportRkt(rkt);
+        Assert.Contains("#:ambient -10\n", File.ReadAllText(rkt));
+
+        session.Execute("(undo)");
+        Assert.Equal(20, session.Document.Ambient);
+    }
+
     /// <summary>
     /// A bollard placed from the palette with nobody holding the rope lets the
     /// load fall; given one turn and a pull inside the capstan band it holds.

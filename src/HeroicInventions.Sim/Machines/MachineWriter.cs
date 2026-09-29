@@ -21,6 +21,7 @@ public static class MachineWriter
     {
         var clauses = new List<SExpr>();
         if (m.Source is { } src) clauses.Add(Tagged("source", new SString(src)));
+        if (m.Ambient != 20) clauses.Add(Tagged("ambient", new SNumber(m.Ambient)));
         foreach (var p in m.Parts) clauses.Add(PartClause(p));
         foreach (var p in m.Pipes) clauses.Add(PipeClause(p));
         foreach (var c in m.Connects) clauses.Add(ConnectClause(c));
@@ -110,10 +111,10 @@ public static class MachineWriter
             SrcLoc(c.Location));
 
     private static SExpr CylinderClause(CylinderSpec c) =>
-        Tagged("atmospheric-cylinder", Sym(c.Id),
+        Tagged("atmospheric-cylinder", [Sym(c.Id),
             Tagged("piston", Sym(c.Piston)), Tagged("steam-from", Sym(c.Boiler)),
-            Tagged("injection-temperature", Num(c.InjectionTemperature)),
-            SrcLoc(c.Location));
+            .. c.InjectionTemperature is { } inj ? [Tagged("injection-temperature", Num(inj))] : Array.Empty<SExpr>(),
+            SrcLoc(c.Location)]);
 
     private static SExpr LiftClause(LiftSpec l) =>
         Tagged("lift", Sym(l.Id),

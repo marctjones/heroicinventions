@@ -18,7 +18,7 @@ namespace HeroicInventions.Sim.Thermo;
 /// A bellows (<see cref="Airflow"/>, m³/s) forces extra air into the fire.
 /// The steady burn rate power/density already implies a natural draught —
 /// the air it draws on its own, power/density × <see cref="AirFuelRatio"/>
-/// — so the bellows' own air (its volume × <see cref="Physics.AirDensity"/>)
+/// — so the bellows' own air (its volume × <see cref="AirDensity"/>)
 /// is that much more air than the fire draws unforced. <see cref="Draught"/>
 /// scales the burn rate by that ratio: total air ÷ natural air alone. It
 /// only ever raises how fast the fuel burns (and so, while any is left,
@@ -45,11 +45,14 @@ public sealed class Hearth(IHeated target, double powerW, double fuelKg, string 
         _ => throw new ArgumentException($"unknown fuel {kind} (wood, charcoal, coal)"),
     };
 
-    /// <summary>Water poured on a fire arrives at this temperature, °C.</summary>
-    public const double WaterTemperature = 20;
+    /// <summary>The air round the fire, °C: water poured on it arrives at this (or at 0 °C, just thawed, if it is freezing).</summary>
+    public double AmbientTemperature { get; set; } = 20;
+    public double WaterTemperature => Math.Max(0, AmbientTemperature);
+    /// <summary>The air the fire draws, kg/m³: a bellows forcing cold dense air in feeds it more by mass.</summary>
+    public double AirDensity => Physics.AirDensityAt(AmbientTemperature);
 
     /// <summary>Heat to take a kilogram of that water to steam, J/kg.</summary>
-    public static double QuenchHeat =>
+    public double QuenchHeat =>
         Physics.WaterSpecificHeat * (100 - WaterTemperature) + Physics.LatentHeatVaporization;
 
     public IHeated Target { get; } = target;
@@ -72,7 +75,7 @@ public sealed class Hearth(IHeated target, double powerW, double fuelKg, string 
         get
         {
             double naturalAir = Power / EnergyDensity(FuelKind) * AirFuelRatio(FuelKind); // kg/s air the nominal burn rate already draws
-            double bellowsAir = Physics.AirDensity * Airflow;                             // kg/s a bellows adds
+            double bellowsAir = AirDensity * Airflow;                                     // kg/s a bellows adds
             return (naturalAir + bellowsAir) / naturalAir;
         }
     }

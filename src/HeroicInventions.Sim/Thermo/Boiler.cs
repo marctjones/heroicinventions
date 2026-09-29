@@ -18,7 +18,8 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
     public double WaterMass { get; private set; } = waterMassKg; // kg
     public double Temperature { get; private set; } = temperatureC; // °C
     public double HeatInput { get; set; } = heatInputW;             // W, from the fire
-    public double HeatLossCoefficient { get; init; } = 2.0;         // W/K to surrounding air at 20 °C
+    public double HeatLossCoefficient { get; init; } = 2.0;         // W/K to the surrounding air
+    public double AmbientTemperature { get; set; } = 20;           // °C of that air: with no fire it cools towards this (Newton)
     public double HeatDelivered { get; private set; }               // J, cumulative — the energy-dashboard's "input" term
     public double HeatLost { get; private set; }                    // J, cumulative, to the air
 
@@ -47,7 +48,7 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
         foreach (var v in Valves) { v.Opening = 0; v.Flow = 0; }
         if (IsDry) return;
         double steamOut = Math.Min(steamOutflowKgPerS * dt, WaterMass);
-        double lost = HeatLossCoefficient * (Temperature - 20) * dt;
+        double lost = HeatLossCoefficient * (Temperature - AmbientTemperature) * dt;
         HeatLost += lost;
         double netHeat = HeatInput * dt - lost - steamOut * Physics.LatentHeatVaporization;
         if (Valves.Count > 0)
@@ -58,7 +59,7 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
         }
         WaterMass -= steamOut;
         if (WaterMass > 0)
-            Temperature += netHeat / (WaterMass * Physics.WaterSpecificHeat);
+            Temperature = Math.Max(0, Temperature + netHeat / (WaterMass * Physics.WaterSpecificHeat)); // freezing a boiler isn't modelled: in a frost it stops at 0 °C
         if (BurstPressure > 0 && GaugePressure >= BurstPressure) BurstNow();
     }
 

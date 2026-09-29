@@ -205,6 +205,32 @@
   (check-= (final-of run '(one-turn held)) 0 1e-9)
   (check-= (final-of run '(one-turn speed)) -0.060861 1e-6))
 
+(test-case "Winter night: a copper cools to the ambient by Newton's law, and ice grows as the square root of time"
+  ;; C = 5 x 4186 = 20930 J/K, k = 2 W/K, tau = C/k = 10465 s:
+  ;;   T = -10 + 100 exp(-3600/10465) = 60.8926 C after an hour
+  ;; Stefan: h = sqrt(2 x 2.22 x 10 x 3600 / (917 x 334000)) = 22.8447 mm,
+  ;; taking 22.8447 x 0.917 = 20.9486 L of the cistern's 500 L: 479.0514 L left.
+  (define run (simulate 'winter-night #:seconds 3600 #:step 0.1 #:sample-dt 600))
+  (check-= (final-of run '(scene ambient)) -10 1e-12)
+  (check-= (final-of run '(scene air-density)) 1.341392 1e-6 "101325 / (287.05 x 263.15)")
+  (check-= (final-of run '(copper temperature)) 60.8926 1e-3)
+  (check-= (final-of run '(cistern ice)) 22.8447 1e-3)
+  (check-= (final-of run '(cistern water)) 479.0514 1e-3)
+  (check-= (final-of run '(seep evaporated)) 0 1e-12 "iced over: nothing evaporates")
+  ;; four hours: twice as thick (sqrt 4)
+  (define later (simulate 'winter-night #:seconds 14400 #:step 0.5 #:sample-dt 3600))
+  (check-= (final-of later '(cistern ice)) (* 2 22.8447) 2e-3))
+
+(test-case "Winter night, moved indoors and into summer: the same copper in a 20 C room, the seep at 30 C"
+  ;; at 20 C: T = 20 + 70 exp(-3600/10465) = 69.6248 C; no ice.
+  (define room (simulate 'winter-night #:seconds 3600 #:step 0.1 #:sample-dt 600 #:set '((scene ambient 20))))
+  (check-= (final-of room '(copper temperature)) 69.6248 1e-3)
+  (check-= (final-of room '(cistern ice)) 0 1e-12)
+  (check-= (final-of room '(seep evaporated)) 3.6 1e-6 "0.001 L/s at 20 C, for an hour")
+  ;; at 30 C the seep runs as water's vapour pressure: p_sat(30)/p_sat(20) = 1.816500 (Antoine)
+  (define summer (simulate 'winter-night #:seconds 1000 #:step 0.1 #:sample-dt 500 #:set '((scene ambient 30))))
+  (check-= (final-of summer '(seep evaporated)) 1.816500 1e-5))
+
 (test-case "Windmills: stones set for a lighter wind let the sails run fast and take less of it"
   ;; The gale mill ground against the breeze mill's 8170.95 N m, a 4/9 of
   ;; its own tau0: lambda = 2.5 (2 - 4/9) = 3.8889, omega = 3.8889 x 9/10 =

@@ -33,6 +33,7 @@ public sealed class Windmill(string name, double radius, double momentOfInertia)
     public double MomentOfInertia { get; } = momentOfInertia; // kg·m²
     public double Wind { get; set; }                          // m/s through the sails
     public double Load { get; set; }                          // N·m the millstone resists with while turning
+    public double AirDensity { get; set; } = Physics.AirDensity; // kg/m³: cold air is denser and carries more power
 
     private readonly double _cpMax = 0.3;
     public double CpMax
@@ -53,7 +54,7 @@ public sealed class Windmill(string name, double radius, double momentOfInertia)
 
     public double SweptArea => Math.PI * Radius * Radius;
     /// <summary>The wind's kinetic power through the swept disc, ½ρAv³, W.</summary>
-    public double WindPower => 0.5 * Physics.AirDensity * SweptArea * Wind * Wind * Wind;
+    public double WindPower => 0.5 * AirDensity * SweptArea * Wind * Wind * Wind;
     public double TipSpeedRatioNow => Wind > 0 ? AngularVelocity * Radius / Wind : 0;
     /// <summary>The fraction of the wind's power the sails are taking.</summary>
     public double PowerCoefficient => WindPower > 0 ? Torque * AngularVelocity / WindPower : 0;
@@ -62,7 +63,7 @@ public sealed class Windmill(string name, double radius, double momentOfInertia)
     public double TorqueAt(double omega)
     {
         if (Wind <= 0) return 0;
-        double stall = 0.5 * Physics.AirDensity * SweptArea * Wind * Wind * Radius * CpMax / TipSpeedRatio;
+        double stall = 0.5 * AirDensity * SweptArea * Wind * Wind * Radius * CpMax / TipSpeedRatio;
         return Math.Max(0, stall * (2 - omega * Radius / Wind / TipSpeedRatio));
     }
 

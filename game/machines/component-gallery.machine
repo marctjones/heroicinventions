@@ -8,7 +8,7 @@
   (part column-b post (material limestone) (at -4.2 0.0 0.0) (props (size-x 0.3) (size-y 1.0) (size-z 0.3) (round #t)) (ports) (srcloc "racket/machines/component-gallery.rkt" 43 2))
   (part lintel block (material limestone) (at -4.8 1.0759999999999998 0.0) (props (size 0.1) (tilt-deg 0.0) (dim-x 1.6) (dim-y 0.15) (dim-z 0.4)) (ports) (srcloc "racket/machines/component-gallery.rkt" 44 2))
   (part load block (material granite) (at -4.8 1.303 0.0) (props (size 0.3) (tilt-deg 0.0)) (ports) (srcloc "racket/machines/component-gallery.rkt" 46 2))
-  (part kettle boiler (material bronze) (at -1.0 0.08 0.0) (props (radius 0.12) (height 0.16) (water 0.3) (fire 0.0) (temperature 20.0)) (ports (steam steam 0.16)) (srcloc "racket/machines/component-gallery.rkt" 49 2))
+  (part kettle boiler (material bronze) (at -1.0 0.08 0.0) (props (radius 0.12) (height 0.16) (water 0.3) (fire 0.0) (temperature #f)) (ports (steam steam 0.16)) (srcloc "racket/machines/component-gallery.rkt" 49 2))
   (part fire hearth (material limestone) (at -1.0 0.0 0.0) (props (heats kettle) (power 3000.0) (fuel 0.05) (fuel-kind wood) (efficiency 0.25)) (ports) (srcloc "racket/machines/component-gallery.rkt" 51 2))
   (part ball rotor (material bronze) (at -1.0 0.45 0.0) (props (radius 0.06) (wall 0.001) (bore 0.002) (arm 0.08) (nozzles 2.0)) (ports (steam-in steam 0.0)) (srcloc "racket/machines/component-gallery.rkt" 52 2))
   (part header-pier post (material limestone) (at 3.0 0.0 0.0) (props (size-x 0.7) (size-y 1.0) (size-z 0.7) (round #f)) (ports) (srcloc "racket/machines/component-gallery.rkt" 57 2))

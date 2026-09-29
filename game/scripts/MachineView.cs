@@ -20,6 +20,7 @@ public partial class MachineView : Node3D
 
     private readonly MaterialLibrary _materials;
     private readonly List<(Tank tank, PartSpec spec, MeshInstance3D water)> _water = [];
+    private readonly Dictionary<Tank, MeshInstance3D> _ice = [];
     private readonly Dictionary<Tank, MeshInstance3D> _tankShells = [];
     private readonly List<(Pipe pipe, Vector3 outlet, MeshInstance3D jet)> _jets = [];
     private readonly List<(Aeolipile rotor, Node3D node)> _rotors = [];
@@ -205,6 +206,10 @@ public partial class MachineView : Node3D
                                Shapes.Mat(Shapes.Water, roughness: 0.2f, alpha: 0.8f));
         AddChild(water);
         _water.Add((Runtime.Tanks[part.Id], part, water));
+        var ice = Shapes.Box(new Vector3(side * 0.96f, 1, side * 0.96f), Shapes.Mat(new Color(0.9f, 0.95f, 1f), roughness: 0.35f, alpha: 0.9f));
+        ice.Visible = false;
+        AddChild(ice);
+        _ice[Runtime.Tanks[part.Id]] = ice;
         _tankShells[Runtime.Tanks[part.Id]] = shell;
         bool hung = Runtime.Counterpoises.Values.Any(c => c.Vessel == Runtime.Tanks[part.Id]);
         if (hung)
@@ -1128,6 +1133,15 @@ public partial class MachineView : Node3D
             water.Scale = new Vector3(1, level, 1);
             // a hanging vessel rides up and down on its rope
             water.Position = new Vector3((float)spec.At.X, (float)tank.BaseElevation + level / 2, (float)spec.At.Z);
+            if (_ice.TryGetValue(tank, out var ice))
+            {
+                // the sheet floats on what is still water; drawn thicker than life so a few mm shows
+                float thick = (float)tank.Ice;
+                ice.Visible = thick > 1e-5;
+                float shown = Mathf.Max(thick * 3, 0.01f);
+                ice.Scale = new Vector3(1, shown, 1);
+                ice.Position = new Vector3((float)spec.At.X, (float)tank.BaseElevation + (float)tank.Level + shown / 2, (float)spec.At.Z);
+            }
             if (_tankShells.TryGetValue(tank, out var shell))
                 shell.Position = new Vector3(shell.Position.X, (float)tank.BaseElevation + (float)tank.Height / 2, shell.Position.Z);
         }
@@ -1211,6 +1225,9 @@ public partial class MachineView : Node3D
                          (p.Broken ? ", column broken" : "") + $", {p.MaxPull:F0} N on the rod at most" + (p.Stalled ? ", STALLED" : ""));
             foreach (var (id, r) in Runtime.Rotors) bits.Add($"{id} {r.Rpm:F0} rpm");
             foreach (var (id, w) in Runtime.WaterWheels) bits.Add($"{id} {w.Rpm:F1} rpm, {w.Power:F0} W, {w.Water:F1} kg aboard");
+            if (Runtime.Ambient != 20 || Runtime.Tanks.Values.Any(t => t.Ice > 0)) bits.Add($"air {Runtime.Ambient:0.#} °C");
+            foreach (var (id, t) in Runtime.Tanks.Where(kv => kv.Value.Ice > 0))
+                bits.Add($"{id} iced {t.Ice * 1000:F1} mm" + (t.FrozenSolid ? ", frozen solid" : $", {t.WaterVolume * 1000:F0} L still water"));
             foreach (var (id, c) in Runtime.Capstans)
                 bits.Add($"{id} {c.Turns:0.##} turns (x{c.Ratio:0.#}): " + (c.Held ? $"held by {c.Hold:0.#} N (needs {c.LeastHold:0.#} N)"
                     : c.Grounded ? "load on the ground" : $"{(c.Velocity < 0 ? "running out" : "coming in")} at {Math.Abs(c.Velocity):F2} m/s, {c.LoadTension:0} N at the load"));

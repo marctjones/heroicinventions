@@ -74,7 +74,9 @@ static string Handle(string line, MaterialLibrary materials)
     double nextSampleAt = 0;
     for (int i = 0; i <= totalSteps; i++)
     {
-        if (run.Time + 1e-9 >= nextSampleAt)
+        // by step count, not the summed clock: 36 000 steps of 0.1 s add up to a
+        // hair under 3600, and a frame due at 3600 must not be skipped for it
+        if (i * step.Value + step.Value / 2 >= nextSampleAt)
         {
             frames.Add(FrameOf(run));
             nextSampleAt += sampleDt.Value;

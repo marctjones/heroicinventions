@@ -3,6 +3,12 @@ namespace HeroicInventions.Sim.Fluids;
 /// <summary>
 /// A vertical-walled vessel. Open tanks sit at atmospheric pressure; sealed
 /// tanks share an <see cref="AirPocket"/> whose pressure follows Boyle's law.
+///
+/// In a frost ice grows down from the surface (<see cref="Freeze"/>); the
+/// water under it is taken to be at 0 °C, as a pond's is. Only the liquid
+/// flows: <see cref="WaterVolume"/> is what is still water, and a tank
+/// frozen solid lets nothing out. (The floating ice's own weight is left
+/// out of the head a pipe sees.)
 /// </summary>
 public sealed class Tank(string name, double baseElevation, double area, double height, double waterVolume = 0)
 {
@@ -12,6 +18,37 @@ public sealed class Tank(string name, double baseElevation, double area, double 
     public double Height { get; } = height;               // m
     public double WaterVolume { get; internal set; } = waterVolume; // m³
     public AirPocket? Air { get; internal set; }
+    public double Ice { get; private set; }               // m thick, grown down from the surface
+    public bool FrozenSolid => Ice > 0 && WaterVolume <= 1e-12;
+
+    // Stefan's problem for a sheet of ice on water at 0 °C under air at T < 0:
+    // the latent heat of each new layer leaves by conduction through the ice
+    // above it, ρ_i·L·dh/dt = k·(0 − T)/h, so h² grows as 2k(−T)t/(ρ_i·L).
+    public const double IceConductivity = 2.22;           // W/(m·K)
+    public const double IceDensity = 917;                 // kg/m³
+    public const double LatentHeatFusion = 334_000;       // J/kg
+    /// <summary>Warm air melting ice from above: W/(m²·K), still air on a flat surface.</summary>
+    public const double MeltCoefficient = 10;
+
+    /// <summary>Freeze (below 0 °C) or thaw (above) for dt seconds under air at <paramref name="ambient"/> °C.</summary>
+    public void Freeze(double dt, double ambient)
+    {
+        double before = Ice;
+        if (ambient < 0 && WaterVolume > 0)
+            Ice = Math.Sqrt(Ice * Ice + 2 * IceConductivity * -ambient * dt / (IceDensity * LatentHeatFusion));
+        else if (ambient > 0 && Ice > 0)
+            Ice = Math.Max(0, Ice - MeltCoefficient * ambient * dt / (IceDensity * LatentHeatFusion));
+        else return;
+        // water frozen (or melted) this step, as liquid volume
+        double water = (Ice - before) * Area * IceDensity / Physics.WaterDensity;
+        if (water > WaterVolume)
+        {
+            // frozen solid: only as thick as the water there was
+            Ice = before + WaterVolume * Physics.WaterDensity / (IceDensity * Area);
+            water = WaterVolume;
+        }
+        WaterVolume = Math.Min(Capacity, WaterVolume - water);
+    }
 
     public double Capacity => Area * Height;
     public double Level => WaterVolume / Area;
@@ -55,13 +92,14 @@ public sealed class AirPocket : IHeated
         _tanks = tanks.ToList();
         TubeVolume = tubeVolume;
         foreach (var t in _tanks) t.Air = this;
-        SealedAt = Temperature = sealedAtC;
+        SealedAt = Temperature = Ambient = sealedAtC;
         _lastVolume = Volume;
         Mass = Physics.AtmosphericPressure * Volume / (Physics.AirGasConstant * Physics.ToKelvin(sealedAtC));
     }
 
     public double TubeVolume { get; }
-    public double SealedAt { get; }                               // °C, and the air outside
+    public double SealedAt { get; }                               // °C
+    public double Ambient { get; set; }                           // °C of the air outside the walls; sealed at it
     public double Mass { get; }                                   // kg of air
     public double Temperature { get; private set; }               // °C
     public double HeatInput { get; set; }                         // W from a fire
@@ -81,7 +119,7 @@ public sealed class AirPocket : IHeated
 
     /// <summary>
     /// Heat for dt seconds. The walls' loss pulls it toward where heat in
-    /// equals heat out, SealedAt + HeatInput / HeatLoss, exponentially with
+    /// equals heat out, Ambient + HeatInput / HeatLoss, exponentially with
     /// time constant C / HeatLoss — solved exactly, since for air alone that
     /// can be far shorter than a step.
     /// </summary>
@@ -91,7 +129,7 @@ public sealed class AirPocket : IHeated
         double c = HeatCapacity;
         if (HeatLoss > 0)
         {
-            double steady = SealedAt + HeatInput / HeatLoss;
+            double steady = Ambient + HeatInput / HeatLoss;
             Temperature = steady + (Temperature - steady) * Math.Exp(-HeatLoss * dt / c);
         }
         else Temperature += HeatInput * dt / c;
@@ -137,6 +175,17 @@ public sealed class FluidNetwork
     public TankLeak AddLeak(TankLeak l) { Leaks.Add(l); return l; }
 
     public double TotalWater => Tanks.Sum(t => t.WaterVolume);
+    /// <summary>The air round the tanks, °C: below 0 they freeze; a seep evaporates as water's vapour pressure at it.</summary>
+    public double Ambient { get; set; } = 20;
+
+    /// <summary>
+    /// A seep's #:evaporation is its rate at 20 °C. Evaporation runs as the
+    /// surface's vapour pressure against the air (dry air, Dalton, 1802), so
+    /// at another temperature it goes as p_sat(T)/p_sat(20 °C); an iced-over
+    /// surface gives none.
+    /// </summary>
+    public double EvaporationFactor(Tank t) =>
+        t.Ice > 0 || Ambient <= 0 ? 0 : Thermo.Boiler.SaturationPressure(Ambient) / Thermo.Boiler.SaturationPressure(20);
 
     public void Step(double dt)
     {
@@ -147,6 +196,7 @@ public sealed class FluidNetwork
 
     private void Substep(double dt)
     {
+        foreach (var t in Tanks) t.Freeze(dt, Ambient);
         // Compute every flow from the same snapshot before moving any water,
         // so the result doesn't depend on pipe order.
         foreach (var p in Pipes)
@@ -178,7 +228,7 @@ public sealed class FluidNetwork
             l.Tank.WaterVolume -= moved;
             if (l.Catch is not null) l.Catch.WaterVolume += moved;
             l.Lost += moved;
-            double seep = Math.Min(l.Evaporation * dt, l.Tank.WaterVolume);
+            double seep = Math.Min(l.Evaporation * EvaporationFactor(l.Tank) * dt, l.Tank.WaterVolume);
             l.Tank.WaterVolume -= seep;
             l.Evaporated += seep;
         }

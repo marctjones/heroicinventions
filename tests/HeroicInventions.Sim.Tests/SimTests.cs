@@ -1,5 +1,6 @@
 using HeroicInventions.Sim;
 using HeroicInventions.Sim.Fluids;
+using HeroicInventions.Sim.Machines;
 using HeroicInventions.Sim.Materials;
 using HeroicInventions.Sim.Mechanics;
 using HeroicInventions.Sim.Parts;
@@ -322,6 +323,60 @@ public class QuenchAndFeedTests
         Assert.Equal(6, copper.WaterMass, precision: 12);
         Assert.Equal((4 * 90 + 2 * 20) / 6.0, copper.Temperature, precision: 12);
         Assert.Equal(2, copper.WaterFed, precision: 12);
+    }
+}
+
+public class AmbientTests
+{
+    /// <summary>Stefan: h = √(2k(0 − T)t/(ρ_i·L)), however the time is cut into steps, and the water it takes is h·A·ρ_i/ρ_w.</summary>
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(60.0)]
+    [InlineData(3600.0)]
+    public void IceGrowsAsTheSquareRootOfTime(double dt)
+    {
+        var t = new Tank("t", 0, 2, 1, waterVolume: 1);
+        for (double s = 0; s < 3600 - 1e-9; s += dt) t.Freeze(dt, -10);
+        double h = Math.Sqrt(2 * Tank.IceConductivity * 10 * 3600 / (Tank.IceDensity * Tank.LatentHeatFusion));
+        Assert.Equal(h, t.Ice, precision: 9);
+        Assert.Equal(1 - h * 2 * Tank.IceDensity / Physics.WaterDensity, t.WaterVolume, precision: 9);
+    }
+
+    [Fact]
+    public void AShallowTankFreezesSolidAndStops()
+    {
+        var t = new Tank("t", 0, 1, 1, waterVolume: 0.001); // 1 mm of water
+        t.Freeze(36000, -20);
+        Assert.True(t.FrozenSolid);
+        Assert.Equal(0.001 * Physics.WaterDensity / Tank.IceDensity, t.Ice, precision: 12);
+    }
+
+    [Fact]
+    public void ABoilerCoolsTowardsTheAmbientByNewtonsLaw()
+    {
+        var b = new Boiler(5, temperatureC: 90, heatInputW: 0) { AmbientTemperature = -10 };
+        for (int i = 0; i < 360000; i++) b.Step(0.01, 0);
+        Assert.Equal(-10 + 100 * Math.Exp(-3600 * 2 / (5 * 4186.0)), b.Temperature, precision: 3);
+    }
+
+    [Fact]
+    public void SealedAirWithWallsSettlesAtTheAmbientNotWhereItWasSealed()
+    {
+        var tank = new Tank("t", 0, 1, 1, waterVolume: 0.5);
+        var air = new AirPocket([tank], sealedAtC: 20) { HeatLoss = 5, Ambient = -10 };
+        for (int i = 0; i < 10000; i++) air.Step(1);
+        Assert.Equal(-10, air.Temperature, precision: 6);
+    }
+
+    [Fact]
+    public void AmbientRoundTripsThroughTheMachineFile()
+    {
+        var def = MachineDef.Parse("(machine m (ambient -5.5) (part k boiler (material bronze) (at 0 0 0) (props (radius 0.1) (height 0.1) (water 1) (fire 0) (temperature #f)) (ports (steam steam 0.1))))");
+        Assert.Equal(-5.5, def.Ambient);
+        var run = new MachineRuntime(MachineDef.Parse(MachineWriter.Write(def)), MaterialLibrary.LoadDefault());
+        Assert.Equal(-5.5, run.Ambient);
+        Assert.Equal(0, run.Boilers["k"].Temperature);   // drawn at the ambient, but water, so no colder than 0 °C
+        Assert.Equal(-5.5, run.Boilers["k"].AmbientTemperature);
     }
 }
 

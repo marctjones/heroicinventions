@@ -29,6 +29,7 @@ public static class RktExporter
         sb.Append(";; overwrite this .machine file the next time it runs from this source).\n");
         sb.Append($"(define-machine {m.Name}\n");
         if (m.Source is { } src) sb.Append($"  #:source {Quote(src)}\n");
+        if (m.Ambient != 20) sb.Append($"  #:ambient {F(m.Ambient)}\n");
 
         foreach (var p in m.Parts) sb.Append(PartClause(p));
         foreach (var p in m.Pipes)
@@ -54,7 +55,7 @@ public static class RktExporter
                       $" #:width {F(c.Width)}" + (c.Length is { } len ? $" #:length {F(len)}" : "") +
                       (c.Onto is { } onto ? $" #:onto {onto}" : "") + ")\n");
         foreach (var c in m.Cylinders)
-            sb.Append($"  (atmospheric-cylinder {c.Id} #:piston {c.Piston} #:steam-from {c.Boiler} #:injection-temperature {F(c.InjectionTemperature)})\n");
+            sb.Append($"  (atmospheric-cylinder {c.Id} #:piston {c.Piston} #:steam-from {c.Boiler}{(c.InjectionTemperature is { } inj ? $" #:injection-temperature {F(inj)}" : "")})\n");
 
         sb.Append(")\n");
         return sb.ToString();

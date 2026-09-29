@@ -77,7 +77,8 @@ public sealed record ChannelSpec(string Id, PortRef From, PortRef? To, Vec3? End
                           IReadOnlyList<(double X, double Z)>? Via = null, string? Onto = null);
 
 /// <summary>A Newcomen atmospheric cylinder driving Piston, with steam from Boiler.</summary>
-public sealed record CylinderSpec(string Id, string Piston, string Boiler, double InjectionTemperature, SourceLocation? Location);
+/// <summary>InjectionTemperature null: the jet water warms 40 K over the ambient it is drawn at.</summary>
+public sealed record CylinderSpec(string Id, string Piston, string Boiler, double? InjectionTemperature, SourceLocation? Location);
 
 /// <summary>Two gears in mesh.</summary>
 public sealed record MeshSpec(string A, string B, SourceLocation? Location);
@@ -114,6 +115,8 @@ public sealed class MachineDef
 {
     public required string Name { get; init; }
     public string? Source { get; init; }
+    /// <summary>The air round the machine, °C: what boilers cool towards, what water and air arrive at, whether tanks freeze.</summary>
+    public double Ambient { get; init; } = 20;
     public required IReadOnlyList<PartSpec> Parts { get; init; }
     public required IReadOnlyList<PipeSpec> Pipes { get; init; }
     public required IReadOnlyList<ConnectSpec> Connects { get; init; }
@@ -139,6 +142,7 @@ public sealed class MachineDef
         {
             Name = name.Name,
             Source = clauses.FirstOrDefault(c => c.Head == "source")?.Items.ElementAtOrDefault(1) is SString s ? s.Value : null,
+            Ambient = clauses.FirstOrDefault(c => c.Head == "ambient")?.Items.ElementAtOrDefault(1) is SNumber amb ? amb.Value : 20,
             Parts = clauses.Where(c => c.Head == "part").Select(ParsePart).ToList(),
             Pipes = clauses.Where(c => c.Head == "pipe").Select(ParsePipe).ToList(),
             Connects = clauses.Where(c => c.Head == "connect").Select(ParseConnect).ToList(),
@@ -180,7 +184,7 @@ public sealed class MachineDef
                 var loc = ParseLoc(c);
                 string Field(string f) => c.Field(f) is { } l ? Sym(l, 1, loc) : throw new MachineFormatException($"atmospheric-cylinder has no {f}", loc);
                 return new CylinderSpec(Sym(c, 1, loc), Field("piston"), Field("steam-from"),
-                                        c.Field("injection-temperature") is { } t ? Num(t, 1, loc) : 60, loc);
+                                        c.Field("injection-temperature") is { } t && t.Items.ElementAtOrDefault(1) is SNumber ? Num(t, 1, loc) : null, loc);
             }).ToList(),
             Meshes = clauses.Where(c => c.Head == "mesh").Select(c =>
             {

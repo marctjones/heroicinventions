@@ -14,7 +14,10 @@ public static class Physics
     public const double AirSpecificHeatCv = 718;       // J/(kg·K) at constant volume
 
     /// <summary>Density of dry air at atmospheric pressure and 20 °C, kg/m³ (ideal gas law).</summary>
-    public static double AirDensity => AtmosphericPressure / (AirGasConstant * ToKelvin(20));
+    public static double AirDensity => AirDensityAt(20);
+
+    /// <summary>Density of dry air at atmospheric pressure and <paramref name="celsius"/>, kg/m³: P / (R·T).</summary>
+    public static double AirDensityAt(double celsius) => AtmosphericPressure / (AirGasConstant * ToKelvin(celsius));
 
     public static double ToKelvin(double celsius) => celsius + 273.15;
 

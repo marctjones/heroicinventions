@@ -1,6 +1,12 @@
 #lang racket/base
 ;; define-machine: the heart of #lang heroic.
 ;;
+;; (define-machine name [#:source "..."] [#:ambient C] clause ...)
+;; #:ambient is the air round the machine, °C (default 20): boilers and
+;; sealed air cool towards it, boilers and pumped water start at it, a
+;; hearth's quench water and a windmill's or bellows' air are at it, and
+;; open tanks freeze below 0.
+;;
 ;; A machine is a list of part clauses (tank, boiler, rotor, block,
 ;; pendulum, lever, ramp, and the generated-geometry parts wheel, screw,
 ;; fixture) and link clauses (pipe, connect, sealed-air).
@@ -28,7 +34,7 @@
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels) #:transparent)
+(struct machine (name source ambient parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -197,7 +203,7 @@
       (bad (format "#:efficiency must be in (0, 1], got ~e" (prop 'efficiency))))
     (unless (or (not (prop 'force)) (and (real? (prop 'force)) (> (prop 'force) 0)))
       (bad (format "#:force must be a force above 0, got ~e" (prop 'force))))
-    (unless (and (real? (prop 'temperature)) (<= 0 (prop 'temperature)) (< (prop 'temperature) 100))
+    (unless (or (not (prop 'temperature)) (and (real? (prop 'temperature)) (<= 0 (prop 'temperature)) (< (prop 'temperature) 100)))
       (bad (format "#:temperature must be in [0, 100) C, got ~e" (prop 'temperature)))))
   parts)
 
@@ -237,8 +243,10 @@
       (bad (format "#:tip-speed-ratio must be above 0, got ~e" (prop 'tip-speed-ratio)))))
   parts)
 
-(define (make-machine name source items)
-  (machine name source
+(define (make-machine name source ambient items)
+  (unless (and (real? ambient) (> ambient -273.15))
+    (error 'define-machine "machine ~a: #:ambient must be a temperature in °C above absolute zero, got ~e" name ambient))
+  (machine name source ambient
            (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
@@ -387,7 +395,7 @@
       #:with expr #`(part 'id 'boiler '(~? mat bronze) (list at.x at.y at.z)
                           (list* (cons 'radius radius-v) (cons 'height height-v)
                                  (cons 'water water-v) (cons 'fire (~? fire-v 0))
-                                 (cons 'temperature (~? temp-v 20))
+                                 (cons 'temperature (~? temp-v #f))
                                  (~? (list (cons 'burst burst-v)) '()))
                           (list (port-spec 'steam 'steam height-v))
                           #,(loc-of this-syntax)))
@@ -850,7 +858,8 @@
     ;; #:efficiency (default 0.8; the rest slips back past the bucket).
     ;; The atmosphere pushes the water up the pipe, and only so far: to
     ;; (P_atm - P_v) / (rho g) over the source's surface, 10.09 m for water
-    ;; at #:temperature 20 C (the default); higher the column breaks, and a
+    ;; at #:temperature 20 C (default: the machine's #:ambient, or just
+    ;; above freezing in a frost); higher the column breaks, and a
     ;; barrel whose foot stands that far above the water lifts nothing.
     ;; #:force (N) is the most the drive can pull the rod with (default: as
     ;; much as it takes); asked for more, the pump stalls.
@@ -870,7 +879,7 @@
                           (list (cons 'from 'from-id) (cons 'to 'to-id)
                                 (cons 'bore bore-v) (cons 'stroke stroke-v) (cons 'rpm (~? rpm-v 0))
                                 (cons 'efficiency (~? eff-v 0.8)) (cons 'force (~? force-v #f))
-                                (cons 'temperature (~? temp-v 20)))
+                                (cons 'temperature (~? temp-v #f)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1005,13 +1014,14 @@
     ;; partial vacuum, and the atmosphere pushes the piston down — that is
     ;; the working stroke. Tappets on a rod hanging from the beam switch the
     ;; valves at each end of the stroke. #:injection-temperature is how warm
-    ;; the injection water gets (°C), which sets how good the vacuum is.
+    ;; the injection water gets (°C), which sets how good the vacuum is; by
+    ;; default 40 K over the #:ambient it is drawn at (60 °C on a 20 °C day).
     (pattern (atmospheric-cylinder id:id
                                    (~alt (~once (~seq #:piston p:id))
                                          (~once (~seq #:steam-from b:id))
                                          (~optional (~seq #:injection-temperature inj-v:expr))) ...)
       #:attr info (cinfo #'id #'p #'b)
-      #:with expr #`(cylinder-spec 'id 'p 'b (~? inj-v 60) #,(loc-of this-syntax)))
+      #:with expr #`(cylinder-spec 'id 'p 'b (~? inj-v #f) #,(loc-of this-syntax)))
 
     (pattern (pipe id:id from:ref to:ref
                    (~alt (~once (~seq #:conductance c:expr))
@@ -1280,8 +1290,8 @@
 
 (define-syntax (define-machine stx)
   (syntax-parse stx
-    [(_ name:id (~optional (~seq #:source src:expr)) c:clause ...)
+    [(_ name:id (~alt (~optional (~seq #:source src:expr)) (~optional (~seq #:ambient amb:expr))) ... c:clause ...)
      (check-machine! stx (attribute c.info))
      #'(begin
-         (define name (make-machine 'name (~? src #f) (list c.expr ...)))
+         (define name (make-machine 'name (~? src #f) (~? amb 20) (list c.expr ...)))
          (register-machine! name))]))

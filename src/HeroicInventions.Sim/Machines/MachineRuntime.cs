@@ -99,9 +99,34 @@ public sealed class MachineRuntime
 
     public string BoilerFor(string rotorId) => _rotorBoiler[rotorId];
 
+    /// <summary>
+    /// The air round the machine, °C. Set, it reaches every part that feels
+    /// it: boilers and sealed air cool towards it, a hearth's quench and feed
+    /// water and a windmill's or bellows' air are at it, tanks freeze below 0.
+    /// </summary>
+    public double Ambient
+    {
+        get => _ambient;
+        set
+        {
+            _ambient = value;
+            Fluids.Ambient = value;
+            foreach (var b in _boilers.Values) b.AmbientTemperature = value;
+            foreach (var h in _hearths.Values) h.AmbientTemperature = value;
+            foreach (var a in _air) a.Ambient = value;
+            foreach (var m in _windmills.Values) m.AirDensity = Physics.AirDensityAt(value);
+        }
+    }
+    private double _ambient = 20;
+
+    /// <summary>A part's #:temperature if it gave one, else the ambient — water drawn from outside is at the air's temperature, or just above freezing in a frost.</summary>
+    private double TemperatureOr(PartSpec part, string key) =>
+        part.Props.GetValueOrDefault(key) is SNumber t ? t.Value : Math.Max(0, _ambient);
+
     public MachineRuntime(MachineDef def, MaterialLibrary materials)
     {
         Def = def;
+        _ambient = def.Ambient;
 
         foreach (var part in def.Parts)
         {
@@ -114,7 +139,7 @@ public sealed class MachineRuntime
                     _tanks[part.Id] = Fluids.AddTank(new Tank(part.Id, part.At.Y, part.Number("area"), part.Number("height"), part.Number("water", 0)));
                     break;
                 case "boiler":
-                    _boilers[part.Id] = new Boiler(part.Number("water"), part.Number("temperature", 20), heatInputW: part.Number("fire", 0))
+                    _boilers[part.Id] = new Boiler(part.Number("water"), TemperatureOr(part, "temperature"), heatInputW: part.Number("fire", 0))
                     {
                         BurstPressure = part.Number("burst", 0),
                     };
@@ -169,7 +194,7 @@ public sealed class MachineRuntime
         // Sealed air is created after the tanks are filled: its P·V constant
         // is fixed from the air volume at the moment it is sealed.
         foreach (var air in def.SealedAir)
-            _air.Add(new AirPocket(air.Tanks.Select(t => TankNamed(t, air.Location)), air.TubeVolume)
+            _air.Add(new AirPocket(air.Tanks.Select(t => TankNamed(t, air.Location)), air.TubeVolume, sealedAtC: _ambient)
             {
                 HeatLoss = air.HeatLoss,
                 VesselHeatCapacity = air.HeatCapacity,
@@ -264,7 +289,7 @@ public sealed class MachineRuntime
             if (_hearths.TryGetValue(onto, out var hearth))
                 channel.Pour = m3 => hearth.Douse(m3 * Physics.WaterDensity);
             else if (_boilers.TryGetValue(onto, out var boiler))
-                channel.Pour = m3 => boiler.AddWater(m3 * Physics.WaterDensity, Hearth.WaterTemperature);
+                channel.Pour = m3 => boiler.AddWater(m3 * Physics.WaterDensity, Math.Max(0, Ambient));
             else if (_wheels.TryGetValue(onto, out var wheel))
                 channel.Pour = wheel.Pour;
             else throw new MachineFormatException($"channel {ch.Id} pours onto {onto}, which is not a hearth, boiler or water wheel", ch.Location);
@@ -289,13 +314,14 @@ public sealed class MachineRuntime
             var piston = def.Part(c.Piston) ?? throw new MachineFormatException($"cylinder {c.Id}: no piston {c.Piston}", c.Location);
             if (!_boilers.TryGetValue(c.Boiler, out var boiler))
                 throw new MachineFormatException($"cylinder {c.Id}: {c.Boiler} is not a boiler", c.Location);
-            _cylinders[c.Id] = new AtmosphericCylinder(c.Id, boiler, piston.Number("bore"), piston.Number("stroke"), c.InjectionTemperature)
+            _cylinders[c.Id] = new AtmosphericCylinder(c.Id, boiler, piston.Number("bore"), piston.Number("stroke"), c.InjectionTemperature ?? _ambient + 40) // jet water warms ~40 K condensing the steam
             {
                 PistonHeight = piston.Number("start", 0) * piston.Number("stroke"),
             };
             _cylinders[c.Id].Prime();
         }
 
+        Ambient = _ambient;   // hand it to every part now they all exist
         RegisterFields();
     }
 
@@ -335,7 +361,7 @@ public sealed class MachineRuntime
         _pumps[part.Id] = new LiftPump(part.Id, from, to, part.At.Y, bore, stroke)
         {
             Efficiency = efficiency,
-            Temperature = part.Number("temperature", 20),
+            Temperature = TemperatureOr(part, "temperature"),
             Rpm = Math.Max(0, part.Number("rpm", 0)),
             Force = force,
         };
@@ -486,10 +512,15 @@ public sealed class MachineRuntime
 
     private void RegisterFields()
     {
+        _getters["scene.ambient"] = () => Ambient;                     // °C
+        _setters["scene.ambient"] = c => Ambient = Math.Max(-273.15, c);
+        _getters["scene.air-density"] = () => Physics.AirDensityAt(Ambient);   // kg/m³
         foreach (var (id, tank) in _tanks)
         {
             _getters[$"{id}.water"] = () => tank.WaterVolume * 1000;   // L
             _getters[$"{id}.level"] = () => tank.Level * 100;          // cm
+            _getters[$"{id}.ice"] = () => tank.Ice * 1000;            // mm thick
+            _getters[$"{id}.frozen-solid"] = () => tank.FrozenSolid ? 1 : 0;
             _setters[$"{id}.water"] = liters => tank.WaterVolume = Math.Clamp(liters / 1000, 0, tank.Capacity);
         }
         foreach (var (id, boiler) in _boilers)

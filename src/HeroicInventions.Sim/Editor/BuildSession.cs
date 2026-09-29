@@ -32,6 +32,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (wheel|screw|fixture id #:catalogue entry-id #:at (x y z) [#:material M])
 ///   (pipe id from.port to.port #:conductance C)
 ///   (connect a.port b.port)
+///   (ambient °C)           ; the scene's air: boilers cool to it, water and air arrive at it, tanks freeze below 0
 ///   (move id (x y z))
 ///   (set id #:prop value)
 ///   (remove id)
@@ -91,6 +92,7 @@ public sealed class BuildSession
         "channel" => CreateChannel(cmd),
         "lift" => CreateLift(cmd),
         "move" => Move(cmd),
+        "ambient" => SetAmbient(cmd),
         "set" => Set(cmd),
         "remove" => Remove(cmd),
         "snap" => Snap(cmd),
@@ -260,6 +262,16 @@ public sealed class BuildSession
         Snapshot();
         Document.AddLift(id, by, from, to, current, currentFrom);
         return $"lift {id}: {by} raises {from} -> {to}";
+    }
+
+    /// <summary>(ambient °C): the scene's air temperature.</summary>
+    private string SetAmbient(SList cmd)
+    {
+        double c = Num(cmd.Items.ElementAtOrDefault(1) ?? throw new FormatException("(ambient °C) needs a temperature"), "ambient");
+        if (c <= -273.15) throw new FormatException($"(ambient {c}): below absolute zero");
+        Snapshot();
+        Document.Ambient = c;
+        return $"ambient {c} °C";
     }
 
     private string Move(SList cmd)
