@@ -110,6 +110,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
     <div class="label">Contents</div>
     <ol>
       <li><a href="#premise">Premise</a></li>
+      <li><a href="#experiment">Play by experiment</a></li>
       <li><a href="#goal">The goal</a></li>
       <li><a href="#path">The path to the call</a></li>
       <li><a href="#night">Night heat</a></li>
@@ -151,6 +152,17 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
     <p>The rover has no chip fab. Everything electronic it owns came from Earth: its own circuits, the solar panels, the batteries, the motors in the cargo. Dust scours the panels, radiation flips and kills circuits, and batteries lose capacity with every cycle. None of it can be replaced. What the rover <em>can</em> make, from cargo metal, greenhouse wood, rope, ice and regolith, is mechanism: levers, gears, siphons, counterweights, springs, valves. A mechanism it made can be repaired indefinitely.</p>
     <p>So the rover builds the way Heron of Alexandria did, and for the same reason Heron's machines still make sense: they run on weight, water, air and heat, and they can be fixed with hand tools. The player isn't choosing old technology for charm but for what will still work in twenty years. The real Opportunity rover is the warning. A dust storm in June 2018 cut its sunlight, its batteries could no longer keep it alive, and it never answered again. A counterweight doesn't care about dust.</p>
     <p>The rover also doesn't breathe, so there is no life support. An enclosure's air matters for only two things: plants and fire. Its pressure also keeps water liquid and lets pumps work. Air, heat and pressure are things its <em>machines</em> need, not things it needs, which is what keeps Mars in the gameplay (see <a href="#zones">Zones</a>).</p>
+
+    <h2 id="experiment">Play by experiment</h2>
+    <p>The solution should be stumbled on, not planned out. Players rearrange, rebuild and change things as they go, try an idea, watch it fail for a visible physical reason, and try another. Everything below is designed so that experimenting is always possible and never costly:</p>
+    <ul>
+      <li><strong>The rover never runs out.</strong> Its own power is unlimited by default, and building, moving and digging are free (#63), so the player can always start a new approach. The rover-power budget (#62) is an advanced option, and even then a flat battery costs time, never the game.</li>
+      <li><strong>Nothing is lost by rebuilding.</strong> Dismantling returns a machine's materials, and broken parts recycle: cracked glass remelts, a burst boiler's metal returns (#66). Only fuel and gas are consumed, and both are renewable.</li>
+      <li><strong>No dead ends.</strong> Nothing needed to win can be destroyed or worn out for good. The battery bank is armoured and can't be broken (#64); a worn motor can always be rewound with the unlimited wire, and the bank's capacity fade stops above what the call needs (#70).</li>
+      <li><strong>Try, rewind, compare.</strong> Named snapshots let the player save before an experiment and rewind or branch from it (#67). Sleep (#59) and tuning (#60) make slow results quick to see.</li>
+      <li><strong>Failures explain themselves.</strong> The state is shown in the scene: a cold bank frosts, a stalled generator stops, a leaky lid glows. A wrong design is the game working, not a mistake.</li>
+    </ul>
+    <p>The <a href="#routes">routes</a> below are what a player might find, not a script to follow.</p>
 
     <h2 id="goal">The goal: call Earth</h2>
     <p>The game is won when the rover calls Earth on a relay pass with a full, warm battery bank (#64, #68). The electrical side is kept simple on purpose, because this is a game about pre-industrial machines. The motors, battery bank and wire are <strong>found in the crates, never built</strong>, wire is unlimited, and there is no circuit or grid model: electricity is just energy moved from a generator into the bank. Winning takes four things:</p>
