@@ -50,6 +50,9 @@ public partial class MachineView : Node3D
     /// no single part and aren't listed.
     /// </summary>
     public IReadOnlyDictionary<string, IReadOnlyList<Node3D>> PartNodes => _partNodes;
+
+    /// <summary>A part's moving body, by id (a thrown stone, a bolt), for the camera to follow.</summary>
+    public RigidBody3D? BodyNamed(string id) => _bodiesById.GetValueOrDefault(id);
     private readonly Dictionary<string, IReadOnlyList<Node3D>> _partNodes = [];
 
     public MachineView(MachineRuntime runtime, MaterialLibrary materials)
@@ -497,10 +500,15 @@ public partial class MachineView : Node3D
         string materialName = char.ToUpper(part.Material[0]) + part.Material[1..];
         // A shaped block (a catapult bolt) is a part with a job, named for it;
         // a plain cube is a material sample, labelled with its friction.
+        // A plain cube is labelled with what matters where it is: its friction
+        // on a ramp (it decides whether it slides), its mass anywhere else (on
+        // a lever it decides which side sinks; μ there meant nothing).
         if (part.Props.ContainsKey("dim-x"))
             AddLabel(part.Id, new Vector3(0, dims.Y / 2 + 0.05f, 0), block);
-        else
+        else if (Runtime.Def.Parts.Any(p => p.Kind == "ramp"))
             AddLabel($"{materialName}\nμ{_materials[part.Material].Friction:F2}", new Vector3(0, size / 2 + 0.05f, 0), block);
+        else
+            AddLabel($"{materialName}\n{block.Mass:0.##} kg", new Vector3(0, size / 2 + 0.05f, 0), block);
         Blocks.Add(block);
         _freezable.Add(block);
         _bodiesById[part.Id] = block;
@@ -882,6 +890,20 @@ public partial class MachineView : Node3D
         body.AddChild(new CollisionShape3D { Shape = mesh.CreateConvexShape() });
         var extent = mesh.GetAabb().Size;
         body.AddChild(new MeshInstance3D { Mesh = mesh, MaterialOverride = PartSurface(part, Mathf.Max(extent.X, extent.Y)) });
+        // A round, evenly toothed wheel looks the same at every angle, so a
+        // gear turning at 27 rpm read as frozen. A dark stripe from hub to
+        // rim on each face shows it turning.
+        if (part.Symbol("shape", "") is "gear" or "pulley" or "drum")
+        {
+            float radius = Mathf.Min(extent.X, extent.Y) / 2;
+            var stripe = Shapes.Mat(new Color(0.12f, 0.1f, 0.09f));
+            foreach (float side in new[] { 1f, -1f })
+            {
+                var bar = Shapes.Box(new Vector3(radius * 0.8f, Mathf.Max(radius * 0.09f, 0.002f), 0.001f), stripe);
+                bar.Position = new Vector3(radius * 0.45f, 0, side * (extent.Z / 2 + 0.0008f));
+                body.AddChild(bar);
+            }
+        }
         AddChild(body);
         _freezable.Add(body);
         _bodiesById[part.Id] = body;

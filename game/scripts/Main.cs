@@ -35,6 +35,19 @@ public partial class Main : Node3D
     private const string MachinesDir = "res://machines";
 
     private static readonly CameraProfile MenuCamera = new(new Vector3(0, 1.4f, 3.0f), new Vector3(0, 0.6f, 0), 60);
+    /// <summary>
+    /// Machines that throw something: the camera follows the missile once
+    /// it leaves, widening to keep both the machine and it in view. The
+    /// throw is over in a fraction of a second and the stone or bolt lands
+    /// 15-50 m away, so a camera framed on the machine showed nothing happen.
+    /// </summary>
+    private static readonly Dictionary<string, string> FollowBody = new()
+    {
+        ["trebuchet"] = "stone",
+        ["torsion-catapult"] = "stone",
+        ["vitruvian-catapulta"] = "bolt",
+    };
+
     private static readonly Dictionary<string, CameraProfile> Profiles = new()
     {
         ["aeolipile"] = new(new Vector3(0, 0.55f, 0.85f), new Vector3(0, 0.32f, 0), 42),
@@ -207,6 +220,34 @@ public partial class Main : Node3D
     private double _editorTimer;
     private PanelContainer _leftPanel = null!; // hidden while build mode's own panel is up, so the two don't overlap
     private PanelContainer _infoPanel = null!; // the running machine's HUD, hidden in build mode for the same reason
+    private VBoxContainer _machineList = null!, _windowSection = null!;
+    private Button _machinesToggle = null!;
+    private ScrollContainer _leftScroll = null!;
+    private bool _hudHidden;
+    private RigidBody3D? _follow;
+    private Vector3 _homePivot;
+    private float _homeDistance;
+
+    /// <summary>
+    /// Folds the menu down to the running machine's own controls (and a
+    /// "Machines…" button) while a machine is on screen, and shrinks the
+    /// panel to fit; unfolds it at the menu.
+    /// </summary>
+    private void SetMenuCollapsed(bool collapsed)
+    {
+        _machineList.Visible = !collapsed;
+        _windowSection.Visible = !collapsed;
+        _machinesToggle.Visible = collapsed;
+        // A scroll container reports no height of its own, so the folded
+        // panel would shrink to nothing; unscrolled, it takes its contents'.
+        _leftScroll.VerticalScrollMode = collapsed ? ScrollContainer.ScrollMode.Disabled : ScrollContainer.ScrollMode.Auto;
+        _leftPanel.SetAnchorsPreset(collapsed ? Control.LayoutPreset.TopLeft : Control.LayoutPreset.LeftWide);
+        _leftPanel.OffsetLeft = 20;
+        _leftPanel.OffsetTop = 20;
+        _leftPanel.OffsetRight = collapsed ? 240 : 320;
+        _leftPanel.OffsetBottom = collapsed ? 20 : -20;
+        _leftPanel.Size = Vector2.Zero; // shrink to its contents when collapsed
+    }
 
     public override void _Ready()
     {
@@ -281,7 +322,7 @@ public partial class Main : Node3D
         panel.OffsetTop = 20;
         panel.OffsetBottom = -20; // bottom-bounded, like the info panel: the buttons scroll instead of running off the window
         layer.AddChild(panel);
-        var scroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
+        var scroll = _leftScroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
         panel.AddChild(scroll);
         var col = new VBoxContainer { CustomMinimumSize = new Vector2(260, 0), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         col.AddThemeConstantOverride("separation", 10);
@@ -291,20 +332,30 @@ public partial class Main : Node3D
         title.AddThemeFontSizeOverride("font_size", 22);
         col.AddChild(title);
 
-        col.AddChild(new HSeparator());
+        // While a machine runs, the list folds away behind this button so the
+        // machine gets the screen; the list used to cover a quarter of it.
+        _machinesToggle = BigButton("Machines…");
+        _machinesToggle.Visible = false;
+        _machinesToggle.Pressed += () => SetMenuCollapsed(_machineList.Visible);
+        col.AddChild(_machinesToggle);
+
+        _machineList = new VBoxContainer();
+        _machineList.AddThemeConstantOverride("separation", 10);
+        col.AddChild(_machineList);
+        _machineList.AddChild(new HSeparator());
 
         foreach (var (name, _) in _machineFiles)
         {
             var button = BigButton(DisplayNames.GetValueOrDefault(name, name));
             button.Pressed += () => SelectMachine(name);
-            col.AddChild(button);
+            _machineList.AddChild(button);
         }
 
-        col.AddChild(new HSeparator());
+        _machineList.AddChild(new HSeparator());
 
         var buildModeButton = BigButton("Build Mode");
         buildModeButton.Pressed += SelectBuildMode;
-        col.AddChild(buildModeButton);
+        _machineList.AddChild(buildModeButton);
 
         col.AddChild(new HSeparator());
 
@@ -345,10 +396,12 @@ public partial class Main : Node3D
             _speedButtons.Add(b);
         }
 
-        col.AddChild(new HSeparator());
-        col.AddChild(new Label { Text = "Window size" });
+        _windowSection = new VBoxContainer();
+        col.AddChild(_windowSection);
+        _windowSection.AddChild(new HSeparator());
+        _windowSection.AddChild(new Label { Text = "Window size" });
         var sizeRow = new HBoxContainer();
-        col.AddChild(sizeRow);
+        _windowSection.AddChild(sizeRow);
         foreach (var (w, h, label) in WindowSizes)
         {
             var b = new Button { Text = label };
@@ -357,7 +410,7 @@ public partial class Main : Node3D
         }
         var fullscreenButton = new Button { Text = "Fullscreen", ToggleMode = true };
         fullscreenButton.Pressed += () => ToggleFullscreen(fullscreenButton.ButtonPressed);
-        col.AddChild(fullscreenButton);
+        _windowSection.AddChild(fullscreenButton);
 
         BuildInfoPanel(layer);
     }
@@ -421,7 +474,7 @@ public partial class Main : Node3D
         _hudControls = new Label
         {
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            Text = "Space pause/run · F fire · R restart · D details · Esc menu · 1-9 pick a machine\nDrag to orbit · scroll to zoom",
+            Text = "Space pause/run · F fire · R restart · D details · H hide this panel · Esc menu · 1-9 pick a machine\nDrag to orbit · scroll to zoom",
         };
         _hudControls.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.6f));
         _hudControls.AddThemeFontSizeOverride("font_size", 13);
@@ -479,6 +532,8 @@ public partial class Main : Node3D
         _menuButton.Disabled = false;
         _runButton.Disabled = false;
         _detailsButton.Disabled = false;
+        SetMenuCollapsed(true);
+        _follow = FollowBody.TryGetValue(name, out var followId) ? view.BodyNamed(followId) : null;
     }
 
     private void RestartCurrent()
@@ -513,7 +568,7 @@ public partial class Main : Node3D
         _buildMode?.QueueFree();
         _buildMode = null;
         _leftPanel.Visible = true;
-        _infoPanel.Visible = true;
+        _infoPanel.Visible = !_hudHidden;
         _camera.MakeCurrent();
         ApplyCamera(MenuCamera);
     }
@@ -534,6 +589,8 @@ public partial class Main : Node3D
         _menuButton.Disabled = false;
         _runButton.Disabled = false;
         _detailsButton.Disabled = false;
+        SetMenuCollapsed(true);
+        _follow = null;
     }
 
     private void DeselectMachine()
@@ -550,6 +607,8 @@ public partial class Main : Node3D
         _menuButton.Disabled = true;
         _runButton.Disabled = true;
         _detailsButton.Disabled = true;
+        SetMenuCollapsed(false);
+        _follow = null;
     }
 
     private void SetRunning(bool running)
@@ -590,10 +649,10 @@ public partial class Main : Node3D
 
     private void ApplyCamera(CameraProfile profile)
     {
-        _orbitPivot = profile.LookAt;
+        _orbitPivot = _homePivot = profile.LookAt;
         _orbitFov = profile.FovDegrees;
         var offset = profile.Eye - profile.LookAt;
-        _orbitDistance = offset.Length();
+        _orbitDistance = _homeDistance = offset.Length();
         _orbitYaw = Mathf.Atan2(offset.X, offset.Z);
         _orbitPitch = Mathf.Asin(Mathf.Clamp(offset.Y / Mathf.Max(_orbitDistance, 0.001f), -1, 1));
         // HEROIC_ORBIT="yaw pitch" (degrees) swings the camera round from the
@@ -742,7 +801,7 @@ public partial class Main : Node3D
                 UpdateOrbitCamera();
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.WheelDown }:
-                _orbitDistance = Mathf.Min(20f, _orbitDistance / 0.9f);
+                _orbitDistance = Mathf.Min(80f, _orbitDistance / 0.9f);
                 UpdateOrbitCamera();
                 break;
             case InputEventMouseMotion motion when _dragging:
@@ -771,6 +830,10 @@ public partial class Main : Node3D
                 break;
             case Key.D when _current is not null:
                 _detailsButton.EmitSignal(BaseButton.SignalName.Pressed);
+                break;
+            case Key.H:
+                _hudHidden = !_hudHidden;
+                _infoPanel.Visible = !_hudHidden;
                 break;
             case >= Key.Key1 and <= Key.Key9:
             {
@@ -808,8 +871,28 @@ public partial class Main : Node3D
             GD.Print($"[{_current.Runtime.Time:F2}s] {_current.DebugState()}\n{_current.EnergyHud()}");
         }
 
+        FollowMissile();
         ShowSky(_current?.Runtime);
         UpdateInfoPanel();
+    }
+
+    /// <summary>
+    /// Once a thrown stone or bolt is clear of the machine, eases the camera
+    /// to look between the two and pulls back far enough to keep both in
+    /// view, so the flight and the landing are on screen.
+    /// </summary>
+    private void FollowMissile()
+    {
+        if (_follow is null || !IsInstanceValid(_follow)) return;
+        var target = _follow.GlobalPosition;
+        var home = _homePivot with { Y = 0 };
+        float separation = new Vector2(target.X - home.X, target.Z - home.Z).Length();
+        if (separation < 1f) return;
+        var wantPivot = (_homePivot + target) / 2;
+        float wantDistance = Mathf.Max(_homeDistance, separation * 0.6f + 1.5f);
+        _orbitPivot = _orbitPivot.Lerp(wantPivot, 0.06f);
+        _orbitDistance = Mathf.Lerp(_orbitDistance, wantDistance, 0.06f);
+        UpdateOrbitCamera();
     }
 
     private void UpdateInfoPanel()
