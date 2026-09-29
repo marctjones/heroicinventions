@@ -261,3 +261,24 @@
   (check-exn exn:fail:syntax?
              (λ () (expand-machine '(wheel g #:shape (pulley #:radius 0.1 #:width 0.05)
                                            #:at (0 0 0) #:material oak #:axis w)))))
+
+;; ---------------------------------------------------------------------------
+;; The in-game editor's palette (racket/build.rkt's catalogue.rktd)
+
+;; Mirrors the (entry …) tuple racket/build.rkt writes for each catalogue
+;; shape, so the editor's C# palette can give a placed wheel/screw/fixture
+;; the same inertia-x/y/z props a machine-authored one gets from emit.rkt
+;; (see MachineView.cs's BuildRigidBody, which reads those three props).
+(test-case "every catalogue entry carries a positive, per-axis inertia"
+  (for ([e catalogue])
+    (define s (catalogue-entry-shape e))
+    (define i (shape-inertia s))
+    (check-equal? (vector-length i) 3 (format "~a inertia is not 3 numbers" (catalogue-entry-id e)))
+    (for ([axis '(x y z)] [v (vector->list i)])
+      (check-true (> v 0) (format "~a inertia-~a should be positive, got ~a" (catalogue-entry-id e) axis v)))))
+
+;; What the editor's exported source says for a catalogue part.
+(test-case "catalogue-shape finds an entry by id and rejects an unknown one"
+  (define s (catalogue-shape 'involute-gear-m5-18))
+  (check-equal? (shape-inertia s) (shape-inertia (catalogue-entry-shape (findf (λ (e) (eq? (catalogue-entry-id e) 'involute-gear-m5-18)) catalogue))))
+  (check-exn #rx"no catalogue entry" (λ () (catalogue-shape 'no-such-gear))))
