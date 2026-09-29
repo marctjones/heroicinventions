@@ -113,6 +113,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <li><a href="#goal">The goal</a></li>
       <li><a href="#path">The path to the call</a></li>
       <li><a href="#night">Night heat</a></li>
+      <li><a href="#routes">Routes to the call</a></li>
       <li><a href="#crater">The world: a crater</a></li>
       <li><a href="#abilities">What the rover can do</a></li>
       <li><a href="#rover-power">The rover's own power</a></li>
@@ -180,6 +181,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
     <p>What is <em>not</em> waved away:</p>
     <ul>
       <li><strong>Driving is on the surface.</strong> The rover drives on the ground and on anything built to carry it, and can't pass through walls, machines or the crater's cliffs. It climbs inclined planes up to a maximum grade (Opportunity was rated for about 30° of tilt), so reaching a raised platform means building a ramp to it.</li>
+      <li><strong>Free effort never makes energy</strong> (#72). The rover moves loads sideways or down, never up: vessels and weights are placed empty, the backhoe dumps at or below where it dug, the rover climbs ramps with an empty bucket, and it can't turn a treadwheel or push a capstan. Otherwise it would be a perpetual-motion machine. Lifting is the machines' job.</li>
       <li><strong>The results obey physics.</strong> Only the rover's effort is free. A reservoir's banks still slump if dug steeper than the angle of repose (#44), a pile of spoil still slides, and a reservoir still leaks through sandy walls unless lined.</li>
     </ul>
 
@@ -233,6 +235,66 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
     <p>The store needs no machinery to release its heat. A hot tank or rock bed inside the enclosure warms it by Newton's law as it cools (#71), and a hearth burns at its set power until its fuel runs out, so a fire loaded at dusk needs no tending. The rover sleeps until the pass (#59).</p>
     <h3>Timers are optional</h3>
     <p>Nothing on the path to the call needs a clockwork timer, because the rover can wake at any hour and act for itself. Timers are for players who want the night to run itself: a water clock (already built) or a sand timer (#50) pulling a rope that opens a valve (#46) or trips a lever (#32), to release more heat at midnight or light a second fire. They earn Heron's catalogue achievements, and with the rover's own power option on (#62) they save it waking up. Each piece is a filed part, so a timer is an assembly, not a new model.</p>
+
+    <h2 id="routes">Routes to the call</h2>
+    <p>Worked with illustrative scenario numbers: a 5 kWh bank, a 5 m/s mean wind in the floor corridor, about 500 W/m² of midday sun, 12-hour nights at −80 °C, and the 03:00 relay pass. Tuning (#60) scales the timings.</p>
+    <h3>The fastest route: about 3–4 sols</h3>
+    <ol>
+      <li><strong>Undermine the boulders.</strong> Dig a pit beside the boulders pinning the bank and undercut them; they roll aside under gravity (#54). No lifting.</li>
+      <li><strong>A membrane tent with a rock heat store.</strong> Heliostats heat basalt inside the tent by day. Rock can be heated to about 200 °C, so about 45 kg carries the 7 MJ night. No water, ice or glass needed.</li>
+      <li><strong>A Stirling engine on mirror heat</strong> (#65). Flat heliostats reach about 270 °C, enough for a hot-air engine with Mars as its cold side. About 15% of 5 kW is about 750 W at the shaft and 600 W of charging: the bank fills in one sol.</li>
+      <li><strong>A night windmill.</strong> Crater slope winds blow at night, so a windmill in the corridor tops up the warm bank.</li>
+      <li><strong>Sleep until 03:00 and call.</strong></li>
+    </ol>
+    <h3>Other routes</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Route</th><th>Machines, in order</th><th>Roughly</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td class="name">The windmiller</td><td>Lever and crane salvage, windmill, membrane tent, rock store</td><td class="num">7–10 sols</td><td>The simplest technology. About 72 W of charging, and none while the tent is cold.</td></tr>
+          <tr><td class="name">Newcomen's mistake</td><td>A pressurised tent, then Earth's first steam engine</td><td class="num">stalls, then a rebuild</td><td>Mars air barely pushes the piston: about 14% of Earth's force in a 13.5 kPa tent. Rebuilding as high-pressure steam (about 5%) takes about 3 sols of daylight.</td></tr>
+          <tr><td class="name">The forester</td><td>Glass, greenhouse, trees, wood-fired steam engine, wood fire at night</td><td class="num">years (months at ×20 growth)</td><td>Charging at 5% burns about 20 kg of wood: four years of a 10 m² greenhouse. The most content, the slowest route.</td></tr>
+          <tr><td class="name">The hydraulic miner</td><td>Ice, rain-house, reservoir, a hushing flood to uncover the bank, a hot-water night store</td><td class="num">weeks</td><td>Salvage by flood and heat by water; charging still needs wind or an engine.</td></tr>
+          <tr><td class="name">The siege engineer</td><td>Trebuchet stones shatter the boulders (#43), then any power route</td><td class="num">+1 sol</td><td>A fun salvage using machines the engine already has.</td></tr>
+          <tr><td class="name">The gravity battery</td><td>A windmill raises weights at night; they drive the generator by day</td><td class="num">slower than warming the bank</td><td>Storing 1 kWh takes about 97 t dropped 10 m on Mars. Clever and weak.</td></tr>
+          <tr><td class="name">The water-wheel trap</td><td>Rain-house reservoir driving a wheel into the generator</td><td class="num">effectively never</td><td>5 kWh needs about 970 t of water falling 5 m.</td></tr>
+          <tr><td class="name">Heron purist</td><td>Only machines from Heron's books: an aeolipile engine, automata timers</td><td class="num">hopeless without tuning</td><td>The aeolipile converts well under 1%. It fills the catalogue but can't win alone.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Route achievements</h3>
+    <p>Every route, and every instructive trap, is an achievement (#68), recognised from the trace rather than a script: how the bank was freed (#54), where its charge came from (the bank records charge per source, #64), and what kept it warm on the night of the call (#71). Each unlocks its key machine as a reusable assembly (#24) and a rover log entry.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Achievement</th><th>Earned when</th><th>Unlocks</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Undermined</td><td>The bank's boulders moved because the ground under them was dug, not because anything lifted them</td><td>A pit-and-undercut earthworks plan</td></tr>
+          <tr><td class="name">Give me a lever</td><td>A lever or crane moved a boulder off the bank</td><td>Lever-and-fulcrum assembly</td></tr>
+          <tr><td class="name">Siege engineer</td><td>A thrown stone broke a boulder</td><td>Trebuchet assembly</td></tr>
+          <tr><td class="name">Hushing</td><td>A released reservoir washed the bank clear</td><td>Reservoir-and-sluice assembly</td></tr>
+          <tr><td class="name">Hot air</td><td>At least half the bank's charge came from a Stirling engine</td><td>Stirling-generator assembly</td></tr>
+          <tr><td class="name">High pressure</td><td>At least half came from a high-pressure steam engine</td><td>Boiler-engine-generator assembly</td></tr>
+          <tr><td class="name">The windmiller</td><td>At least 90% came from windmills</td><td>Windmill-generator assembly</td></tr>
+          <tr><td class="name">Day and night</td><td>At least a quarter each from a daytime heat engine and a night-time windmill</td><td>A day/night charging plan</td></tr>
+          <tr><td class="name">The forester</td><td>At least half came from burning wood the greenhouse grew</td><td>Greenhouse-and-stove assembly</td></tr>
+          <tr><td class="name">Newcomen's mistake</td><td>A Newcomen engine ran on Mars and its stroke force was measured</td><td>A log entry on why engines went to high pressure</td></tr>
+          <tr><td class="name">Hypocaust</td><td>A rock store kept the bank above 0 °C through the night of the call</td><td>Rock heat-store assembly</td></tr>
+          <tr><td class="name">Warm water</td><td>A hot-water store did</td><td>Hot-water store assembly</td></tr>
+          <tr><td class="name">Hearth-keeper</td><td>A wood fire did</td><td>Loaded-hearth assembly</td></tr>
+          <tr><td class="name">The water-wheel trap</td><td>A water wheel fed the generator</td><td>A log entry with the measured efficiency, g·h/L</td></tr>
+          <tr><td class="name">The gravity battery</td><td>Falling weights fed the generator</td><td>Counterweight-store assembly and a log entry on its capacity</td></tr>
+          <tr><td class="name">Heron purist</td><td>An aeolipile fed the generator</td><td>A log entry on Heron's engine</td></tr>
+          <tr><td class="name">Three sols to Earth</td><td>The call within 4 sols</td><td>A speedrun timer in the scenario panel</td></tr>
+          <tr><td class="name">The long way round</td><td>The call with the greenhouse, glass and at least five of Heron's automata built</td><td>The world-house rain achievement becomes available</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>What the routes show</h3>
+    <ul>
+      <li><strong>The fastest route skips most of the content.</strong> Glass, the greenhouse, trees, water and the automata are optional on it. That is fine if they are for achievements, harder settings and exploration. If they should be required, candidate gates include: the storm shredded most membranes, so a large enclosure needs glass; the Stirling engine's parts are in the deepest crate; or a bigger bank needs more than one engine.</li>
+      <li><strong>The traps teach.</strong> The water wheel, the gravity battery, the aeolipile and wood-for-electricity are all reasonable things to try, and their numbers explain why they fail.</li>
+      <li><strong>Mixed routes win.</strong> Day and night have different power sources, so combining them is fastest.</li>
+    </ul>
 
     <h2 id="rules">Physics as the rules</h2>
     <p>Heroic Inventions does not script its machines. A pump lifts water because the atmosphere pushes it up the pipe; a windmill turns because the wind carries ½ρAv³ through its sails. Move the same laws to Mars and most familiar machines stop working, each for a reason the player can discover and measure. The figures below come from the formulas the engine already uses, with Earth at 20 °C and Mars at 610 Pa and −63 °C.</p>
@@ -467,6 +529,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
 
     <h2 id="open">Open questions</h2>
     <ul>
+      <li><strong>Should the middle be required?</strong> The fastest route skips glass, the greenhouse and the automata (see <a href="#routes">Routes</a>). Keep them optional, or add a gate?</li>
       <li><strong>Game or sandbox?</strong> Settled: a game, won by calling Earth (see <a href="#goal">The goal</a>). Still open: what does the ending show: the first people arriving to what the rover built?</li>
       <li><strong>How literal is Mars?</strong> Real seasons and dust storms change pressure by ±30% and sunlight by far more. Do they belong in the first version?</li>
       <li><strong>Electricity.</strong> Settled: found parts and unlimited wire, with no circuit model (#64), so the game doesn't wait on M7's electrical network.</li>
