@@ -114,6 +114,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <li><a href="#path">The path to the call</a></li>
       <li><a href="#night">Night heat</a></li>
       <li><a href="#routes">Routes to the call</a></li>
+      <li><a href="#checked">Checked assumptions</a></li>
       <li><a href="#crater">The world: a crater</a></li>
       <li><a href="#abilities">What the rover can do</a></li>
       <li><a href="#rover-power">The rover's own power</a></li>
@@ -205,7 +206,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
           <tr><td class="name">2. Water</td><td>Backhoe out ice-cemented soil and melt it with mirrors inside a membrane tent: the first liquid water.</td><td>#63, #22, #39, #42</td></tr>
           <tr><td class="name">3. Salvage</td><td>Dig out the crates, wash out sediment, and use levers, a crane and grips to free the battery bank from under boulders.</td><td>#53, #54, #55</td></tr>
           <tr><td class="name">4. Power</td><td>A windmill in the wind corridor turns a salvaged motor through a step-up gear train; later a steam or hot-air engine on mirror heat.</td><td>#19, #51, #64, #65</td></tr>
-          <tr><td class="name">5. Warmth</td><td>An insulated, glazed enclosure for the bank, warm by day from mirrors, a heat store (hot water or rock, topped up with wood) to carry it through the night, and a sealed-air thermostat to keep it under 45 °C.</td><td>#56, #57, #71, #42, #40</td></tr>
+          <tr><td class="name">5. Warmth</td><td>An insulated enclosure for the bank (a tight regolith vault, or glazed later), a heat store (rock, or hot water, topped up with wood) in a lidded bin to carry it through the night, and a thermostat on the lid to keep it under 45 °C.</td><td>#56, #57, #71, #42, #40</td></tr>
           <tr><td class="name">6. The call</td><td>Charge the bank to full while it is warm, keep it above 0 °C through the night, and call on the 03:00 relay pass.</td><td>#64, #68, #59</td></tr>
         </tbody>
       </table>
@@ -217,35 +218,36 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <li><strong>The pre-dawn call.</strong> The call goes out at 03:00, the coldest hour. Without it a player could charge by day in a mirror-warmed tent and never need night heat; with it, heat must be stored by day and last the night.</li>
       <li><strong>The boulders.</strong> The bank is pinned under rim boulders too big for the backhoe. Freeing it takes levers, a crane and grips, or washing the fines out from under them (#54, #63).</li>
       <li><strong>Generator speed.</strong> The salvaged motor charges only above about 1,500 rpm. Windmills and water wheels turn at a few to a dozen rpm, so every slow route needs a gear train, with a little loss at every stage.</li>
-      <li><strong>Overheating.</strong> The bank won't charge above 45 °C, so a hot heat store beside it needs a thermostat: sealed air that expands and pushes open a vent, as in Heron's temple doors.</li>
+      <li><strong>Overheating.</strong> The bank won't charge above 45 °C, so a hot heat store beside it needs a lidded bin and a thermostat to meter its heat. A bimetal strip works anywhere; Heron's sealed-air thermostat only works charged from a gas cylinder and counterweighted.</li>
       <li><strong>The capacity.</strong> The bank's size (a scenario number, #60) sets how long one windmill would take, so more windmills or a heat engine become worthwhile.</li>
     </ol>
     <p>Around the path sits the game layer (#66–#70): a resource store so building costs materials, saving a whole world, goals and Heron's catalogue as achievements, sols and dust storms, and wear on the salvaged motors and bank.</p>
 
     <h2 id="night">Night heat</h2>
-    <p>An enclosure loses heat at U·A·ΔT. A well-insulated membrane box losing 2 W per kelvin, held 80 K above the −80 °C night, needs about 160 W for 12 hours: roughly 7 MJ each night. A regolith vault does four times better: Mars soil insulates like fibreglass (about 0.04 W/(m·K), because the gas in its pores is so thin), so 0.5 m of it over 6 m² loses about 0.5 W/K, about 1.7 MJ a night (#71). The bank needs warmth, not air, so the vault needs no membrane. Three ways to supply the heat (figures for the 7 MJ box; a vault needs a quarter):</p>
+    <p>An enclosure loses heat at U·A·ΔT. A well-insulated membrane box losing 2 W per kelvin, held 80 K above the −80 °C night, needs about 160 W for 12 hours: roughly 7 MJ each night. A regolith vault loses far less once it has warmed through: Mars soil insulates like fibreglass (0.039 W/(m·K) measured by InSight, because the gas in its pores is so thin), so 0.5 m of it over 6 m² loses about 0.5 W/K. <strong>But a fresh vault is not in that steady state.</strong> Its walls start at ground temperature, about −55 °C, and heat soaks into them for weeks before the steady loss is reached, so the first nights cost far more (see <a href="#checked">Checked assumptions</a>). The bank needs warmth, not air, so the vault needs no membrane. Three ways to supply the heat:</p>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Night heat</th><th>Per night</th><th>Verdict</th></tr></thead>
+        <thead><tr><th>Night heat</th><th>Amount</th><th>Verdict</th></tr></thead>
         <tbody>
-          <tr><td class="name">Wood fire</td><td class="num">about 0.5 kg of wood</td><td>A 10 m² greenhouse grows about 5 kg a year: only about 10 nights. A top-up, not the main source.</td></tr>
-          <tr><td class="name">Hot water, heated by mirrors by day</td><td class="num">about 33 kg, 60 → 10 °C</td><td>The efficient answer. Water's high heat capacity is the lesson, and it rewards the water loop.</td></tr>
-          <tr><td class="name">Hot rocks</td><td class="num">about 160 kg of basalt</td><td>Free material from the backhoe; the Roman hypocaust stored heat the same way.</td></tr>
+          <tr><td class="name">Hot rocks</td><td class="num">about 40 kg of basalt at 200 °C a sol, for a tight vault (modelled)</td><td>Free material from the backhoe; the Roman hypocaust stored heat the same way. A membrane tent needs 60–120 kg.</td></tr>
+          <tr><td class="name">Hot water, heated by mirrors by day</td><td class="num">about 33 kg, 60 → 10 °C, per 7 MJ (arithmetic)</td><td>Water's high heat capacity is the lesson, but it must be mined, melted and kept liquid, so rock wins on the fastest route.</td></tr>
+          <tr><td class="name">Wood fire</td><td class="num">about 0.5 kg of wood per 7 MJ (arithmetic)</td><td>A 10 m² greenhouse grows about 5 kg a year: only about 10 nights. A top-up, not the main source.</td></tr>
         </tbody>
       </table>
     </div>
-    <p>The store needs no machinery to release its heat. A hot tank or rock bed inside the enclosure warms it by Newton's law as it cools (#71), and a hearth burns at its set power until its fuel runs out, so a fire loaded at dusk needs no tending. The rover sleeps until the pass (#59).</p>
+    <p>Heat inside the vault moves by radiation, not air: the vault is open to Mars's 610 Pa, too thin to carry heat by convection. Hot rock loose beside the bank would radiate about 280 W at first and push the bank past 45 °C within a couple of hours, so the rock goes in a <strong>lidded bin</strong>, like a storage heater: a thermostat opens the lid when the bank cools toward 5 °C and closes it near 40 °C, so the heat is metered rather than dumped. The lid must be well insulated: in the model, a lid leaking 0.1 W/K holds the bank at or below 40 °C, while one leaking 0.5 W/K lets it reach 64 °C. A hearth burns at its set power until its fuel runs out, so a fire loaded at dusk needs no tending. The rover sleeps until the pass (#59).</p>
+    <p><strong>The thermostat</strong> should be a bimetallic strip, two bonded metals that bend as they warm, as John Harrison used in his H3 marine clock of 1759. It works at any pressure. Heron's sealed-air thermostat is a trap in the vault: sealed at Mars's 610 Pa, a 30 K rise adds only about 60 Pa, far too little to lift a lid. Charged from a cargo nitrogen cylinder to 100 kPa, the same rise gives about 10 kPa, but the piston then carries about 100 N of standing load against the thin outside air and needs a counterweight to balance it. Heron's water-siphon version fails outright, because its water boils at 610 Pa.</p>
     <h3>Timers are optional</h3>
     <p>Nothing on the path to the call needs a clockwork timer, because the rover can wake at any hour and act for itself. Timers are for players who want the night to run itself: a water clock (already built) or a sand timer (#50) pulling a rope that opens a valve (#46) or trips a lever (#32), to release more heat at midnight or light a second fire. They earn Heron's catalogue achievements, and with the rover's own power option on (#62) they save it waking up. Each piece is a filed part, so a timer is an assembly, not a new model.</p>
 
     <h2 id="routes">Routes to the call</h2>
     <p>Worked with illustrative scenario numbers: a 5 kWh bank, a 5 m/s mean wind in the floor corridor, about 500 W/m² of midday sun, 12-hour nights at −80 °C, and the 03:00 relay pass. Tuning (#60) scales the timings.</p>
-    <h3>The fastest route: about 3–4 sols</h3>
+    <h3>The fastest route: about 3–5 sols</h3>
     <ol>
       <li><strong>Undermine the boulders.</strong> Dig a pit beside the boulders pinning the bank and undercut them; they roll aside under gravity (#54). No lifting.</li>
-      <li><strong>A regolith vault with a rock heat store.</strong> The backhoe buries the bank under 0.5 m of regolith, which insulates like fibreglass on Mars, so the vault loses only about 38 W on an −80 °C night: about 1.7 MJ. Heliostats heat basalt in the open by day to about 200 °C, and at dusk the rover pushes about 11 kg of it sideways into the vault. No membrane, water or glass needed.</li>
-      <li><strong>A thermostat.</strong> A sealed-air vent opens the vault to the outside if the fresh-in hot rock pushes it past 45 °C.</li>
-      <li><strong>A Stirling engine on mirror heat</strong> (#65). Flat heliostats reach about 270 °C, enough for a hot-air engine with Mars as its cold side. It turns at a few hundred rpm, so a single gear stage brings it to the generator's cut-in. About 15% of 5 kW is about 750 W at the shaft and 600 W of charging: the bank fills in one sol.</li>
+      <li><strong>A tight regolith vault with a rock heat store.</strong> The backhoe buries the bank in a cavity only a little bigger than it (about 0.5 m across; a 1 m cavity has four times the cold wall). Heliostats heat basalt in the open by day to about 200 °C, and the rover pushes about 40 kg of it sideways into the vault's lidded bin each sol. In the model this keeps the bank between 0 and 45 °C at 03:00 from the first night, even starting from a bank frozen at −55 °C. The 11 kg this doc first estimated fails: the fresh, cold walls soak up the heat. No membrane, water or glass needed.</li>
+      <li><strong>A bimetal thermostat on the bin's lid.</strong> It opens the lid as the bank cools and closes it near 40 °C, so the rock's heat lasts the night instead of overheating the bank at dusk.</li>
+      <li><strong>A Stirling engine on mirror heat</strong> (#65), with Mars as its cold side. It turns at a few hundred rpm, so one gear stage brings it to the generator's cut-in. It runs best well below the mirrors' 270 °C limit, around 100–150 °C, because a hotter receiver re-radiates what the mirrors deliver. Modelled with a fair engine (35% of Carnot), ten 1 m² heliostats give about 320 W at the shaft at noon and 1.7 kWh of charge a sol, so the 5 kWh bank takes about 3 sols; twenty heliostats fill it in about one.</li>
       <li><strong>A night windmill.</strong> Crater slope winds blow at night, so a windmill in the corridor, geared up about 125:1, tops up the warm bank.</li>
       <li><strong>Sleep until 03:00 and call.</strong></li>
     </ol>
@@ -288,7 +290,9 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
           <tr><td class="name">The gravity battery</td><td>Falling weights fed the generator</td><td>Counterweight-store assembly and a log entry on its capacity</td></tr>
           <tr><td class="name">Heron purist</td><td>An aeolipile fed the generator</td><td>A log entry on Heron's engine</td></tr>
           <tr><td class="name">Gear up</td><td>A gear train of at least 100:1 drove a generator above cut-in</td><td>Step-up gearbox assembly</td></tr>
-          <tr><td class="name">Thermostat</td><td>Sealed air held the bank's enclosure under 45 °C while a heat store beside it ran above 100 °C</td><td>Sealed-air vent assembly</td></tr>
+          <tr><td class="name">Thermostat</td><td>A thermostat held the bank under 45 °C while a heat store beside it ran above 100 °C</td><td>Lidded heat-bin assembly</td></tr>
+          <tr><td class="name">Harrison</td><td>The thermostat was a bimetallic strip</td><td>Bimetal strip part and a log entry on Harrison's H3</td></tr>
+          <tr><td class="name">Heron under pressure</td><td>A sealed-air thermostat worked in a Mars-pressure space, charged from a cylinder and counterweighted</td><td>A log entry on why 610 Pa sealed air barely pushes</td></tr>
           <tr><td class="name">Archimedes' screw</td><td>A screw filled a raised water store</td><td>Wind-driven screw assembly</td></tr>
           <tr><td class="name">Noria</td><td>A bucket wheel filled a raised water store</td><td>Noria assembly</td></tr>
           <tr><td class="name">Ctesibius</td><td>A force pump lifted water higher than the enclosure's suction limit allows a lift pump</td><td>Force-pump assembly</td></tr>
@@ -311,7 +315,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
         <tbody>
           <tr><td class="name">Windmills, sun and mirrors</td><td>Power and heat on the fastest route</td></tr>
           <tr><td class="name">Gear trains and bearing friction</td><td>Stepping slow prime movers up to the generator's cut-in speed</td></tr>
-          <tr><td class="name">Heated sealed air</td><td>The thermostat that keeps the bank under 45 °C</td></tr>
+          <tr><td class="name">Heated sealed air, bimetal</td><td>The thermostat on the heat bin that keeps the bank under 45 °C</td></tr>
           <tr><td class="name">Boilers, safety valves, burst</td><td>High-pressure steam, and the burst trap</td></tr>
           <tr><td class="name">Newcomen engine, aeolipile, water wheel</td><td>Traps with measured lessons</td></tr>
           <tr><td class="name">Hearth, fuel, oxygen</td><td>Night heat and the forester route</td></tr>
@@ -333,6 +337,33 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <li><strong>The traps teach.</strong> The water wheel, the gravity battery, the aeolipile and wood-for-electricity are all reasonable things to try, and their numbers explain why they fail.</li>
       <li><strong>Mixed routes win.</strong> Day and night have different power sources, so combining them is fastest.</li>
     </ul>
+
+    <h2 id="checked">Checked assumptions</h2>
+    <p>The numbers in this doc started as hand estimates. The key ones have now been checked, either by a time-stepped model (a 1-D transient conduction model of the vault wall, radiation inside the vault, the lidded bin and thermostat with hysteresis, and the Stirling engine's day), or against published sources. Where the check changed the answer, the design above has been corrected.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Claim</th><th>How checked</th><th>Result</th><th>Design change</th></tr></thead>
+        <tbody>
+          <tr><td class="name">11 kg of rock carries a vault through the night</td><td>Model</td><td class="needs">Wrong. A fresh vault's walls start at −55 °C and soak up heat for weeks; with a 1 m cavity the bank is at −35 °C at 03:00 on night 1</td><td>A tight cavity and about 40 kg a sol; works from night 1 even from a frozen bank</td></tr>
+          <tr><td class="name">A vault beats a membrane tent</td><td>Model</td><td class="built">Holds, by less than claimed: the tight vault needs about 40 kg of rock, the tent 60–120 kg</td><td>None</td></tr>
+          <tr><td class="name">Regolith conductivity about 0.04 W/(m·K)</td><td>Source: InSight measured 0.039</td><td class="built">Confirmed. The vault design works across 0.02–0.08, fails the first two nights at 0.15</td><td>None</td></tr>
+          <tr><td class="name">A thermostat can meter the heat</td><td>Model</td><td class="built">Holds if the closed bin leaks 0.1 W/K or less; a 0.5 W/K lid lets the bank reach 64 °C</td><td>The bin's lid must be well insulated</td></tr>
+          <tr><td class="name">Vent the excess heat</td><td>Reasoning and arithmetic</td><td class="needs">Poor: 610 Pa air barely convects; only a hatch radiating to the cold sky works (about 500 W/m², assuming an effective sky near −70 °C), and it wastes the heat</td><td>A lidded bin (damper) instead of a vent</td></tr>
+          <tr><td class="name">Heron's sealed-air thermostat works in the vault</td><td>Arithmetic</td><td class="needs">Fails at 610 Pa (about 60 Pa of change); works charged to 100 kPa but needs a counterweight for about 100 N of standing load</td><td>Bimetal strip as the default; sealed air as a lesson</td></tr>
+          <tr><td class="name">A Stirling engine fills the bank in one sol at 750 W</td><td>Model</td><td class="needs">Wrong. Ten heliostats give about 320 W at noon and 1.7 kWh a sol: about 3 sols. The best receiver temperature is 100–150 °C, not 270 °C</td><td>Fastest route is 3–5 sols; twenty heliostats for one sol</td></tr>
+          <tr><td class="name">The bank charges only at 0–45 °C</td><td>Source: Battery University</td><td class="built">Confirmed (best 10–30 °C); below 0 °C lithium plates</td><td>None</td></tr>
+          <tr><td class="name">MRO passes about 3 am and 3 pm</td><td>Source: AIAA mission operations paper</td><td class="built">Confirmed: a sun-synchronous 3 am/3 pm orbit</td><td>None</td></tr>
+          <tr><td class="name">Opportunity's last message: 22 Wh, τ 10.8</td><td>Source: NASA/JPL</td><td class="built">Confirmed (21–22 Wh, τ 10.8, 10 June 2018)</td><td>None</td></tr>
+          <tr><td class="name">Victoria crater about 800 m wide, 70 m deep</td><td>Source</td><td class="built">Confirmed</td><td>None</td></tr>
+          <tr><td class="name">Silica-rich sand near Home Plate</td><td>Source: Spirit, 2007</td><td class="built">Confirmed: soils of 65–92% silica, one patch over 90%</td><td>None</td></tr>
+          <tr><td class="name">Night slope winds in a crater</td><td>Source: Curiosity REMS at Gale</td><td class="built">Confirmed: upslope by day, downslope at night, stronger and gustier at night</td><td>None</td></tr>
+          <tr><td class="name">Habitat membranes are opaque</td><td>Source: TransHab design</td><td class="built">Confirmed: more than 60 fabric layers (liner, bladder, Kevlar restraint, shielding, insulation)</td><td>None</td></tr>
+          <tr><td class="name">Harrison's bimetallic strip</td><td>Source</td><td class="built">Confirmed: H3, 1759</td><td>None</td></tr>
+          <tr><td class="name">Wood and hot-water night heat</td><td>Arithmetic only</td><td class="ready">Not yet modelled</td><td>Model when #42 and #71 land</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Sources: <a href="https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2021JE006861">InSight soil conductivity</a>, <a href="https://www.batteryuniversity.com/article/bu-410-charging-at-high-and-low-temperatures/">Battery University BU-410</a>, <a href="https://arc.aiaa.org/doi/pdf/10.2514/6.2006-5956">MRO mission operations (AIAA)</a>, <a href="https://science.nasa.gov/resource/opportunitys-last-message/">Opportunity's last message (NASA)</a>, <a href="https://en.wikipedia.org/wiki/Victoria_(crater)">Victoria crater</a>, <a href="https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2010JE003767">opaline silica at Home Plate</a>, <a href="https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2020JE006734">diurnal winds at Gale</a>, <a href="https://ntrs.nasa.gov/api/citations/20190000847/downloads/20190000847.pdf">NASA review of inflatable habitats</a>, <a href="https://en.wikipedia.org/wiki/Bimetallic_strip">bimetallic strip</a>.</p>
 
     <h2 id="rules">Physics as the rules</h2>
     <p>Heroic Inventions does not script its machines. A pump lifts water because the atmosphere pushes it up the pipe; a windmill turns because the wind carries ½ρAv³ through its sails. Move the same laws to Mars and most familiar machines stop working, each for a reason the player can discover and measure. The figures below come from the formulas the engine already uses, with Earth at 20 °C and Mars at 610 Pa and −63 °C.</p>
