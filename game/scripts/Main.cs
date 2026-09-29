@@ -596,7 +596,10 @@ public partial class Main : Node3D
 
     private void BuildEnvironment()
     {
-        var sky = new Sky { SkyMaterial = new ProceduralSkyMaterial() };
+        _skyMaterial = new ProceduralSkyMaterial();
+        _skyTop = _skyMaterial.SkyTopColor;
+        _skyHorizon = _skyMaterial.SkyHorizonColor;
+        var sky = new Sky { SkyMaterial = _skyMaterial };
         AddChild(new WorldEnvironment
         {
             Environment = new Godot.Environment
@@ -614,18 +617,47 @@ public partial class Main : Node3D
             },
         });
 
-        var sun = new DirectionalLight3D { ShadowEnabled = true };
-        AddChild(sun);
-        sun.RotationDegrees = new Vector3(-50, 30, 0);
+        _sun = new DirectionalLight3D { ShadowEnabled = true };
+        AddChild(_sun);
+        _sun.RotationDegrees = new Vector3(-50, 30, 0);
 
         // Big enough for a trebuchet's stone, or a catapult bolt skidding on, to land on.
         var floor = new StaticBody3D { Position = new Vector3(0, -0.05f, 0) };
         floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(100, 0.1f, 100) } });
-        floor.AddChild(Shapes.Box(new Vector3(100, 0.1f, 100), Shapes.Mat(Shapes.Stone)));
+        _floorMaterial = Shapes.Mat(Shapes.Stone);
+        floor.AddChild(Shapes.Box(new Vector3(100, 0.1f, 100), _floorMaterial));
         AddChild(floor);
 
         _camera = new Camera3D();
         AddChild(_camera);
+    }
+
+    private DirectionalLight3D _sun = null!;
+    private ProceduralSkyMaterial _skyMaterial = null!;
+    private StandardMaterial3D _floorMaterial = null!;
+    private Color _skyTop, _skyHorizon;
+    private double _shownAmbient = double.NaN;
+
+    /// <summary>
+    /// The air's temperature, seen: at 20 °C everything is as it always was.
+    /// Colder, the light goes thin and blue, and below freezing the ground
+    /// whitens with frost (fully by −5 °C). Warmer, the light yellows, as on
+    /// a hot afternoon. Only the scene's look — nothing here touches the sim.
+    /// </summary>
+    private void ShowAmbient(double ambient)
+    {
+        if (ambient == _shownAmbient) return;
+        _shownAmbient = ambient;
+        float cold = Mathf.Clamp((20 - (float)ambient) / 30, 0, 1);   // 0 at 20 °C, 1 at −10 °C and below
+        float hot = Mathf.Clamp(((float)ambient - 20) / 15, 0, 1);    // 0 at 20 °C, 1 at 35 °C and above
+        var light = Colors.White.Lerp(new Color(0.88f, 0.92f, 1f), cold).Lerp(new Color(1f, 0.9f, 0.74f), hot);
+        _sun.LightColor = light;
+        _sun.LightEnergy = 1 - 0.2f * cold;
+        _skyMaterial.SkyTopColor = _skyTop.Lerp(new Color(0.55f, 0.62f, 0.72f), cold * 0.7f).Lerp(new Color(0.42f, 0.6f, 0.85f), hot * 0.5f);
+        _skyMaterial.SkyHorizonColor = _skyHorizon.Lerp(new Color(0.82f, 0.85f, 0.9f), cold * 0.7f).Lerp(new Color(0.9f, 0.82f, 0.68f), hot * 0.5f);
+        float frost = Mathf.Clamp(-(float)ambient / 5, 0, 1);         // none above 0 °C, white by −5 °C
+        _floorMaterial.AlbedoColor = Shapes.Stone.Lerp(new Color(0.93f, 0.95f, 0.98f), frost);
+        _floorMaterial.Roughness = 0.8f - 0.25f * frost;
     }
 
     // Radians per pixel dragged, and the pitch range that keeps the camera
@@ -716,6 +748,7 @@ public partial class Main : Node3D
             GD.Print($"[{_current.Runtime.Time:F2}s] {_current.DebugState()}\n{_current.EnergyHud()}");
         }
 
+        ShowAmbient(_current?.Runtime.Ambient ?? 20);
         UpdateInfoPanel();
     }
 

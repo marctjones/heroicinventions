@@ -96,6 +96,7 @@ public partial class MachineView : Node3D
         BuildLeaks();
         BuildSafetyValves();
         BuildBellows();
+        BuildWarmth();
         BuildPumps();
         BuildPistonDrives();
         Refresh();
@@ -206,7 +207,8 @@ public partial class MachineView : Node3D
                                Shapes.Mat(Shapes.Water, roughness: 0.2f, alpha: 0.8f));
         AddChild(water);
         _water.Add((Runtime.Tanks[part.Id], part, water));
-        var ice = Shapes.Box(new Vector3(side * 0.96f, 1, side * 0.96f), Shapes.Mat(new Color(0.9f, 0.95f, 1f), roughness: 0.35f, alpha: 0.9f));
+        // Ice is opaque and matt where water is clear and glossy: the eye reads the difference as solid
+        var ice = Shapes.Box(new Vector3(side * 0.96f, 1, side * 0.96f), Shapes.Mat(new Color(0.96f, 0.98f, 1f), roughness: 0.75f));
         ice.Visible = false;
         AddChild(ice);
         _ice[Runtime.Tanks[part.Id]] = ice;
@@ -1138,7 +1140,9 @@ public partial class MachineView : Node3D
                 // the sheet floats on what is still water; drawn thicker than life so a few mm shows
                 float thick = (float)tank.Ice;
                 ice.Visible = thick > 1e-5;
-                float shown = Mathf.Max(thick * 3, 0.01f);
+                // frozen solid it is the whole block, at its true thickness, and whiter (air trapped as it froze)
+                float shown = tank.FrozenSolid ? thick : Mathf.Max(thick * 3, 0.01f);
+                ((StandardMaterial3D)ice.MaterialOverride).AlbedoColor = tank.FrozenSolid ? new Color(1f, 1f, 1f) : new Color(0.96f, 0.98f, 1f);
                 ice.Scale = new Vector3(1, shown, 1);
                 ice.Position = new Vector3((float)spec.At.X, (float)tank.BaseElevation + (float)tank.Level + shown / 2, (float)spec.At.Z);
             }
@@ -1184,6 +1188,7 @@ public partial class MachineView : Node3D
         DrawLeaks();
         DrawSafetyValves();
         DrawBellows();
+        DrawWarmth();
         DrawPumps();
     }
 
