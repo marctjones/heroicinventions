@@ -50,6 +50,9 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
     public double Length { get; } = length;
     public double Slope => Math.Max(1e-4, (LipElevation - EndElevation) / Length);
 
+    /// <summary>A sluice gate across the head of the channel, if it has one.</summary>
+    public SluiceGate? Gate { get; set; }
+
     public double Flow { get; private set; }       // m³/s
     public double Depth { get; private set; }      // m, running down the channel
     public double Velocity { get; private set; }   // m/s
@@ -80,7 +83,10 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
 
     public void Step(double dt)
     {
-        double q = WeirFlow(Width, Head);
+        double downstream = To?.SurfaceElevation ?? double.NegativeInfinity;
+        double q = Gate is { } gate
+            ? gate.Discharge(From.SurfaceElevation, LipElevation, downstream, WeirFlow(Width, Head))
+            : WeirFlow(Width, Head);
         // can't take more than stands above the lip, nor put more than fits
         double available = Math.Max(0, (From.SurfaceElevation - LipElevation) * From.Area);
         double room = To is null ? double.PositiveInfinity : To.Capacity - To.WaterVolume;
@@ -90,5 +96,58 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
         Flow = moved / dt;
         Depth = NormalDepth(Flow, Width, Slope);
         Velocity = Depth > 0 ? Flow / (Width * Depth) : 0;
+    }
+}
+
+/// <summary>
+/// A sluice gate: a wooden plate across the head of a channel, sliding up
+/// and down in grooves. Raised by Opening × Height it leaves a slot that
+/// high across the gate's Width, and the water runs out under it as an
+/// orifice, Q = Cd·a·√(2·g·h) with a the slot's area, Cd ≈ 0.6 (the jet
+/// contracts as it leaves the sharp lower edge) and h how far the water
+/// stands above the middle of the slot — or above the water on the far
+/// side, if that is higher (a drowned gate). While the water stands below
+/// the plate's lower edge the gate doesn't touch it and the channel's lip
+/// is a plain weir again; once it touches, the lesser of the two flows
+/// (at the edge the orifice would pass slightly more than the weir), so
+/// the two join without a jump. The plate is Height tall: water rising above its top
+/// pours over it as a broad-crested weir, so a shut gate is a dam whose
+/// crest stands Height above the lip. Shut, nothing passes underneath and
+/// the channel below it runs dry.
+/// </summary>
+public sealed class SluiceGate(double width, double height, double opening)
+{
+    public const double DischargeCoefficient = 0.6;
+    private const double G = 9.81;
+
+    public double Width { get; } = width;             // m, across the channel
+    public double Height { get; } = height;           // m, the plate itself
+    private double _opening = Math.Clamp(opening, 0, 1);
+    /// <summary>How far the plate is raised, as a fraction of its height: 0 shut, 1 fully drawn.</summary>
+    public double Opening { get => _opening; set => _opening = Math.Clamp(value, 0, 1); }
+
+    public double Flow { get; private set; }          // m³/s through the slot, last step
+    public double OverFlow { get; private set; }      // m³/s over the top, last step
+    public double OrificeHead { get; private set; }   // m of water above the slot's middle (or the tailwater)
+
+    /// <summary>Q = Cd·w·a·√(2gh): an orifice a high and w wide under a head h.</summary>
+    public static double OrificeFlow(double width, double slot, double head) =>
+        DischargeCoefficient * width * slot * Math.Sqrt(2 * G * Math.Max(0, head));
+
+    /// <summary>
+    /// What leaves over the lip through this gate, given the water's surface
+    /// upstream, the lip (the gate's sill), the water level downstream and
+    /// what the lip alone would pass as a weir.
+    /// </summary>
+    public double Discharge(double upstream, double lip, double downstream, double weirFlow)
+    {
+        double slot = Opening * Height;
+        OrificeHead = Math.Max(0, upstream - Math.Max(lip + slot / 2, downstream));
+        Flow = slot <= 0 ? 0
+             : upstream <= lip + slot ? weirFlow                    // the plate hangs clear of the water
+             : Math.Min(weirFlow, OrificeFlow(Width, slot, OrificeHead));
+        double crest = lip + slot + Height;
+        OverFlow = Channel.WeirFlow(Width, upstream - Math.Max(crest, downstream));
+        return Flow + OverFlow;
     }
 }

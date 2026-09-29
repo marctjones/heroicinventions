@@ -193,3 +193,52 @@
   (check-= (final-of run '(baths water)) 922.5 2.0)
   (check-= (final-of run '(castellum level)) 77.55 0.2)
   (check-true (> (final-of run '(to-fountains flow)) (final-of run '(to-baths flow))) "the lowest pipe gets most"))
+
+;; A run's value of target.field in the frame nearest t seconds.
+(define (value-at run path t)
+  (define key (string->symbol (format "~a.~a" (car path) (cadr path))))
+  (define frame (for/fold ([best (car run)]) ([f (cdr run)])
+                  (if (< (abs (- (car f) t)) (abs (- (car best) t))) f best)))
+  (cadr (assq key (cdr frame))))
+
+(test-case "Sluice gate: all of the spring runs under it, at the orifice head Q = 0.6 w a sqrt(2gh) predicts"
+  ;; 20 L/s through a 30 cm wide slot a = opening x 1 m needs
+  ;; h = (Q / 0.6 w a)^2 / 2g above the slot's middle (sluice-demo.rkt).
+  ;; Levels are read just after each step's outflow, Q dt / A lower than
+  ;; the surface the gate sees: 0.04 cm in the 0.5 m2 pool.
+  (for ([opening '(0.08 0.05 0.03)] [head '(9.832 25.170 69.916)])
+    (define run (simulate 'sluice-demo #:seconds 600 #:step 0.02 #:sample-dt 100 #:set `((gate opening ,opening))))
+    (define q (final-of run '(gate flow)))
+    (define h (final-of run '(gate head)))
+    (check-= q 20.0 1e-3 (format "opening ~a: the whole spring passes the gate" opening))
+    (check-= h head 0.01 (format "opening ~a: predicted head over the slot" opening))
+    (check-= (final-of run '(pool level)) (+ 10 (* 100 opening 1/2) head -0.04) 0.01 "sill 10 cm up the pool")
+    (check-= q (* 1000 0.6 0.3 opening (sqrt (* 2 9.81 (/ h 100)))) 1e-3 "flow and traced head obey the orifice law")
+    (check-= (final-of run '(waste-weir flow)) 0 1e-9 "nothing spills to waste")
+    (check-= (final-of run '(race flow)) 20.0 1e-3)))
+
+(test-case "Sluice gate: cracked to 2 cm it can't pass the spring, and the pool backs up over its waste weir"
+  ;; 0.0036 sqrt(2g (s - 0.01)) + 1.705 (0.3) (s - 0.80)^1.5 = 0.020 at s = 84.81 cm over the sill
+  (define run (simulate 'sluice-demo #:seconds 600 #:step 0.02 #:sample-dt 100 #:set '((gate opening 0.02))))
+  (check-= (final-of run '(gate flow)) 14.60 0.01)
+  (check-= (final-of run '(waste-weir flow)) 5.40 0.01)
+  (check-= (final-of run '(gate head)) 83.81 0.05)
+  (check-= (final-of run '(pool level)) (- 94.81 0.04) 0.05))
+
+(test-case "Sluice gate: shut, the race runs dry at once and the reach below drains as 1/sqrt(h) = 1/sqrt(h0) + 0.2558 t"
+  ;; the reach starts at its 20 L/s depth, 11.52 cm; its 1 m2 drains over
+  ;; a 30 cm floor-level outfall, dh/dt = -(1.705 b / A) h^1.5
+  (define run (simulate 'sluice-demo #:seconds 120 #:step 0.01 #:sample-dt 1
+                        #:set '((gate opening 0) (reach water 115.201))))
+  (check-= (max-of run '(gate flow)) 0 1e-12 "nothing passes a shut gate")
+  (check-= (max-of run '(race flow)) 0 1e-12 "the race below it never runs")
+  (check-= (max-of run '(race depth)) 0 1e-12 "and stands dry")
+  (check-= (value-at run '(reach level) 10) 3.301 0.01)
+  (check-= (value-at run '(reach level) 30) 0.887 0.005)
+  (check-= (value-at run '(run flow) 10) 3.068 0.01 "L/s over the outfall")
+  (check-= (value-at run '(run flow) 30) 0.427 0.005)
+  (check-true (> (value-at run '(reach level) 110) 0.1) "not yet down to 1 mm at 110 s")
+  (check-true (< (value-at run '(reach level) 115) 0.1) "below 1 mm by 115 s (predicted 112 s)")
+  ;; and the pool backs up to the waste weir: 80 cm + 11.52 cm over the sill, 20 L/s spilling
+  (check-= (final-of run '(waste-weir flow)) 20.0 0.01)
+  (check-= (final-of run '(pool level)) (- 101.52 0.04) 0.02))

@@ -28,6 +28,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, AtmosphericCylinder> _cylinders = [];
     private readonly Dictionary<string, WaterSource> _sources = [];
     private readonly Dictionary<string, Channel> _channels = [];
+    private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
     private readonly Dictionary<string, Action<double>> _setters = [];
 
@@ -43,6 +44,7 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, AtmosphericCylinder> Cylinders => _cylinders;
     public IReadOnlyDictionary<string, WaterSource> Sources => _sources;
     public IReadOnlyDictionary<string, Channel> Channels => _channels;
+    public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
     public double Time { get; private set; }
 
     /// <summary>
@@ -86,7 +88,7 @@ public sealed class MachineRuntime
                 case "boiler":
                     _boilers[part.Id] = new Boiler(part.Number("water"), part.Number("temperature", 20), heatInputW: part.Number("fire", 0));
                     break;
-                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth":
+                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -146,6 +148,15 @@ public sealed class MachineRuntime
         foreach (var src in def.Sources)
             _sources[src.Id] = new WaterSource(src.Id, TankNamed(src.Into, src.Location), src.Flow);
         foreach (var ch in def.Channels) _channels[ch.Id] = BuildChannel(def, ch);
+        foreach (var part in def.Parts.Where(p => p.Kind == "sluice"))
+        {
+            var on = part.Symbol("on", "");
+            if (!_channels.TryGetValue(on, out var channel))
+                throw new MachineFormatException($"sluice {part.Id} stands on {on}, which is not a channel", part.Location);
+            if (channel.Gate is not null)
+                throw new MachineFormatException($"sluice {part.Id}: channel {on} already has a gate", part.Location);
+            channel.Gate = _gates[part.Id] = new SluiceGate(part.Number("width", channel.Width), part.Number("height"), part.Number("opening", 1));
+        }
         foreach (var c in def.Cylinders)
         {
             var piston = def.Part(c.Piston) ?? throw new MachineFormatException($"cylinder {c.Id}: no piston {c.Piston}", c.Location);
@@ -299,6 +310,14 @@ public sealed class MachineRuntime
             _getters[$"{id}.flow"] = () => ch.Flow * 1000;             // L/s
             _getters[$"{id}.depth"] = () => ch.Depth * 100;            // cm
             _getters[$"{id}.velocity"] = () => ch.Velocity;            // m/s
+        }
+        foreach (var (id, g) in _gates)
+        {
+            _getters[$"{id}.opening"] = () => g.Opening;               // 0 shut .. 1 fully drawn
+            _getters[$"{id}.flow"] = () => g.Flow * 1000;              // L/s under the gate
+            _getters[$"{id}.over"] = () => g.OverFlow * 1000;          // L/s over its top
+            _getters[$"{id}.head"] = () => g.OrificeHead * 100;        // cm above the slot's middle
+            _setters[$"{id}.opening"] = o => g.Opening = o;
         }
         foreach (var (id, c) in _cylinders)
         {

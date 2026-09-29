@@ -16,10 +16,15 @@ namespace HeroicInventions;
 /// An inflow — water arriving from beyond the scene — is drawn the same
 /// way: a short trough coming in from outside (away from the machine's
 /// middle), spilling into its tank.
+///
+/// A sluice gate stands across the head of its channel: an oak plate in
+/// two grooved uprights, raised as far as its opening says, so a shut gate
+/// sits on the sill and a drawn one hangs clear above the water.
 /// </summary>
 public partial class MachineView
 {
     private readonly List<(Channel? channel, WaterSource? source, Trough trough)> _troughs = [];
+    private readonly List<(SluiceGate gate, MeshInstance3D plate)> _gateViews = [];
 
     private sealed class Trough
     {
@@ -74,6 +79,7 @@ public partial class MachineView
                 var trough = MakeTrough(start, end, (float)channel.Width, final ? channel.To : null, end + dir * 0.05f);
                 _troughs.Add((channel, null, trough));
                 if (i == 0) AddLabel(spec.Id, (start + end) / 2 + Vector3.Up * (trough.Width / 3 + 0.15f));
+                if (i == 0 && channel.Gate is { } gate) BuildGate(gate, trough);
             }
         }
 
@@ -96,6 +102,39 @@ public partial class MachineView
         }
 
         static float Half(PartSpec tank) => Mathf.Sqrt((float)tank.Number("area")) / 2;
+    }
+
+    /// <summary>The gate's plate and its two uprights, a hand's breadth down the trough from the tank's wall.</summary>
+    private void BuildGate(SluiceGate gate, Trough trough)
+    {
+        var id = Runtime.Gates.First(g => g.Value == gate).Key;
+        var part = Runtime.Def.Part(id)!;
+        float w = (float)gate.Width, h = (float)gate.Height;
+        const float x = 0.08f, thick = 0.05f, post = 0.08f;
+        var wood = Surface(part.Material);
+        foreach (float s in new[] { -1f, 1f })
+        {
+            var upright = Shapes.Box(new Vector3(post, 2 * h + 0.1f, post), wood);
+            upright.Position = new Vector3(x, h + 0.05f, s * (w / 2 + post / 2));
+            trough.Frame.AddChild(upright);
+        }
+        var beam = Shapes.Box(new Vector3(post, post, w + 2 * post), wood);
+        beam.Position = new Vector3(x, 2 * h + 0.1f + post / 2, 0);
+        trough.Frame.AddChild(beam);
+        var plate = Shapes.Box(new Vector3(thick, h, w), wood);
+        trough.Frame.AddChild(plate);
+        _gateViews.Add((gate, plate));
+        AddLabel(id, trough.Frame.Transform * new Vector3(x, 2 * h + 0.3f, 0));
+    }
+
+    private void DrawGates()
+    {
+        const float x = 0.08f;
+        foreach (var (gate, plate) in _gateViews)
+        {
+            float h = (float)gate.Height;
+            plate.Position = new Vector3(x, (float)gate.Opening * h + h / 2, 0);
+        }
     }
 
     private Trough MakeTrough(Vector3 start, Vector3 end, float width, Tank? into, Vector3 fallAt)
@@ -155,6 +194,7 @@ public partial class MachineView
 
     private void DrawChannels()
     {
+        DrawGates();
         foreach (var (channel, source, t) in _troughs)
         {
             double flow, depth, velocity;

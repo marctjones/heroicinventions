@@ -245,6 +245,47 @@ public class BuildSessionTests
         Assert.Contains("(pipe p1 a.outlet b.inlet", text);
     }
 
+    /// <summary>
+    /// A sluice placed from the palette: #:on names its channel, #:opening
+    /// narrows the slot, and the pool settles where the orifice passes the
+    /// whole spring — h = (Q / 0.6 w a)^2 / 2g above the slot's middle — then
+    /// the design round-trips through .machine and exports as a Racket clause.
+    /// </summary>
+    [Fact]
+    public void SluiceScriptHoldsThePoolAtTheOrificeHeadAndRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "gated");
+        session.Execute("(tank pool #:at (0 0.5 0) #:area 0.25 #:height 1.5 #:water 0.05)");
+        session.Execute("(tank pond #:at (4 0 0) #:area 4.0 #:height 1.0)");
+        session.Execute("(inflow spring #:into pool #:flow 0.01)");
+        session.Execute("(channel race pool.outlet pond.inlet #:width 0.3)");
+        session.Execute("(sluice gate #:at (0.25 0.5 0) #:on race #:height 0.5 #:opening 0.1)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 200)");
+
+        // a = 5 cm slot, 30 cm wide: h = (0.01 / (0.6 * 0.3 * 0.05))^2 / (2 * 9.81) = 6.293 cm
+        double h = Math.Pow(0.01 / (0.6 * 0.3 * 0.05), 2) / (2 * 9.81);
+        var gate = session.LastRun!.Gates["gate"];
+        Assert.Equal(h, gate.OrificeHead, precision: 4);
+        Assert.Equal(0.01, session.LastRun.Channels["race"].Flow, precision: 6);
+        // read just after the step's outflow: Q·dt/A = 0.4 mm below the level the gate saw
+        Assert.InRange(session.LastRun.Tanks["pool"].SurfaceElevation, 0.5 + 0.025 + h - 0.0005, 0.5 + 0.025 + h);
+
+        string saved = Path.Combine(TempDir(), "gated.machine");
+        session.SaveFile(saved);
+        var reparsed = MachineDef.Parse(File.ReadAllText(saved));
+        var sluice = reparsed.Part("gate")!;
+        Assert.Equal("sluice", sluice.Kind);
+        Assert.Equal("race", sluice.Symbol("on", ""));
+        Assert.Equal(0.1, sluice.Number("opening"));
+        Assert.Equal(0.5, sluice.Number("height"));
+        Assert.False(sluice.Props["width"] is SNumber, "no #:width: the channel's own");
+
+        string rkt = Path.Combine(TempDir(), "gated.rkt");
+        session.ExportRkt(rkt);
+        Assert.Contains("(sluice gate #:at (0.25 0.5 0) #:on race #:height 0.5 #:opening 0.1 #:material bronze)", File.ReadAllText(rkt));
+    }
+
     [Fact]
     public void ExportsCataloguePartsWaterAndLiftsToRacket()
     {

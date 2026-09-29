@@ -198,4 +198,48 @@ public class OpenChannelTests
         Assert.Equal(1.5, upper.WaterVolume + lower.WaterVolume, precision: 9);
         Assert.Equal(1.2, upper.SurfaceElevation, precision: 2); // drained to the lip, no further
     }
+
+    [Fact]
+    public void AnOpenedGatePassesTheOrificeFlowAndAShutOneNothing()
+    {
+        // 1.0 m of water over a 0.5 m sill; a 30 cm gate raised 10 cm (opening 0.1 of 1 m)
+        var pool = new Tank("pool", 0, 10, 3, waterVolume: 15);
+        var race = new Channel("race", pool, 0.5, null, 0.4, width: 0.3, length: 5) { Gate = new SluiceGate(0.3, 1.0, 0.1) };
+        race.Step(0.001);
+        double h = 1.5 - (0.5 + 0.05);                                    // above the slot's middle
+        Assert.Equal(0.6 * 0.3 * 0.1 * Math.Sqrt(2 * 9.81 * h), race.Flow, precision: 6);
+        Assert.True(race.Flow < Channel.WeirFlow(0.3, 1.0), "the gate, not the lip, is holding the water back");
+
+        race.Gate.Opening = 0;
+        race.Step(0.001);
+        Assert.Equal(0, race.Flow);
+        Assert.Equal(0, race.Depth);                                       // the channel below runs dry at once
+        Assert.Equal(0, race.Velocity);
+    }
+
+    [Fact]
+    public void AShutGateIsADamThatOverflowsAboveItsTop()
+    {
+        // a 40 cm plate shut on a sill 0.5 m up: its crest is 0.9 m; water 10 cm above that spills as a weir
+        var pool = new Tank("pool", 0, 10, 3, waterVolume: 10);
+        var race = new Channel("race", pool, 0.5, null, 0.4, width: 0.3, length: 5) { Gate = new SluiceGate(0.3, 0.4, 0) };
+        race.Step(0.001);
+        Assert.Equal(Channel.WeirFlow(0.3, 0.1), race.Flow, precision: 9);
+        Assert.Equal(0, race.Gate.Flow);
+
+        var lower = new Tank("lower", 0, 10, 3, waterVolume: 8.5);         // 0.85 m: below the crest, held back entirely
+        var held = new Channel("held", lower, 0.5, null, 0.4, width: 0.3, length: 5) { Gate = new SluiceGate(0.3, 0.4, 0) };
+        held.Step(0.001);
+        Assert.Equal(0, held.Flow);
+    }
+
+    [Fact]
+    public void AGateClearOfTheWaterLeavesThePlainWeir()
+    {
+        // drawn up 60 cm, its lower edge stands above water 10 cm over the lip: the lip's weir flow, untouched
+        var pool = new Tank("pool", 0, 10, 3, waterVolume: 6);
+        var race = new Channel("race", pool, 0.5, null, 0.4, width: 0.3, length: 5) { Gate = new SluiceGate(0.3, 1.0, 0.6) };
+        race.Step(0.001);
+        Assert.Equal(Channel.WeirFlow(0.3, 0.1), race.Flow, precision: 9);
+    }
 }

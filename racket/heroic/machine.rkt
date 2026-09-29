@@ -15,7 +15,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth
+         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -56,9 +56,40 @@
 ;; (worked out from the tanks' positions and the waypoints).
 (struct channel-spec (id from to end via width length loc) #:transparent)
 
+;; A sluice with no #:at stands at the lip where its channel leaves its
+;; tank: on the tank's wall, facing the way the channel runs.
+(define (place-sluices parts channels)
+  (define (find-part id) (for/first ([p parts] #:when (eq? (part-id p) id)) p))
+  (for/list ([p parts])
+    (cond
+      [(and (eq? (part-kind p) 'sluice) (not (part-at p)))
+       (define on (cdr (assq 'on (part-props p))))
+       (define c (for/first ([c channels] #:when (eq? (channel-spec-id c) on)) c))
+       (define tank (and c (find-part (car (channel-spec-from c)))))
+       (define port (and tank (for/first ([pt (part-ports tank)]
+                                          #:when (eq? (port-spec-name pt) (cadr (channel-spec-from c))))
+                                pt)))
+       (cond
+         [(not port) (struct-copy part p [at (list 0 0 0)])]
+         [else
+          (define-values (tx ty tz) (apply values (part-at tank)))
+          (define far
+            (cond [(pair? (channel-spec-via c)) (car (channel-spec-via c))]
+                  [(pair? (channel-spec-to c))
+                   (define to (find-part (car (channel-spec-to c))))
+                   (if to (list (car (part-at to)) (caddr (part-at to))) (list (+ tx 1) tz))]
+                  [else (list (car (channel-spec-end c)) (caddr (channel-spec-end c)))]))
+          (define dx (- (car far) tx))
+          (define dz (- (cadr far) tz))
+          (define len (max 1e-9 (sqrt (+ (* dx dx) (* dz dz)))))
+          (define half (/ (sqrt (cdr (assq 'area (part-props tank)))) 2))
+          (struct-copy part p [at (list (+ tx (* half (/ dx len))) (+ ty (port-spec-height port))
+                                        (+ tz (* half (/ dz len))))])])]
+      [else p])))
+
 (define (make-machine name source items)
   (machine name source
-           (filter part? items)
+           (place-sluices (filter part? items) (filter channel-spec? items))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -86,7 +117,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -125,6 +156,7 @@
   (struct cinfo (id piston boiler))  ; an atmospheric cylinder
   (struct iinfo (id into))           ; an inflow
   (struct hinfo (id heats))          ; a hearth: the boiler it heats
+  (struct sinfo (id on))             ; a sluice gate: the channel it stands across
   (struct chinfo (id from to))       ; a channel: from a ref, to a ref or #f (off the scene)
 
   (define known-materials (material-ids))
@@ -167,8 +199,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -396,6 +428,28 @@
       #:with expr #`(part 'id 'hearth 'limestone (list at.x at.y at.z)
                           (list (cons 'heats 'boiler-id) (cons 'power power-v) (cons 'fuel fuel-v)
                                 (cons 'fuel-kind '(~? kind wood)) (cons 'efficiency (~? eff-v 1/2)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A sluice gate across the head of channel #:on: a plate #:height tall
+    ;; (m) sliding in grooves at the channel's lip, raised by #:opening (0
+    ;; shut .. 1 drawn right up; default 1). Water runs out under it as an
+    ;; orifice, Q = 0.6·w·a·√(2gh), a the slot the raised plate leaves, h the
+    ;; water above the slot's middle; water over the plate's top spills as a
+    ;; weir, so a shut gate is a dam. #:width defaults to the channel's.
+    ;; #:at defaults to the lip where the channel leaves its tank. Set
+    ;; (gate opening v) at run time to work it.
+    (pattern (sluice id:id
+                     (~alt (~once (~seq #:on on-ch:id))
+                           (~once (~seq #:height height-v:expr))
+                           (~optional (~seq #:opening open-v:expr))
+                           (~optional (~seq #:width width-v:expr))
+                           (~optional (~seq #:at at:vec3))
+                           (~optional (~seq #:material mat:id))) ...)
+      #:attr info (sinfo #'id #'on-ch)
+      #:with expr #`(part 'id 'sluice '(~? mat oak) (~? (list at.x at.y at.z) #f)
+                          (list (cons 'on 'on-ch) (cons 'height height-v) (cons 'opening (~? open-v 1))
+                                (cons 'width (~? width-v #f)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -682,6 +736,15 @@
         (define-values (p kind) (resolve r))
         (unless (eq? (pinfo-kind p) 'tank)
           (fail (format "a channel runs between tanks' ports; ~a is a ~a" (syntax-e r) (pinfo-kind p)) r))))
+
+    (define gated (make-hasheq))
+    (for ([g infos] #:when (sinfo? g))
+      (define on (syntax-e (sinfo-on g)))
+      (unless (for/or ([c infos]) (and (chinfo? c) (eq? (syntax-e (chinfo-id c)) on)))
+        (fail (format "~a is not a channel; a sluice stands across a channel" on) (sinfo-on g)))
+      (when (hash-ref gated on #f)
+        (fail (format "channel ~a already has a gate" on) (sinfo-on g)))
+      (hash-set! gated on #t))
 
     (for ([h infos] #:when (hinfo? h))
       (define b (hash-ref parts (syntax-e (hinfo-heats h)) #f))

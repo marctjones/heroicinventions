@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -46,6 +46,11 @@ public static class PartTemplates
         "piston" => new PartSpec(id, "piston", material, at, Props(("bore", 0.1), ("stroke", 0.3), ("start", 0), ("rod-mass", 0)), [], null),
         "post" => new PartSpec(id, "post", material, at,
             new Dictionary<string, SExpr> { ["size-x"] = new SNumber(0.2), ["size-y"] = new SNumber(1.0), ["size-z"] = new SNumber(0.2), ["round"] = new SBool(false) },
+            [], null),
+        // a gate across the head of a channel; #:on names it (the editor's
+        // placeholder, until set), #:width is the channel's unless given
+        "sluice" => new PartSpec(id, "sluice", material, at,
+            new Dictionary<string, SExpr> { ["on"] = new SSymbol("?"), ["height"] = new SNumber(1.0), ["opening"] = new SNumber(1.0), ["width"] = new SBool(false) },
             [], null),
         _ => throw new ArgumentException($"not a primitive part kind: {kind}; catalogue kinds are placed from a CatalogueEntry instead"),
     };

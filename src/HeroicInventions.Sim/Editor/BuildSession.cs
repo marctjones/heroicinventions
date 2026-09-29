@@ -20,7 +20,8 @@ namespace HeroicInventions.Sim.Editor;
 ///
 /// Commands (id is a bare symbol; a.b is a part.port reference):
 ///   (tank id #:at (x y z) #:area A #:height H [#:water W] [#:material M] ...)
-///   (boiler|block|pendulum|lever|ramp|piston id #:at (x y z) ... similarly)
+///   (boiler|block|pendulum|lever|ramp|piston|post id #:at (x y z) ... similarly)
+///   (sluice id #:at (x y z) #:on channel #:height H [#:opening o] [#:width w])
 ///   (wheel|screw|fixture id #:catalogue entry-id #:at (x y z) [#:material M])
 ///   (pipe id from.port to.port #:conductance C)
 ///   (connect a.port b.port)
@@ -164,6 +165,10 @@ public sealed class BuildSession
             if (key is "at" or "material" or "catalogue") continue;
             if (props.TryGetValue(key, out var existing) && existing is SNumber)
                 props[key] = new SNumber(Num(cmd.Items[i + 1], context));
+            else if (existing is SSymbol && cmd.Items[i + 1] is SSymbol sym)
+                props[key] = sym;                          // a name, such as a sluice's #:on channel
+            else if (existing is SBool { Value: false } && cmd.Items[i + 1] is SNumber or SSymbol)
+                props[key] = new SNumber(Num(cmd.Items[i + 1], context)); // an optional number, such as a sluice's #:width
         }
         return part with { Props = props };
     }
