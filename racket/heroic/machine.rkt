@@ -16,7 +16,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak
+         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak safety-valve
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -145,9 +145,44 @@
           (struct-copy part p [at (list (+ tx (/ (sqrt (tank-prop 'area)) 2)) (+ ty (prop 'height)) tz)])])]
       [else p])))
 
+;; A safety valve with no #:at sits in its boiler's lid, halfway out from
+;; the middle on the +x side. Its lift must be below the boiler's rating,
+;; or the boiler bursts before the valve ever opens.
+(define (place-safety-valves parts)
+  (for/list ([p parts])
+    (cond
+      [(eq? (part-kind p) 'safety-valve)
+       (define (prop k) (cdr (assq k (part-props p))))
+       (define loc (part-loc p))
+       (define (bad what)
+         (error 'define-machine "~a:~a:~a: safety-valve ~a: ~a"
+                (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+       (define b (for/first ([t parts] #:when (eq? (part-id t) (prop 'on))) t))
+       (define (boiler-prop k) (cond [(assq k (part-props b)) => cdr] [else 0]))
+       (unless (and (real? (prop 'lift)) (> (prop 'lift) 0)) (bad (format "#:lift must be a gauge pressure above 0, got ~e" (prop 'lift))))
+       (unless (and (real? (prop 'bore)) (> (prop 'bore) 0)) (bad (format "#:bore must be a length above 0, got ~e" (prop 'bore))))
+       (unless (and (real? (prop 'coefficient)) (> (prop 'coefficient) 0) (<= (prop 'coefficient) 1))
+         (bad (format "#:coefficient must be in (0, 1], got ~e" (prop 'coefficient))))
+       (unless (and (real? (prop 'accumulation)) (> (prop 'accumulation) 0))
+         (bad (format "#:accumulation must be above 0, got ~e" (prop 'accumulation))))
+       (define rating (boiler-prop 'burst))
+       (when (and (> rating 0) (>= (prop 'lift) rating))
+         (bad (format "lifts at ~e Pa, but ~a bursts at ~e Pa" (prop 'lift) (part-id b) rating)))
+       (cond
+         [(part-at p) p]
+         [else
+          (define-values (bx by bz) (apply values (part-at b)))
+          (struct-copy part p [at (list (+ bx (/ (boiler-prop 'radius) 2)) (+ by (boiler-prop 'height)) bz)])])]
+      [(and (eq? (part-kind p) 'boiler) (assq 'burst (part-props p)))
+       (define rating (cdr (assq 'burst (part-props p))))
+       (unless (and (real? rating) (>= rating 0))
+         (error 'define-machine "boiler ~a: #:burst must be a gauge pressure, 0 or more, got ~e" (part-id p) rating))
+       p]
+      [else p])))
+
 (define (make-machine name source items)
   (machine name source
-           (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))
+           (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -175,7 +210,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak safety-valve
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -217,6 +252,7 @@
   (struct sinfo (id on))             ; a sluice gate: the channel it stands across
   (struct fvinfo (id feed mat))      ; a float valve: the inflow, pipe or channel it throttles
   (struct lkinfo (id on into mat))   ; a leak: the tank it is in, the tank under it (or #f)
+  (struct svinfo (id on mat))        ; a safety valve: the boiler whose lid it sits in
   (struct cpinfo (id vessel))        ; a counterpoise: the tank that hangs from it
   (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
   (struct chinfo (id from to onto))  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
@@ -261,8 +297,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice, waterwheel, counterpoise, float-valve) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice, waterwheel, counterpoise, float-valve, leak, safety-valve) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak safety-valve piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -286,12 +322,14 @@
                            (~once (~seq #:water water-v:expr))
                            (~optional (~seq #:fire fire-v:expr))
                            (~optional (~seq #:temperature temp-v:expr))
+                           (~optional (~seq #:burst burst-v:expr))
                            (~optional (~seq #:material mat:id))) ...)
       #:attr info (pinfo #'id 'boiler (attribute mat) (list (cons 'steam 'steam)))
       #:with expr #`(part 'id 'boiler '(~? mat bronze) (list at.x at.y at.z)
-                          (list (cons 'radius radius-v) (cons 'height height-v)
-                                (cons 'water water-v) (cons 'fire (~? fire-v 0))
-                                (cons 'temperature (~? temp-v 20)))
+                          (list* (cons 'radius radius-v) (cons 'height height-v)
+                                 (cons 'water water-v) (cons 'fire (~? fire-v 0))
+                                 (cons 'temperature (~? temp-v 20))
+                                 (~? (list (cons 'burst burst-v)) '()))
                           (list (port-spec 'steam 'steam height-v))
                           #,(loc-of this-syntax)))
 
@@ -645,6 +683,30 @@
                           '()
                           #,(loc-of this-syntax)))
 
+    ;; Papin's safety valve (1679), in the lid of boiler #:on: a disc on a
+    ;; seat of #:bore (m) across, held down by a weighted lever until the
+    ;; steam reaches #:lift (gauge Pa, e.g. (kPa 100)). It opens in
+    ;; proportion as the pressure climbs on to #:accumulation × lift over
+    ;; (default 0.1, a tenth), and vents steam through its bore as a
+    ;; compressible nozzle with discharge coefficient #:coefficient (default
+    ;; 0.8), choked above about 85 kPa. A boiler given #:burst (gauge Pa)
+    ;; bursts at that pressure; the valve must lift below it. Set (valve
+    ;; lift kPa) at run time to tie it down. #:at defaults to the lid.
+    (pattern (safety-valve id:id
+                           (~alt (~once (~seq #:on boiler-id:id))
+                                 (~once (~seq #:lift lift-v:expr))
+                                 (~once (~seq #:bore bore-v:expr))
+                                 (~optional (~seq #:coefficient cd-v:expr))
+                                 (~optional (~seq #:accumulation acc-v:expr))
+                                 (~optional (~seq #:at at:vec3))
+                                 (~optional (~seq #:material mat:id))) ...)
+      #:attr info (svinfo #'id #'boiler-id (attribute mat))
+      #:with expr #`(part 'id 'safety-valve '(~? mat bronze) (~? (list at.x at.y at.z) #f)
+                          (list (cons 'on 'boiler-id) (cons 'lift lift-v) (cons 'bore bore-v)
+                                (cons 'coefficient (~? cd-v 0.8)) (cons 'accumulation (~? acc-v 0.1)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     ;; A rope (or chain) between two parts. It only pulls, never pushes: it
     ;; goes slack when its ends come closer than its length. Each end is a
     ;; point on a part, in that part's own frame — (arm 0.9 0 0) is 0.9 m
@@ -992,6 +1054,14 @@
         (when (eq? (syntax-e into) (syntax-e (lkinfo-on l)))
           (fail "a leak cannot run into its own tank" into)))
       (define mat (lkinfo-mat l))
+      (when (and mat (not (memq (syntax-e mat) known-materials)))
+        (fail (format "unknown material ~a" (syntax-e mat)) mat)))
+
+    (for ([v infos] #:when (svinfo? v))
+      (define b (hash-ref parts (syntax-e (svinfo-on v)) #f))
+      (unless (and b (eq? (pinfo-kind b) 'boiler))
+        (fail (format "~a is not a boiler; a safety valve sits in a boiler's lid" (syntax-e (svinfo-on v))) (svinfo-on v)))
+      (define mat (svinfo-mat v))
       (when (and mat (not (memq (syntax-e mat) known-materials)))
         (fail (format "unknown material ~a" (syntax-e mat)) mat)))
 

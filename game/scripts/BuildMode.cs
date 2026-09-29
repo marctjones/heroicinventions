@@ -382,6 +382,7 @@ public partial class BuildMode : Node3D
             "waterwheel" => Shapes.Cylinder((float)part.Number("radius"), (float)part.Number("width"), mat),
             "float-valve" => Shapes.Cylinder(0.08f, 0.05f, mat),
             "leak" => Shapes.Sphere(0.03f, mat),
+            "safety-valve" => Shapes.Cylinder(0.02f, 0.04f, mat),
             "sluice" => Shapes.Box(new Vector3(0.05f, (float)part.Number("height"), (float)part.Number("width", 0.3)), mat),
             "piston" => Shapes.Cylinder((float)part.Number("bore"), (float)part.Number("stroke"), mat),
             _ => CatalogueVisual(part, mat),

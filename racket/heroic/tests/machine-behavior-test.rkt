@@ -592,3 +592,93 @@
   (for ([t '(0 100 300)])
     (check-= (value-at run '(seep level)  t) (* 100 (- 0.50 (/ (* 5e-5 t) lk-area))) 1e-6 "0.2 mm/s"))
   (check-= (final-of run '(seep-hole evaporated)) 15 1e-6 "0.05 L/s for 300 s"))
+
+;; boiler-safety.rkt: two boilers of 10 kg of 20 C water, rated to burst at
+;; 200 kPa gauge, each given Q = 20 kW x 0.5 by its fire and losing 2 W/K;
+;; "guarded" has a safety valve lifting at 100 kPa through an 8 mm bore
+;; (Cd 0.8, fully lifted 10% over), "unguarded" has none.
+(define bs-q 10000.0) (define bs-h 2.0) (define bs-m 10.0) (define bs-c 4186.0) (define bs-l 2.257e6)
+(define bs-atm 101325.0)
+(define (bs-psat t)   ; Antoine, as Boiler.SaturationPressure
+  (define-values (a b c) (if (< t 100) (values 8.07131 1730.63 233.426) (values 8.14019 1810.94 244.485)))
+  (* 133.322 (expt 10 (- a (/ b (+ c t))))))
+(define (bs-tsat p)   ; turned round: the boiling point under absolute p
+  (define-values (a b c) (if (< p (bs-psat 100)) (values 8.07131 1730.63 233.426) (values 8.14019 1810.94 244.485)))
+  (- (/ b (- a (log (/ p 133.322) 10))) c))
+(define bs-t-inf (+ 20 (/ bs-q bs-h)))
+;; sealed, M c dT/dt = Q - h (T - 20): the time to warm from t0 to t1 with m kg
+(define (bs-warm-time m t0 t1) (* (/ (* m bs-c) bs-h) (log (/ (- bs-t-inf t0) (- bs-t-inf t1)))))
+(define (bs-sealed-temp t) (- bs-t-inf (* (- bs-t-inf 20) (exp (- (/ (* t bs-h) (* bs-m bs-c)))))))
+(define bs-t-lift (bs-tsat (+ bs-atm 100e3)))
+(define bs-t-burst (bs-tsat (+ bs-atm 200e3)))
+;; what the valve must carry away at temperature t: m L = Q - h (T - 20)
+(define (bs-vent-rate t) (/ (- bs-q (* bs-h (- t 20))) bs-l))
+;; a choked (or not) nozzle, k = 1.3, R = 8.314 / 0.018015
+(define (bs-capacity p t)
+  (define k 1.3) (define r-steam (/ 8.314 0.018015)) (define area (* pi 0.008 0.008 1/4))
+  (define r (max (/ bs-atm p) (expt (/ 2 (+ k 1)) (/ k (- k 1)))))
+  (* 0.8 area p (sqrt (* (/ (* 2 k) (* (- k 1) r-steam (+ t 273.15))) (- (expt r (/ 2 k)) (expt r (/ (+ k 1) k)))))))
+;; the gauge pressure the valve holds: open just enough, (Pg - lift) / (0.1 lift), to pass the vent rate
+(define bs-p-hold
+  (let loop ([lo 100e3] [hi 110e3] [n 60])
+    (define mid (/ (+ lo hi) 2))
+    (define t (bs-tsat (+ bs-atm mid)))
+    (define passes (* (min 1 (/ (- mid 100e3) 10e3)) (bs-capacity (+ bs-atm mid) t)))
+    (cond [(zero? n) mid]
+          [(> passes (bs-vent-rate t)) (loop lo mid (sub1 n))]
+          [else (loop mid hi (sub1 n))])))
+(define bs-t-hold (bs-tsat (+ bs-atm bs-p-hold)))
+
+(test-case "Boiler safety: the valve lifts at 100 kPa and holds the pressure there, venting what the fire brings"
+  (define run (simulate 'boiler-safety #:seconds 900 #:step 0.01 #:sample-dt 1))
+  (check-= bs-t-lift 120.536 0.001) (check-= (bs-warm-time bs-m 20 bs-t-lift) 425.13 0.01)
+  (check-= (/ bs-p-hold 1000) 103.37 0.01) (check-= (* 1000 (bs-vent-rate bs-t-hold)) 4.341 0.001)
+  ;; sealed, both boilers warm alike along the same curve
+  (for ([t '(100 300 420)])
+    (check-= (value-at run '(guarded temperature) t) (bs-sealed-temp t) 0.01 (format "guarded at ~a s" t))
+    (check-= (value-at run '(unguarded temperature) t) (bs-sealed-temp t) 0.01 (format "unguarded at ~a s" t)))
+  (check-= (value-at run '(guard flow) 420) 0 1e-12 "seated below its lift")
+  (let ([t (first-time-at-least run '(guarded pressure) 100)])     ; sampled each second
+    (check-true (<= (- (bs-warm-time bs-m 20 bs-t-lift) 1) t (+ (bs-warm-time bs-m 20 bs-t-lift) 1)) "reaches the lift at 425.1 s"))
+  ;; then it holds: pressure, temperature and vented steam steady at the balance
+  (for ([t '(500 700 900)])
+    (check-= (value-at run '(guarded pressure) t) (/ bs-p-hold 1000) 0.02 (format "103.37 kPa at ~a s" t))
+    (check-= (value-at run '(guarded temperature) t) bs-t-hold 0.002)
+    (check-= (value-at run '(guard flow) t) (* 1000 (bs-vent-rate bs-t-hold)) 0.002 "4.34 g/s")
+    (check-= (value-at run '(guard opening) t) (/ (- bs-p-hold 100e3) 10e3) 0.002))
+  (check-true (< (max-of run '(guarded pressure)) (+ (/ bs-p-hold 1000) 0.02)) "it never overshoots the hold")
+  (check-= (final-of run '(guarded burst)) 0 0 "and never bursts")
+  ;; mass: every kilogram vented is gone from the water; heat: over 600-900 s
+  ;; at a steady temperature, what the fire brings = what the air takes + L x vented
+  (define vented (- (value-at run '(guard vented) 900) (value-at run '(guard vented) 600)))
+  (check-= vented (* 300 (bs-vent-rate bs-t-hold)) 0.001 "1.302 kg in 5 minutes")
+  (check-= (final-of run '(guarded water)) (- bs-m (final-of run '(guard vented))) 1e-9)
+  (check-= (- (- (value-at run '(guarded heat) 900) (value-at run '(guarded heat) 600))
+              (- (value-at run '(guarded lost) 900) (value-at run '(guarded lost) 600)))
+           (/ (* vented bs-l) 1000) 1 "kJ: heat in less heat lost is latent heat vented")
+  (check-true (> (final-of run '(guarded-fire fuel)) 0) "the fire burns steadily throughout"))
+
+(test-case "Boiler safety: without a valve the boiler bursts at its 200 kPa rating, when the warming curve says"
+  (define run (simulate 'boiler-safety #:seconds 600 #:step 0.01 #:sample-dt 1))
+  (define t-burst (bs-warm-time bs-m 20 bs-t-burst))
+  (check-= bs-t-burst 133.893 0.001) (check-= t-burst 482.27 0.01)
+  (check-= (final-of run '(unguarded burst)) 1 0)
+  (check-= (final-of run '(unguarded burst-time)) t-burst 0.02 "bursts at 482.3 s")
+  (check-= (final-of run '(unguarded burst-pressure)) 200 0.05 "at its rating, to within one step's rise")
+  (check-= (final-of run '(unguarded flashed)) (/ (* bs-m bs-c (- bs-t-burst 100)) bs-l) 0.001 "0.629 kg flashes to steam")
+  (check-= (value-at run '(unguarded burst) 481) 0 0 "still whole a second before")
+  (check-true (> (value-at run '(unguarded pressure) 481) 195))
+  (check-= (value-at run '(unguarded pressure) 483) 0 0 "open to the air after")
+  (check-= (final-of run '(unguarded water)) 0 0 "and empty")
+  (check-= (final-of run '(guarded burst)) 0 0 "the guarded one, alongside, holds"))
+
+(test-case "Boiler safety: tie the valve down and the guarded boiler bursts too, on the sealed curve from where it held"
+  (define run (simulate 'boiler-safety #:seconds 700 #:step 0.01 #:sample-dt 1 #:set '((guard lift 300 600))))
+  ;; held from 425.1 s to 600 s, venting 4.34 g/s (less a few grams while it settled)
+  (define m-tied (- bs-m (* (bs-vent-rate bs-t-hold) (- 600 (bs-warm-time bs-m 20 bs-t-lift)))))
+  (define t-burst (+ 600 (bs-warm-time m-tied bs-t-hold bs-t-burst)))
+  (check-= (value-at run '(guarded pressure) 599) (/ bs-p-hold 1000) 0.02)
+  (check-= (value-at run '(guard flow) 601) 0 1e-12 "tied down, it vents nothing")
+  (check-= (final-of run '(guarded burst-time)) t-burst 0.3 "bursts 50.7 s after it was tied down")
+  (check-= (final-of run '(guarded burst-pressure)) 200 0.05)
+  (check-= (final-of run '(guarded flashed)) (/ (* m-tied bs-c (- bs-t-burst 100)) bs-l) 0.002))

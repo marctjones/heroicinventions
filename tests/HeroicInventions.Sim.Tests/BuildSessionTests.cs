@@ -361,6 +361,44 @@ public class BuildSessionTests
         Assert.Contains("(leak hole #:at (0.25 0.4 0) #:on barrel #:height 0.1 #:area 0.0005 #:coefficient 0.6 #:into catch #:material", File.ReadAllText(rkt));
     }
 
+    /// <summary>
+    /// A safety valve placed from the palette on a boiler rated to burst: the
+    /// sealed boiler warms to the valve's lift, M·c·dT/dt = Q − h(T − 20), and
+    /// then the valve vents (Q − h(T − 20))/L so it never reaches the rating;
+    /// the design round-trips through .machine and exports as Racket clauses.
+    /// </summary>
+    [Fact]
+    public void SafetyValveScriptHoldsTheBoilerBelowItsRatingAndRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "papin");
+        session.Execute("(boiler k #:at (0 0.25 0) #:water 10 #:fire 10000 #:burst 200000)");
+        session.Execute("(safety-valve guard #:at (0.075 0.55 0) #:on k #:lift 100000 #:bore 0.008)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 600)");
+
+        var run = session.LastRun!;
+        double tHold = run.Boilers["k"].Temperature;
+        Assert.InRange(run.Boilers["k"].GaugePressure, 100e3, 110e3);
+        Assert.False(run.Boilers["k"].Burst);
+        Assert.Equal((10000 - 2 * (tHold - 20)) / 2.257e6, run.SafetyValves["guard"].Valve.Flow, precision: 7);
+        Assert.True(run.Boilers["k"].Vented > 0.5);
+
+        string saved = Path.Combine(TempDir(), "papin.machine");
+        session.SaveFile(saved);
+        var def = MachineDef.Parse(File.ReadAllText(saved));
+        Assert.Equal(200000, def.Part("k")!.Number("burst"));
+        var guard = def.Part("guard")!;
+        Assert.Equal("safety-valve", guard.Kind);
+        Assert.Equal("k", guard.Symbol("on", ""));
+        Assert.Equal(100000, guard.Number("lift"));
+
+        string rkt = Path.Combine(TempDir(), "papin.rkt");
+        session.ExportRkt(rkt);
+        string text = File.ReadAllText(rkt);
+        Assert.Contains("#:burst 200000 #:material bronze)", text);
+        Assert.Contains("(safety-valve guard #:at (0.075 0.55 0) #:on k #:lift 100000 #:bore 0.008 #:coefficient 0.8 #:accumulation 0.1 #:material bronze)", text);
+    }
+
     /// <summary>A channel run off the scene #:onto a boiler feeds it, and the clause round-trips.</summary>
     [Fact]
     public void ChannelOntoABoilerFeedsItAndRoundTrips()

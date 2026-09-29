@@ -1,7 +1,7 @@
 #lang racket/base
 ;; Unit helpers. Every quantity in a machine is SI (metres, kilograms,
 ;; seconds, watts); these just make the source read like a drawing.
-(provide m cm mm m2 cm2 L L/s kg g W kW)
+(provide m cm mm m2 cm2 L L/s kg g W kW kPa)
 
 (define (m x) x)
 (define (cm x) (/ x 100))
@@ -14,3 +14,4 @@
 (define (g x) (/ x 1000))
 (define (W x) x)
 (define (kW x) (* x 1000))
+(define (kPa x) (* x 1000))   ; kilopascals → Pa

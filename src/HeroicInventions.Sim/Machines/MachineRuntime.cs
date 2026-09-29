@@ -31,6 +31,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, (FloatValve Valve, Func<double> Flow)> _floatValves = [];
     private readonly Dictionary<string, TankLeak> _leaks = [];
+    private readonly Dictionary<string, (SafetyValve Valve, Boiler Boiler)> _safetyValves = [];
     private readonly Dictionary<string, WaterWheel> _wheels = [];
     private readonly Dictionary<string, Counterpoise> _counterpoises = [];
     private readonly Dictionary<string, Pendulum> _pendulums = [];
@@ -54,6 +55,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, (FloatValve Valve, Func<double> Flow)> FloatValves => _floatValves;
     /// <summary>Holes in tank walls (and seeps), draining by Torricelli's law.</summary>
     public IReadOnlyDictionary<string, TankLeak> Leaks => _leaks;
+    /// <summary>Safety valves, each with the boiler whose lid it sits in.</summary>
+    public IReadOnlyDictionary<string, (SafetyValve Valve, Boiler Boiler)> SafetyValves => _safetyValves;
     public IReadOnlyDictionary<string, WaterWheel> WaterWheels => _wheels;
     public IReadOnlyDictionary<string, Counterpoise> Counterpoises => _counterpoises;
     /// <summary>Pendulums hung on a bearing (#:bearing-radius): swung here, not by Jolt, so their friction and wear can be checked.</summary>
@@ -99,7 +102,10 @@ public sealed class MachineRuntime
                     _tanks[part.Id] = Fluids.AddTank(new Tank(part.Id, part.At.Y, part.Number("area"), part.Number("height"), part.Number("water", 0)));
                     break;
                 case "boiler":
-                    _boilers[part.Id] = new Boiler(part.Number("water"), part.Number("temperature", 20), heatInputW: part.Number("fire", 0));
+                    _boilers[part.Id] = new Boiler(part.Number("water"), part.Number("temperature", 20), heatInputW: part.Number("fire", 0))
+                    {
+                        BurstPressure = part.Number("burst", 0),
+                    };
                     break;
                 case "waterwheel": break; // built once the channels that drive it exist
                 case "counterpoise": break; // built once its vessel exists
@@ -113,7 +119,7 @@ public sealed class MachineRuntime
                             WearRate = part.Number("bearing-wear", 0),
                         });
                     break;
-                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice" or "float-valve" or "leak":
+                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice" or "float-valve" or "leak" or "safety-valve":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -227,6 +233,7 @@ public sealed class MachineRuntime
         }
         foreach (var part in def.Parts.Where(p => p.Kind == "float-valve")) BuildFloatValve(part);
         foreach (var part in def.Parts.Where(p => p.Kind == "leak")) BuildLeak(part);
+        foreach (var part in def.Parts.Where(p => p.Kind == "safety-valve")) BuildSafetyValve(part);
         foreach (var c in def.Cylinders)
         {
             var piston = def.Part(c.Piston) ?? throw new MachineFormatException($"cylinder {c.Id}: no piston {c.Piston}", c.Location);
@@ -240,6 +247,25 @@ public sealed class MachineRuntime
         }
 
         RegisterFields();
+    }
+
+    private void BuildSafetyValve(PartSpec part)
+    {
+        var on = part.Symbol("on", "");
+        if (!_boilers.TryGetValue(on, out var boiler))
+            throw new MachineFormatException($"safety valve {part.Id} is on {on}, which is not a boiler", part.Location);
+        double lift = part.Number("lift"), bore = part.Number("bore");
+        if (lift <= 0 || bore <= 0)
+            throw new MachineFormatException($"safety valve {part.Id}: lift and bore must be more than 0", part.Location);
+        if (boiler.BurstPressure > 0 && lift >= boiler.BurstPressure)
+            throw new MachineFormatException($"safety valve {part.Id} lifts at {lift} Pa, but {on} bursts at {boiler.BurstPressure} Pa", part.Location);
+        var valve = new SafetyValve(lift, bore)
+        {
+            Cd = part.Number("coefficient", SafetyValve.DefaultCoefficient),
+            Accumulation = part.Number("accumulation", SafetyValve.DefaultAccumulation),
+        };
+        boiler.Valves.Add(valve);
+        _safetyValves[part.Id] = (valve, boiler);
     }
 
     private void BuildLeak(PartSpec part)
@@ -403,6 +429,19 @@ public sealed class MachineRuntime
             _getters[$"{id}.heat"] = () => boiler.HeatDelivered / 1000; // kJ from the fire, all told
             _getters[$"{id}.lost"] = () => boiler.HeatLost / 1000;      // kJ lost to the air, all told
             _setters[$"{id}.fire"] = watts => boiler.HeatInput = Math.Max(0, watts);
+            _getters[$"{id}.burst"] = () => boiler.Burst ? 1 : 0;
+            _getters[$"{id}.burst-time"] = () => boiler.BurstTime;          // s
+            _getters[$"{id}.burst-pressure"] = () => boiler.BurstGauge / 1000; // kPa it gave way at
+            _getters[$"{id}.flashed"] = () => boiler.Flashed;              // kg flashed to steam as it burst
+            _getters[$"{id}.vented"] = () => boiler.Vented;                // kg out of its safety valves
+        }
+        foreach (var (id, (v, _)) in _safetyValves)
+        {
+            _getters[$"{id}.lift"] = () => v.LiftPressure / 1000;          // kPa gauge
+            _setters[$"{id}.lift"] = kPa => v.LiftPressure = kPa * 1000;   // tie it down: a lift past the boiler's rating
+            _getters[$"{id}.opening"] = () => v.Opening;
+            _getters[$"{id}.flow"] = () => v.Flow * 1000;                  // g/s of steam
+            _getters[$"{id}.vented"] = () => v.Vented;                     // kg
         }
         foreach (var (id, h) in _hearths)
         {

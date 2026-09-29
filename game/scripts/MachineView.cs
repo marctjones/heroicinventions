@@ -91,6 +91,7 @@ public partial class MachineView : Node3D
         BuildChannels();
         BuildFloatValves();
         BuildLeaks();
+        BuildSafetyValves();
         BuildPistonDrives();
         Refresh();
 
@@ -378,6 +379,7 @@ public partial class MachineView : Node3D
         var body = Shapes.Cylinder(radius, height, Surface(part.Material));
         body.Position = V(part.At) + new Vector3(0, height / 2, 0);
         AddChild(body);
+        _boilerBodies[part.Id] = body;
 
         var firePos = V(part.At) + new Vector3(0, -0.03f, 0);
         var emberMat = new StandardMaterial3D
@@ -1160,6 +1162,7 @@ public partial class MachineView : Node3D
         DrawBearingPendulums();
         DrawFloatValves();
         DrawLeaks();
+        DrawSafetyValves();
     }
 
     public void ToggleFire()
@@ -1189,7 +1192,12 @@ public partial class MachineView : Node3D
             foreach (var air in Runtime.AirPockets) bits.Add($"air {air.GaugePressure / 1000:F2} kPa");
             foreach (var (pipe, _, _) in _jets) bits.Add($"{pipe.Name} jet {(pipe.Flow > 0 ? pipe.JetHeight * 100 : 0):F1} cm");
             foreach (var (id, b) in Runtime.Boilers)
-                bits.Add($"{id} {b.Temperature:F1} °C {b.GaugePressure / 1000:F1} kPa, fire {(b.HeatInput > 0 ? "on" : "off")}");
+                bits.Add(b.Burst
+                    ? $"{id} BURST at {b.BurstGauge / 1000:F1} kPa, {b.BurstTime:F1} s: {b.Flashed:F3} kg flashed to steam"
+                    : $"{id} {b.Temperature:F1} °C {b.GaugePressure / 1000:F1} kPa, fire {(b.HeatInput > 0 ? "on" : "off")}" +
+                      (b.BurstPressure > 0 ? $", rated {b.BurstPressure / 1000:0.#} kPa" : ""));
+            foreach (var (id, (v, _)) in Runtime.SafetyValves)
+                bits.Add($"{id} {v.Opening * 100:F0}% open, venting {v.Flow * 1000:F2} g/s, {v.Vented:F3} kg out (lifts at {v.LiftPressure / 1000:0.#} kPa)");
             foreach (var (id, r) in Runtime.Rotors) bits.Add($"{id} {r.Rpm:F0} rpm");
             foreach (var (id, w) in Runtime.WaterWheels) bits.Add($"{id} {w.Rpm:F1} rpm, {w.Power:F0} W, {w.Water:F1} kg aboard");
             foreach (var (id, p) in Runtime.Pendulums)

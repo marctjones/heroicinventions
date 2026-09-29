@@ -458,3 +458,93 @@ public class TankLeakTests
         Assert.Equal(0.01, seepLeak.Evaporated, precision: 9);
     }
 }
+
+public class SafetyValveTests
+{
+    private const double Q = 10_000, H = 2, M = 10, C = 4186, L = 2.257e6, Atm = 101_325;
+
+    private static (Boiler Boiler, SafetyValve? Valve) Rig(bool valve, double burst = 200e3)
+    {
+        var b = new Boiler(M, 20, Q) { BurstPressure = burst };
+        SafetyValve? v = valve ? new SafetyValve(100e3, 0.008) : null;
+        if (v is not null) b.Valves.Add(v);
+        return (b, v);
+    }
+
+    private static double WarmTime(double m, double t0, double t1) =>
+        m * C / H * Math.Log((20 + Q / H - t0) / (20 + Q / H - t1));
+
+    /// <summary>The gauge pressure at which the valve, open (P − lift)/(0.1·lift), passes (Q − h(T − 20))/L.</summary>
+    private static double HoldPressure(SafetyValve v)
+    {
+        double lo = v.LiftPressure, hi = v.LiftPressure * 1.1;
+        for (int i = 0; i < 60; i++)
+        {
+            double mid = (lo + hi) / 2, t = Boiler.SaturationTemperature(Atm + mid);
+            if (v.Discharge(mid, Atm + mid, t) > (Q - H * (t - 20)) / L) hi = mid; else lo = mid;
+        }
+        return lo;
+    }
+
+    [Fact]
+    public void SaturationTemperatureInvertsTheAntoineEquation()
+    {
+        foreach (double t in new[] { 60.0, 110, 133.9 })
+            Assert.Equal(t, Boiler.SaturationTemperature(Boiler.SaturationPressure(t)), precision: 9);
+    }
+
+    /// <summary>Above the critical pressure ratio the vent is the choked nozzle, Cd·A·P₀·√(k/RT₀)·(2/(k+1))^((k+1)/2(k−1)).</summary>
+    [Fact]
+    public void AFullyLiftedValveChokesAsASonicNozzle()
+    {
+        var v = new SafetyValve(100e3, 0.008);
+        double k = 1.3, p0 = 201_325, t0 = 120.5, r = 8.314 / 0.018015;
+        double choked = 0.8 * Math.PI * 0.008 * 0.008 / 4 * p0 * Math.Sqrt(k / (r * (t0 + 273.15))) * Math.Pow(2 / (k + 1), (k + 1) / (2 * (k - 1)));
+        Assert.Equal(choked, v.Capacity(p0, t0), precision: 9);
+        Assert.Equal(0, v.Discharge(99e3, Atm + 99e3, 120), precision: 12);    // seated below its lift
+        Assert.Equal(0.5, v.OpeningAt(105e3), precision: 12);
+    }
+
+    /// <summary>It lifts where the sealed warming curve reaches 100 kPa, then holds where venting carries off the fire's heat.</summary>
+    [Fact]
+    public void TheValveHoldsThePressureWhereItVentsWhatTheFireBrings()
+    {
+        var (b, v) = Rig(valve: true);
+        double tLift = WarmTime(M, 20, Boiler.SaturationTemperature(Atm + 100e3));   // 425.1 s
+        for (int i = 0; i < 42_000; i++) b.Step(0.01, 0);
+        Assert.Equal(0, v!.Vented);
+        Assert.InRange(tLift, 420, 430);
+        for (int i = 0; i < 38_000; i++) b.Step(0.01, 0);                          // to 800 s
+        double hold = HoldPressure(v), tHold = Boiler.SaturationTemperature(Atm + hold);
+        Assert.InRange(hold, 103e3, 104e3);
+        Assert.Equal(hold, b.GaugePressure, precision: 1);
+        Assert.Equal((Q - H * (tHold - 20)) / L, v.Flow, precision: 7);
+        Assert.Equal(M - v.Vented, b.WaterMass, precision: 9);
+        Assert.False(b.Burst);
+    }
+
+    [Fact]
+    public void WithoutAValveItBurstsAtItsRatingWhenTheWarmingCurveSays()
+    {
+        var (b, _) = Rig(valve: false);
+        double tBurst = Boiler.SaturationTemperature(Atm + 200e3);
+        for (int i = 0; i < 60_000 && !b.Burst; i++) b.Step(0.01, 0);
+        Assert.True(b.Burst);
+        Assert.Equal(WarmTime(M, 20, tBurst), b.BurstTime, precision: 1);        // 482.3 s
+        Assert.InRange(b.BurstGauge, 200e3, 200e3 + 50);
+        Assert.Equal(M * C * (tBurst - 100) / L, b.Flashed, precision: 3);      // 0.629 kg
+        Assert.Equal(0, b.GaugePressure);
+        Assert.True(b.IsDry);
+        b.AddWater(1, 20);
+        Assert.Equal(0, b.WaterMass);                                           // a burst boiler holds nothing
+    }
+
+    [Fact]
+    public void AnUnratedBoilerNeverBursts()
+    {
+        var b = new Boiler(M, 20, Q);
+        for (int i = 0; i < 70_000; i++) b.Step(0.01, 0);
+        Assert.False(b.Burst);
+        Assert.True(b.GaugePressure > 200e3);
+    }
+}

@@ -120,3 +120,21 @@
   (check-exn #rx"height 1.5 is not in cask's wall" (λ () (build cask '(leak hole #:on cask #:height 1.5 #:area 0.0005))))
   (check-exn #rx"leaks nothing" (λ () (build cask '(leak hole #:on cask #:height 0.1))))
   (check-not-exn (λ () (build cask '(leak hole #:on cask #:height 0.1 #:evaporation 0.00005)))))
+
+(test-case "a safety valve sits in a boiler's lid"
+  (check-compile-error #rx"cask is not a boiler; a safety valve sits in a boiler's lid"
+    (tank cask #:at (0 0 0) #:area 0.25 #:height 1)
+    (safety-valve guard #:on cask #:lift 100000 #:bore 0.008)))
+
+;; a safety valve's numbers are checked when the machine is built, not when it expands
+(test-case "a safety valve must lift below its boiler's rating"
+  (define (build . clauses)
+    (parameterize ([current-namespace (make-base-namespace)])
+      (eval `(module papin heroic (define-machine papin ,@clauses)))
+      (dynamic-require ''papin #f)))
+  (define (k burst) `(boiler k #:at (0 0 0) #:radius 0.15 #:height 0.3 #:water 10 #:burst ,burst))
+  (check-exn #rx"lifts at 200000 Pa, but k bursts at 150000 Pa"
+             (λ () (build (k 150000) '(safety-valve guard #:on k #:lift 200000 #:bore 0.008))))
+  (check-exn #rx"#:bore must be a length above 0" (λ () (build (k 0) '(safety-valve guard #:on k #:lift 100000 #:bore 0))))
+  (check-exn #rx"#:burst must be a gauge pressure" (λ () (build (k -1))))
+  (check-not-exn (λ () (build (k 0) '(safety-valve guard #:on k #:lift 100000 #:bore 0.008)))))

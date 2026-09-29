@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -28,7 +28,7 @@ public static class PartTemplates
             [new PortSpec("inlet", "water", 0), new PortSpec("outlet", "water", 0)],
             null),
         "boiler" => new PartSpec(id, "boiler", material, at,
-            Props(("radius", 0.15), ("height", 0.3), ("water", 0.01), ("fire", 0), ("temperature", 20)),
+            Props(("radius", 0.15), ("height", 0.3), ("water", 0.01), ("fire", 0), ("temperature", 20), ("burst", 0)),
             [new PortSpec("steam", "steam", 0.3)],
             null),
         "block" => new PartSpec(id, "block", material, at, Props(("size", 0.1), ("tilt-deg", 0)), [], null),
@@ -66,6 +66,14 @@ public static class PartTemplates
             {
                 ["on"] = new SSymbol("?"), ["height"] = new SNumber(0.1), ["area"] = new SNumber(0.0005),
                 ["coefficient"] = new SNumber(0.6), ["into"] = new SBool(false), ["evaporation"] = new SNumber(0),
+            },
+            [], null),
+        // in the lid of the boiler #:on; lifts at #:lift gauge Pa, fully open #:accumulation over it
+        "safety-valve" => new PartSpec(id, "safety-valve", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["on"] = new SSymbol("?"), ["lift"] = new SNumber(100_000), ["bore"] = new SNumber(0.008),
+                ["coefficient"] = new SNumber(0.8), ["accumulation"] = new SNumber(0.1),
             },
             [], null),
         // an overshot wheel by default: 12 buckets; give it a #:race to drive it undershot

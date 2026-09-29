@@ -94,7 +94,8 @@ public static class RktExporter
                        string.Concat(p.Ports.Select(pt => $"       (port {pt.Name} #:height {F(pt.Height)})\n")) + "  )\n";
             case "boiler":
                 return $"  (boiler {p.Id} {At()} #:radius {F(N("radius"))} #:height {F(N("height"))} #:water {F(N("water"))} " +
-                       $"#:fire {F(N("fire"))} #:temperature {F(N("temperature", 20))} {Mat()})\n";
+                       $"#:fire {F(N("fire"))} #:temperature {F(N("temperature", 20))}" +
+                       (N("burst") > 0 ? $" #:burst {F(N("burst"))}" : "") + $" {Mat()})\n";
             case "rotor":
                 return $"  (rotor {p.Id} {At()} #:radius {F(N("radius"))} {Mat()} #:bore {F(N("bore"))} #:arm {F(N("arm"))} " +
                        $"#:wall {F(N("wall", 0.001))} #:nozzles {F(N("nozzles", 2))})\n";
@@ -133,6 +134,9 @@ public static class RktExporter
                 return $"  (leak {p.Id} {At()} #:on {Sym("on", "?")} #:height {F(N("height"))} #:area {F(N("area"))} #:coefficient {F(N("coefficient", 0.6))}" +
                        (p.Props.GetValueOrDefault("into") is SSymbol into ? $" #:into {into.Name}" : "") +
                        (N("evaporation") > 0 ? $" #:evaporation {F(N("evaporation"))}" : "") + $" {Mat()})\n";
+            case "safety-valve":
+                return $"  (safety-valve {p.Id} {At()} #:on {Sym("on", "?")} #:lift {F(N("lift"))} #:bore {F(N("bore"))} " +
+                       $"#:coefficient {F(N("coefficient", 0.8))} #:accumulation {F(N("accumulation", 0.1))} {Mat()})\n";
             case "counterpoise":
                 return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +
                        $"#:counterweight {F(N("counterweight"))} #:radius {F(N("radius"))} #:turn-deg {F(N("turn-deg"))} " +
