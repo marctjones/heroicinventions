@@ -66,7 +66,8 @@ public partial class MachineView
             float heap = 0.02f + 0.16f * (float)Math.Clamp(hearth.Fuel / initial, 0, 1);
             logs.Scale = new Vector3(1, heap, 1);
             logs.Position = new Vector3(logs.Position.X, heap / 2, logs.Position.Z);
-            glow.EmissionEnergyMultiplier = hearth.Lit ? 1.2f + 0.5f * (float)Math.Sin(Runtime.Time * 9) : 0;
+            float draught = (float)hearth.Draught;
+            glow.EmissionEnergyMultiplier = hearth.Lit ? draught * (1.2f + 0.5f * (float)Math.Sin(Runtime.Time * 9 * draught)) : 0;
         }
     }
 }

@@ -21,6 +21,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Pipe> _pipes = [];
     private readonly Dictionary<string, Boiler> _boilers = [];
     private readonly Dictionary<string, Hearth> _hearths = [];
+    private readonly Dictionary<string, Hearth> _bellows = []; // bellows id → the hearth it forces draught into
     private readonly Dictionary<string, Aeolipile> _rotors = [];
     private readonly Dictionary<string, string> _rotorBoiler = []; // rotor id → boiler id
     private readonly List<AirPocket> _air = [];
@@ -45,6 +46,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Pipe> Pipes => _pipes;
     public IReadOnlyDictionary<string, Boiler> Boilers => _boilers;
     public IReadOnlyDictionary<string, Hearth> Hearths => _hearths;
+    /// <summary>Bellows, each with the hearth it forces draught into.</summary>
+    public IReadOnlyDictionary<string, Hearth> Bellows => _bellows;
     public IReadOnlyDictionary<string, Aeolipile> Rotors => _rotors;
     public IReadOnlyList<AirPocket> AirPockets => _air;
     public IReadOnlyDictionary<string, WaterLift> Lifts => _lifts;
@@ -122,7 +125,7 @@ public sealed class MachineRuntime
                             WearRate = part.Number("bearing-wear", 0),
                         });
                     break;
-                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump":
+                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -181,6 +184,15 @@ public sealed class MachineRuntime
                 : throw new MachineFormatException($"hearth {part.Id} heats {heats}, which is neither a boiler nor a sealed vessel", part.Location);
             _hearths[part.Id] = new Hearth(target, part.Number("power"), part.Number("fuel"),
                                            part.Symbol("fuel-kind", "wood"), part.Number("efficiency", 0.5));
+        }
+
+        foreach (var part in def.Parts.Where(p => p.Kind == "bellows"))
+        {
+            var on = part.Symbol("on", "");
+            if (!_hearths.TryGetValue(on, out var hearth))
+                throw new MachineFormatException($"bellows {part.Id} is on {on}, which is not a hearth", part.Location);
+            hearth.Airflow = part.Number("airflow");
+            _bellows[part.Id] = hearth;
         }
 
         foreach (var lift in def.Lifts) _lifts[lift.Id] = BuildLift(def, lift);
@@ -481,8 +493,14 @@ public sealed class MachineRuntime
             _getters[$"{id}.doused"] = () => h.Doused;                 // kg poured on, all told
             _getters[$"{id}.boiled"] = () => h.Boiled;                 // kg of it boiled off
             _getters[$"{id}.drowned"] = () => h.Drowned ? 1 : 0;
+            _getters[$"{id}.draught"] = () => h.Draught;
             _setters[$"{id}.fuel"] = kg => h.Fuel = Math.Max(0, kg);
             _setters[$"{id}.power"] = w => h.Power = Math.Max(0, w);
+        }
+        foreach (var (id, h) in _bellows)
+        {
+            _getters[$"{id}.airflow"] = () => h.Airflow;
+            _setters[$"{id}.airflow"] = m3s => h.Airflow = Math.Max(0, m3s);
         }
         foreach (var (id, rotor) in _rotors)
         {

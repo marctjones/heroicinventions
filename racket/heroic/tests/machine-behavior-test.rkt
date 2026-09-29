@@ -117,6 +117,36 @@
   ;; 12 MJ reach 2000 kg of water at 104 C (4186 J/kg.K), less 2 W/K x 84 K x 48 s of loss
   (check-= (final-of run '(boiler temperature)) (+ 104 (/ (- 12e6 (* 2 84 48)) (* 2000 4186))) 0.01))
 
+(test-case "Bellows forge: forced draught burns a fire faster in exact proportion, but hands over no more heat"
+  ;; Natural draught (no bellows): a 5 kW wood fire's own steady burn,
+  ;; 5000 / 15e6 = 1/3000 kg/s, draws 1/3000 x 6 (wood's air-fuel ratio)
+  ;; = 1/500 kg/s of air on its own. The bellows forces in 5 L/s, which at
+  ;; air's density (Patm / (Rair x 293.15 K) = 101325 / (287.05 x 293.15)
+  ;; = 1.204118 kg/m3) is 1.204118 x 0.005 = 0.0060206 kg/s more -- draught
+  ;; (1/500 + 0.0060206) / (1/500) = 4.010296 times the air, so 4.010296
+  ;; times the burn rate too.
+  ;;
+  ;; Early (t=100 s, both still burning): bare has burned 100/3000 =
+  ;; 0.033333 kg; blown, 4.010296x that, 0.133677 kg.
+  (define early (simulate 'bellows-forge #:seconds 100 #:step 0.01 #:sample-dt 10))
+  (check-= (final-of early '(blown draught)) 4.010296 5e-6)
+  (check-= (final-of early '(bare draught)) 1 1e-9 "no bellows on it, so no forced draught at all")
+  (check-= (final-of early '(bare burned)) (/ 100.0 3000) 1e-6)
+  (check-= (final-of early '(blown burned)) (* (/ 100.0 3000) 4.010296) 1e-5)
+  (check-= (final-of early '(bare lit)) 1 1e-9)
+  (check-= (final-of early '(blown lit)) 1 1e-9)
+
+  ;; Run both out entirely: bare takes 3000 x 15e6 / 5000 = 3000 s exactly;
+  ;; blown, 3000 / 4.010296 = 748.07 s. Both give up the same 1 kg x 15 MJ/kg
+  ;; = 15 MJ, whichever forge burns it and however long that takes.
+  (define done (simulate 'bellows-forge #:seconds 3200 #:step 0.01 #:sample-dt 100))
+  (check-= (final-of done '(bare burned)) 1.0 1e-6)
+  (check-= (final-of done '(blown burned)) 1.0 1e-6)
+  (check-= (final-of done '(bare energy)) 15 1e-6 "MJ")
+  (check-= (final-of done '(blown energy)) 15 1e-6 "MJ, same as the bare forge")
+  (check-= (final-of done '(bare lit)) 0 1e-9 "out at 3000 s")
+  (check-= (final-of done '(blown lit)) 0 1e-9 "out long before, at 748.07 s"))
+
 (test-case "Newcomen engine fed by a hearth pumps in Godot, and keeps pumping on stored heat after the fire is out"
   (when (file-exists? godot-binary)
     (define lines (godot-trace 'newcomen-hearth 100))

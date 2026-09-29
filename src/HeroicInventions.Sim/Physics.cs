@@ -13,6 +13,9 @@ public static class Physics
     public const double AirGasConstant = 287.05;       // J/(kg·K), specific gas constant of dry air
     public const double AirSpecificHeatCv = 718;       // J/(kg·K) at constant volume
 
+    /// <summary>Density of dry air at atmospheric pressure and 20 °C, kg/m³ (ideal gas law).</summary>
+    public static double AirDensity => AtmosphericPressure / (AirGasConstant * ToKelvin(20));
+
     public static double ToKelvin(double celsius) => celsius + 273.15;
 
     /// <summary>Converts a gauge pressure into metres of water column (hydraulic head).</summary>

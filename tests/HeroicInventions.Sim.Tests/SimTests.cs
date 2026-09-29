@@ -284,6 +284,36 @@ public class QuenchAndFeedTests
         Assert.Equal((60000 - 0.02 * QuenchHeat) * 0.3, pot.HeatInput, precision: 6);
     }
 
+    /// <summary>
+    /// A bellows' own air (density x its m3/s) on top of the natural
+    /// draught (power / density x air-fuel ratio) scales the burn rate by
+    /// their ratio; the energy a burned kilogram gives up stays mass x
+    /// density regardless.
+    /// </summary>
+    [Fact]
+    public void AirflowScalesBurnRateButNotEnergyPerKilogram()
+    {
+        var pot = new Boiler(1, heatInputW: 0);
+        var fire = new Hearth(pot, 5000, 1, "wood", 0.5) { Airflow = 0.005 };
+        double density = Hearth.EnergyDensity("wood");
+        double natural = 5000 / density * Hearth.AirFuelRatio("wood");
+        double expectedDraught = (natural + Physics.AirDensity * 0.005) / natural;
+        Assert.Equal(expectedDraught, fire.Draught, precision: 9);
+
+        const double dt = 0.01;
+        fire.Step(dt);
+        Assert.Equal(5000 * expectedDraught * dt / density, fire.FuelBurned, precision: 9);
+        Assert.Equal(fire.FuelBurned * density, fire.EnergyReleased, precision: 3);
+    }
+
+    [Fact]
+    public void NoBellowsLeavesDraughtAtOne()
+    {
+        var pot = new Boiler(1, heatInputW: 0);
+        var fire = new Hearth(pot, 5000, 1, "wood", 0.5);
+        Assert.Equal(1, fire.Draught, precision: 12);
+    }
+
     [Fact]
     public void FeedWaterMixesByMassWeightedTemperature()
     {

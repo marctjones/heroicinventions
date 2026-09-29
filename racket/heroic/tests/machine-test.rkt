@@ -139,6 +139,18 @@
   (check-exn #rx"#:burst must be a gauge pressure" (λ () (build (k -1))))
   (check-not-exn (λ () (build (k 0) '(safety-valve guard #:on k #:lift 100000 #:bore 0.008)))))
 
+(test-case "a bellows forces draught into a hearth"
+  (check-compile-error #rx"cask is not a hearth; a bellows forces draught into a hearth"
+    (tank cask #:at (0 0 0) #:area 0.25 #:height 1)
+    (bellows pump #:at (0 0 0) #:on cask #:airflow 0.005)))
+
+(test-case "only one bellows to a hearth"
+  (check-compile-error #rx"fire already has a bellows"
+    (boiler kettle #:at (0 0 0) #:radius 0.1 #:height 0.1 #:water 0.3)
+    (hearth fire #:at (0 0 0) #:heats kettle #:power 4000 #:fuel 0.06)
+    (bellows a #:at (0 0 0) #:on fire #:airflow 0.005)
+    (bellows b #:at (0 0 0) #:on fire #:airflow 0.005)))
+
 (test-case "a pump draws from one tank into another"
   (check-compile-error #rx"k is not a tank; a pump draws from a tank and pours into another"
     (tank well #:at (0 0 0) #:area 1 #:height 1)

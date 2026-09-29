@@ -1,8 +1,10 @@
+using HeroicInventions.Sim;
 using HeroicInventions.Sim.Mechanics;
 using HeroicInventions.Sim.Editor;
 using HeroicInventions.Sim.Fluids;
 using HeroicInventions.Sim.Machines;
 using HeroicInventions.Sim.Materials;
+using HeroicInventions.Sim.Thermo;
 
 namespace HeroicInventions.Sim.Tests;
 
@@ -398,6 +400,46 @@ public class BuildSessionTests
         string text = File.ReadAllText(rkt);
         Assert.Contains("#:burst 200000 #:material bronze)", text);
         Assert.Contains("(safety-valve guard #:at (0.075 0.55 0) #:on k #:lift 100000 #:bore 0.008 #:coefficient 0.8 #:accumulation 0.1 #:material bronze)", text);
+    }
+
+    /// <summary>
+    /// A bellows placed from the palette on a hearth: scales the hearth's
+    /// burn rate by the ratio its forced air adds over the hearth's own
+    /// natural draught; round-trips through .machine and exports as Racket.
+    /// </summary>
+    /// <summary>
+    /// A hearth isn't itself placeable from the palette (it needs a boiler
+    /// or sealed vessel to heat), so this starts from the shipped
+    /// bellows-forge scene and adds a second bellows, onto the hearth that
+    /// had none — it isn't a catalogue part either, so this is also the
+    /// coverage for #:on referencing a hearth through the palette/BuildSession
+    /// path rather than the Racket compiler.
+    /// </summary>
+    [Fact]
+    public void BellowsScriptSpeedsUpTheHearthsBurnAndRoundTrips()
+    {
+        var session = NewSession(Path.Combine(AppContext.BaseDirectory, "machines"));
+        session.Execute("(load bellows-forge)");
+        session.Execute("(bellows extra #:at (-0.3 0.1 0.2) #:on bare #:airflow 0.005)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 1)");
+
+        var run = session.LastRun!;
+        double density = Hearth.EnergyDensity("wood"), natural = 5000 / density * Hearth.AirFuelRatio("wood");
+        double expectedDraught = (natural + Physics.AirDensity * 0.005) / natural;
+        Assert.Equal(expectedDraught, run.Hearths["bare"].Draught, precision: 9);
+
+        string saved = Path.Combine(TempDir(), "forge.machine");
+        session.SaveFile(saved);
+        var def = MachineDef.Parse(File.ReadAllText(saved));
+        var extra = def.Part("extra")!;
+        Assert.Equal("bellows", extra.Kind);
+        Assert.Equal("bare", extra.Symbol("on", ""));
+        Assert.Equal(0.005, extra.Number("airflow"));
+
+        string rkt = Path.Combine(TempDir(), "forge.rkt");
+        session.ExportRkt(rkt);
+        Assert.Contains("(bellows extra #:at (-0.3 0.1 0.2) #:on bare #:airflow 0.005 #:material bronze)", File.ReadAllText(rkt));
     }
 
     /// <summary>

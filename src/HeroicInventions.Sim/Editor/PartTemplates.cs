@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -75,6 +75,10 @@ public static class PartTemplates
                 ["on"] = new SSymbol("?"), ["lift"] = new SNumber(100_000), ["bore"] = new SNumber(0.008),
                 ["coefficient"] = new SNumber(0.8), ["accumulation"] = new SNumber(0.1),
             },
+            [], null),
+        // a bellows or fan forcing draught into the hearth #:on; #:airflow (m3/s) starts at 0, still until set
+        "bellows" => new PartSpec(id, "bellows", material, at,
+            new Dictionary<string, SExpr> { ["on"] = new SSymbol("?"), ["airflow"] = new SNumber(0) },
             [], null),
         // a lift pump whose barrel's foot is at `at`, drawing from #:from into #:to; #:force #f is a drive as strong as it takes
         "pump" => new PartSpec(id, "pump", material, at,

@@ -16,7 +16,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak safety-valve pump
+         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel counterpoise float-valve leak safety-valve pump
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -231,7 +231,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak safety-valve pump
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel counterpoise float-valve leak safety-valve pump
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -270,6 +270,7 @@
   (struct cinfo (id piston boiler))  ; an atmospheric cylinder
   (struct iinfo (id into))           ; an inflow
   (struct hinfo (id heats))          ; a hearth: the boiler it heats
+  (struct bvinfo (id on mat))        ; a bellows: the hearth it forces draught into
   (struct sinfo (id on))             ; a sluice gate: the channel it stands across
   (struct fvinfo (id feed mat))      ; a float valve: the inflow, pipe or channel it throttles
   (struct lkinfo (id on into mat))   ; a leak: the tank it is in, the tank under it (or #f)
@@ -319,8 +320,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice, waterwheel, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -568,6 +569,27 @@
       #:with expr #`(part 'id 'hearth 'limestone (list at.x at.y at.z)
                           (list (cons 'heats 'boiler-id) (cons 'power power-v) (cons 'fuel fuel-v)
                                 (cons 'fuel-kind '(~? kind wood)) (cons 'efficiency (~? eff-v 1/2)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A bellows or fan working #:airflow (m3/s, e.g. (L/s 40)) into the
+    ;; hearth #:on names. A hearth's #:power already implies a natural
+    ;; draught — the air its steady burn rate draws, power / energy-density
+    ;; x its fuel's stoichiometric air-fuel ratio. The bellows adds its own
+    ;; air on top of that; a fire is worked exactly as much harder as the
+    ;; total air is more than the natural draught alone, so #:airflow raises
+    ;; the burn RATE (and, while it lasts, the heat given off), never the
+    ;; total energy a load of fuel can ever release — still fuel x energy
+    ;; density, however fast it is burned. Settable at run time
+    ;; ((set id airflow v)) — work it harder, ease off, or still it.
+    (pattern (bellows id:id
+                      (~alt (~once (~seq #:at at:vec3))
+                            (~once (~seq #:on hearth-id:id))
+                            (~once (~seq #:airflow airflow-v:expr))
+                            (~optional (~seq #:material mat:id))) ...)
+      #:attr info (bvinfo #'id #'hearth-id (attribute mat))
+      #:with expr #`(part 'id 'bellows '(~? mat oak) (list at.x at.y at.z)
+                          (list (cons 'on 'hearth-id) (cons 'airflow airflow-v))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1117,6 +1139,18 @@
       (unless (and b (eq? (pinfo-kind b) 'boiler))
         (fail (format "~a is not a boiler; a safety valve sits in a boiler's lid" (syntax-e (svinfo-on v))) (svinfo-on v)))
       (define mat (svinfo-mat v))
+      (when (and mat (not (memq (syntax-e mat) known-materials)))
+        (fail (format "unknown material ~a" (syntax-e mat)) mat)))
+
+    (define bellowed (make-hasheq))
+    (for ([v infos] #:when (bvinfo? v))
+      (define on (syntax-e (bvinfo-on v)))
+      (unless (for/or ([h infos]) (and (hinfo? h) (eq? (syntax-e (hinfo-id h)) on)))
+        (fail (format "~a is not a hearth; a bellows forces draught into a hearth" on) (bvinfo-on v)))
+      (when (hash-ref bellowed on #f)
+        (fail (format "~a already has a bellows" on) (bvinfo-on v)))
+      (hash-set! bellowed on #t)
+      (define mat (bvinfo-mat v))
       (when (and mat (not (memq (syntax-e mat) known-materials)))
         (fail (format "unknown material ~a" (syntax-e mat)) mat)))
 

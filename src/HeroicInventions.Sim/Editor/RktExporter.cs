@@ -125,6 +125,8 @@ public static class RktExporter
             case "hearth":
                 return $"  (hearth {p.Id} {At()} #:heats {Sym("heats", "?")} #:power {F(N("power"))} #:fuel {F(N("fuel"))} " +
                        $"#:fuel-kind {Sym("fuel-kind", "wood")} #:efficiency {F(N("efficiency", 0.5))})\n";
+            case "bellows":
+                return $"  (bellows {p.Id} {At()} #:on {Sym("on", "?")} #:airflow {F(N("airflow"))} {Mat()})\n";
             case "sluice":
                 return $"  (sluice {p.Id} {At()} #:on {Sym("on", "?")} #:height {F(N("height"))} #:opening {F(N("opening", 1))}" +
                        Opt("width", "width") + $" {Mat()})\n";
