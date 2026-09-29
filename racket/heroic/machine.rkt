@@ -15,7 +15,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice
+         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -118,7 +118,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -158,6 +158,7 @@
   (struct iinfo (id into))           ; an inflow
   (struct hinfo (id heats))          ; a hearth: the boiler it heats
   (struct sinfo (id on))             ; a sluice gate: the channel it stands across
+  (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
   (struct chinfo (id from to onto))  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
 
   (define known-materials (material-ids))
@@ -200,8 +201,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice, waterwheel) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -432,6 +433,44 @@
                           '()
                           #,(loc-of this-syntax)))
 
+    ;; A water wheel on a horizontal axle turning a millstone that resists
+    ;; with #:load N·m (settable: (set id load v)). #:mass kg sits mostly in
+    ;; the rim, so I = mass × radius². Two ways to drive it, either or both:
+    ;;   overshot   #:buckets n of #:bucket-volume m³ each; a channel run
+    ;;              #:to off pours #:onto it at the top, and the buckets
+    ;;              carry the water down until they have turned #:spill-deg
+    ;;              (default 120: buckets start tipping near 90° and are empty by 150°), then tip it into #:tail
+    ;;              (a tank) or away. Power ρ·g·Q·r·(1 − cos θ).
+    ;;   undershot  #:race channel: it stands in that channel, whose current
+    ;;              pushes on paddles #:paddle-depth deep; at best 8/27 of
+    ;;              the stream's kinetic energy through them.
+    (pattern (waterwheel id:id
+                         (~alt (~once (~seq #:at at:vec3))
+                               (~once (~seq #:radius radius-v:expr))
+                               (~once (~seq #:width width-v:expr))
+                               (~once (~seq #:mass mass-v:expr))
+                               (~optional (~seq #:load load-v:expr))
+                               (~optional (~seq #:buckets buckets-v:expr))
+                               (~optional (~seq #:bucket-volume bucket-v:expr))
+                               (~optional (~seq #:spill-deg spill-v:expr))
+                               (~optional (~seq #:tail tail-tank:id))
+                               (~optional (~seq #:race race-ch:id))
+                               (~optional (~seq #:paddle-depth paddle-v:expr))
+                               (~optional (~seq #:material mat:id))) ...)
+      #:fail-unless (or (attribute buckets-v) (attribute race-ch)) "a water wheel needs #:buckets (overshot) or a #:race (undershot) to be driven"
+      #:fail-when (and (attribute buckets-v) (not (attribute bucket-v)) #'id) "#:buckets needs a #:bucket-volume"
+      #:fail-when (and (attribute race-ch) (not (attribute paddle-v)) #'id) "an undershot wheel (#:race) needs a #:paddle-depth"
+      #:attr info (winfo #'id (attribute race-ch) (attribute tail-tank))
+      #:with expr #`(part 'id 'waterwheel '(~? mat oak) (list at.x at.y at.z)
+                          (list (cons 'radius radius-v) (cons 'width width-v) (cons 'mass mass-v)
+                                (cons 'load (~? load-v 0))
+                                (cons 'buckets (~? buckets-v 0)) (cons 'bucket-volume (~? bucket-v 0))
+                                (cons 'spill-deg (~? spill-v 120))
+                                (cons 'tail (~? 'tail-tank #f)) (cons 'race (~? 'race-ch #f))
+                                (cons 'paddle-depth (~? paddle-v 0)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     ;; A sluice gate across the head of channel #:on: a plate #:height tall
     ;; (m) sliding in grooves at the channel's lip, raised by #:opening (0
     ;; shut .. 1 drawn right up; default 1). Water runs out under it as an
@@ -549,7 +588,7 @@
                             (~optional (~seq #:length len-v:expr))
                             (~optional (~seq #:onto onto:id))) ...)
       #:fail-when (and (attribute off-kw) (not (attribute end)) #'id) "a channel running off the scene needs an #:end (x y z)"
-      #:fail-when (and (attribute onto) (not (attribute off-kw)) #'onto) "only a channel running #:to off can pour #:onto a hearth or boiler"
+      #:fail-when (and (attribute onto) (not (attribute off-kw)) #'onto) "only a channel running #:to off can pour #:onto a hearth, boiler or water wheel"
       #:attr info (chinfo #'id #'from (and (attribute to) #'to) (attribute onto))
       #:with expr #`(channel-spec 'id (list 'from.part-id 'from.port-id)
                                   (~? (list 'to.part-id 'to.port-id) 'off)
@@ -745,8 +784,18 @@
         (define onto (syntax-e (chinfo-onto c)))
         (define p (hash-ref parts onto #f))
         (unless (or (and p (eq? (pinfo-kind p) 'boiler))
-                    (for/or ([h infos]) (and (hinfo? h) (eq? (syntax-e (hinfo-id h)) onto))))
-          (fail (format "~a is not a hearth or boiler; a channel pours #:onto one of those" (syntax-e (chinfo-onto c))) (chinfo-onto c)))))
+                    (for/or ([h infos]) (and (hinfo? h) (eq? (syntax-e (hinfo-id h)) onto)))
+                    (for/or ([w infos]) (and (winfo? w) (eq? (syntax-e (winfo-id w)) onto))))
+          (fail (format "~a is not a hearth, boiler or water wheel; a channel pours #:onto one of those" (syntax-e (chinfo-onto c))) (chinfo-onto c)))))
+    (for ([w infos] #:when (winfo? w))
+      (when (winfo-race w)
+        (define r (syntax-e (winfo-race w)))
+        (unless (for/or ([c infos]) (and (chinfo? c) (eq? (syntax-e (chinfo-id c)) r)))
+          (fail (format "~a is not a channel; an undershot wheel stands in a channel" r) (winfo-race w))))
+      (when (winfo-tail w)
+        (define p (hash-ref parts (syntax-e (winfo-tail w)) #f))
+        (unless (and p (eq? (pinfo-kind p) 'tank))
+          (fail (format "~a is not a tank; a wheel's buckets tip into a tank" (syntax-e (winfo-tail w))) (winfo-tail w)))))
 
     (define gated (make-hasheq))
     (for ([g infos] #:when (sinfo? g))

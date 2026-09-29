@@ -310,6 +310,29 @@ public class BuildSessionTests
         Assert.Contains("#:onto copper)", File.ReadAllText(rkt));
     }
 
+    /// <summary>An overshot wheel fed #:onto from a tank settles at ρ·g·Q·r·(1 − cos θ) / load, and round-trips.</summary>
+    [Fact]
+    public void OvershotWheelScriptTurnsAtThePredictedSpeedAndRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "mill");
+        session.Execute("(tank header #:at (0 3 0) #:area 0.5 #:height 0.4 #:water 0.05)");
+        session.Execute("(inflow spring #:into header #:flow 0.02)");
+        session.Execute("(waterwheel wheel #:at (1 1.5 0) #:radius 1.2 #:load 250 #:buckets 24 #:bucket-volume 0.01)");
+        session.Execute("(channel race header.outlet off #:end (0.8 2.8 0) #:width 0.3 #:onto wheel)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 300)");
+        double omega = 1000 * 9.81 * 0.02 * 1.2 * (1 - Math.Cos(2 * Math.PI / 3)) / 250;
+        Assert.Equal(omega, session.LastRun!.WaterWheels["wheel"].AngularVelocity, precision: 4);
+
+        string saved = Path.Combine(TempDir(), "mill.machine");
+        session.SaveFile(saved);
+        var wheel = MachineDef.Parse(File.ReadAllText(saved)).Part("wheel")!;
+        Assert.Equal(250, wheel.Number("load"));
+        string rkt = Path.Combine(TempDir(), "mill.rkt");
+        session.ExportRkt(rkt);
+        Assert.Contains("(waterwheel wheel #:at (1 1.5 0) #:radius 1.2 #:width 0.3 #:mass 100 #:load 250 #:buckets 24 #:bucket-volume 0.01 #:spill-deg 120", File.ReadAllText(rkt));
+    }
+
     [Fact]
     public void ExportsCataloguePartsWaterAndLiftsToRacket()
     {

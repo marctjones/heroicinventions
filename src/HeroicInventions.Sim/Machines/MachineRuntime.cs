@@ -29,6 +29,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, WaterSource> _sources = [];
     private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, SluiceGate> _gates = [];
+    private readonly Dictionary<string, WaterWheel> _wheels = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
     private readonly Dictionary<string, Action<double>> _setters = [];
 
@@ -45,6 +46,7 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, WaterSource> Sources => _sources;
     public IReadOnlyDictionary<string, Channel> Channels => _channels;
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
+    public IReadOnlyDictionary<string, WaterWheel> WaterWheels => _wheels;
     public double Time { get; private set; }
 
     /// <summary>
@@ -88,6 +90,7 @@ public sealed class MachineRuntime
                 case "boiler":
                     _boilers[part.Id] = new Boiler(part.Number("water"), part.Number("temperature", 20), heatInputW: part.Number("fire", 0));
                     break;
+                case "waterwheel": break; // built once the channels that drive it exist
                 case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
@@ -147,15 +150,35 @@ public sealed class MachineRuntime
         foreach (var lift in def.Lifts) _lifts[lift.Id] = BuildLift(def, lift);
         foreach (var src in def.Sources)
             _sources[src.Id] = new WaterSource(src.Id, TankNamed(src.Into, src.Location), src.Flow);
+        foreach (var ch in def.Channels) _channels[ch.Id] = BuildChannel(def, ch);
+        foreach (var part in def.Parts.Where(p => p.Kind == "waterwheel"))
+        {
+            double r = part.Number("radius");
+            string race = part.Symbol("race", ""), tail = part.Symbol("tail", "");
+            if (race != "" && !_channels.ContainsKey(race))
+                throw new MachineFormatException($"waterwheel {part.Id} stands in {race}, which is not a channel", part.Location);
+            _wheels[part.Id] = new WaterWheel(part.Id, r, part.Number("width"), part.Number("mass") * r * r)
+            {
+                Load = part.Number("load", 0),
+                Buckets = (int)part.Number("buckets", 0),
+                BucketVolume = part.Number("bucket-volume", 0),
+                SpillAngle = part.Number("spill-deg", 120) * Math.PI / 180,
+                Tail = tail == "" ? null : TankNamed(tail, part.Location),
+                Race = race == "" ? null : _channels[race],
+                PaddleDepth = part.Number("paddle-depth", 0),
+            };
+        }
         foreach (var ch in def.Channels)
         {
-            var channel = _channels[ch.Id] = BuildChannel(def, ch);
+            var channel = _channels[ch.Id];
             if (ch.Onto is not { } onto) continue;
             if (_hearths.TryGetValue(onto, out var hearth))
                 channel.Pour = m3 => hearth.Douse(m3 * Physics.WaterDensity);
             else if (_boilers.TryGetValue(onto, out var boiler))
                 channel.Pour = m3 => boiler.AddWater(m3 * Physics.WaterDensity, Hearth.WaterTemperature);
-            else throw new MachineFormatException($"channel {ch.Id} pours onto {onto}, which is not a hearth or boiler", ch.Location);
+            else if (_wheels.TryGetValue(onto, out var wheel))
+                channel.Pour = wheel.Pour;
+            else throw new MachineFormatException($"channel {ch.Id} pours onto {onto}, which is not a hearth, boiler or water wheel", ch.Location);
             if (ch.To is not null)
                 throw new MachineFormatException($"channel {ch.Id} runs into a tank; only a channel run off the scene can pour onto {onto}", ch.Location);
         }
@@ -337,6 +360,18 @@ public sealed class MachineRuntime
             _getters[$"{id}.head"] = () => g.OrificeHead * 100;        // cm above the slot's middle
             _setters[$"{id}.opening"] = o => g.Opening = o;
         }
+        foreach (var (id, w) in _wheels)
+        {
+            _getters[$"{id}.rpm"] = () => w.Rpm;
+            _getters[$"{id}.torque"] = () => w.Torque;                 // N·m from the water
+            _getters[$"{id}.power"] = () => w.Power;                   // W into the millstone
+            _getters[$"{id}.work"] = () => w.Work / 1000;              // kJ done on the millstone
+            _getters[$"{id}.water"] = () => w.Water;                   // kg on the descending arc
+            _getters[$"{id}.taken"] = () => w.Taken;                   // kg caught, all told
+            _getters[$"{id}.overflow"] = () => w.Overflow;             // kg spilled on arrival
+            _getters[$"{id}.load"] = () => w.Load;
+            _setters[$"{id}.load"] = t => w.Load = Math.Max(0, t);
+        }
         foreach (var (id, c) in _cylinders)
         {
             _getters[$"{id}.pressure"] = () => c.Pressure / 1000;      // kPa absolute
@@ -362,6 +397,7 @@ public sealed class MachineRuntime
         {
             foreach (var src in _sources.Values) src.Step(dt / n);
             foreach (var ch in _channels.Values) ch.Step(dt / n);
+            foreach (var w in _wheels.Values) w.Step(dt / n);
         }
         foreach (var lift in _lifts.Values) lift.Step(dt);
         foreach (var rotor in _rotors.Values) rotor.Step(dt); // steps its own boiler

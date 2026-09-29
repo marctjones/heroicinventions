@@ -79,7 +79,7 @@ public partial class MachineView
                 bool final = i + 2 == course.Count;
                 var trough = MakeTrough(start, end, (float)channel.Width, final ? channel.To : null, end + dir * 0.05f);
                 if (final && spec.Onto is { } onto && Runtime.Def.Part(onto) is { } target)
-                    trough.Onto = (float)(target.At.Y + (target.Kind == "boiler" ? target.Number("height") : 0.1));
+                    trough.Onto = (float)(target.At.Y + target.Kind switch { "boiler" => target.Number("height"), "waterwheel" => target.Number("radius"), _ => 0.1 });
                 _troughs.Add((channel, null, trough));
                 if (i == 0) AddLabel(spec.Id, (start + end) / 2 + Vector3.Up * (trough.Width / 3 + 0.15f));
                 if (i == 0 && channel.Gate is { } gate) BuildGate(gate, trough);

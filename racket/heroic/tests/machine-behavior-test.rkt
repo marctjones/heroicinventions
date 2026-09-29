@@ -7,7 +7,7 @@
 ;; AeolipileBlueprintSpinsOnceTheWaterBoils, which asserted the same
 ;; things from C# directly against MachineRuntime. See docs/design.html
 ;; §III "Machines as tests".
-(require rackunit heroic/simhost)
+(require rackunit heroic/simhost (only-in racket/math pi))
 
 (test-case "Heron's fountain lifts water above its basin, then empties the supply vessel"
   (define run (simulate 'herons-fountain #:seconds 60 #:step 0.05 #:sample-dt 0.5))
@@ -295,3 +295,50 @@
   (define lost (* 1000 (final-of (simulate 'fire-and-water #:seconds t100 #:step 0.01 #:sample-dt 1) '(copper lost))))
   (check-= t100 (/ (+ need lost) 2000) 1.0 (format "boils again at ~a s" t100))
   (check-true (< (/ need 2000) t100 (/ need (- 2000 (* 2 80)))) "between no loss and the worst-case loss"))
+
+;; ---- #12 water wheels (water-wheels.rkt)
+(define (rpm->rad rpm) (/ (* rpm 2 pi) 60))
+
+(test-case "Overshot wheel: the water's weight gives rho g Q r (1 - cos theta), and the millstone sets the speed"
+  (define q 0.020) (define r 1.5) (define theta (* 2/3 pi)) (define load 300)
+  (define power (* 1000 9.81 q r (- 1 (cos theta))))
+  (define omega (/ power load))
+  (define run (simulate 'water-wheels #:seconds 300 #:step 0.02 #:sample-dt 50))
+  (check-= (final-of run '(race flow)) 20 1e-3 "the header passes the spring")
+  (check-= (rpm->rad (final-of run '(overshot rpm))) omega 1e-4)
+  (check-= (final-of run '(overshot power)) power 0.05 "W")
+  ;; steady water on the arc, rho Q theta / omega, sampled after the step's
+  ;; buckets tip: one substep's pour (q x 10 ms) lower
+  (check-= (final-of run '(overshot water)) (- (/ (* 1000 q theta) omega) (* 1000 q 0.01)) 0.01)
+  (check-= (final-of run '(overshot overflow)) 0 1e-9 "the buckets never brim")
+  ;; efficiency against the whole fall: race lip 3.3 m, wheel bottom 0.2 m
+  (define efficiency (/ power (* 1000 9.81 q (- 3.3 0.2))))
+  (check-= efficiency (/ (* r (- 1 (cos theta))) 3.1) 1e-9)
+  (check-true (< 0.63 efficiency 0.78) "within Smeaton's measured overshot range"))
+
+(test-case "Overshot wheel: loaded past what brimming buckets can turn, it stalls"
+  ;; 24 buckets x 10 L over 120 of 360 degrees: 80 kg, turning 80 g r (1 - cos theta) / theta
+  (define theta (* 2/3 pi))
+  (define most (/ (* 80 9.81 1.5 (- 1 (cos theta))) theta))
+  (define run (simulate 'water-wheels #:seconds 120 #:step 0.02 #:sample-dt 10 #:set `((overshot load ,(+ most 20)))))
+  (check-= (final-of run '(overshot rpm)) 0 1e-9)
+  (check-= (final-of run '(overshot water)) 80 1e-6 "kg: every bucket on the arc full")
+  (check-= (final-of run '(overshot torque)) most 1e-3)
+  (check-true (> (final-of run '(overshot overflow)) 100) "the rest spills as it arrives"))
+
+(test-case "Undershot wheel: the current's push settles it at u = v - sqrt(tau / rho A r)"
+  (define run (simulate 'water-wheels #:seconds 300 #:step 0.02 #:sample-dt 50))
+  (define v (final-of run '(mill-race velocity)))
+  (define area (* 0.6 (/ (final-of run '(mill-race depth)) 100)))   ; paddles deeper than the race
+  (define u (- v (sqrt (/ 40 (* 1000 area 1.0)))))
+  (check-= (rpm->rad (final-of run '(undershot rpm))) u 1e-4))
+
+(test-case "Undershot wheel: at its best load it takes 8/27 of the race's kinetic energy through its paddles"
+  (define probe (simulate 'water-wheels #:seconds 60 #:step 0.02 #:sample-dt 30))
+  (define v (final-of probe '(mill-race velocity)))
+  (define area (* 0.6 (/ (final-of probe '(mill-race depth)) 100)))
+  (define best (* 1000 area (expt (* 2/3 v) 2) 1.0))                 ; tau at u = v/3
+  (define run (simulate 'water-wheels #:seconds 300 #:step 0.02 #:sample-dt 50 #:set `((undershot load ,best))))
+  (define kinetic (* 1/2 1000 area (expt v 3)))
+  (check-= (final-of run '(undershot power)) (* 8/27 kinetic) 0.5 "W")
+  (check-= (rpm->rad (final-of run '(undershot rpm))) (/ v 3) 1e-4))

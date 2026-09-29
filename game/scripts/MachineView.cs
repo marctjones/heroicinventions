@@ -76,6 +76,7 @@ public partial class MachineView : Node3D
                 case "piston": BuildPiston(part); break;
                 case "post": BuildPost(part); break;
                 case "hearth": BuildHearth(part); break;
+                case "waterwheel": BuildWaterWheel(part); break;
             }
         }
         foreach (var pipe in Runtime.Def.Pipes) BuildPipe(pipe);
@@ -1134,6 +1135,7 @@ public partial class MachineView : Node3D
         DrawChannels();
         DrawCylinders();
         DrawHearths();
+        DrawWaterWheels();
     }
 
     public void ToggleFire()
@@ -1161,6 +1163,7 @@ public partial class MachineView : Node3D
             foreach (var (id, b) in Runtime.Boilers)
                 bits.Add($"{id} {b.Temperature:F1} °C {b.GaugePressure / 1000:F1} kPa, fire {(b.HeatInput > 0 ? "on" : "off")}");
             foreach (var (id, r) in Runtime.Rotors) bits.Add($"{id} {r.Rpm:F0} rpm");
+            foreach (var (id, w) in Runtime.WaterWheels) bits.Add($"{id} {w.Rpm:F1} rpm, {w.Power:F0} W, {w.Water:F1} kg aboard");
             foreach (var b in Blocks) bits.Add($"{b.Name} {b.Material.Name} {b.Mass:F1} kg");
             return string.Join(" · ", bits);
         }
@@ -1184,7 +1187,7 @@ public partial class MachineView : Node3D
     /// </summary>
     public EnergySummary Energy()
     {
-        double rotorKe = Runtime.Rotors.Values.Sum(r => r.KineticEnergy);
+        double rotorKe = Runtime.Rotors.Values.Sum(r => r.KineticEnergy) + Runtime.WaterWheels.Values.Sum(w => w.KineticEnergy);
         double bodyKe = _freezable.Sum(b => 0.5 * b.Mass * b.LinearVelocity.LengthSquared())
                         + _axles.Sum(a => SpinEnergy(a.Body)); // wheels only turn, so all their energy is spin
         // The real centre of mass, not the body's own origin: a pendulum's
@@ -1204,6 +1207,8 @@ public partial class MachineView : Node3D
 
         string speed = Runtime.Rotors.Count > 0
             ? $"{Runtime.Rotors.Values.First().Rpm:F0} rpm"
+            : Runtime.WaterWheels.Count > 0
+                ? string.Join(", ", Runtime.WaterWheels.Values.Select(w => $"{w.Name} {w.Rpm:F1} rpm"))
             : _axles.Count > 0
                 ? $"{_axles.Max(a => Math.Abs(AxleRpm(a.Body, a.Axis))):F1} rpm"
             : _freezable.Count > 0
@@ -1217,8 +1222,9 @@ public partial class MachineView : Node3D
             : null;
 
         // Not for a driven machine: whoever turns the crank (or the river
-        // under a noria) keeps adding energy, so "retained" means nothing.
+        // under a noria, a spring filling a tank) keeps adding energy, so "retained" means nothing.
         double? retained = Runtime.Boilers.Count == 0 && !_axles.Any(a => a.Driven) && _liftDrives.Count == 0
+                           && Runtime.Sources.Count == 0 && Runtime.WaterWheels.Count == 0
                            && _initialMechanicalEnergy is { } init && init > 1e-6
             ? (rotorKe + bodyKe + pe) / init * 100
             : null;

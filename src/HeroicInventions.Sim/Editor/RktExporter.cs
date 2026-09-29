@@ -122,6 +122,12 @@ public static class RktExporter
             case "sluice":
                 return $"  (sluice {p.Id} {At()} #:on {Sym("on", "?")} #:height {F(N("height"))} #:opening {F(N("opening", 1))}" +
                        Opt("width", "width") + $" {Mat()})\n";
+            case "waterwheel":
+                return $"  (waterwheel {p.Id} {At()} #:radius {F(N("radius"))} #:width {F(N("width"))} #:mass {F(N("mass"))} #:load {F(N("load"))}" +
+                       (N("buckets") > 0 ? $" #:buckets {F(N("buckets"))} #:bucket-volume {F(N("bucket-volume"))} #:spill-deg {F(N("spill-deg", 120))}" : "") +
+                       (Sym("tail", "") is { Length: > 0 } tail ? $" #:tail {tail}" : "") +
+                       (Sym("race", "") is { Length: > 0 } race ? $" #:race {race} #:paddle-depth {F(N("paddle-depth"))}" : "") +
+                       $" {Mat()})\n";
             case "wheel":
             case "screw":
             case "fixture":
