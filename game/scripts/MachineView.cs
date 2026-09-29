@@ -78,6 +78,7 @@ public partial class MachineView : Node3D
                 case "post": BuildPost(part); break;
                 case "hearth": BuildHearth(part); break;
                 case "waterwheel": BuildWaterWheel(part); break;
+                case "windmill": BuildWindmill(part); break;
                 case "counterpoise": BuildCounterpoise(part); break;
             }
         }
@@ -1160,6 +1161,7 @@ public partial class MachineView : Node3D
         DrawCylinders();
         DrawHearths();
         DrawWaterWheels();
+        DrawWindmills();
         DrawCounterpoises();
         DrawBearingPendulums();
         DrawFloatValves();
@@ -1207,6 +1209,8 @@ public partial class MachineView : Node3D
                          (p.Broken ? ", column broken" : "") + $", {p.MaxPull:F0} N on the rod at most" + (p.Stalled ? ", STALLED" : ""));
             foreach (var (id, r) in Runtime.Rotors) bits.Add($"{id} {r.Rpm:F0} rpm");
             foreach (var (id, w) in Runtime.WaterWheels) bits.Add($"{id} {w.Rpm:F1} rpm, {w.Power:F0} W, {w.Water:F1} kg aboard");
+            foreach (var (id, m) in Runtime.Windmills)
+                bits.Add($"{id} {m.Rpm:F1} rpm in {m.Wind:0.#} m/s, {m.Power / 1000:F2} kW of the wind's {m.WindPower / 1000:F1} kW (Cp {m.PowerCoefficient:F3}, Betz 0.593)");
             foreach (var (id, p) in Runtime.Pendulums)
                 bits.Add($"{id} {p.Angle * 180 / Math.PI:F1}° (last turned at {p.Amplitude * 180 / Math.PI:F2}°, {p.Swings} swings), bearing {p.Bearing.Heat:F2} J heat, {p.Bearing.Wear:E2} mm³ worn");
             foreach (var b in Blocks) bits.Add($"{b.Name} {b.Material.Name} {b.Mass:F1} kg");
@@ -1232,7 +1236,8 @@ public partial class MachineView : Node3D
     /// </summary>
     public EnergySummary Energy()
     {
-        double rotorKe = Runtime.Rotors.Values.Sum(r => r.KineticEnergy) + Runtime.WaterWheels.Values.Sum(w => w.KineticEnergy);
+        double rotorKe = Runtime.Rotors.Values.Sum(r => r.KineticEnergy) + Runtime.WaterWheels.Values.Sum(w => w.KineticEnergy)
+                         + Runtime.Windmills.Values.Sum(m => m.KineticEnergy);
         double bodyKe = _freezable.Sum(b => 0.5 * b.Mass * b.LinearVelocity.LengthSquared())
                         + _axles.Sum(a => SpinEnergy(a.Body)) // wheels only turn, so all their energy is spin
                         + BearingPendulumEnergy(out double bearingPe);
@@ -1256,6 +1261,8 @@ public partial class MachineView : Node3D
             ? $"{Runtime.Rotors.Values.First().Rpm:F0} rpm"
             : Runtime.WaterWheels.Count > 0
                 ? string.Join(", ", Runtime.WaterWheels.Values.Select(w => $"{w.Name} {w.Rpm:F1} rpm"))
+            : Runtime.Windmills.Count > 0
+                ? string.Join(", ", Runtime.Windmills.Values.Select(m => $"{m.Name} {m.Rpm:F1} rpm"))
             : _axles.Count > 0
                 ? $"{_axles.Max(a => Math.Abs(AxleRpm(a.Body, a.Axis))):F1} rpm"
             : _freezable.Count > 0
@@ -1275,7 +1282,7 @@ public partial class MachineView : Node3D
         // Not for a driven machine: whoever turns the crank (or the river
         // under a noria, a spring filling a tank, a pump's crank) keeps adding energy, so "retained" means nothing.
         double? retained = Runtime.Boilers.Count == 0 && !_axles.Any(a => a.Driven) && _liftDrives.Count == 0 && Runtime.Pumps.Count == 0
-                           && Runtime.Sources.Count == 0 && Runtime.WaterWheels.Count == 0 && Runtime.Hearths.Count == 0
+                           && Runtime.Sources.Count == 0 && Runtime.WaterWheels.Count == 0 && Runtime.Windmills.Count == 0 && Runtime.Hearths.Count == 0
                            && _initialMechanicalEnergy is { } init && init > 1e-6
             ? (rotorKe + bodyKe + pe) / init * 100
             : null;

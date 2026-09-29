@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -95,6 +95,14 @@ public static class PartTemplates
                 ["radius"] = new SNumber(1.0), ["width"] = new SNumber(0.3), ["mass"] = new SNumber(100), ["load"] = new SNumber(0),
                 ["buckets"] = new SNumber(12), ["bucket-volume"] = new SNumber(0.005), ["spill-deg"] = new SNumber(120),
                 ["tail"] = new SBool(false), ["race"] = new SBool(false), ["paddle-depth"] = new SNumber(0),
+            },
+            [], null),
+        // four sails 10 m from hub to tip facing a 6 m/s breeze, the stones free (load 0) until set
+        "windmill" => new PartSpec(id, "windmill", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["radius"] = new SNumber(10), ["mass"] = new SNumber(1500), ["wind"] = new SNumber(6), ["load"] = new SNumber(0),
+                ["cp"] = new SNumber(0.3), ["tip-speed-ratio"] = new SNumber(2.5),
             },
             [], null),
         // a spindle turned by a hanging vessel against a counterweight; #:vessel names the tank

@@ -139,6 +139,17 @@
   (check-exn #rx"#:burst must be a gauge pressure" (λ () (build (k -1))))
   (check-not-exn (λ () (build (k 0) '(safety-valve guard #:on k #:lift 100000 #:bore 0.008)))))
 
+;; a windmill's numbers are checked when the machine is built, not when it expands
+(test-case "a windmill takes no more of the wind than the Betz limit"
+  (define (build . clauses)
+    (parameterize ([current-namespace (make-base-namespace)])
+      (eval `(module mill heroic (define-machine mill ,@clauses)))
+      (dynamic-require ''mill #f)))
+  (check-exn #rx"#:cp must be above 0 and at most the Betz limit"
+             (λ () (build '(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind 6 #:cp 0.6))))
+  (check-exn #rx"#:wind must be a speed" (λ () (build '(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind -1))))
+  (check-not-exn (λ () (build '(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind 6 #:cp 16/27)))))
+
 (test-case "a bellows forces draught into a hearth"
   (check-compile-error #rx"cask is not a hearth; a bellows forces draught into a hearth"
     (tank cask #:at (0 0 0) #:area 0.25 #:height 1)

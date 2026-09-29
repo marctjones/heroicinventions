@@ -147,6 +147,38 @@
   (check-= (final-of done '(bare lit)) 0 1e-9 "out at 3000 s")
   (check-= (final-of done '(blown lit)) 0 1e-9 "out long before, at 748.07 s"))
 
+(test-case "Windmills: at their best load the sails take Cp of the wind, and power goes as the wind speed cubed"
+  ;; R = 10 m, A = 314.159 m2, air 1.204118 kg/m3, Cp* = 0.3 at lambda* = 2.5.
+  ;; Each mill's stones are set to tau0 = 1/2 rho A v^2 R Cp*/lambda*, where
+  ;; the sails' torque tau0 (2 - lambda/lambda*) balances them at lambda*:
+  ;;   breeze, 6 m/s: omega = 2.5 x 6 / 10 = 1.5 rad/s = 14.3239 rpm;
+  ;;                  1/2 rho A v^3 = 40854.77 W, x 0.3 = 12256.43 W
+  ;;   gale,   9 m/s: omega = 2.25 rad/s = 21.4859 rpm; 137884.86 W x 0.3 = 41365.46 W
+  ;; and 41365.46 / 12256.43 = (9/6)^3 = 3.375.
+  (define run (simulate 'windmills #:seconds 200 #:step 0.01 #:sample-dt 10))
+  (check-= (final-of run '(breeze rpm)) 14.3239 1e-4)
+  (check-= (final-of run '(gale rpm)) 21.4859 1e-4)
+  (check-= (final-of run '(breeze power)) 12256.43 0.01)
+  (check-= (final-of run '(gale power)) 41365.46 0.01)
+  (check-= (final-of run '(breeze cp)) 0.3 1e-6)
+  (check-= (final-of run '(gale cp)) 0.3 1e-6)
+  (check-= (/ (final-of run '(gale power)) (final-of run '(breeze power))) 3.375 1e-6 "(9/6)^3")
+  (check-true (<= (max-of run '(breeze cp)) 16/27) "never above the Betz limit")
+  (check-true (<= (max-of run '(gale cp)) 16/27) "never above the Betz limit"))
+
+(test-case "Windmills: stones set for a lighter wind let the sails run fast and take less of it"
+  ;; The gale mill ground against the breeze mill's 8170.95 N m, a 4/9 of
+  ;; its own tau0: lambda = 2.5 (2 - 4/9) = 3.8889, omega = 3.8889 x 9/10 =
+  ;; 3.5 rad/s = 33.4225 rpm; Cp = 0.3 (lambda/lambda*)(2 - lambda/lambda*)
+  ;; = 0.3 x 1.5556 x 0.4444 = 0.207407, 28598.34 W -- more power than the
+  ;; breeze mill gets, but a smaller share of a stronger wind.
+  (define run (simulate 'windmills #:seconds 200 #:step 0.01 #:sample-dt 10
+                        #:set '((gale load 8170.9543946348695))))
+  (check-= (final-of run '(gale tsr)) 3.888889 1e-5)
+  (check-= (final-of run '(gale rpm)) 33.4225 1e-4)
+  (check-= (final-of run '(gale cp)) 0.207407 1e-6)
+  (check-= (final-of run '(gale power)) 28598.34 0.01))
+
 (test-case "Newcomen engine fed by a hearth pumps in Godot, and keeps pumping on stored heat after the fire is out"
   (when (file-exists? godot-binary)
     (define lines (godot-trace 'newcomen-hearth 100))

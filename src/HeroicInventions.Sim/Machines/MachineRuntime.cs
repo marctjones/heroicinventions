@@ -35,6 +35,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, (SafetyValve Valve, Boiler Boiler)> _safetyValves = [];
     private readonly Dictionary<string, LiftPump> _pumps = [];
     private readonly Dictionary<string, WaterWheel> _wheels = [];
+    private readonly Dictionary<string, Windmill> _windmills = [];
     private readonly Dictionary<string, Counterpoise> _counterpoises = [];
     private readonly Dictionary<string, Pendulum> _pendulums = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
@@ -64,6 +65,8 @@ public sealed class MachineRuntime
     /// <summary>Lift pumps, each drawing up a suction pipe no higher than the atmosphere can push the water.</summary>
     public IReadOnlyDictionary<string, LiftPump> Pumps => _pumps;
     public IReadOnlyDictionary<string, WaterWheel> WaterWheels => _wheels;
+    /// <summary>Windmills: sails turning a millstone, taking at most the Betz limit of the wind's power.</summary>
+    public IReadOnlyDictionary<string, Windmill> Windmills => _windmills;
     public IReadOnlyDictionary<string, Counterpoise> Counterpoises => _counterpoises;
     /// <summary>Pendulums hung on a bearing (#:bearing-radius): swung here, not by Jolt, so their friction and wear can be checked.</summary>
     public IReadOnlyDictionary<string, Pendulum> Pendulums => _pendulums;
@@ -114,6 +117,20 @@ public sealed class MachineRuntime
                     };
                     break;
                 case "waterwheel": break; // built once the channels that drive it exist
+                case "windmill":
+                {
+                    double r = part.Number("radius"), cp = part.Number("cp", 0.3);
+                    if (!(cp > 0 && cp <= Windmill.BetzLimit))
+                        throw new MachineFormatException($"windmill {part.Id}: #:cp must be above 0 and at most the Betz limit, 16/27 = 0.593 (no rotor takes more of the wind), got {cp}", part.Location);
+                    _windmills[part.Id] = new Windmill(part.Id, r, part.Number("mass") * r * r / 3) // slender sails from the hub: ⅓·m·R²
+                    {
+                        Wind = part.Number("wind"),
+                        Load = part.Number("load", 0),
+                        CpMax = cp,
+                        TipSpeedRatio = part.Number("tip-speed-ratio", 2.5),
+                    };
+                    break;
+                }
                 case "counterpoise": break; // built once its vessel exists
                 case "pendulum" when part.Props.GetValueOrDefault("bearing-radius") is SNumber journal:
                     _pendulums[part.Id] = new Pendulum(part.Id, part.Number("length"), materials[part.Material].Density,
@@ -584,6 +601,20 @@ public sealed class MachineRuntime
             _getters[$"{id}.load"] = () => w.Load;
             _setters[$"{id}.load"] = t => w.Load = Math.Max(0, t);
         }
+        foreach (var (id, m) in _windmills)
+        {
+            _getters[$"{id}.rpm"] = () => m.Rpm;
+            _getters[$"{id}.torque"] = () => m.Torque;                 // N·m from the wind
+            _getters[$"{id}.power"] = () => m.Power;                   // W into the millstone
+            _getters[$"{id}.wind-power"] = () => m.WindPower;          // W the wind carries through the sails' disc
+            _getters[$"{id}.cp"] = () => m.PowerCoefficient;           // fraction of it taken; never above 16/27
+            _getters[$"{id}.tsr"] = () => m.TipSpeedRatioNow;          // sail tip speed ÷ wind speed
+            _getters[$"{id}.work"] = () => m.Work / 1000;              // kJ done on the millstone
+            _getters[$"{id}.wind"] = () => m.Wind;
+            _setters[$"{id}.wind"] = v => m.Wind = Math.Max(0, v);
+            _getters[$"{id}.load"] = () => m.Load;
+            _setters[$"{id}.load"] = t => m.Load = Math.Max(0, t);
+        }
         foreach (var (id, c) in _cylinders)
         {
             _getters[$"{id}.pressure"] = () => c.Pressure / 1000;      // kPa absolute
@@ -641,6 +672,7 @@ public sealed class MachineRuntime
         foreach (var lift in _lifts.Values) lift.Step(dt);
         foreach (var pump in _pumps.Values) pump.Step(dt);
         foreach (var cp in _counterpoises.Values) cp.Step(dt);
+        foreach (var m in _windmills.Values) m.Step(dt);
         foreach (var p in _pendulums.Values) p.Step(dt);
         foreach (var rotor in _rotors.Values) rotor.Step(dt); // steps its own boiler
         foreach (var c in _cylinders.Values) c.Step(dt);

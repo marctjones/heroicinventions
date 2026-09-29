@@ -408,6 +408,36 @@ public class BuildSessionTests
     /// natural draught; round-trips through .machine and exports as Racket.
     /// </summary>
     /// <summary>
+    /// A windmill placed from the palette, its stones set to τ₀ from the
+    /// console: it settles at the tip-speed ratio where the sails take Cp*
+    /// of the wind, and round-trips through .machine and Racket export.
+    /// </summary>
+    [Fact]
+    public void WindmillScriptSettlesAtItsBestTipSpeedAndRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "mill");
+        double tau0 = 0.5 * Physics.AirDensity * Math.PI * 100 * 36 * 10 * 0.3 / 2.5;
+        session.Execute("(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind 6)");
+        session.Execute($"(set sails #:load {tau0.ToString("R", System.Globalization.CultureInfo.InvariantCulture)})");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 300)");
+        var mill = session.LastRun!.Windmills["sails"];
+        Assert.Equal(2.5, mill.TipSpeedRatioNow, precision: 5);
+        Assert.Equal(0.3, mill.PowerCoefficient, precision: 5);
+
+        string saved = Path.Combine(TempDir(), "mill.machine");
+        session.SaveFile(saved);
+        var part = MachineDef.Parse(File.ReadAllText(saved)).Part("sails")!;
+        Assert.Equal("windmill", part.Kind);
+        Assert.Equal(6, part.Number("wind"));
+
+        string rkt = Path.Combine(TempDir(), "mill.rkt");
+        session.ExportRkt(rkt);
+        Assert.Contains("(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind 6 #:load ", File.ReadAllText(rkt));
+        Assert.Contains("#:cp 0.3 #:tip-speed-ratio 2.5 #:material bronze)", File.ReadAllText(rkt));
+    }
+
+    /// <summary>
     /// A hearth isn't itself placeable from the palette (it needs a boiler
     /// or sealed vessel to heat), so this starts from the shipped
     /// bellows-forge scene and adds a second bellows, onto the hearth that

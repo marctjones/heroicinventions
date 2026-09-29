@@ -384,6 +384,7 @@ public partial class BuildMode : Node3D
             "leak" => Shapes.Sphere(0.03f, mat),
             "safety-valve" => Shapes.Cylinder(0.02f, 0.04f, mat),
             "bellows" => Shapes.Box(new Vector3(0.18f, 0.12f, 0.3f), mat),
+            "windmill" => Shapes.Box(new Vector3((float)part.Number("radius") * 2, 0.4f, 0.1f), mat),
             "pump" => Shapes.Cylinder((float)part.Number("bore") / 2 + 0.02f, (float)part.Number("stroke"), mat),
             "sluice" => Shapes.Box(new Vector3(0.05f, (float)part.Number("height"), (float)part.Number("width", 0.3)), mat),
             "piston" => Shapes.Cylinder((float)part.Number("bore"), (float)part.Number("stroke"), mat),

@@ -16,7 +16,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel counterpoise float-valve leak safety-valve pump
+         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill counterpoise float-valve leak safety-valve pump
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -201,9 +201,28 @@
       (bad (format "#:temperature must be in [0, 100) C, got ~e" (prop 'temperature)))))
   parts)
 
+;; A windmill's numbers are checked when the machine is built; its #:cp
+;; above all, which no rotor can take past the Betz limit.
+(define (check-windmills parts)
+  (for ([p parts] #:when (eq? (part-kind p) 'windmill))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what)
+      (error 'define-machine "~a:~a:~a: windmill ~a: ~a"
+             (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (unless (and (real? (prop 'radius)) (> (prop 'radius) 0)) (bad (format "#:radius must be a length above 0, got ~e" (prop 'radius))))
+    (unless (and (real? (prop 'mass)) (> (prop 'mass) 0)) (bad (format "#:mass must be above 0, got ~e" (prop 'mass))))
+    (unless (and (real? (prop 'wind)) (>= (prop 'wind) 0)) (bad (format "#:wind must be a speed, 0 or more, got ~e" (prop 'wind))))
+    (unless (and (real? (prop 'load)) (>= (prop 'load) 0)) (bad (format "#:load must be a torque, 0 or more, got ~e" (prop 'load))))
+    (unless (and (real? (prop 'cp)) (> (prop 'cp) 0) (<= (prop 'cp) 16/27))
+      (bad (format "#:cp must be above 0 and at most the Betz limit, 16/27 = 0.593 (no rotor takes more of the wind), got ~e" (prop 'cp))))
+    (unless (and (real? (prop 'tip-speed-ratio)) (> (prop 'tip-speed-ratio) 0))
+      (bad (format "#:tip-speed-ratio must be above 0, got ~e" (prop 'tip-speed-ratio)))))
+  parts)
+
 (define (make-machine name source items)
   (machine name source
-           (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))
+           (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -231,7 +250,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel counterpoise float-valve leak safety-valve pump
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill counterpoise float-valve leak safety-valve pump
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -320,8 +339,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -628,6 +647,31 @@
                                 (cons 'spill-deg (~? spill-v 120))
                                 (cons 'tail (~? 'tail-tank #f)) (cons 'race (~? 'race-ch #f))
                                 (cons 'paddle-depth (~? paddle-v 0)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A windmill: sails #:radius (m, hub to tip) across, #:mass kg of them
+    ;; (slender arms from the hub, I = mass × radius² / 3), facing a #:wind
+    ;; (m/s) and turning a millstone that resists with #:load N·m. Both are
+    ;; settable: (set id wind v), (set id load v). The wind carries ½ρAv³
+    ;; through the swept disc; the sails take the fraction Cp of it, most —
+    ;; #:cp (default 0.3) — when their tips run #:tip-speed-ratio (default
+    ;; 2.5) times the wind speed, less either side. #:cp can be no more than
+    ;; the Betz limit, 16/27: no rotor takes more of the wind than that.
+    (pattern (windmill id:id
+                       (~alt (~once (~seq #:at at:vec3))
+                             (~once (~seq #:radius radius-v:expr))
+                             (~once (~seq #:mass mass-v:expr))
+                             (~once (~seq #:wind wind-v:expr))
+                             (~optional (~seq #:load load-v:expr))
+                             (~optional (~seq #:cp cp-v:expr))
+                             (~optional (~seq #:tip-speed-ratio tsr-v:expr))
+                             (~optional (~seq #:material mat:id))) ...)
+      #:attr info (pinfo #'id 'windmill (attribute mat) '())
+      #:with expr #`(part 'id 'windmill '(~? mat oak) (list at.x at.y at.z)
+                          (list (cons 'radius radius-v) (cons 'mass mass-v) (cons 'wind wind-v)
+                                (cons 'load (~? load-v 0)) (cons 'cp (~? cp-v 0.3))
+                                (cons 'tip-speed-ratio (~? tsr-v 2.5)))
                           '()
                           #,(loc-of this-syntax)))
 

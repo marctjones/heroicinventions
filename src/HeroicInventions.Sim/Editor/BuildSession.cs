@@ -24,6 +24,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (sluice id #:at (x y z) #:on channel #:height H [#:opening o] [#:width w])
 ///   (float-valve id #:at (x y z) #:on feed #:shut S #:travel T)   ; feed: an inflow, pipe or channel into a tank
 ///   (safety-valve id #:at (x y z) #:on boiler #:lift Pa #:bore D [#:coefficient Cd] [#:accumulation a])   ; a boiler's #:burst Pa rates it
+///   (windmill id #:at (x y z) #:radius R #:mass M #:wind v [#:load N·m] [#:cp Cp] [#:tip-speed-ratio λ])   ; Cp at most 16/27 (Betz)
 ///   (bellows id #:at (x y z) #:on hearth #:airflow m3/s [#:material M])   ; forces the hearth's draught past what it draws unforced
 ///   (pump id #:at (x y z) #:from tank #:to tank #:bore D #:stroke S [#:rpm n] [#:efficiency e] [#:force N] [#:temperature C])   ; #:at is the barrel's foot
 ///   (leak id #:at (x y z) #:on tank #:height H #:area A [#:coefficient Cd] [#:into catch-tank] [#:evaporation m3/s])

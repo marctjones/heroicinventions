@@ -325,6 +325,46 @@ public class QuenchAndFeedTests
     }
 }
 
+public class WindmillTests
+{
+    private static Windmill Mill(double wind, double load) =>
+        new("m", 10, 1500 * 100 / 3.0) { Wind = wind, Load = load, CpMax = 0.3, TipSpeedRatio = 2.5 };
+
+    private static double Tau0(double v) => 0.5 * Physics.AirDensity * Math.PI * 100 * v * v * 10 * 0.3 / 2.5;
+
+    /// <summary>Loaded at τ₀ = ½ρAv²R·Cp*/λ*, the sails settle at λ*, taking exactly Cp* of the wind's ½ρAv³.</summary>
+    [Fact]
+    public void AtItsBestLoadItTakesCpMaxOfTheWind()
+    {
+        var mill = Mill(6, Tau0(6));
+        for (int i = 0; i < 30000; i++) mill.Step(0.01);
+        Assert.Equal(2.5, mill.TipSpeedRatioNow, precision: 6);
+        Assert.Equal(0.3, mill.PowerCoefficient, precision: 6);
+        Assert.Equal(0.3 * mill.WindPower, mill.Power, precision: 2);
+    }
+
+    [Fact]
+    public void TorqueIsLinearInTipSpeedRatioAndMostAtAStandstill()
+    {
+        var mill = Mill(6, 0);
+        Assert.Equal(2 * Tau0(6), mill.TorqueAt(0), precision: 6);
+        Assert.Equal(Tau0(6), mill.TorqueAt(2.5 * 6 / 10.0), precision: 6);
+        Assert.Equal(0, mill.TorqueAt(5 * 6 / 10.0), precision: 6);
+    }
+
+    [Fact]
+    public void AMillstoneHeavierThanTheStartingTorqueHoldsItStill()
+    {
+        var mill = Mill(6, 2 * Tau0(6) + 1);
+        for (int i = 0; i < 1000; i++) mill.Step(0.01);
+        Assert.Equal(0, mill.AngularVelocity);
+    }
+
+    [Fact]
+    public void NoRotorIsAllowedPastTheBetzLimit() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Windmill("m", 10, 1) { CpMax = 0.6 });
+}
+
 public class BearingTests
 {
     /// <summary>A flywheel coasting on a dry pin: constant torque μNr stops it at t = Iω₀/τ, all ½Iω₀² as heat, the pin sliding r·ω₀·t/2.</summary>
