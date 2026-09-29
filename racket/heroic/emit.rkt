@@ -2,7 +2,7 @@
 ;; Turns a machine value into the .machine format: plain S-expressions
 ;; with every number a finite flonum, so the C# reader never meets exact
 ;; rationals (3/100) or infinities.
-(require racket/path "machine.rkt" "geometry/shape.rkt")
+(require racket/path racket/match "machine.rkt" "geometry/shape.rkt")
 (provide machine->sexp write-machine-file)
 
 (define (num who v)
@@ -53,6 +53,9 @@
   `(machine ,(machine-name m)
             ,@(if (machine-source m) `((source ,(machine-source m))) '())
             ,@(if (= (machine-ambient m) 20) '() `((ambient ,(num "#:ambient" (machine-ambient m)))))
+            ,@(match (machine-sun m)
+                [#f '()]
+                [(list lat day time) `((sun (latitude ,(num "#:latitude" lat)) (day ,day) (time ,(num "#:time" time))))])
             ,@(for/list ([p (machine-parts m)]) (part->sexp p root))
             ,@(for/list ([p (machine-pipes m)])
                 `(pipe ,(pipe-spec-id p)

@@ -1,7 +1,12 @@
 #lang racket/base
 ;; define-machine: the heart of #lang heroic.
 ;;
-;; (define-machine name [#:source "..."] [#:ambient C] clause ...)
+;; (define-machine name [#:source "..."] [#:ambient C]
+;;                 [#:latitude deg] [#:day n] [#:time hours] clause ...)
+;; #:latitude/#:day/#:time put the scene under the sun: degrees north, day
+;; of the year, solar hours (12 is noon; the clock then runs with the
+;; simulation). Defaults, if any is given: Alexandria, 31.2 N, on
+;; midsummer's day (172) at noon.
 ;; #:ambient is the air round the machine, °C (default 20): boilers and
 ;; sealed air cool towards it, boilers and pumped water start at it, a
 ;; hearth's quench water and a windmill's or bellows' air are at it, and
@@ -22,7 +27,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan counterpoise float-valve leak safety-valve pump
+         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -34,7 +39,7 @@
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source ambient parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels) #:transparent)
+(struct machine (name source ambient sun parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -226,6 +231,19 @@
       (bad (format "#:drop must be above 0 and leave the load off the ground (the post is ~e m up), got ~e" (cadr (part-at p)) (prop 'drop)))))
   parts)
 
+;; A mirror's numbers are checked when the machine is built.
+(define (check-mirrors parts)
+  (for ([p parts] #:when (eq? (part-kind p) 'mirror))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what)
+      (error 'define-machine "~a:~a:~a: mirror ~a: ~a"
+             (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (unless (and (real? (prop 'area)) (> (prop 'area) 0)) (bad (format "#:area must be above 0, got ~e" (prop 'area))))
+    (unless (and (real? (prop 'reflectivity)) (> (prop 'reflectivity) 0) (<= (prop 'reflectivity) 1))
+      (bad (format "#:reflectivity must be in (0, 1], got ~e" (prop 'reflectivity)))))
+  parts)
+
 (define (check-windmills parts)
   (for ([p parts] #:when (eq? (part-kind p) 'windmill))
     (define (prop k) (cdr (assq k (part-props p))))
@@ -243,11 +261,19 @@
       (bad (format "#:tip-speed-ratio must be above 0, got ~e" (prop 'tip-speed-ratio)))))
   parts)
 
-(define (make-machine name source ambient items)
+(define (make-machine name source ambient sun items)
   (unless (and (real? ambient) (> ambient -273.15))
     (error 'define-machine "machine ~a: #:ambient must be a temperature in °C above absolute zero, got ~e" name ambient))
-  (machine name source ambient
-           (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))
+  (when sun
+    (define-values (lat day time) (apply values sun))
+    (unless (and (real? lat) (<= -90 lat 90))
+      (error 'define-machine "machine ~a: #:latitude must be in [-90, 90] degrees, got ~e" name lat))
+    (unless (and (exact-integer? day) (<= 1 day 365))
+      (error 'define-machine "machine ~a: #:day must be a day of the year, 1 to 365, got ~e" name day))
+    (unless (and (real? time) (<= 0 time) (< time 24))
+      (error 'define-machine "machine ~a: #:time must be solar hours in [0, 24), got ~e" name time)))
+  (machine name source ambient sun
+           (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)))))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -275,7 +301,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan counterpoise float-valve leak safety-valve pump
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -314,7 +340,8 @@
   (struct cinfo (id piston boiler))  ; an atmospheric cylinder
   (struct iinfo (id into))           ; an inflow
   (struct hinfo (id heats))          ; a hearth: the boiler it heats
-  (struct bvinfo (id on mat))        ; a bellows: the hearth it forces draught into
+  (struct bvinfo (id on mat))
+  (struct mrinfo (id onto))          ; a mirror: the boiler or sealed vessel it throws the sun onto        ; a bellows: the hearth it forces draught into
   (struct sinfo (id on))             ; a sluice gate: the channel it stands across
   (struct fvinfo (id feed mat))      ; a float valve: the inflow, pipe or channel it throttles
   (struct lkinfo (id on into mat))   ; a leak: the tank it is in, the tank under it (or #f)
@@ -364,8 +391,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -626,6 +653,24 @@
     ;; total energy a load of fuel can ever release — still fuel x energy
     ;; density, however fast it is burned. Settable at run time
     ;; ((set id airflow v)) — work it harder, ease off, or still it.
+;; A heliostat: a flat mirror of #:area m2 turned through the day to keep
+    ;; throwing the sun onto #:onto, a boiler or a tank in a sealed-air.
+    ;; It faces halfway between the sun and its target, so it catches
+    ;; DNI x area x #:reflectivity (default 0.85; polished bronze ~0.6) x
+    ;; cos(theta/2), theta the angle between them seen from the mirror.
+    ;; Settable: (set id area a) -- cover it with 0.
+    (pattern (mirror id:id
+                     (~alt (~once (~seq #:at at:vec3))
+                           (~once (~seq #:area area-v:expr))
+                           (~once (~seq #:onto target:id))
+                           (~optional (~seq #:reflectivity refl-v:expr))
+                           (~optional (~seq #:material mat:id))) ...)
+      #:attr info (mrinfo #'id #'target)
+      #:with expr #`(part 'id 'mirror '(~? mat bronze) (list at.x at.y at.z)
+                          (list (cons 'onto 'target) (cons 'area area-v) (cons 'reflectivity (~? refl-v 0.85)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     (pattern (bellows id:id
                       (~alt (~once (~seq #:at at:vec3))
                             (~once (~seq #:on hearth-id:id))
@@ -1271,6 +1316,12 @@
       (unless (or (and b (eq? (pinfo-kind b) 'boiler))
                   (for/or ([a infos]) (and (ainfo? a) (memq heats (map syntax-e (ainfo-tanks a))))))
         (fail (format "~a is neither a boiler nor a tank in a sealed-air; a hearth heats one of those" heats) (hinfo-heats h))))
+    (for ([m infos] #:when (mrinfo? m))
+      (define onto (syntax-e (mrinfo-onto m)))
+      (define b (hash-ref parts onto #f))
+      (unless (or (and b (eq? (pinfo-kind b) 'boiler))
+                  (for/or ([a infos]) (and (ainfo? a) (memq onto (map syntax-e (ainfo-tanks a))))))
+        (fail (format "~a is neither a boiler nor a tank in a sealed-air; a mirror heats one of those" onto) (mrinfo-onto m))))
     (for ([c infos] #:when (cpinfo? c))
       (define v (hash-ref parts (syntax-e (cpinfo-vessel c)) #f))
       (unless (and v (eq? (pinfo-kind v) 'tank))
@@ -1290,8 +1341,13 @@
 
 (define-syntax (define-machine stx)
   (syntax-parse stx
-    [(_ name:id (~alt (~optional (~seq #:source src:expr)) (~optional (~seq #:ambient amb:expr))) ... c:clause ...)
+    [(_ name:id (~alt (~optional (~seq #:source src:expr)) (~optional (~seq #:ambient amb:expr))
+                      (~optional (~seq #:latitude lat:expr)) (~optional (~seq #:day day:expr)) (~optional (~seq #:time time:expr))) ...
+        c:clause ...)
+     #:with sun (if (or (attribute lat) (attribute day) (attribute time))
+                    #'(list (~? lat 31.2) (~? day 172) (~? time 12))
+                    #'#f)
      (check-machine! stx (attribute c.info))
      #'(begin
-         (define name (make-machine 'name (~? src #f) (~? amb 20) (list c.expr ...)))
+         (define name (make-machine 'name (~? src #f) (~? amb 20) sun (list c.expr ...)))
          (register-machine! name))]))

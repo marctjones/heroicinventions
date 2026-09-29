@@ -97,6 +97,7 @@ public partial class MachineView : Node3D
         BuildSafetyValves();
         BuildBellows();
         BuildWarmth();
+        BuildMirrors();
         BuildPumps();
         BuildPistonDrives();
         Refresh();
@@ -1190,6 +1191,7 @@ public partial class MachineView : Node3D
         DrawBellows();
         DrawWarmth();
         DrawSprings();
+        DrawMirrors();
         DrawPumps();
     }
 
@@ -1234,6 +1236,16 @@ public partial class MachineView : Node3D
             if (Runtime.Ambient != 20 || Runtime.Tanks.Values.Any(t => t.Ice > 0)) bits.Add($"air {Runtime.Ambient:0.#} °C");
             foreach (var (id, t) in Runtime.Tanks.Where(kv => kv.Value.Ice > 0))
                 bits.Add($"{id} iced {t.Ice * 1000:F1} mm" + (t.FrozenSolid ? ", frozen solid" : $", {t.WaterVolume * 1000:F0} L still water"));
+            if (Runtime.SunShown)
+            {
+                var sun = Runtime.Sun;
+                string[] compass = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+                bits.Add(sun.Elevation > 0
+                    ? $"sun {sun.Elevation:F1}° up in the {compass[(int)Math.Round(sun.Azimuth / 45) % 8]}, {sun.DirectNormal:F0} W/m², {(int)sun.Time:00}:{(int)(sun.Time % 1 * 60):00} on day {sun.Day}"
+                    : $"night, {(int)sun.Time:00}:{(int)(sun.Time % 1 * 60):00} on day {sun.Day}");
+            }
+            foreach (var (id, m) in Runtime.Mirrors)
+                bits.Add($"{id} throws {m.Power:F0} W (cos {m.Cosine:F3}), {m.Collected / 1000:F1} kJ so far");
             foreach (var (id, c) in Runtime.Capstans)
                 bits.Add($"{id} {c.Turns:0.##} turns (x{c.Ratio:0.#}): " + (c.Held ? $"held by {c.Hold:0.#} N (needs {c.LeastHold:0.#} N)"
                     : c.Grounded ? "load on the ground" : $"{(c.Velocity < 0 ? "running out" : "coming in")} at {Math.Abs(c.Velocity):F2} m/s, {c.LoadTension:0} N at the load"));

@@ -68,6 +68,8 @@ public sealed class Hearth(IHeated target, double powerW, double fuelKg, string 
     public double Boiled { get; private set; }                     // kg of it the fire boiled away
     public bool Drowned { get; private set; }
     public bool Lit => Fuel > 0 && Power > 0 && !Drowned;
+    /// <summary>W reaching the target, last step. The runtime adds it to anything else heating the same target.</summary>
+    public double HeatOut { get; private set; }
 
     /// <summary>Total air the fire draws ÷ the air its own steady burn rate draws unforced: 1 with no bellows, more as it works harder.</summary>
     public double Draught
@@ -91,7 +93,7 @@ public sealed class Hearth(IHeated target, double powerW, double fuelKg, string 
     /// <summary>Burn for dt seconds, setting what the boiler is heated by this step.</summary>
     public void Step(double dt)
     {
-        if (!Lit) { Target.HeatInput = 0; return; }
+        if (!Lit) { Target.HeatInput = HeatOut = 0; return; }
         double density = EnergyDensity(FuelKind);
         double burn = Math.Min(Fuel, Power * Draught * dt / density);
         double released = burn * density;
@@ -101,7 +103,7 @@ public sealed class Hearth(IHeated target, double powerW, double fuelKg, string 
         double boiled = Math.Min(Soak, released / QuenchHeat);
         Soak -= boiled;
         Boiled += boiled;
-        Target.HeatInput = (released - boiled * QuenchHeat) * Efficiency / dt;
+        Target.HeatInput = HeatOut = (released - boiled * QuenchHeat) * Efficiency / dt;
         if (Soak > 0 && Soak >= Fuel) Drowned = true;
     }
 }

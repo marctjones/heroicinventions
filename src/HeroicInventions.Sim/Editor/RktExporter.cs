@@ -30,6 +30,7 @@ public static class RktExporter
         sb.Append($"(define-machine {m.Name}\n");
         if (m.Source is { } src) sb.Append($"  #:source {Quote(src)}\n");
         if (m.Ambient != 20) sb.Append($"  #:ambient {F(m.Ambient)}\n");
+        if (m.Sun is { } sun) sb.Append($"  #:latitude {F(sun.Latitude)} #:day {sun.Day} #:time {F(sun.Time)}\n");
 
         foreach (var p in m.Parts) sb.Append(PartClause(p));
         foreach (var p in m.Pipes)
@@ -126,6 +127,8 @@ public static class RktExporter
             case "hearth":
                 return $"  (hearth {p.Id} {At()} #:heats {Sym("heats", "?")} #:power {F(N("power"))} #:fuel {F(N("fuel"))} " +
                        $"#:fuel-kind {Sym("fuel-kind", "wood")} #:efficiency {F(N("efficiency", 0.5))})\n";
+            case "mirror":
+                return $"  (mirror {p.Id} {At()} #:area {F(N("area"))} #:onto {Sym("onto", "?")} #:reflectivity {F(N("reflectivity", 0.85))} {Mat()})\n";
             case "capstan":
                 return $"  (capstan {p.Id} {At()} #:turns {F(N("turns"))} #:load {F(N("load"))} #:hold {F(N("hold"))} #:drop {F(N("drop", 1))} " +
                        $"#:radius {F(N("radius", 0.15))}" + Opt("mu", "mu") + $" #:rope {Sym("rope", "hemp")} {Mat()})\n";

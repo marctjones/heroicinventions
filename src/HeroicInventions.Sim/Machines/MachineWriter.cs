@@ -22,6 +22,8 @@ public static class MachineWriter
         var clauses = new List<SExpr>();
         if (m.Source is { } src) clauses.Add(Tagged("source", new SString(src)));
         if (m.Ambient != 20) clauses.Add(Tagged("ambient", new SNumber(m.Ambient)));
+        if (m.Sun is { } sun)
+            clauses.Add(Tagged("sun", Tagged("latitude", Num(sun.Latitude)), Tagged("day", Num(sun.Day)), Tagged("time", Num(sun.Time))));
         foreach (var p in m.Parts) clauses.Add(PartClause(p));
         foreach (var p in m.Pipes) clauses.Add(PipeClause(p));
         foreach (var c in m.Connects) clauses.Add(ConnectClause(c));

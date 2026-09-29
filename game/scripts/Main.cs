@@ -69,6 +69,7 @@ public partial class Main : Node3D
         ["windmills"] = new(new Vector3(0, 9f, 46f), new Vector3(0, 8f, 0), 50),
         ["capstans"] = new(new Vector3(0, 2.6f, 7.5f), new Vector3(0, 1.6f, 0), 50),
         ["winter-night"] = new(new Vector3(0, 2.2f, 5.5f), new Vector3(0, 0.4f, 0), 50),
+        ["heliostats"] = new(new Vector3(7.5f, 3.2f, 5.5f), new Vector3(0, 0.6f, 0), 50),
     };
     private static readonly (double Scale, string Label)[] Speeds =
         [(0.1, "0.1×"), (0.25, "0.25×"), (1, "1×"), (5, "5×"), (10, "10×"), (20, "20×")];
@@ -76,6 +77,7 @@ public partial class Main : Node3D
     {
         ["aeolipile"] = 5,
         ["winter-night"] = 20,   // an hour of frost is three minutes
+        ["heliostats"] = 20,     // a day in a little over an hour
         // No special default here on purpose: after retuning the vessels
         // (see herons-fountain.rkt), the whole "runs at strength, then
         // stops abruptly once the receiver fills" story completes in
@@ -126,6 +128,7 @@ public partial class Main : Node3D
         ["windmills"] = "Windmills and the Betz Limit",
         ["capstans"] = "Capstans: Rope Friction on a Post",
         ["winter-night"] = "A Winter Night (Ambient Temperature)",
+        ["heliostats"] = "Heliostats: Sunlight and Mirrors",
     };
 
     private static readonly Dictionary<string, string> Descriptions = new()
@@ -161,6 +164,7 @@ public partial class Main : Node3D
         ["tank-leaks"] = "Torricelli's law. Four oak barrels, 0.25 m2 each; three are 80 cm full with a 5 cm2 hole in the wall, Q = 0.6 a sqrt(2 g h), h the water above the hole. sqrt(h - hole) falls at a steady 2.66 mm^1/2 per second, so the level runs down to the hole and stops: a hole 10 cm up takes 315 s (1.11 L/s to start with, at 70 cm of head) and leaves 10 cm; the same hole 40 cm up takes 238 s (0.84 L/s) and leaves 40 cm. Lower holes leak faster and further, and throw the jet farther. The third barrel leaks into a catch tank, litre for litre, until a thumb stops the hole at 100 s. The last has no hole, only a seep of 0.05 L/s off its surface: a steady 0.2 mm/s at any level.",
         ["constant-head"] = "Ctesibius' float valve. Two identical cisterns, 40 cm full, each drain through a tap raised 1 cm into a receiver. The front one is fed by a 2 L/s aqueduct through a mouth that a bronze float closes with a conical plug: seated at 40 cm, wide open 2 cm below. It settles at 39.17 cm, where the valve lets in exactly the 0.83 L/s the tap draws, so its receiver rises a steady 1.65 mm/s, a clock. Open the tap to 2 cm (tap.opening 0.04) and the draw doubles, yet the head drops only 0.8 cm, to 38.38 cm. The back cistern, with no valve and no feed, sinks to 22.5 cm in a minute and 10 cm in two, and its receiver slows as it goes.",
         ["sluice-demo"] = "A sluice gate on a mill race. A 20 L/s spring fills a head pool; a wooden gate 1 m tall, raised 5 cm, lets the water out under its lower edge as a jet, Q = 0.6 x slot area x sqrt(2 g h). All the spring must pass the slot, so the pool rises until the water stands 25.2 cm over the slot's middle. Below, the race runs into a reach that drains over a floor-level outfall into a pond. Shut the gate (gate.opening 0) and the race runs dry at once, the reach drains away over two minutes, and the pool backs up and spills over its waste weir.",
+        ["heliostats"] = "Two bronze boilers of a litre of water, each heated by a 0.5 m2 mirror turned through the day to keep throwing the sun onto it - a heliostat - at Alexandria on midsummer's day, from noon. The sun stands 82 degrees up in the south and its direct beam through clear air is 951 W/m2. A mirror sending that light to its boiler must face halfway between the two, so it shows only cos(theta/2) of itself to the sun: the mirror north of its boiler, looking back towards the sun, keeps 0.83 and throws 336 W; the one to the south, standing between boiler and sun, keeps 0.75 and throws 303 W. Watch the day go by at 20x: the beams weaken as the sun lowers, and die at sunset. Try scene.day 355: at midwinter noon the sun is only 35 degrees up, and the north mirror keeps 0.98 of its area while the south one keeps 0.42.",
         ["winter-night"] = "A night at -10 C. A copper of 5 kg of water, taken off the fire at 90 C, cools towards the air by Newton's law: 2 W for every kelvin it is warmer, against 5 x 4186 J/K, so T = -10 + 100 exp(-t / 10465 s) - 60.9 C after an hour, 40.3 C after two. The cistern beside it ices over: each new layer's latent heat has to leave up through the ice already there, so the ice thickens as the square root of time (Stefan, 1891) - 22.8 mm in an hour, twice that in four. The shallow basin's seep evaporates nothing under ice. Try scene.ambient 20, or 30 for a summer's day. Best at 20x.",
         ["capstans"] = "Three oak bollards, each with 200 kg hanging a metre below on a hemp rope, and a sailor holding the other end with 100 N. Friction where rope slides on a post takes off tension in proportion to the tension there, so round the post it falls off exponentially: the tight end carries e^(mu theta) times the slack one (the capstan equation, Euler 1762). Hemp on oak, mu = 0.474. Half a turn multiplies the pull by 4.4 - 444 N, not the load's 1962 N, so it runs out and falls. One turn multiplies it by 19.7 - just enough. Two turns by 388: 5 N would hold it. Try one-turn.hold 99, or haul in over half a turn with half-turn.hold 10000.",
         ["windmills"] = "Two post mills, sails 10 m from hub to tip. The wind carries 1/2 rho A v^3 through the disc they sweep; the sails take a share of it, Cp, that depends on how fast their tips run for the wind - most, 0.3 here, at 2.5 times its speed. No rotor can take more than 16/27 (Betz, 1919): the air behind it has to keep moving. Each miller sets the stones to hold the sails at that best speed: the left, in a 6 m/s breeze, turns at 14.3 rpm and grinds with 12.3 kW; the right, in a 9 m/s wind, at 21.5 rpm with 41.4 kW. Half again the wind, (1.5)^3 = 3.4 times the power. Set the right one's stones light (gale.load 8171) and it races to 33 rpm but takes only 0.21 of the wind.",
@@ -636,25 +640,54 @@ public partial class Main : Node3D
     private ProceduralSkyMaterial _skyMaterial = null!;
     private StandardMaterial3D _floorMaterial = null!;
     private Color _skyTop, _skyHorizon;
-    private double _shownAmbient = double.NaN;
+    private (double ambient, bool sunShown, int elevation, int azimuth) _shownSky = (double.NaN, false, 0, 0);
 
     /// <summary>
-    /// The air's temperature, seen: at 20 °C everything is as it always was.
-    /// Colder, the light goes thin and blue, and below freezing the ground
-    /// whitens with frost (fully by −5 °C). Warmer, the light yellows, as on
-    /// a hot afternoon. Only the scene's look — nothing here touches the sim.
+    /// The sky, seen. At 20 °C under the studio light everything is as it
+    /// always was. The air's temperature tints it: colder, the light goes
+    /// thin and blue and below freezing the ground whitens with frost (fully
+    /// by −5 °C); warmer, it yellows. A scene that sets its sun, or has
+    /// mirrors, is lit from where the sun really stands: full daylight above
+    /// 10°, warming to orange near the horizon, and dark at night. Only the
+    /// scene's look — nothing here touches the sim.
     /// </summary>
-    private void ShowAmbient(double ambient)
+    private void ShowSky(MachineRuntime? run)
     {
-        if (ambient == _shownAmbient) return;
-        _shownAmbient = ambient;
+        double ambient = run?.Ambient ?? 20;
+        bool sunShown = run?.SunShown ?? false;
+        var sun = run?.Sun;
+        var key = (ambient, sunShown, sunShown ? (int)Math.Round(sun!.Elevation * 4) : 0, sunShown ? (int)Math.Round(sun!.Azimuth * 4) : 0);
+        if (key == _shownSky) return;
+        _shownSky = key;
+
         float cold = Mathf.Clamp((20 - (float)ambient) / 30, 0, 1);   // 0 at 20 °C, 1 at −10 °C and below
         float hot = Mathf.Clamp(((float)ambient - 20) / 15, 0, 1);    // 0 at 20 °C, 1 at 35 °C and above
         var light = Colors.White.Lerp(new Color(0.88f, 0.92f, 1f), cold).Lerp(new Color(1f, 0.9f, 0.74f), hot);
+        var top = _skyTop.Lerp(new Color(0.55f, 0.62f, 0.72f), cold * 0.7f).Lerp(new Color(0.42f, 0.6f, 0.85f), hot * 0.5f);
+        var horizon = _skyHorizon.Lerp(new Color(0.82f, 0.85f, 0.9f), cold * 0.7f).Lerp(new Color(0.9f, 0.82f, 0.68f), hot * 0.5f);
+        float energy = 1 - 0.2f * cold;
+
+        if (sunShown)
+        {
+            float el = (float)sun!.Elevation;
+            float day = Mathf.Clamp(el / 10, 0, 1);                   // full daylight above 10°
+            float low = 1 - Mathf.Clamp(el / 25, 0, 1);               // a low sun reddens
+            light = light.Lerp(new Color(1f, 0.62f, 0.35f), low * day);
+            energy *= day;
+            top = top.Lerp(new Color(0.02f, 0.03f, 0.08f), 1 - day);
+            horizon = horizon.Lerp(new Color(0.95f, 0.55f, 0.35f), low * day * 0.6f).Lerp(new Color(0.07f, 0.08f, 0.13f), 1 - day);
+            var d = sun.Direction;
+            var toSun = new Vector3((float)d.X, (float)d.Y, (float)d.Z);
+            var up = Mathf.Abs(toSun.Dot(Vector3.Up)) > 0.99f ? Vector3.Forward : Vector3.Up;
+            _sun.LookAtFromPosition(Vector3.Zero, -toSun, up);        // shine from the sun, towards the scene
+        }
+        else _sun.RotationDegrees = new Vector3(-50, 30, 0);
+
         _sun.LightColor = light;
-        _sun.LightEnergy = 1 - 0.2f * cold;
-        _skyMaterial.SkyTopColor = _skyTop.Lerp(new Color(0.55f, 0.62f, 0.72f), cold * 0.7f).Lerp(new Color(0.42f, 0.6f, 0.85f), hot * 0.5f);
-        _skyMaterial.SkyHorizonColor = _skyHorizon.Lerp(new Color(0.82f, 0.85f, 0.9f), cold * 0.7f).Lerp(new Color(0.9f, 0.82f, 0.68f), hot * 0.5f);
+        _sun.LightEnergy = energy;
+        _sun.Visible = energy > 0.001f;
+        _skyMaterial.SkyTopColor = top;
+        _skyMaterial.SkyHorizonColor = horizon;
         float frost = Mathf.Clamp(-(float)ambient / 5, 0, 1);         // none above 0 °C, white by −5 °C
         _floorMaterial.AlbedoColor = Shapes.Stone.Lerp(new Color(0.93f, 0.95f, 0.98f), frost);
         _floorMaterial.Roughness = 0.8f - 0.25f * frost;
@@ -748,7 +781,7 @@ public partial class Main : Node3D
             GD.Print($"[{_current.Runtime.Time:F2}s] {_current.DebugState()}\n{_current.EnergyHud()}");
         }
 
-        ShowAmbient(_current?.Runtime.Ambient ?? 20);
+        ShowSky(_current?.Runtime);
         UpdateInfoPanel();
     }
 

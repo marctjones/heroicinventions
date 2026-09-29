@@ -24,6 +24,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (sluice id #:at (x y z) #:on channel #:height H [#:opening o] [#:width w])
 ///   (float-valve id #:at (x y z) #:on feed #:shut S #:travel T)   ; feed: an inflow, pipe or channel into a tank
 ///   (safety-valve id #:at (x y z) #:on boiler #:lift Pa #:bore D [#:coefficient Cd] [#:accumulation a])   ; a boiler's #:burst Pa rates it
+///   (mirror id #:at (x y z) #:area m2 #:onto boiler-or-sealed-tank [#:reflectivity r])   ; a heliostat: DNI·area·r·cos(θ/2)
 ///   (capstan id #:at (x y z) #:turns n #:load kg [#:hold N] [#:mu μ] [#:drop m] [#:radius r] [#:rope hemp])   ; holds e^(μ·2πn) × the pull
 ///   (windmill id #:at (x y z) #:radius R #:mass M #:wind v [#:load N·m] [#:cp Cp] [#:tip-speed-ratio λ])   ; Cp at most 16/27 (Betz)
 ///   (bellows id #:at (x y z) #:on hearth #:airflow m3/s [#:material M])   ; forces the hearth's draught past what it draws unforced
@@ -32,6 +33,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (wheel|screw|fixture id #:catalogue entry-id #:at (x y z) [#:material M])
 ///   (pipe id from.port to.port #:conductance C)
 ///   (connect a.port b.port)
+///   (sun [#:latitude deg] [#:day n] [#:time hours])   ; the scene under the sun (default Alexandria, midsummer, noon)
 ///   (ambient °C)           ; the scene's air: boilers cool to it, water and air arrive at it, tanks freeze below 0
 ///   (move id (x y z))
 ///   (set id #:prop value)
@@ -93,6 +95,7 @@ public sealed class BuildSession
         "lift" => CreateLift(cmd),
         "move" => Move(cmd),
         "ambient" => SetAmbient(cmd),
+        "sun" => SetSun(cmd),
         "set" => Set(cmd),
         "remove" => Remove(cmd),
         "snap" => Snap(cmd),
@@ -262,6 +265,21 @@ public sealed class BuildSession
         Snapshot();
         Document.AddLift(id, by, from, to, current, currentFrom);
         return $"lift {id}: {by} raises {from} -> {to}";
+    }
+
+    /// <summary>(sun #:latitude deg #:day n #:time hours): where and when the scene stands; unspecified fields keep their current (or default) values.</summary>
+    private string SetSun(SList cmd)
+    {
+        var now = Document.Sun ?? new SunSpec(31.2, 172, 12);
+        double lat = Kw(cmd, "latitude") is { } l ? Num(l, "sun #:latitude") : now.Latitude;
+        int day = Kw(cmd, "day") is { } d ? (int)Num(d, "sun #:day") : now.Day;
+        double time = Kw(cmd, "time") is { } t ? Num(t, "sun #:time") : now.Time;
+        if (lat is < -90 or > 90) throw new FormatException($"(sun #:latitude {lat}): must be in [-90, 90]");
+        if (day is < 1 or > 365) throw new FormatException($"(sun #:day {day}): must be 1 to 365");
+        if (time is < 0 or >= 24) throw new FormatException($"(sun #:time {time}): must be solar hours in [0, 24)");
+        Snapshot();
+        Document.Sun = new SunSpec(lat, day, time);
+        return $"sun at {lat}° N, day {day}, {time} h";
     }
 
     /// <summary>(ambient °C): the scene's air temperature.</summary>

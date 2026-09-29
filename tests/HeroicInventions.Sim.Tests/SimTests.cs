@@ -326,6 +326,73 @@ public class QuenchAndFeedTests
     }
 }
 
+public class SunTests
+{
+    /// <summary>At solar noon the sun stands at 90° − latitude + declination, due south north of the tropics.</summary>
+    [Fact]
+    public void NoonElevationIsNinetyMinusLatitudePlusDeclination()
+    {
+        var sun = new Sun(31.2, 172, 12);
+        Assert.Equal(90 - 31.2 + sun.Declination, sun.Elevation, precision: 9);
+        Assert.Equal(180, sun.Azimuth, precision: 9);
+        Assert.InRange(sun.Declination, 23.44, 23.45);   // the summer solstice
+    }
+
+    [Fact]
+    public void MorningAndAfternoonMirrorEachOtherAboutNoon()
+    {
+        var am = new Sun(40, 100, 9.5);
+        var pm = new Sun(40, 100, 14.5);
+        Assert.Equal(am.Elevation, pm.Elevation, precision: 9);
+        Assert.Equal(360 - am.Azimuth, pm.Azimuth, precision: 9);
+        Assert.Equal(am.DirectNormal, pm.DirectNormal, precision: 9);
+    }
+
+    [Fact]
+    public void TheBeamIsMeinelsClearSkyAndGoneAtNight()
+    {
+        var overhead = new Sun(23.45, 172, 12);   // near the tropic at midsummer: the sun almost overhead
+        Assert.InRange(overhead.DirectNormal, 940, 960);
+        Assert.Equal(0, new Sun(31.2, 172, 0).DirectNormal);
+    }
+
+    [Fact]
+    public void TheClockRollsIntoTheNextDay()
+    {
+        var sun = new Sun(0, 365, 23.5);
+        sun.Step(3600);
+        Assert.Equal(1, sun.Day);
+        Assert.Equal(0.5, sun.Time, precision: 9);
+    }
+
+    /// <summary>A heliostat facing halfway between sun and target: cos(θ/2) of its area catches the beam.</summary>
+    [Fact]
+    public void AMirrorBetweenSunAndTargetLosesToTheCosine()
+    {
+        var sun = new Sun(0, 81, 12) { ClockRate = 0 };   // near the equinox on the equator: nearly overhead
+        var up = sun.Direction;
+        var behind = new Mirror(sun, new Vec3(0, 0, 0), new Vec3(up.X * 10, up.Y * 10, up.Z * 10), 1, 1);  // target in line with the sun
+        Assert.Equal(1, behind.Cosine, precision: 9);
+        var across = new Mirror(sun, new Vec3(0, 0, 0), new Vec3(10, 0, 0), 1, 1);                         // target on the horizon
+        Assert.Equal(Math.Sqrt((1 + up.X) / 2), across.Cosine, precision: 9);
+        Assert.Equal(sun.DirectNormal * across.Cosine, across.Power, precision: 9);
+    }
+
+    [Fact]
+    public void AHearthAndAMirrorOnOneBoilerAddUp()
+    {
+        var def = MachineDef.Parse("""
+            (machine m (sun (latitude 31.2) (day 172) (time 12))
+              (part k boiler (material bronze) (at 0 0 0) (props (radius 0.1) (height 0.2) (water 1) (fire 100) (temperature #f)) (ports (steam steam 0.2)))
+              (part f hearth (material limestone) (at 0 0 0) (props (heats k) (power 1000) (fuel 1) (fuel-kind wood) (efficiency 0.5)) (ports))
+              (part g mirror (material bronze) (at 0 0.1 -3) (props (onto k) (area 0.5) (reflectivity 0.85)) (ports)))
+            """);
+        var run = new MachineRuntime(def, MaterialLibrary.LoadDefault());
+        run.Step(0.01);
+        Assert.Equal(100 + 500 + run.Mirrors["g"].Power, run.Boilers["k"].HeatInput, precision: 6);
+    }
+}
+
 public class AmbientTests
 {
     /// <summary>Stefan: h = √(2k(0 − T)t/(ρ_i·L)), however the time is cut into steps, and the water it takes is h·A·ρ_i/ρ_w.</summary>

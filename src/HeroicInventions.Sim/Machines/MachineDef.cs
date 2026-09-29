@@ -54,6 +54,9 @@ public sealed record PartSpec(
         ?? throw new MachineFormatException($"{Kind} {Id} has no port named {name}", usedAt);
 }
 
+/// <summary>Where and when the scene stands under the sun: latitude (degrees north), day of the year, solar time (hours).</summary>
+public sealed record SunSpec(double Latitude, int Day, double Time);
+
 public sealed record PipeSpec(string Id, PortRef From, PortRef To, double Conductance, bool Jet, SourceLocation? Location);
 public sealed record ConnectSpec(PortRef A, PortRef B, SourceLocation? Location);
 public sealed record SealedAirSpec(IReadOnlyList<string> Tanks, double TubeVolume, SourceLocation? Location,
@@ -117,6 +120,8 @@ public sealed class MachineDef
     public string? Source { get; init; }
     /// <summary>The air round the machine, °C: what boilers cool towards, what water and air arrive at, whether tanks freeze.</summary>
     public double Ambient { get; init; } = 20;
+    /// <summary>Null: the default sun, Alexandria at noon on midsummer's day, and the scene keeps its fixed studio light.</summary>
+    public SunSpec? Sun { get; init; }
     public required IReadOnlyList<PartSpec> Parts { get; init; }
     public required IReadOnlyList<PipeSpec> Pipes { get; init; }
     public required IReadOnlyList<ConnectSpec> Connects { get; init; }
@@ -143,6 +148,11 @@ public sealed class MachineDef
             Name = name.Name,
             Source = clauses.FirstOrDefault(c => c.Head == "source")?.Items.ElementAtOrDefault(1) is SString s ? s.Value : null,
             Ambient = clauses.FirstOrDefault(c => c.Head == "ambient")?.Items.ElementAtOrDefault(1) is SNumber amb ? amb.Value : 20,
+            Sun = clauses.FirstOrDefault(c => c.Head == "sun") is { } sun
+                ? new SunSpec(sun.Field("latitude") is { } la ? Num(la, 1, null) : 31.2,
+                              sun.Field("day") is { } dy ? (int)Num(dy, 1, null) : 172,
+                              sun.Field("time") is { } tm ? Num(tm, 1, null) : 12)
+                : null,
             Parts = clauses.Where(c => c.Head == "part").Select(ParsePart).ToList(),
             Pipes = clauses.Where(c => c.Head == "pipe").Select(ParsePipe).ToList(),
             Connects = clauses.Where(c => c.Head == "connect").Select(ParseConnect).ToList(),

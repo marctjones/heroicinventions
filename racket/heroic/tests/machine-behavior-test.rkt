@@ -231,6 +231,42 @@
   (define summer (simulate 'winter-night #:seconds 1000 #:step 0.1 #:sample-dt 500 #:set '((scene ambient 30))))
   (check-= (final-of summer '(seep evaporated)) 1.816500 1e-5))
 
+(test-case "Heliostats: the sun's place and beam, and a mirror's cos(theta/2)"
+  ;; Alexandria 31.2 N, day 172: declination 23.449783; at noon elevation
+  ;; 90 - 31.2 + 23.4498 = 82.249783 deg due south (azimuth 180); air mass
+  ;; (Kasten-Young) 1.008882; beam 1361 x 0.7^(1.008882^0.678) = 950.6588 W/m2.
+  ;; The mirrors' cosines from their positions: north 0.832349, south 0.750003;
+  ;; power 950.6588 x 0.5 x 0.85 x cos = 336.2940 and 303.0235 W. With the sun
+  ;; held still the boilers (1 kg, 2 W/K to 20 C air) warm as
+  ;; 20 + (P/2)(1 - exp(-2 t / 4186)): 24.75183 and 24.28172 C at 60 s.
+  (define run (simulate 'heliostats #:seconds 60 #:step 0.01 #:sample-dt 10 #:set '((scene clock-rate 0))))
+  (check-= (final-of run '(scene sun-elevation)) 82.249783 1e-5)
+  (check-= (final-of run '(scene sun-azimuth)) 180 1e-6)
+  (check-= (final-of run '(scene irradiance)) 950.658756 1e-4)
+  (check-= (final-of run '(north-mirror cosine)) 0.832349 1e-6)
+  (check-= (final-of run '(south-mirror cosine)) 0.750003 1e-6)
+  (check-= (final-of run '(north-mirror power)) 336.294015 1e-4)
+  (check-= (final-of run '(south-mirror power)) 303.023514 1e-4)
+  (check-= (final-of run '(north-lit temperature)) 24.751832 1e-4)
+  (check-= (final-of run '(south-lit temperature)) 24.281720 1e-4))
+
+(test-case "Heliostats: morning, night, and the clock"
+  ;; 9:00 solar time: hour angle -45 deg, elevation 49.554775 deg nearly due east
+  ;; (azimuth 89.616622), air mass 1.312800, beam 886.2691 W/m2; the mirrors now
+  ;; see the sun from the side: 290.7759 and 291.7973 W. At 22:00 the sun is down.
+  (define morning (simulate 'heliostats #:seconds 1 #:step 0.01 #:sample-dt 1 #:set '((scene clock-rate 0) (scene time 9))))
+  (check-= (final-of morning '(scene sun-elevation)) 49.554775 1e-5)
+  (check-= (final-of morning '(scene sun-azimuth)) 89.616622 1e-5)
+  (check-= (final-of morning '(scene irradiance)) 886.269073 1e-4)
+  (check-= (final-of morning '(north-mirror power)) 290.775853 1e-4)
+  (check-= (final-of morning '(south-mirror power)) 291.797264 1e-4)
+  (define night (simulate 'heliostats #:seconds 1 #:step 0.01 #:sample-dt 1 #:set '((scene clock-rate 0) (scene time 22))))
+  (check-= (final-of night '(scene irradiance)) 0 1e-12)
+  (check-= (final-of night '(north-mirror power)) 0 1e-12)
+  ;; left to run, the sun's clock keeps the simulation's time: an hour after noon is 13:00
+  (define hour (simulate 'heliostats #:seconds 3600 #:step 0.5 #:sample-dt 600))
+  (check-= (final-of hour '(scene time)) 13 1e-9))
+
 (test-case "Windmills: stones set for a lighter wind let the sails run fast and take less of it"
   ;; The gale mill ground against the breeze mill's 8170.95 N m, a 4/9 of
   ;; its own tau0: lambda = 2.5 (2 - 4/9) = 3.8889, omega = 3.8889 x 9/10 =

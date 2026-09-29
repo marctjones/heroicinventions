@@ -37,6 +37,10 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, WaterWheel> _wheels = [];
     private readonly Dictionary<string, Windmill> _windmills = [];
     private readonly Dictionary<string, Capstan> _capstans = [];
+    private readonly Dictionary<string, Mirror> _mirrors = [];
+    // every target a hearth or mirror heats, with those sources: summed onto its own fire each step
+    private readonly Dictionary<IHeated, List<Func<double>>> _heatSources = [];
+    private readonly Dictionary<IHeated, double> _ownHeat = [];
     private readonly Dictionary<string, Counterpoise> _counterpoises = [];
     private readonly Dictionary<string, Pendulum> _pendulums = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
@@ -70,6 +74,11 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Windmill> Windmills => _windmills;
     /// <summary>Ropes wrapped round fixed posts, holding a load by friction (the capstan equation).</summary>
     public IReadOnlyDictionary<string, Capstan> Capstans => _capstans;
+    /// <summary>Heliostats throwing sunlight onto boilers and sealed vessels.</summary>
+    public IReadOnlyDictionary<string, Mirror> Mirrors => _mirrors;
+    public Sun Sun { get; }
+    /// <summary>Whether the scene sets its sun or has mirrors: then the view lights it by the sun, else by its fixed studio light.</summary>
+    public bool SunShown => Def.Sun is not null || _mirrors.Count > 0;
     public IReadOnlyDictionary<string, Counterpoise> Counterpoises => _counterpoises;
     /// <summary>Pendulums hung on a bearing (#:bearing-radius): swung here, not by Jolt, so their friction and wear can be checked.</summary>
     public IReadOnlyDictionary<string, Pendulum> Pendulums => _pendulums;
@@ -127,6 +136,7 @@ public sealed class MachineRuntime
     {
         Def = def;
         _ambient = def.Ambient;
+        Sun = def.Sun is { } sun ? new Sun(sun.Latitude, sun.Day, sun.Time) : new Sun(31.2, 172, 12);
 
         foreach (var part in def.Parts)
         {
@@ -184,6 +194,7 @@ public sealed class MachineRuntime
                             WearRate = part.Number("bearing-wear", 0),
                         });
                     break;
+                case "mirror": break; // built once what it heats exists
                 case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
@@ -244,6 +255,17 @@ public sealed class MachineRuntime
             _hearths[part.Id] = new Hearth(target, part.Number("power"), part.Number("fuel"),
                                            part.Symbol("fuel-kind", "wood"), part.Number("efficiency", 0.5));
         }
+
+        foreach (var part in def.Parts.Where(p => p.Kind == "mirror"))
+        {
+            var onto = part.Symbol("onto", "");
+            var (target, targetPart) = HeatedNamed(onto, part);
+            var aim = new Vec3(targetPart.At.X, targetPart.At.Y + targetPart.Number("height") / 2, targetPart.At.Z);
+            var mirror = new Mirror(Sun, part.At, aim, part.Number("area"), part.Number("reflectivity", 0.85));
+            _mirrors[part.Id] = mirror;
+            AddHeatSource(target, () => mirror.Power);
+        }
+        foreach (var (_, h) in _hearths) AddHeatSource(h.Target, () => h.HeatOut);
 
         foreach (var part in def.Parts.Where(p => p.Kind == "bellows"))
         {
@@ -515,6 +537,25 @@ public sealed class MachineRuntime
         _getters["scene.ambient"] = () => Ambient;                     // °C
         _setters["scene.ambient"] = c => Ambient = Math.Max(-273.15, c);
         _getters["scene.air-density"] = () => Physics.AirDensityAt(Ambient);   // kg/m³
+        _getters["scene.time"] = () => Sun.Time;                        // solar hours
+        _setters["scene.time"] = h => Sun.Time = ((h % 24) + 24) % 24;
+        _getters["scene.day"] = () => Sun.Day;
+        _setters["scene.day"] = d => Sun.Day = Math.Clamp((int)Math.Round(d), 1, 365);
+        _getters["scene.latitude"] = () => Sun.Latitude;
+        _setters["scene.latitude"] = deg => Sun.Latitude = Math.Clamp(deg, -90, 90);
+        _getters["scene.clock-rate"] = () => Sun.ClockRate;            // sun-seconds per second; 0 holds it still
+        _setters["scene.clock-rate"] = r => Sun.ClockRate = r;
+        _getters["scene.sun-elevation"] = () => Sun.Elevation;         // degrees
+        _getters["scene.sun-azimuth"] = () => Sun.Azimuth;             // degrees from north towards east
+        _getters["scene.irradiance"] = () => Sun.DirectNormal;         // W/m², direct beam
+        foreach (var (id, m) in _mirrors)
+        {
+            _getters[$"{id}.power"] = () => m.Power;                   // W onto the target
+            _getters[$"{id}.cosine"] = () => m.Cosine;                 // cos(θ/2)
+            _getters[$"{id}.collected"] = () => m.Collected / 1000;    // kJ so far
+            _getters[$"{id}.area"] = () => m.Area;
+            _setters[$"{id}.area"] = a => m.Area = Math.Max(0, a);     // cover it: 0
+        }
         foreach (var (id, tank) in _tanks)
         {
             _getters[$"{id}.water"] = () => tank.WaterVolume * 1000;   // L
@@ -532,7 +573,11 @@ public sealed class MachineRuntime
             _getters[$"{id}.fed"] = () => boiler.WaterFed;             // kg of feed water taken in
             _getters[$"{id}.heat"] = () => boiler.HeatDelivered / 1000; // kJ from the fire, all told
             _getters[$"{id}.lost"] = () => boiler.HeatLost / 1000;      // kJ lost to the air, all told
-            _setters[$"{id}.fire"] = watts => boiler.HeatInput = Math.Max(0, watts);
+            _setters[$"{id}.fire"] = watts =>
+            {
+                boiler.HeatInput = Math.Max(0, watts);
+                if (_ownHeat.ContainsKey(boiler)) _ownHeat[boiler] = boiler.HeatInput;
+            };
             _getters[$"{id}.burst"] = () => boiler.Burst ? 1 : 0;
             _getters[$"{id}.burst-time"] = () => boiler.BurstTime;          // s
             _getters[$"{id}.burst-pressure"] = () => boiler.BurstGauge / 1000; // kPa it gave way at
@@ -721,9 +766,27 @@ public sealed class MachineRuntime
         }
     }
 
+    private (IHeated target, PartSpec part) HeatedNamed(string id, PartSpec by) =>
+        _boilers.TryGetValue(id, out var boiler) ? (boiler, Def.Part(id)!)
+        : _tanks.TryGetValue(id, out var vessel) && vessel.Air is { } air ? (air, Def.Part(id)!)
+        : throw new MachineFormatException($"{by.Kind} {by.Id} heats {id}, which is neither a boiler nor a sealed vessel", by.Location);
+
+    private void AddHeatSource(IHeated target, Func<double> watts)
+    {
+        if (!_heatSources.TryGetValue(target, out var list))
+        {
+            _heatSources[target] = list = [];
+            _ownHeat[target] = target.HeatInput;   // a boiler's own #:fire, kept under whatever else heats it
+        }
+        list.Add(watts);
+    }
+
     public void Step(double dt)
     {
+        Sun.Step(dt);
         foreach (var h in _hearths.Values) h.Step(dt);
+        foreach (var m in _mirrors.Values) m.Step(dt);
+        foreach (var (target, sources) in _heatSources) target.HeatInput = _ownHeat[target] + sources.Sum(w => w());
         foreach (var air in _air) air.Step(dt);
         Fluids.Step(dt);
         // Springs and open channels, in steps short enough that a weir can't
