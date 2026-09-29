@@ -137,6 +137,10 @@ public static class RktExporter
             case "safety-valve":
                 return $"  (safety-valve {p.Id} {At()} #:on {Sym("on", "?")} #:lift {F(N("lift"))} #:bore {F(N("bore"))} " +
                        $"#:coefficient {F(N("coefficient", 0.8))} #:accumulation {F(N("accumulation", 0.1))} {Mat()})\n";
+            case "pump":
+                return $"  (pump {p.Id} {At()} #:from {Sym("from", "?")} #:to {Sym("to", "?")} #:bore {F(N("bore"))} #:stroke {F(N("stroke"))} " +
+                       $"#:rpm {F(N("rpm"))} #:efficiency {F(N("efficiency", 0.8))}" + Opt("force", "force") +
+                       $" #:temperature {F(N("temperature", 20))} {Mat()})\n";
             case "counterpoise":
                 return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +
                        $"#:counterweight {F(N("counterweight"))} #:radius {F(N("radius"))} #:turn-deg {F(N("turn-deg"))} " +

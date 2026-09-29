@@ -32,6 +32,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, (FloatValve Valve, Func<double> Flow)> _floatValves = [];
     private readonly Dictionary<string, TankLeak> _leaks = [];
     private readonly Dictionary<string, (SafetyValve Valve, Boiler Boiler)> _safetyValves = [];
+    private readonly Dictionary<string, LiftPump> _pumps = [];
     private readonly Dictionary<string, WaterWheel> _wheels = [];
     private readonly Dictionary<string, Counterpoise> _counterpoises = [];
     private readonly Dictionary<string, Pendulum> _pendulums = [];
@@ -57,6 +58,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, TankLeak> Leaks => _leaks;
     /// <summary>Safety valves, each with the boiler whose lid it sits in.</summary>
     public IReadOnlyDictionary<string, (SafetyValve Valve, Boiler Boiler)> SafetyValves => _safetyValves;
+    /// <summary>Lift pumps, each drawing up a suction pipe no higher than the atmosphere can push the water.</summary>
+    public IReadOnlyDictionary<string, LiftPump> Pumps => _pumps;
     public IReadOnlyDictionary<string, WaterWheel> WaterWheels => _wheels;
     public IReadOnlyDictionary<string, Counterpoise> Counterpoises => _counterpoises;
     /// <summary>Pendulums hung on a bearing (#:bearing-radius): swung here, not by Jolt, so their friction and wear can be checked.</summary>
@@ -119,7 +122,7 @@ public sealed class MachineRuntime
                             WearRate = part.Number("bearing-wear", 0),
                         });
                     break;
-                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice" or "float-valve" or "leak" or "safety-valve":
+                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -234,6 +237,7 @@ public sealed class MachineRuntime
         foreach (var part in def.Parts.Where(p => p.Kind == "float-valve")) BuildFloatValve(part);
         foreach (var part in def.Parts.Where(p => p.Kind == "leak")) BuildLeak(part);
         foreach (var part in def.Parts.Where(p => p.Kind == "safety-valve")) BuildSafetyValve(part);
+        foreach (var part in def.Parts.Where(p => p.Kind == "pump")) BuildPump(part);
         foreach (var c in def.Cylinders)
         {
             var piston = def.Part(c.Piston) ?? throw new MachineFormatException($"cylinder {c.Id}: no piston {c.Piston}", c.Location);
@@ -266,6 +270,29 @@ public sealed class MachineRuntime
         };
         boiler.Valves.Add(valve);
         _safetyValves[part.Id] = (valve, boiler);
+    }
+
+    private void BuildPump(PartSpec part)
+    {
+        var from = TankNamed(part.Symbol("from", ""), part.Location);
+        var to = TankNamed(part.Symbol("to", ""), part.Location);
+        if (from == to)
+            throw new MachineFormatException($"pump {part.Id} draws from and delivers to the same tank", part.Location);
+        double bore = part.Number("bore"), stroke = part.Number("stroke");
+        double efficiency = part.Number("efficiency", LiftPump.DefaultEfficiency), force = part.Number("force", double.PositiveInfinity);
+        if (bore <= 0 || stroke <= 0)
+            throw new MachineFormatException($"pump {part.Id}: bore and stroke must be more than 0", part.Location);
+        if (efficiency is <= 0 or > 1)
+            throw new MachineFormatException($"pump {part.Id}: efficiency must be in (0, 1], got {efficiency}", part.Location);
+        if (force <= 0)
+            throw new MachineFormatException($"pump {part.Id}: force must be more than 0", part.Location);
+        _pumps[part.Id] = new LiftPump(part.Id, from, to, part.At.Y, bore, stroke)
+        {
+            Efficiency = efficiency,
+            Temperature = part.Number("temperature", 20),
+            Rpm = Math.Max(0, part.Number("rpm", 0)),
+            Force = force,
+        };
     }
 
     private void BuildLeak(PartSpec part)
@@ -475,6 +502,26 @@ public sealed class MachineRuntime
             _getters[$"{id}.per-turn"] = () => lift.VolumePerTurn * 1000; // L
             _setters[$"{id}.rpm"] = rpm => lift.Rpm = rpm;
         }
+        foreach (var (id, p) in _pumps)
+        {
+            _getters[$"{id}.flow"] = () => p.Flow * 1000;              // L/s out of the spout
+            _getters[$"{id}.delivered"] = () => p.Delivered * 1000;    // L, all told
+            _getters[$"{id}.strokes"] = () => p.Strokes;
+            _getters[$"{id}.bucket"] = () => p.Bucket * 100;           // cm above the barrel's foot
+            _getters[$"{id}.lift"] = () => p.SuctionLift;              // m, the water's surface to the bucket's lowest point
+            _getters[$"{id}.limit"] = () => p.Limit;                   // m the atmosphere can hold a column up
+            _getters[$"{id}.column"] = () => p.Column;                 // m the water stands over the surface
+            _getters[$"{id}.broken"] = () => p.Broken ? 1 : 0;
+            _getters[$"{id}.pull"] = () => p.Pull;                     // N on the rod
+            _getters[$"{id}.max-pull"] = () => p.MaxPull;              // N, the most it has needed
+            _getters[$"{id}.work"] = () => p.Work / 1000;              // kJ done on the rod, net
+            _getters[$"{id}.lifted"] = () => p.Lifted / 1000;          // kJ given the water
+            _getters[$"{id}.stalled"] = () => p.Stalled ? 1 : 0;
+            _getters[$"{id}.rpm"] = () => p.Rpm;
+            _setters[$"{id}.rpm"] = rpm => p.Rpm = Math.Max(0, rpm);
+            _getters[$"{id}.force"] = () => double.IsPositiveInfinity(p.Force) ? -1 : p.Force; // N the drive can pull; -1 unlimited
+            _setters[$"{id}.force"] = n => p.Force = n > 0 ? n : double.PositiveInfinity;
+        }
         foreach (var (id, src) in _sources)
             _getters[$"{id}.flow"] = () => src.Flow * 1000;            // L/s
         foreach (var (id, ch) in _channels)
@@ -574,6 +621,7 @@ public sealed class MachineRuntime
             foreach (var w in _wheels.Values) w.Step(dt / n);
         }
         foreach (var lift in _lifts.Values) lift.Step(dt);
+        foreach (var pump in _pumps.Values) pump.Step(dt);
         foreach (var cp in _counterpoises.Values) cp.Step(dt);
         foreach (var p in _pendulums.Values) p.Step(dt);
         foreach (var rotor in _rotors.Values) rotor.Step(dt); // steps its own boiler

@@ -682,3 +682,90 @@
   (check-= (final-of run '(guarded burst-time)) t-burst 0.3 "bursts 50.7 s after it was tied down")
   (check-= (final-of run '(guarded burst-pressure)) 200 0.05)
   (check-= (final-of run '(guarded flashed)) (/ (* m-tied bs-c (- bs-t-burst 100)) bs-l) 0.002))
+
+;; suction-limit.rkt: three lift pumps, each a 15 cm bucket over a 50 cm
+;; stroke at 20 strokes a minute (a stroke every 3 s, upstroke first),
+;; efficiency 0.8, drawing 20 C water. The limit is where the pressure
+;; under the bucket falls to the water's vapour pressure.
+(define sl-rho-g (* 1000 9.81)) (define sl-atm 101325.0)
+(define sl-pv (* 133.322 (expt 10 (- 8.07131 (/ 1730.63 (+ 233.426 20))))))   ; Antoine, as Boiler.SaturationPressure
+(define sl-limit (/ (- sl-atm sl-pv) sl-rho-g))
+(define sl-area (* pi 0.15 0.15 1/4)) (define sl-stroke 0.5) (define sl-eta 0.8)
+(define sl-per-stroke (* sl-area sl-stroke sl-eta))                           ; m3
+(define sl-period (/ 60 20.0))
+
+(test-case "Suction limit: a pump 6 m over its water delivers its swept volume x efficiency every stroke"
+  (define run (simulate 'suction-limit #:seconds 300 #:step 0.01 #:sample-dt 1.5))
+  (check-= sl-limit 10.0913 0.0001 "10.09 m of water at 20 C")
+  (check-= (* 1000 sl-per-stroke) 7.0686 0.0001)
+  ;; the well (4 m2) sinks k S a stroke, and within a stroke k x, k = A eta / 4
+  (define k (/ (* sl-area sl-eta) 4))
+  (define (surface n) (- 0.8 (* n k sl-stroke)))
+  (define spout (+ 6.8 sl-stroke))
+  ;; work on the rod in stroke n: rho g A (spout - surface) over the stroke
+  (define (work-through n)
+    (for/sum ([i n]) (* sl-rho-g sl-area (+ (* (- spout (surface i)) sl-stroke) (* k sl-stroke sl-stroke 1/2)))))
+  (for ([n '(1 10 50 100)])
+    (define t (* n sl-period))
+    (check-= (value-at run '(short strokes) t) n 0)
+    (check-= (value-at run '(short delivered) t) (* 1000 n sl-per-stroke) 1e-6 (format "~a strokes" n))
+    (check-= (/ (value-at run '(short delivered) t) t) (* 1000 sl-per-stroke (/ 20 60.0)) 1e-6 "2.36 L/s averaged over whole strokes")
+    (check-= (value-at run '(short work) t) (/ (work-through n) 1000) 1e-3 "kJ done on the rod")
+    ;; the water gains rho g V (spout - surface): eta of the work
+    (check-= (/ (value-at run '(short lifted) t) (value-at run '(short work) t)) sl-eta 1e-9))
+  (check-= (value-at run '(short work) sl-period) 0.5635 0.0001 "the first stroke, 563.5 J")
+  ;; the pull grows as the well sinks under it: the most, at the top of the first stroke
+  (check-= (value-at run '(short max-pull) sl-period) (* sl-rho-g sl-area (- spout (surface 1))) 0.001 "1127 N on the rod")
+  (check-= (value-at run '(short column) 0) 6.5 1e-9 "the water reaches the barrel's top")
+  (check-= (value-at run '(short broken) 300) 0 0)
+  ;; and every litre it lifts is gone from the well
+  (check-= (+ (final-of run '(short-well water)) (final-of run '(short-cistern water))) 3200 1e-6))
+
+(test-case "Suction limit: a pump 11 m over its water lifts nothing, however hard it is worked"
+  (define run (simulate 'suction-limit #:seconds 60 #:step 0.01 #:sample-dt 1.5))
+  (define cap (* sl-area (- sl-atm sl-pv)))                                  ; N: the most the column can bear
+  (check-= cap 1749.39 0.01)
+  (check-= (final-of run '(tall strokes)) 20 0 "it is worked, stroke after stroke")
+  (check-= (final-of run '(tall delivered)) 0 0 "and nothing comes out")
+  (check-= (final-of run '(tall-cistern water)) 0 0)
+  (check-= (final-of run '(tall-well water)) 800 0 "nor leaves the well")
+  (check-= (final-of run '(tall column)) sl-limit 1e-9 "the water stands 10.09 m up the pipe")
+  (check-= (final-of run '(tall lift)) 11 1e-9)
+  (check-= (final-of run '(tall broken)) 1 0)
+  (check-= (final-of run '(tall max-pull)) cap 1e-6 "the pull tops out at A (P_atm - P_v), not the drive's 10 kN")
+  ;; the vacuum drawn going up is handed back coming down: no net work over whole strokes
+  (for ([n '(1 10 20)]) (check-= (value-at run '(tall work) (* n sl-period)) 0 1e-9))
+  ;; ten times the drive's force changes nothing
+  (define harder (simulate 'suction-limit #:seconds 60 #:step 0.01 #:sample-dt 1.5 #:set '((tall force 100000))))
+  (check-= (final-of harder '(tall delivered)) 0 0)
+  (check-= (final-of harder '(tall max-pull)) cap 1e-6))
+
+(test-case "Suction limit: a pump draws its well down until the lift reaches 10.09 m, then stops"
+  (define run (simulate 'suction-limit #:seconds 600 #:step 0.01 #:sample-dt 1.5))
+  ;; d, the surface's height over its last level (bucket foot - limit), falls
+  ;; k S a stroke while the whole stroke fills, k = A eta / 0.25; once d is
+  ;; under (1 + k) S the column breaks part way up and each stroke leaves
+  ;; d / (1 + k): the water follows the bucket d / (1 + k) as it falls k per metre.
+  (define k (/ (* sl-area sl-eta) 0.25))
+  (define floor-level (- 10.8 sl-limit))                                     ; 0.709 m over the well's bottom
+  (define d0 (- 2.8 floor-level))
+  (define full (add1 (floor (/ (- d0 (* (+ 1 k) sl-stroke)) (* k sl-stroke)))))   ; strokes that fill
+  (check-= full 56 0)
+  (define (d n) (if (<= n full) (- d0 (* n k sl-stroke)) (/ (d full) (expt (+ 1 k) (- n full)))))
+  (for ([n '(10 30 56 60 80 100 150 200)])
+    (check-= (value-at run '(drawing lift) (* n sl-period)) (- sl-limit (d n)) 0.001 (format "lift after ~a strokes" n))
+    (check-= (value-at run '(drawing delivered) (* n sl-period)) (* 1000 0.25 (- d0 (d n))) 1 (format "litres after ~a strokes" n)))
+  (check-= (value-at run '(drawing delivered) (* 56 sl-period)) (* 56 1000 sl-per-stroke) 1e-6 "full strokes to begin with")
+  (check-= (value-at run '(drawing broken) (* 55 sl-period)) 0 0)
+  (check-= (value-at run '(drawing broken) (* 57 sl-period)) 1 0)
+  (check-true (< (- sl-limit (final-of run '(drawing lift))) 0.001) "the lift ends within 1 mm of the limit")
+  (check-true (< (- (final-of run '(drawing delivered)) (value-at run '(drawing delivered) 540)) 0.1) "and it has all but stopped lifting")
+  (check-= (final-of run '(deep-well level)) (* 100 floor-level) 0.1 "the well stands 10.09 m below the bucket"))
+
+(test-case "Suction limit: a drive too weak for the column stalls the pump"
+  ;; the short pump needs rho g A (spout - surface) = 1127 N; 1000 N stops it at its next upstroke
+  (define run (simulate 'suction-limit #:seconds 60 #:step 0.01 #:sample-dt 1.5 #:set '((short force 1000 30))))
+  (check-= (value-at run '(short delivered) 30) (* 10 1000 sl-per-stroke) 1e-6)
+  (check-= (final-of run '(short delivered)) (* 10 1000 sl-per-stroke) 1e-6 "not a drop more")
+  (check-= (final-of run '(short stalled)) 1 0)
+  (check-= (final-of run '(short strokes)) 10 0))

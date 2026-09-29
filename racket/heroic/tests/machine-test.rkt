@@ -138,3 +138,26 @@
   (check-exn #rx"#:bore must be a length above 0" (λ () (build (k 0) '(safety-valve guard #:on k #:lift 100000 #:bore 0))))
   (check-exn #rx"#:burst must be a gauge pressure" (λ () (build (k -1))))
   (check-not-exn (λ () (build (k 0) '(safety-valve guard #:on k #:lift 100000 #:bore 0.008)))))
+
+(test-case "a pump draws from one tank into another"
+  (check-compile-error #rx"k is not a tank; a pump draws from a tank and pours into another"
+    (tank well #:at (0 0 0) #:area 1 #:height 1)
+    (boiler k #:at (1 0 0) #:radius 0.15 #:height 0.3 #:water 10)
+    (pump p #:at (0 5 0) #:from well #:to k #:bore 0.15 #:stroke 0.5))
+  (check-compile-error #rx"a pump cannot pour into the tank it draws from"
+    (tank well #:at (0 0 0) #:area 1 #:height 1)
+    (pump p #:at (0 5 0) #:from well #:to well #:bore 0.15 #:stroke 0.5)))
+
+;; a pump's numbers are checked when the machine is built; standing past the suction limit is allowed
+(test-case "a pump's bore, stroke and efficiency must make sense"
+  (define (build . clauses)
+    (parameterize ([current-namespace (make-base-namespace)])
+      (eval `(module lifter heroic (define-machine lifter
+                                    (tank well #:at (0 0 0) #:area 1 #:height 1)
+                                    (tank cistern #:at (1 12 0) #:area 1 #:height 1)
+                                    ,@clauses)))
+      (dynamic-require ''lifter #f)))
+  (check-exn #rx"pump p: #:bore must be a length above 0" (λ () (build '(pump p #:at (0 11 0) #:from well #:to cistern #:bore 0 #:stroke 0.5))))
+  (check-exn #rx"#:efficiency must be in \\(0, 1\\]" (λ () (build '(pump p #:at (0 11 0) #:from well #:to cistern #:bore 0.15 #:stroke 0.5 #:efficiency 1.2))))
+  (check-exn #rx"#:force must be a force above 0" (λ () (build '(pump p #:at (0 11 0) #:from well #:to cistern #:bore 0.15 #:stroke 0.5 #:force 0))))
+  (check-not-exn (λ () (build '(pump p #:at (0 11 0) #:from well #:to cistern #:bore 0.15 #:stroke 0.5 #:rpm 20)))))

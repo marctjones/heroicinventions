@@ -24,6 +24,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (sluice id #:at (x y z) #:on channel #:height H [#:opening o] [#:width w])
 ///   (float-valve id #:at (x y z) #:on feed #:shut S #:travel T)   ; feed: an inflow, pipe or channel into a tank
 ///   (safety-valve id #:at (x y z) #:on boiler #:lift Pa #:bore D [#:coefficient Cd] [#:accumulation a])   ; a boiler's #:burst Pa rates it
+///   (pump id #:at (x y z) #:from tank #:to tank #:bore D #:stroke S [#:rpm n] [#:efficiency e] [#:force N] [#:temperature C])   ; #:at is the barrel's foot
 ///   (leak id #:at (x y z) #:on tank #:height H #:area A [#:coefficient Cd] [#:into catch-tank] [#:evaporation m3/s])
 ///   (wheel|screw|fixture id #:catalogue entry-id #:at (x y z) [#:material M])
 ///   (pipe id from.port to.port #:conductance C)

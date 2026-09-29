@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -74,6 +74,14 @@ public static class PartTemplates
             {
                 ["on"] = new SSymbol("?"), ["lift"] = new SNumber(100_000), ["bore"] = new SNumber(0.008),
                 ["coefficient"] = new SNumber(0.8), ["accumulation"] = new SNumber(0.1),
+            },
+            [], null),
+        // a lift pump whose barrel's foot is at `at`, drawing from #:from into #:to; #:force #f is a drive as strong as it takes
+        "pump" => new PartSpec(id, "pump", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["from"] = new SSymbol("?"), ["to"] = new SSymbol("?"), ["bore"] = new SNumber(0.15), ["stroke"] = new SNumber(0.5),
+                ["rpm"] = new SNumber(20), ["efficiency"] = new SNumber(0.8), ["force"] = new SBool(false), ["temperature"] = new SNumber(20),
             },
             [], null),
         // an overshot wheel by default: 12 buckets; give it a #:race to drive it undershot

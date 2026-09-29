@@ -1,3 +1,4 @@
+using HeroicInventions.Sim.Mechanics;
 using HeroicInventions.Sim.Editor;
 using HeroicInventions.Sim.Fluids;
 using HeroicInventions.Sim.Machines;
@@ -397,6 +398,48 @@ public class BuildSessionTests
         string text = File.ReadAllText(rkt);
         Assert.Contains("#:burst 200000 #:material bronze)", text);
         Assert.Contains("(safety-valve guard #:at (0.075 0.55 0) #:on k #:lift 100000 #:bore 0.008 #:coefficient 0.8 #:accumulation 0.1 #:material bronze)", text);
+    }
+
+    /// <summary>
+    /// Two pumps placed from the palette over the same kind of well: one
+    /// with its bucket 6 m over the water delivers A·S·η a stroke, the other
+    /// 11 m over, past (P_atm − P_v)/ρg = 10.09 m, delivers nothing however
+    /// strong its drive; the design round-trips through .machine and exports
+    /// as Racket clauses.
+    /// </summary>
+    [Fact]
+    public void PumpScriptLiftsBelowTheSuctionLimitOnlyAndRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "wells");
+        session.Execute("(tank well #:at (0 0 0) #:area 100 #:height 1 #:water 80)");
+        session.Execute("(tank low-cistern #:at (1 6 0) #:area 1 #:height 1)");
+        session.Execute("(tank high-cistern #:at (2 11 0) #:area 1 #:height 1)");
+        session.Execute("(pump low #:at (0 6.8 0) #:from well #:to low-cistern #:bore 15cm #:stroke 50cm #:rpm 20)");
+        session.Execute("(pump high #:at (0.5 11.8 0) #:from well #:to high-cistern #:bore 15cm #:stroke 50cm #:rpm 20 #:force 10000)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 30)");
+
+        var run = session.LastRun!;
+        double perStroke = Math.PI * 0.15 * 0.15 / 4 * 0.5 * 0.8;
+        Assert.Equal(10, run.Pumps["low"].Strokes);
+        Assert.Equal(10 * perStroke, run.Pumps["low"].Delivered, precision: 9);
+        Assert.Equal(0, run.Pumps["high"].Delivered);
+        Assert.Equal(LiftPump.SuctionLimit(20), run.Pumps["high"].Column, precision: 12);
+
+        string saved = Path.Combine(TempDir(), "wells.machine");
+        session.SaveFile(saved);
+        var def = MachineDef.Parse(File.ReadAllText(saved));
+        var high = def.Part("high")!;
+        Assert.Equal("pump", high.Kind);
+        Assert.Equal("well", high.Symbol("from", ""));
+        Assert.Equal(10000, high.Number("force"));
+        Assert.Equal(double.PositiveInfinity, def.Part("low")!.Number("force", double.PositiveInfinity));
+
+        string rkt = Path.Combine(TempDir(), "wells.rkt");
+        session.ExportRkt(rkt);
+        string text = File.ReadAllText(rkt);
+        Assert.Contains("(pump low #:at (0 6.8 0) #:from well #:to low-cistern #:bore 0.15 #:stroke 0.5 #:rpm 20 #:efficiency 0.8 #:temperature 20 #:material bronze)", text);
+        Assert.Contains("#:rpm 20 #:efficiency 0.8 #:force 10000 #:temperature 20", text);
     }
 
     /// <summary>A channel run off the scene #:onto a boiler feeds it, and the clause round-trips.</summary>

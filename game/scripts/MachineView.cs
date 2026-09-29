@@ -92,6 +92,7 @@ public partial class MachineView : Node3D
         BuildFloatValves();
         BuildLeaks();
         BuildSafetyValves();
+        BuildPumps();
         BuildPistonDrives();
         Refresh();
 
@@ -1163,6 +1164,7 @@ public partial class MachineView : Node3D
         DrawFloatValves();
         DrawLeaks();
         DrawSafetyValves();
+        DrawPumps();
     }
 
     public void ToggleFire()
@@ -1198,6 +1200,9 @@ public partial class MachineView : Node3D
                       (b.BurstPressure > 0 ? $", rated {b.BurstPressure / 1000:0.#} kPa" : ""));
             foreach (var (id, (v, _)) in Runtime.SafetyValves)
                 bits.Add($"{id} {v.Opening * 100:F0}% open, venting {v.Flow * 1000:F2} g/s, {v.Vented:F3} kg out (lifts at {v.LiftPressure / 1000:0.#} kPa)");
+            foreach (var (id, p) in Runtime.Pumps)
+                bits.Add($"{id} {p.Strokes} strokes, {p.Delivered * 1000:F1} L lifted, lift {p.SuctionLift:F2} m of {p.Limit:F2} m" +
+                         (p.Broken ? ", column broken" : "") + $", {p.MaxPull:F0} N on the rod at most" + (p.Stalled ? ", STALLED" : ""));
             foreach (var (id, r) in Runtime.Rotors) bits.Add($"{id} {r.Rpm:F0} rpm");
             foreach (var (id, w) in Runtime.WaterWheels) bits.Add($"{id} {w.Rpm:F1} rpm, {w.Power:F0} W, {w.Water:F1} kg aboard");
             foreach (var (id, p) in Runtime.Pendulums)
@@ -1253,6 +1258,8 @@ public partial class MachineView : Node3D
                 ? $"{_axles.Max(a => Math.Abs(AxleRpm(a.Body, a.Axis))):F1} rpm"
             : _freezable.Count > 0
                 ? $"{_freezable.Max(b => b.LinearVelocity.Length()):F2} m/s"
+            : Runtime.Pumps.Count > 0
+                ? $"{Runtime.Pumps.Values.Max(p => p.Rpm):F0} strokes/min"
             : Runtime.Pendulums.Count > 0
                 ? $"{Runtime.Pendulums.Values.Max(p => Math.Abs(p.AngularVelocity) * p.Length):F2} m/s"
                 : Runtime.Pipes.Count > 0
@@ -1264,8 +1271,8 @@ public partial class MachineView : Node3D
             : null;
 
         // Not for a driven machine: whoever turns the crank (or the river
-        // under a noria, a spring filling a tank) keeps adding energy, so "retained" means nothing.
-        double? retained = Runtime.Boilers.Count == 0 && !_axles.Any(a => a.Driven) && _liftDrives.Count == 0
+        // under a noria, a spring filling a tank, a pump's crank) keeps adding energy, so "retained" means nothing.
+        double? retained = Runtime.Boilers.Count == 0 && !_axles.Any(a => a.Driven) && _liftDrives.Count == 0 && Runtime.Pumps.Count == 0
                            && Runtime.Sources.Count == 0 && Runtime.WaterWheels.Count == 0 && Runtime.Hearths.Count == 0
                            && _initialMechanicalEnergy is { } init && init > 1e-6
             ? (rotorKe + bodyKe + pe) / init * 100

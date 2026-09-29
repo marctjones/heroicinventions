@@ -16,7 +16,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak safety-valve
+         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak safety-valve pump
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -180,9 +180,30 @@
        p]
       [else p])))
 
+;; A pump's numbers are checked when the machine is built. Nothing stops
+;; a barrel standing higher over its water than the atmosphere can lift:
+;; that pump simply delivers nothing.
+(define (check-pumps parts)
+  (for ([p parts] #:when (eq? (part-kind p) 'pump))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what)
+      (error 'define-machine "~a:~a:~a: pump ~a: ~a"
+             (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (unless (and (real? (prop 'bore)) (> (prop 'bore) 0)) (bad (format "#:bore must be a length above 0, got ~e" (prop 'bore))))
+    (unless (and (real? (prop 'stroke)) (> (prop 'stroke) 0)) (bad (format "#:stroke must be a length above 0, got ~e" (prop 'stroke))))
+    (unless (and (real? (prop 'rpm)) (>= (prop 'rpm) 0)) (bad (format "#:rpm must be 0 or more, got ~e" (prop 'rpm))))
+    (unless (and (real? (prop 'efficiency)) (> (prop 'efficiency) 0) (<= (prop 'efficiency) 1))
+      (bad (format "#:efficiency must be in (0, 1], got ~e" (prop 'efficiency))))
+    (unless (or (not (prop 'force)) (and (real? (prop 'force)) (> (prop 'force) 0)))
+      (bad (format "#:force must be a force above 0, got ~e" (prop 'force))))
+    (unless (and (real? (prop 'temperature)) (<= 0 (prop 'temperature)) (< (prop 'temperature) 100))
+      (bad (format "#:temperature must be in [0, 100) C, got ~e" (prop 'temperature)))))
+  parts)
+
 (define (make-machine name source items)
   (machine name source
-           (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)))
+           (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -210,7 +231,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak safety-valve
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak safety-valve pump
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -253,6 +274,7 @@
   (struct fvinfo (id feed mat))      ; a float valve: the inflow, pipe or channel it throttles
   (struct lkinfo (id on into mat))   ; a leak: the tank it is in, the tank under it (or #f)
   (struct svinfo (id on mat))        ; a safety valve: the boiler whose lid it sits in
+  (struct puinfo (id from to mat))   ; a lift pump: the tank it draws from, the tank it fills
   (struct cpinfo (id vessel))        ; a counterpoise: the tank that hangs from it
   (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
   (struct chinfo (id from to onto))  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
@@ -297,8 +319,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice, waterwheel, counterpoise, float-valve, leak, safety-valve) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak safety-valve piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice, waterwheel, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -707,6 +729,39 @@
                           '()
                           #,(loc-of this-syntax)))
 
+    ;; A lift (suction) pump: a bucket with a flap valve in it, worked up
+    ;; and down a barrel of #:bore (m) over #:stroke (m) by a crank at #:rpm
+    ;; (strokes a minute, default 0: set (pump rpm n) to work it), drawing
+    ;; water up a suction pipe from tank #:from and pouring it from a spout
+    ;; at the top of the stroke into tank #:to. #:at is the barrel's foot,
+    ;; the bucket's lowest point. Each stroke lifts bore area x stroke x
+    ;; #:efficiency (default 0.8; the rest slips back past the bucket).
+    ;; The atmosphere pushes the water up the pipe, and only so far: to
+    ;; (P_atm - P_v) / (rho g) over the source's surface, 10.09 m for water
+    ;; at #:temperature 20 C (the default); higher the column breaks, and a
+    ;; barrel whose foot stands that far above the water lifts nothing.
+    ;; #:force (N) is the most the drive can pull the rod with (default: as
+    ;; much as it takes); asked for more, the pump stalls.
+    (pattern (pump id:id
+                   (~alt (~once (~seq #:at at:vec3))
+                         (~once (~seq #:from from-id:id))
+                         (~once (~seq #:to to-id:id))
+                         (~once (~seq #:bore bore-v:expr))
+                         (~once (~seq #:stroke stroke-v:expr))
+                         (~optional (~seq #:rpm rpm-v:expr))
+                         (~optional (~seq #:efficiency eff-v:expr))
+                         (~optional (~seq #:force force-v:expr))
+                         (~optional (~seq #:temperature temp-v:expr))
+                         (~optional (~seq #:material mat:id))) ...)
+      #:attr info (puinfo #'id #'from-id #'to-id (attribute mat))
+      #:with expr #`(part 'id 'pump '(~? mat oak) (list at.x at.y at.z)
+                          (list (cons 'from 'from-id) (cons 'to 'to-id)
+                                (cons 'bore bore-v) (cons 'stroke stroke-v) (cons 'rpm (~? rpm-v 0))
+                                (cons 'efficiency (~? eff-v 0.8)) (cons 'force (~? force-v #f))
+                                (cons 'temperature (~? temp-v 20)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     ;; A rope (or chain) between two parts. It only pulls, never pushes: it
     ;; goes slack when its ends come closer than its length. Each end is a
     ;; point on a part, in that part's own frame — (arm 0.9 0 0) is 0.9 m
@@ -1062,6 +1117,17 @@
       (unless (and b (eq? (pinfo-kind b) 'boiler))
         (fail (format "~a is not a boiler; a safety valve sits in a boiler's lid" (syntax-e (svinfo-on v))) (svinfo-on v)))
       (define mat (svinfo-mat v))
+      (when (and mat (not (memq (syntax-e mat) known-materials)))
+        (fail (format "unknown material ~a" (syntax-e mat)) mat)))
+
+    (for ([u infos] #:when (puinfo? u))
+      (for ([t (list (puinfo-from u) (puinfo-to u))])
+        (define p (hash-ref parts (syntax-e t) #f))
+        (unless (and p (eq? (pinfo-kind p) 'tank))
+          (fail (format "~a is not a tank; a pump draws from a tank and pours into another" (syntax-e t)) t)))
+      (when (eq? (syntax-e (puinfo-from u)) (syntax-e (puinfo-to u)))
+        (fail "a pump cannot pour into the tank it draws from" (puinfo-to u)))
+      (define mat (puinfo-mat u))
       (when (and mat (not (memq (syntax-e mat) known-materials)))
         (fail (format "unknown material ~a" (syntax-e mat)) mat)))
 

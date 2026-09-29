@@ -548,3 +548,86 @@ public class SafetyValveTests
         Assert.True(b.GaugePressure > 200e3);
     }
 }
+
+public class LiftPumpTests
+{
+    private const double RhoG = 1000 * 9.81, Atm = 101_325, Bore = 0.15, Stroke = 0.5, Eta = 0.8;
+    private static readonly double A = Math.PI * Bore * Bore / 4;
+
+    /// <summary>A pump whose bucket's lowest point stands `lift` m over a well so wide its surface never moves.</summary>
+    private static (LiftPump Pump, Tank Well, Tank Cistern) Rig(double lift, double force = double.PositiveInfinity)
+    {
+        var well = new Tank("well", 0, 1e6, 2, 1e6);                     // surface 1 m up
+        var cistern = new Tank("cistern", lift + 1, 10, 10);
+        var pump = new LiftPump("p", well, cistern, 1 + lift, Bore, Stroke) { Efficiency = Eta, Rpm = 30, Force = force };
+        return (pump, well, cistern);
+    }
+
+    private static void Strokes(LiftPump p, int n) { for (int i = 0; i < 200 * n; i++) p.Step(0.01); } // 2 s a stroke at 30 rpm
+
+    [Fact]
+    public void TheSuctionLimitIsTheAtmosphereLessTheVapourPressure()
+    {
+        Assert.Equal((Atm - Boiler.SaturationPressure(20)) / RhoG, LiftPump.SuctionLimit(20), precision: 12);
+        Assert.InRange(LiftPump.SuctionLimit(20), 10.09, 10.10);
+        Assert.InRange(LiftPump.SuctionLimit(60), 8.2, 8.4);   // hot water boils under a shorter column
+    }
+
+    /// <summary>Well within the limit: A·S·η a stroke, ρ·g·A·(spout − surface)·S of work, η of it into the water.</summary>
+    [Fact]
+    public void BelowTheLimitEachStrokeDeliversSweptVolumeTimesEfficiency()
+    {
+        var (p, _, cistern) = Rig(lift: 5);
+        Strokes(p, 10);
+        Assert.Equal(10, p.Strokes);
+        Assert.Equal(10 * A * Stroke * Eta, p.Delivered, precision: 9);
+        Assert.Equal(p.Delivered, cistern.WaterVolume, precision: 12);
+        Assert.Equal(10 * RhoG * A * 5.5 * Stroke, p.Work, precision: 3);
+        Assert.Equal(Eta, p.Lifted / p.Work, precision: 9);
+        Assert.Equal(RhoG * A * 5.5, p.MaxPull, precision: 3);
+        Assert.False(p.Broken);
+    }
+
+    /// <summary>The bucket's foot 9.9 m up: the water follows it only the 0.19 m left under the limit.</summary>
+    [Fact]
+    public void WhenTheLimitFallsInsideTheStrokeOnlyThatMuchFills()
+    {
+        var (p, _, _) = Rig(lift: 9.9);
+        Strokes(p, 10);
+        Assert.True(p.Broken);
+        Assert.Equal(10 * A * Eta * (LiftPump.SuctionLimit(20) - 9.9), p.Delivered, precision: 7);
+        Assert.Equal(10 * RhoG * A * (9.9 + Stroke) * (LiftPump.SuctionLimit(20) - 9.9), p.Work, precision: 2); // the vacuum's work comes back
+    }
+
+    /// <summary>Past the limit no force helps: the pull tops out at A·(P_atm − P_v), and nothing is lifted.</summary>
+    [Fact]
+    public void PastTheLimitItLiftsNothingHoweverHardItIsPulled()
+    {
+        var (p, well, _) = Rig(lift: 10.2, force: 1e7);
+        Strokes(p, 10);
+        Assert.Equal(10, p.Strokes);
+        Assert.Equal(0, p.Delivered);
+        Assert.Equal(1e6, well.WaterVolume);
+        Assert.Equal(A * (Atm - Boiler.SaturationPressure(20)), p.MaxPull, precision: 6);
+        Assert.Equal(0, p.Work, precision: 6);
+        Assert.Equal(LiftPump.SuctionLimit(20), p.Column, precision: 12);
+    }
+
+    /// <summary>Once primed the rod carries ρ·g·A·(spout − surface); a drive that can't give it stops at its next upstroke.</summary>
+    [Fact]
+    public void ADriveTooWeakForTheColumnStalls()
+    {
+        var (p, _, _) = Rig(lift: 5);
+        Strokes(p, 1);
+        p.Force = RhoG * A * 5.5 - 1;
+        Strokes(p, 3);
+        Assert.True(p.Stalled);
+        Assert.Equal(1, p.Strokes);
+        Assert.Equal(A * Stroke * Eta, p.Delivered, precision: 9);
+        p.Force = RhoG * A * 5.5 + 1;
+        Strokes(p, 3);
+        Assert.False(p.Stalled);
+        Assert.Equal(4, p.Strokes);
+        Assert.Equal(4 * A * Stroke * Eta, p.Delivered, precision: 9);
+    }
+}
