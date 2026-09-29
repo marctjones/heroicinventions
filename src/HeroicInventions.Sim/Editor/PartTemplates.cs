@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -95,6 +95,14 @@ public static class PartTemplates
                 ["radius"] = new SNumber(1.0), ["width"] = new SNumber(0.3), ["mass"] = new SNumber(100), ["load"] = new SNumber(0),
                 ["buckets"] = new SNumber(12), ["bucket-volume"] = new SNumber(0.005), ["spill-deg"] = new SNumber(120),
                 ["tail"] = new SBool(false), ["race"] = new SBool(false), ["paddle-depth"] = new SNumber(0),
+            },
+            [], null),
+        // a bollard 1.5 m up: 200 kg hanging 1 m below on one turn of hemp, nobody holding the other end until set
+        "capstan" => new PartSpec(id, "capstan", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["turns"] = new SNumber(1), ["load"] = new SNumber(200), ["hold"] = new SNumber(0), ["mu"] = new SBool(false),
+                ["drop"] = new SNumber(1), ["radius"] = new SNumber(0.15), ["rope"] = new SSymbol("hemp"),
             },
             [], null),
         // four sails 10 m from hub to tip facing a 6 m/s breeze, the stones free (load 0) until set

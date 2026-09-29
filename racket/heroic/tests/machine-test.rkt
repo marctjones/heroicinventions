@@ -150,6 +150,10 @@
   (check-exn #rx"#:wind must be a speed" (λ () (build '(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind -1))))
   (check-not-exn (λ () (build '(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind 6 #:cp 16/27)))))
 
+(test-case "a capstan's rope is a known material"
+  (check-compile-error #rx"unknown rope material silk"
+    (capstan post #:at (0 2 0) #:turns 1 #:load 100 #:rope silk)))
+
 (test-case "a bellows forces draught into a hearth"
   (check-compile-error #rx"cask is not a hearth; a bellows forces draught into a hearth"
     (tank cask #:at (0 0 0) #:area 0.25 #:height 1)

@@ -408,6 +408,31 @@ public class BuildSessionTests
     /// natural draught; round-trips through .machine and exports as Racket.
     /// </summary>
     /// <summary>
+    /// A bollard placed from the palette with nobody holding the rope lets the
+    /// load fall; given one turn and a pull inside the capstan band it holds.
+    /// </summary>
+    [Fact]
+    public void CapstanScriptHoldsInsideTheBandAndRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "bollard");
+        session.Execute("(capstan post #:at (0 2 0) #:turns 1 #:load 200 #:hold 150 #:material oak)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 2)");
+        var c = session.LastRun!.Capstans["post"];
+        Assert.Equal(Math.Sqrt(0.5 * 0.45), c.Mu, precision: 12);
+        Assert.True(c.Held);
+        Assert.Equal(1, c.Height, precision: 12);
+
+        session.Execute("(set post #:hold 0)");
+        session.Execute("(run 2)");
+        Assert.True(session.LastRun!.Capstans["post"].Grounded);
+
+        string rkt = Path.Combine(TempDir(), "bollard.rkt");
+        session.ExportRkt(rkt);
+        Assert.Contains("(capstan post #:at (0 2 0) #:turns 1 #:load 200 #:hold 0 #:drop 1 #:radius 0.15 #:rope hemp #:material oak)", File.ReadAllText(rkt));
+    }
+
+    /// <summary>
     /// A windmill placed from the palette, its stones set to τ₀ from the
     /// console: it settles at the tip-speed ratio where the sails take Cp*
     /// of the wind, and round-trips through .machine and Racket export.

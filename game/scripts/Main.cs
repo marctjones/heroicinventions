@@ -67,6 +67,7 @@ public partial class Main : Node3D
         ["suction-limit"] = new(new Vector3(3.6f, 6.9f, 16f), new Vector3(3.6f, 6.7f, 0), 50),
         ["bellows-forge"] = new(new Vector3(1.2f, 1.1f, 2.2f), new Vector3(0, 0.5f, 0), 45),
         ["windmills"] = new(new Vector3(0, 9f, 46f), new Vector3(0, 8f, 0), 50),
+        ["capstans"] = new(new Vector3(0, 2.6f, 7.5f), new Vector3(0, 1.6f, 0), 50),
     };
     private static readonly (double Scale, string Label)[] Speeds =
         [(0.1, "0.1×"), (0.25, "0.25×"), (1, "1×"), (5, "5×"), (10, "10×"), (20, "20×")];
@@ -121,6 +122,7 @@ public partial class Main : Node3D
         ["bearing-friction"] = "Bearing Friction",
         ["bellows-forge"] = "Bellows and Forced Draught",
         ["windmills"] = "Windmills and the Betz Limit",
+        ["capstans"] = "Capstans: Rope Friction on a Post",
     };
 
     private static readonly Dictionary<string, string> Descriptions = new()
@@ -156,6 +158,7 @@ public partial class Main : Node3D
         ["tank-leaks"] = "Torricelli's law. Four oak barrels, 0.25 m2 each; three are 80 cm full with a 5 cm2 hole in the wall, Q = 0.6 a sqrt(2 g h), h the water above the hole. sqrt(h - hole) falls at a steady 2.66 mm^1/2 per second, so the level runs down to the hole and stops: a hole 10 cm up takes 315 s (1.11 L/s to start with, at 70 cm of head) and leaves 10 cm; the same hole 40 cm up takes 238 s (0.84 L/s) and leaves 40 cm. Lower holes leak faster and further, and throw the jet farther. The third barrel leaks into a catch tank, litre for litre, until a thumb stops the hole at 100 s. The last has no hole, only a seep of 0.05 L/s off its surface: a steady 0.2 mm/s at any level.",
         ["constant-head"] = "Ctesibius' float valve. Two identical cisterns, 40 cm full, each drain through a tap raised 1 cm into a receiver. The front one is fed by a 2 L/s aqueduct through a mouth that a bronze float closes with a conical plug: seated at 40 cm, wide open 2 cm below. It settles at 39.17 cm, where the valve lets in exactly the 0.83 L/s the tap draws, so its receiver rises a steady 1.65 mm/s, a clock. Open the tap to 2 cm (tap.opening 0.04) and the draw doubles, yet the head drops only 0.8 cm, to 38.38 cm. The back cistern, with no valve and no feed, sinks to 22.5 cm in a minute and 10 cm in two, and its receiver slows as it goes.",
         ["sluice-demo"] = "A sluice gate on a mill race. A 20 L/s spring fills a head pool; a wooden gate 1 m tall, raised 5 cm, lets the water out under its lower edge as a jet, Q = 0.6 x slot area x sqrt(2 g h). All the spring must pass the slot, so the pool rises until the water stands 25.2 cm over the slot's middle. Below, the race runs into a reach that drains over a floor-level outfall into a pond. Shut the gate (gate.opening 0) and the race runs dry at once, the reach drains away over two minutes, and the pool backs up and spills over its waste weir.",
+        ["capstans"] = "Three oak bollards, each with 200 kg hanging a metre below on a hemp rope, and a sailor holding the other end with 100 N. Friction where rope slides on a post takes off tension in proportion to the tension there, so round the post it falls off exponentially: the tight end carries e^(mu theta) times the slack one (the capstan equation, Euler 1762). Hemp on oak, mu = 0.474. Half a turn multiplies the pull by 4.4 - 444 N, not the load's 1962 N, so it runs out and falls. One turn multiplies it by 19.7 - just enough. Two turns by 388: 5 N would hold it. Try one-turn.hold 99, or haul in over half a turn with half-turn.hold 10000.",
         ["windmills"] = "Two post mills, sails 10 m from hub to tip. The wind carries 1/2 rho A v^3 through the disc they sweep; the sails take a share of it, Cp, that depends on how fast their tips run for the wind - most, 0.3 here, at 2.5 times its speed. No rotor can take more than 16/27 (Betz, 1919): the air behind it has to keep moving. Each miller sets the stones to hold the sails at that best speed: the left, in a 6 m/s breeze, turns at 14.3 rpm and grinds with 12.3 kW; the right, in a 9 m/s wind, at 21.5 rpm with 41.4 kW. Half again the wind, (1.5)^3 = 3.4 times the power. Set the right one's stones light (gale.load 8171) and it races to 33 rpm but takes only 0.21 of the wind.",
         ["bellows-forge"] = "Two forges, each 1 kg of wood at 5 kW. The left burns on its own draught: its steady burn already draws power / density x wood's 6:1 air-fuel ratio, 2 g/s of air, and takes 3000 s to burn the kilogram out. The right has a bellows forcing in 5 L/s more (air's density, 1.204 kg/m3, makes that 6.02 g/s) — 4.01x the air, so 4.01x the burn rate, out in 748 s. Both give up the same 15 MJ; the bellows only ever buys speed, not heat.",
     };

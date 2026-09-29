@@ -125,6 +125,9 @@ public static class RktExporter
             case "hearth":
                 return $"  (hearth {p.Id} {At()} #:heats {Sym("heats", "?")} #:power {F(N("power"))} #:fuel {F(N("fuel"))} " +
                        $"#:fuel-kind {Sym("fuel-kind", "wood")} #:efficiency {F(N("efficiency", 0.5))})\n";
+            case "capstan":
+                return $"  (capstan {p.Id} {At()} #:turns {F(N("turns"))} #:load {F(N("load"))} #:hold {F(N("hold"))} #:drop {F(N("drop", 1))} " +
+                       $"#:radius {F(N("radius", 0.15))}" + Opt("mu", "mu") + $" #:rope {Sym("rope", "hemp")} {Mat()})\n";
             case "windmill":
                 return $"  (windmill {p.Id} {At()} #:radius {F(N("radius"))} #:mass {F(N("mass"))} #:wind {F(N("wind"))} #:load {F(N("load"))} " +
                        $"#:cp {F(N("cp", 0.3))} #:tip-speed-ratio {F(N("tip-speed-ratio", 2.5))} {Mat()})\n";

@@ -166,6 +166,45 @@
   (check-true (<= (max-of run '(breeze cp)) 16/27) "never above the Betz limit")
   (check-true (<= (max-of run '(gale cp)) 16/27) "never above the Betz limit"))
 
+(test-case "Capstans: a pull holds e^(mu theta) times itself -- half a turn slips, one turn just holds, two turns barely need a hand"
+  ;; hemp on oak, mu = sqrt(0.5 x 0.45) = 0.474342; the load weighs 200 x 9.81 = 1962 N.
+  ;;   half turn: e^(mu pi) = 4.437931, 100 N holds 443.79 N < 1962 N: the load
+  ;;              runs out at 443.79/200 - 9.81 = -7.591035 m/s2, 0.94888 m in 0.5 s
+  ;;   one turn:  e^(2 mu pi) = 19.695230; least hold 1962/19.695 = 99.618 N <= 100: held
+  ;;   two turns: e^(4 mu pi) = 387.902089; least hold 5.057977 N
+  (define run (simulate 'capstans #:seconds 0.5 #:step 0.001 #:sample-dt 0.05))
+  (check-= (final-of run '(half-turn mu)) 0.474342 1e-6)
+  (check-= (final-of run '(half-turn ratio)) 4.437931 1e-6)
+  (check-= (final-of run '(one-turn ratio)) 19.695230 1e-6)
+  (check-= (final-of run '(two-turns ratio)) 387.902089 1e-5)
+  (check-= (final-of run '(half-turn held)) 0 1e-9)
+  (check-= (final-of run '(half-turn load-tension)) 443.7931 1e-4 "the load's end is the tight one")
+  (check-= (final-of run '(half-turn speed)) (* -7.591035 0.5) 1e-5)
+  (check-= (final-of run '(half-turn lowered)) 0.948879 1e-5)
+  (check-= (final-of run '(one-turn held)) 1 1e-9)
+  (check-= (final-of run '(one-turn least-hold)) 99.618029 1e-5)
+  (check-= (final-of run '(one-turn lowered)) 0 1e-12)
+  (check-= (final-of run '(two-turns least-hold)) 5.057977 1e-6)
+  (check-= (final-of run '(two-turns held)) 1 1e-9)
+  ;; the half-turn load lands at t = sqrt(2 x 1.5 / 7.591) = 0.6287 s and stays down
+  (define later (simulate 'capstans #:seconds 2 #:step 0.001 #:sample-dt 0.5))
+  (check-= (final-of later '(half-turn grounded)) 1 1e-9)
+  (check-= (final-of later '(half-turn lowered)) 1.5 1e-9))
+
+(test-case "Capstans: the same friction fights a haul -- in over half a turn takes e^(mu pi) times the weight"
+  ;; Hauling in, the sailor's end is the tight one: the load feels 10000 /
+  ;; 4.437931 = 2253.30 N, rising at 2253.30/200 - 9.81 = 1.456512 m/s2, 0.728256 m in 1 s.
+  ;; And the one-turn sailor letting go to 99 N (below its 99.618 N least hold) loses the load.
+  (define run (simulate 'capstans #:seconds 1 #:step 0.001 #:sample-dt 0.1
+                        #:set '((half-turn hold 10000) (one-turn hold 99))))
+  (check-= (final-of run '(half-turn load-tension)) 2253.3024 1e-3)
+  (check-= (final-of run '(half-turn speed)) 1.456512 1e-5)
+  (check-= (final-of run '(half-turn hauled)) 0.728256 1e-5)
+  ;; one turn at 99 N: the load's end tight at 99 x 19.695230 = 1949.8278 N,
+  ;; creeping out at 1949.8278/200 - 9.81 = -0.060861 m/s2
+  (check-= (final-of run '(one-turn held)) 0 1e-9)
+  (check-= (final-of run '(one-turn speed)) -0.060861 1e-6))
+
 (test-case "Windmills: stones set for a lighter wind let the sails run fast and take less of it"
   ;; The gale mill ground against the breeze mill's 8170.95 N m, a 4/9 of
   ;; its own tau0: lambda = 2.5 (2 - 4/9) = 3.8889, omega = 3.8889 x 9/10 =

@@ -325,6 +325,53 @@ public class QuenchAndFeedTests
     }
 }
 
+public class CapstanTests
+{
+    private const double Mu = 0.4, Mass = 100;
+    private static double Weight => Mass * Physics.Gravity;
+
+    /// <summary>Held anywhere in [mg·e^(−μθ), mg·e^(μθ)]: the band the capstan equation allows.</summary>
+    [Theory]
+    [InlineData(0.5)]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void HoldsForAnyPullInsideTheCapstanBand(double turns)
+    {
+        double ratio = Math.Exp(Mu * 2 * Math.PI * turns);
+        foreach (double hold in new[] { Weight / ratio * 1.0001, Weight, Weight * ratio * 0.9999 })
+        {
+            var c = new Capstan("c", turns, Mu, Mass, 1, 2) { Hold = hold };
+            for (int i = 0; i < 100; i++) c.Step(0.01);
+            Assert.True(c.Held, $"{turns} turns, {hold} N");
+            Assert.Equal(1, c.Height, precision: 12);
+        }
+    }
+
+    [Fact]
+    public void BelowTheLeastHoldTheLoadRunsOutAtTheSlidingTension()
+    {
+        var c = new Capstan("c", 1, Mu, Mass, 5, 6) { Hold = 20 };
+        double ratio = Math.Exp(Mu * 2 * Math.PI), a = 20 * ratio / Mass - Physics.Gravity;
+        for (int i = 0; i < 50; i++) c.Step(0.01);
+        Assert.Equal(20 * ratio, c.LoadTension, precision: 9);
+        Assert.Equal(a * 0.5, c.Velocity, precision: 9);
+        Assert.Equal(-0.5 * a * 0.25, c.Lowered, precision: 9);
+    }
+
+    [Fact]
+    public void AStoppedLoadStaysWhereFrictionCaughtIt()
+    {
+        var c = new Capstan("c", 1, Mu, Mass, 5, 6) { Hold = 0 };
+        for (int i = 0; i < 20; i++) c.Step(0.01);
+        c.Hold = Weight; // back inside the band while it is falling: friction brakes it to a stop
+        for (int i = 0; i < 200; i++) c.Step(0.01);
+        Assert.True(c.Held);
+        double stoppedAt = c.Height;
+        for (int i = 0; i < 100; i++) c.Step(0.01);
+        Assert.Equal(stoppedAt, c.Height, precision: 12);
+    }
+}
+
 public class WindmillTests
 {
     private static Windmill Mill(double wind, double load) =>

@@ -16,7 +16,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill counterpoise float-valve leak safety-valve pump
+         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan counterpoise float-valve leak safety-valve pump
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -203,6 +203,23 @@
 
 ;; A windmill's numbers are checked when the machine is built; its #:cp
 ;; above all, which no rotor can take past the Betz limit.
+;; A capstan's numbers are checked when the machine is built.
+(define (check-capstans parts)
+  (for ([p parts] #:when (eq? (part-kind p) 'capstan))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what)
+      (error 'define-machine "~a:~a:~a: capstan ~a: ~a"
+             (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (unless (and (real? (prop 'turns)) (> (prop 'turns) 0)) (bad (format "#:turns must be above 0, got ~e" (prop 'turns))))
+    (unless (and (real? (prop 'load)) (> (prop 'load) 0)) (bad (format "#:load must be a mass above 0, got ~e" (prop 'load))))
+    (unless (and (real? (prop 'hold)) (>= (prop 'hold) 0)) (bad (format "#:hold must be a pull, 0 or more, got ~e" (prop 'hold))))
+    (unless (or (not (prop 'mu)) (and (real? (prop 'mu)) (> (prop 'mu) 0)))
+      (bad (format "#:mu must be a friction coefficient above 0, got ~e" (prop 'mu))))
+    (unless (and (real? (prop 'drop)) (> (prop 'drop) 0) (< (prop 'drop) (cadr (part-at p))))
+      (bad (format "#:drop must be above 0 and leave the load off the ground (the post is ~e m up), got ~e" (cadr (part-at p)) (prop 'drop)))))
+  parts)
+
 (define (check-windmills parts)
   (for ([p parts] #:when (eq? (part-kind p) 'windmill))
     (define (prop k) (cdr (assq k (part-props p))))
@@ -222,7 +239,7 @@
 
 (define (make-machine name source items)
   (machine name source
-           (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)))))
+           (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -250,7 +267,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill counterpoise float-valve leak safety-valve pump
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan counterpoise float-valve leak safety-valve pump
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -339,8 +356,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -647,6 +664,35 @@
                                 (cons 'spill-deg (~? spill-v 120))
                                 (cons 'tail (~? 'tail-tank #f)) (cons 'race (~? 'race-ch #f))
                                 (cons 'paddle-depth (~? paddle-v 0)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+;; A rope wrapped #:turns times round a fixed post #:radius (m, default
+    ;; 0.15) across — a bollard, a snubbing post — a #:load kg hanging #:drop
+    ;; m (default 1) below the post from one end, someone pulling on the
+    ;; other with #:hold N (settable: (set id hold n)). Friction round the
+    ;; post multiplies what a pull can hold by e^(μθ), θ = 2π × turns (the
+    ;; capstan equation): the load stays for any pull between m·g·e^(−μθ)
+    ;; and m·g·e^(μθ), runs out below that, comes in above it. μ is #:mu,
+    ;; or by default the rope's (#:rope, hemp) and post's frictions
+    ;; combined as √(μ₁μ₂). The post's radius doesn't enter into it.
+    (pattern (capstan id:id
+                      (~alt (~once (~seq #:at at:vec3))
+                            (~once (~seq #:turns turns-v:expr))
+                            (~once (~seq #:load load-v:expr))
+                            (~optional (~seq #:hold hold-v:expr))
+                            (~optional (~seq #:mu mu-v:expr))
+                            (~optional (~seq #:drop drop-v:expr))
+                            (~optional (~seq #:radius radius-v:expr))
+                            (~optional (~seq #:rope rope-mat:id))
+                            (~optional (~seq #:material mat:id))) ...)
+      #:fail-unless (memq (syntax-e (or (attribute rope-mat) #'hemp)) known-materials)
+                    (format "unknown rope material ~a" (syntax-e (or (attribute rope-mat) #'hemp)))
+      #:attr info (pinfo #'id 'capstan (attribute mat) '())
+      #:with expr #`(part 'id 'capstan '(~? mat oak) (list at.x at.y at.z)
+                          (list (cons 'turns turns-v) (cons 'load load-v) (cons 'hold (~? hold-v 0))
+                                (cons 'mu (~? mu-v #f)) (cons 'drop (~? drop-v 1)) (cons 'radius (~? radius-v 0.15))
+                                (cons 'rope '(~? rope-mat hemp)))
                           '()
                           #,(loc-of this-syntax)))
 

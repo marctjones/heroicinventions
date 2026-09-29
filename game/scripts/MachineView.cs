@@ -79,6 +79,7 @@ public partial class MachineView : Node3D
                 case "hearth": BuildHearth(part); break;
                 case "waterwheel": BuildWaterWheel(part); break;
                 case "windmill": BuildWindmill(part); break;
+                case "capstan": BuildCapstan(part); break;
                 case "counterpoise": BuildCounterpoise(part); break;
             }
         }
@@ -1162,6 +1163,7 @@ public partial class MachineView : Node3D
         DrawHearths();
         DrawWaterWheels();
         DrawWindmills();
+        DrawCapstans();
         DrawCounterpoises();
         DrawBearingPendulums();
         DrawFloatValves();
@@ -1209,6 +1211,9 @@ public partial class MachineView : Node3D
                          (p.Broken ? ", column broken" : "") + $", {p.MaxPull:F0} N on the rod at most" + (p.Stalled ? ", STALLED" : ""));
             foreach (var (id, r) in Runtime.Rotors) bits.Add($"{id} {r.Rpm:F0} rpm");
             foreach (var (id, w) in Runtime.WaterWheels) bits.Add($"{id} {w.Rpm:F1} rpm, {w.Power:F0} W, {w.Water:F1} kg aboard");
+            foreach (var (id, c) in Runtime.Capstans)
+                bits.Add($"{id} {c.Turns:0.##} turns (x{c.Ratio:0.#}): " + (c.Held ? $"held by {c.Hold:0.#} N (needs {c.LeastHold:0.#} N)"
+                    : c.Grounded ? "load on the ground" : $"{(c.Velocity < 0 ? "running out" : "coming in")} at {Math.Abs(c.Velocity):F2} m/s, {c.LoadTension:0} N at the load"));
             foreach (var (id, m) in Runtime.Windmills)
                 bits.Add($"{id} {m.Rpm:F1} rpm in {m.Wind:0.#} m/s, {m.Power / 1000:F2} kW of the wind's {m.WindPower / 1000:F1} kW (Cp {m.PowerCoefficient:F3}, Betz 0.593)");
             foreach (var (id, p) in Runtime.Pendulums)
@@ -1261,6 +1266,8 @@ public partial class MachineView : Node3D
             ? $"{Runtime.Rotors.Values.First().Rpm:F0} rpm"
             : Runtime.WaterWheels.Count > 0
                 ? string.Join(", ", Runtime.WaterWheels.Values.Select(w => $"{w.Name} {w.Rpm:F1} rpm"))
+            : Runtime.Capstans.Count > 0
+                ? $"{Runtime.Capstans.Values.Max(c => Math.Abs(c.Velocity)):F2} m/s"
             : Runtime.Windmills.Count > 0
                 ? string.Join(", ", Runtime.Windmills.Values.Select(m => $"{m.Name} {m.Rpm:F1} rpm"))
             : _axles.Count > 0

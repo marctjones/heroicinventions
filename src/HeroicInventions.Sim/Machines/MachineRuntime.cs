@@ -36,6 +36,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, LiftPump> _pumps = [];
     private readonly Dictionary<string, WaterWheel> _wheels = [];
     private readonly Dictionary<string, Windmill> _windmills = [];
+    private readonly Dictionary<string, Capstan> _capstans = [];
     private readonly Dictionary<string, Counterpoise> _counterpoises = [];
     private readonly Dictionary<string, Pendulum> _pendulums = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
@@ -67,6 +68,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, WaterWheel> WaterWheels => _wheels;
     /// <summary>Windmills: sails turning a millstone, taking at most the Betz limit of the wind's power.</summary>
     public IReadOnlyDictionary<string, Windmill> Windmills => _windmills;
+    /// <summary>Ropes wrapped round fixed posts, holding a load by friction (the capstan equation).</summary>
+    public IReadOnlyDictionary<string, Capstan> Capstans => _capstans;
     public IReadOnlyDictionary<string, Counterpoise> Counterpoises => _counterpoises;
     /// <summary>Pendulums hung on a bearing (#:bearing-radius): swung here, not by Jolt, so their friction and wear can be checked.</summary>
     public IReadOnlyDictionary<string, Pendulum> Pendulums => _pendulums;
@@ -117,6 +120,20 @@ public sealed class MachineRuntime
                     };
                     break;
                 case "waterwheel": break; // built once the channels that drive it exist
+                case "capstan":
+                {
+                    string rope = part.Symbol("rope", "hemp");
+                    if (!materials.TryGet(rope, out var ropeMat))
+                        throw new MachineFormatException($"capstan {part.Id}'s rope is of unknown material {rope}", part.Location);
+                    // rope on post as Jolt combines two surfaces' friction: √(μ₁μ₂)
+                    double mu = part.Props.GetValueOrDefault("mu") is SNumber given ? given.Value
+                        : Math.Sqrt(ropeMat.Friction * materials[part.Material].Friction);
+                    _capstans[part.Id] = new Capstan(part.Id, part.Number("turns"), mu, part.Number("load"), part.At.Y - part.Number("drop", 1), part.At.Y)
+                    {
+                        Hold = part.Number("hold", 0),
+                    };
+                    break;
+                }
                 case "windmill":
                 {
                     double r = part.Number("radius"), cp = part.Number("cp", 0.3);
@@ -601,6 +618,24 @@ public sealed class MachineRuntime
             _getters[$"{id}.load"] = () => w.Load;
             _setters[$"{id}.load"] = t => w.Load = Math.Max(0, t);
         }
+        foreach (var (id, c) in _capstans)
+        {
+            _getters[$"{id}.held"] = () => c.Held ? 1 : 0;
+            _getters[$"{id}.grounded"] = () => c.Grounded ? 1 : 0;
+            _getters[$"{id}.height"] = () => c.Height;                 // m, the load above the ground
+            _getters[$"{id}.speed"] = () => c.Velocity;                // m/s, + up
+            _getters[$"{id}.lowered"] = () => c.Lowered;               // m run out
+            _getters[$"{id}.hauled"] = () => c.Hauled;                 // m brought in
+            _getters[$"{id}.load-tension"] = () => c.LoadTension;      // N at the load
+            _getters[$"{id}.ratio"] = () => c.Ratio;                   // e^(μθ)
+            _getters[$"{id}.least-hold"] = () => c.LeastHold;          // N: m·g·e^(−μθ)
+            _getters[$"{id}.hauling-pull"] = () => c.HaulingPull;      // N: m·g·e^(μθ)
+            _getters[$"{id}.mu"] = () => c.Mu;
+            _getters[$"{id}.hold"] = () => c.Hold;
+            _setters[$"{id}.hold"] = n => c.Hold = Math.Max(0, n);
+            _getters[$"{id}.load"] = () => c.LoadMass;
+            _setters[$"{id}.load"] = kg => c.LoadMass = Math.Max(1e-6, kg);
+        }
         foreach (var (id, m) in _windmills)
         {
             _getters[$"{id}.rpm"] = () => m.Rpm;
@@ -673,6 +708,7 @@ public sealed class MachineRuntime
         foreach (var pump in _pumps.Values) pump.Step(dt);
         foreach (var cp in _counterpoises.Values) cp.Step(dt);
         foreach (var m in _windmills.Values) m.Step(dt);
+        foreach (var c in _capstans.Values) c.Step(dt);
         foreach (var p in _pendulums.Values) p.Step(dt);
         foreach (var rotor in _rotors.Values) rotor.Step(dt); // steps its own boiler
         foreach (var c in _cylinders.Values) c.Step(dt);
