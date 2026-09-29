@@ -29,8 +29,20 @@
          (define dll (build-path config-dir tfm "HeroicInventions.SimHost.dll"))
          (and (file-exists? dll) dll))))
 
+;; newest source file under the Sim and SimHost projects (not bin/obj)
+(define (newest-source-time)
+  (for/fold ([t 0]) ([dir (list simhost-dir (build-path simhost-dir 'up "HeroicInventions.Sim"))])
+    (for/fold ([t t]) ([f (in-directory dir (λ (d) (not (member (path->string (file-name-from-path d)) '("bin" "obj")))))]
+                       #:when (member (path-get-extension f) '(#".cs" #".csproj" #".json")))
+      (max t (file-or-directory-modify-seconds f)))))
+
+;; a built host older than its sources would test yesterday's simulation
+(define (built-stale?)
+  (define dll (built-dll-path))
+  (or (not dll) (< (file-or-directory-modify-seconds dll) (newest-source-time))))
+
 (define (ensure-built!)
-  (unless (built-dll-path)
+  (when (built-stale?)
     (define dotnet (or (find-executable-path "dotnet")
                         (error 'simhost "dotnet not found on PATH")))
     (define ok? (parameterize ([current-output-port (open-output-nowhere)])
