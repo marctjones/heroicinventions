@@ -59,7 +59,7 @@ public partial class MachineView : Node3D
         // Several identical, closely-spaced pendulums (Newton's cradle) —
         // labelling each one adds nothing (they're interchangeable) and
         // the text can't fit between them anyway. One machine title is enough.
-        _manyIdenticalPendulums = Runtime.Def.Parts.Count(p => p.Kind == "pendulum") > 1;
+        _manyIdenticalPendulums = Runtime.Def.Parts.Count(p => p.Kind == "pendulum" && !Runtime.Pendulums.ContainsKey(p.Id)) > 1;
         foreach (var part in Runtime.Def.Parts)
         {
             switch (part.Kind)
@@ -487,6 +487,11 @@ public partial class MachineView : Node3D
     /// </summary>
     private void BuildPendulum(PartSpec part)
     {
+        if (Runtime.Pendulums.TryGetValue(part.Id, out var onBearing))
+        {
+            BuildBearingPendulum(part, onBearing);
+            return;
+        }
         float length = (float)part.Number("length");
         float startAngle = (float)part.Number("start-angle-deg");
         const float rodRadius = 0.01f;
@@ -542,7 +547,7 @@ public partial class MachineView : Node3D
         // the bob is the part actually worth pointing at.
         if (!_manyIdenticalPendulums)
             AddLabel(part.Id, new Vector3(0, -length + bobRadius + 0.06f, 0), body);
-        _pendulumMounts.Add((V(part.At), bobRadius)); // hung from a frame beside the swing, built once all are placed
+        _pendulumMounts.Add((V(part.At), bobRadius, 0.06f)); // hung from a frame beside the swing, built once all are placed
     }
 
     /// <summary>
@@ -687,7 +692,7 @@ public partial class MachineView : Node3D
     }
 
     private const uint FixtureLayer = 8, SprungArmLayer = 16;
-    private readonly List<(Vector3 Pivot, float BobRadius)> _pendulumMounts = [];
+    private readonly List<(Vector3 Pivot, float BobRadius, float Reach)> _pendulumMounts = []; // Reach: clearance past the end pivots
 
     /// <summary>
     /// Pendulums hang from a frame beside their swing, never from a post
@@ -704,14 +709,14 @@ public partial class MachineView : Node3D
         {
             float y = row.First().Pivot.Y, z = row.First().Pivot.Z;
             float side = row.Max(m => m.BobRadius) + 0.04f;
-            float left = row.Min(m => m.Pivot.X) - 0.06f, right = row.Max(m => m.Pivot.X) + 0.06f;
+            float left = row.Min(m => m.Pivot.X - m.Reach), right = row.Max(m => m.Pivot.X + m.Reach);
             foreach (float dz in new[] { -side, side })
             {
                 AddGroundedSupport(new Vector3(left, y, z + dz), 0.012f, 0.06f);
                 AddGroundedSupport(new Vector3(right, y, z + dz), 0.012f, 0.06f);
                 AddChild(Shapes.Rod(new Vector3(left, y, z + dz), new Vector3(right, y, z + dz), 0.01f, wood));
             }
-            foreach (var (pivot, _) in row)
+            foreach (var (pivot, _, _) in row)
                 AddChild(Shapes.Rod(pivot - new Vector3(0, 0, side), pivot + new Vector3(0, 0, side), 0.005f, iron));
         }
     }
@@ -1150,6 +1155,7 @@ public partial class MachineView : Node3D
         DrawHearths();
         DrawWaterWheels();
         DrawCounterpoises();
+        DrawBearingPendulums();
     }
 
     public void ToggleFire()
@@ -1178,6 +1184,8 @@ public partial class MachineView : Node3D
                 bits.Add($"{id} {b.Temperature:F1} °C {b.GaugePressure / 1000:F1} kPa, fire {(b.HeatInput > 0 ? "on" : "off")}");
             foreach (var (id, r) in Runtime.Rotors) bits.Add($"{id} {r.Rpm:F0} rpm");
             foreach (var (id, w) in Runtime.WaterWheels) bits.Add($"{id} {w.Rpm:F1} rpm, {w.Power:F0} W, {w.Water:F1} kg aboard");
+            foreach (var (id, p) in Runtime.Pendulums)
+                bits.Add($"{id} {p.Angle * 180 / Math.PI:F1}° (last turned at {p.Amplitude * 180 / Math.PI:F2}°, {p.Swings} swings), bearing {p.Bearing.Heat:F2} J heat, {p.Bearing.Wear:E2} mm³ worn");
             foreach (var b in Blocks) bits.Add($"{b.Name} {b.Material.Name} {b.Mass:F1} kg");
             return string.Join(" · ", bits);
         }
@@ -1203,7 +1211,8 @@ public partial class MachineView : Node3D
     {
         double rotorKe = Runtime.Rotors.Values.Sum(r => r.KineticEnergy) + Runtime.WaterWheels.Values.Sum(w => w.KineticEnergy);
         double bodyKe = _freezable.Sum(b => 0.5 * b.Mass * b.LinearVelocity.LengthSquared())
-                        + _axles.Sum(a => SpinEnergy(a.Body)); // wheels only turn, so all their energy is spin
+                        + _axles.Sum(a => SpinEnergy(a.Body)) // wheels only turn, so all their energy is spin
+                        + BearingPendulumEnergy(out double bearingPe);
         // The real centre of mass, not the body's own origin: a pendulum's
         // RigidBody3D origin sits fixed at the pivot for the joint, so its
         // Y never changes — using it directly would make PE constant and
@@ -1213,6 +1222,7 @@ public partial class MachineView : Node3D
         // Water has real gravitational PE too — without this, a fluid
         // machine like Heron's fountain (no rigid bodies, no rotor) shows
         // zero energy and a blank speed the whole time it's running.
+        pe += bearingPe;
         pe += Runtime.Tanks.Values.Sum(t => t.WaterVolume * Physics.WaterDensity * Physics.Gravity * (t.BaseElevation + t.Level / 2));
         // A twisted torsion spring stores ½·k·(θ − rest)²: counted, or a
         // catapult would seem to make energy from nothing when loosed.
@@ -1227,6 +1237,8 @@ public partial class MachineView : Node3D
                 ? $"{_axles.Max(a => Math.Abs(AxleRpm(a.Body, a.Axis))):F1} rpm"
             : _freezable.Count > 0
                 ? $"{_freezable.Max(b => b.LinearVelocity.Length()):F2} m/s"
+            : Runtime.Pendulums.Count > 0
+                ? $"{Runtime.Pendulums.Values.Max(p => Math.Abs(p.AngularVelocity) * p.Length):F2} m/s"
                 : Runtime.Pipes.Count > 0
                     ? $"{Runtime.Pipes.Values.Max(p => Math.Abs(p.Flow)) * 1000:F2} L/s"
                     : "—";

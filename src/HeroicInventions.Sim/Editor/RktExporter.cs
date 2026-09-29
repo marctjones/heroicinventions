@@ -102,7 +102,10 @@ public static class RktExporter
                 return $"  (block {p.Id} {At()} #:size {F(N("size"))} #:tilt-deg {F(N("tilt-deg"))}" +
                        (p.Props.ContainsKey("dim-x") ? $" #:dimensions ({F(N("dim-x"))} {F(N("dim-y"))} {F(N("dim-z"))})" : "") + $" {Mat()})\n";
             case "pendulum":
-                return $"  (pendulum {p.Id} {At()} #:length {F(N("length"))} #:start-angle-deg {F(N("start-angle-deg"))} {Mat()})\n";
+                return $"  (pendulum {p.Id} {At()} #:length {F(N("length"))} #:start-angle-deg {F(N("start-angle-deg"))} {Mat()}" +
+                       (p.Props.GetValueOrDefault("bearing-radius") is SNumber pin
+                           ? $" #:bearing-radius {F(pin.Value)} #:bearing-mu {F(N("bearing-mu"))} #:bearing-drag {F(N("bearing-drag"))} #:bearing-wear {F(N("bearing-wear"))}"
+                           : "") + ")\n";
             case "lever":
                 return $"  (lever {p.Id} {At()} #:length {F(N("length"))} {Mat()} #:axis {Sym("axis", "z")} " +
                        $"#:start-angle-deg {F(N("start-angle-deg"))} #:pivot-fraction {F(N("pivot-fraction", 0.5))} " +

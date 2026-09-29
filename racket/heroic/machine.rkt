@@ -5,7 +5,8 @@
 ;; pendulum, lever, ramp, and the generated-geometry parts wheel, screw,
 ;; fixture) and link clauses (pipe, connect, sealed-air).
 ;; pendulum/lever/ramp need no solver of their own — they're pure Jolt
-;; rigid-body physics, built in MachineView. The macro checks the whole
+;; rigid-body physics, built in MachineView — except a pendulum hung on a
+;; bearing, which the sim swings so its friction and wear can be checked. The macro checks the whole
 ;; machine while the file compiles: part names, materials, port names,
 ;; port kinds, and that every rotor has steam. Errors point at the exact
 ;; clause that is wrong. Parameter values are ordinary Racket expressions,
@@ -275,14 +276,32 @@
     ;; bob at its far end. Jolt computes its real moment of inertia from the
     ;; rod+bob shapes, so this swings with genuine (not idealized point-mass)
     ;; pendulum dynamics — released from #:start-angle-deg off vertical.
+    ;;
+    ;; Hung on a bearing, #:bearing-radius m (the pin's radius), it swings in
+    ;; the sim instead, so its run-down can be checked: the bearing carries
+    ;; its weight N = m·g and resists with Coulomb friction μ·N·r
+    ;; (#:bearing-mu μ, dry metal) and viscous drag c·ω (#:bearing-drag c,
+    ;; N·m·s/rad, grease). Friction's work is heat; the pin wears by
+    ;; Archard's law V = K·N·s, #:bearing-wear K in mm³/(N·m).
     (pattern (pendulum id:id
                        (~alt (~once (~seq #:at at:vec3))
                              (~once (~seq #:length length-v:expr))
                              (~once (~seq #:material mat:id))
-                             (~optional (~seq #:start-angle-deg angle-v:expr))) ...)
+                             (~optional (~seq #:start-angle-deg angle-v:expr))
+                             (~optional (~seq #:bearing-radius journal-v:expr))
+                             (~optional (~seq (~and mu-kw #:bearing-mu) mu-v:expr))
+                             (~optional (~seq (~and drag-kw #:bearing-drag) drag-v:expr))
+                             (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))) ...)
+      #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
+                  "a pendulum's bearing needs a #:bearing-radius (its pin's radius, m)"
       #:attr info (pinfo #'id 'pendulum (attribute mat) '())
       #:with expr #`(part 'id 'pendulum 'mat (list at.x at.y at.z)
-                          (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 0)))
+                          (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 0))
+                                (~@ . (~? ((cons 'bearing-radius journal-v)
+                                           (cons 'bearing-mu (~? mu-v 0))
+                                           (cons 'bearing-drag (~? drag-v 0))
+                                           (cons 'bearing-wear (~? wear-v 0)))
+                                          ())))
                           '()
                           #,(loc-of this-syntax)))
 

@@ -294,3 +294,31 @@ public class QuenchAndFeedTests
         Assert.Equal(2, copper.WaterFed, precision: 12);
     }
 }
+
+public class BearingTests
+{
+    /// <summary>A flywheel coasting on a dry pin: constant torque μNr stops it at t = Iω₀/τ, all ½Iω₀² as heat, the pin sliding r·ω₀·t/2.</summary>
+    [Fact]
+    public void DryPinStopsAFlywheelAtIOmegaOverTau()
+    {
+        double inertia = 2, omega0 = 10, load = 100, dt = 0.001;
+        var bearing = new Bearing(0.02) { Mu = 0.3, WearRate = 1e-4 };
+        double tau = 0.3 * load * 0.02, omega = omega0, t = 0;
+        while (omega > 0) { omega = bearing.Slow(omega, inertia, load, dt); t += dt; }
+        Assert.Equal(inertia * omega0 / tau, t, precision: 2);
+        Assert.Equal(0.5 * inertia * omega0 * omega0, bearing.Heat, precision: 9);
+        Assert.Equal(0.02 * omega0 * (inertia * omega0 / tau) / 2, bearing.Sliding, precision: 3);
+        Assert.Equal(1e-4 * load * bearing.Sliding, bearing.Wear, precision: 12);
+    }
+
+    /// <summary>Viscous drag alone: ω = ω₀·exp(−c·t / I), never quite stopping.</summary>
+    [Fact]
+    public void GreasedPinSlowsAFlywheelExponentially()
+    {
+        double inertia = 2, omega = 10;
+        var bearing = new Bearing(0.02) { Drag = 0.5 };
+        for (int i = 0; i < 4000; i++) omega = bearing.Slow(omega, inertia, 100, 0.001);
+        Assert.Equal(10 * Math.Exp(-0.5 * 4 / inertia), omega, precision: 9);
+        Assert.Equal(0.5 * inertia * (100 - omega * omega), bearing.Heat, precision: 9);
+    }
+}

@@ -6,9 +6,10 @@
 ;; expected values. See docs/design.html §III "Machines as tests".
 ;;
 ;; This only reaches parts MachineRuntime itself simulates: tanks,
-;; boilers, rotors and pipes. Blocks, levers, pendulums and ramps are pure
-;; Jolt rigid-body physics and only exist inside the Godot game; they stay
-;; covered by the HEROIC_AUTORUN headless-Godot smoke test instead.
+;; boilers, rotors and pipes, and pendulums hung on a bearing. Blocks,
+;; levers, ramps and other pendulums are pure Jolt rigid-body physics and
+;; only exist inside the Godot game; they stay covered by the
+;; HEROIC_AUTORUN headless-Godot smoke test instead.
 (require racket/system racket/port racket/runtime-path racket/path
          racket/string racket/list)
 (provide simulate max-of min-of final-of)

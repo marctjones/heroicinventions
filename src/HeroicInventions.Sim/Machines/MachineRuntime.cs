@@ -31,6 +31,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, WaterWheel> _wheels = [];
     private readonly Dictionary<string, Counterpoise> _counterpoises = [];
+    private readonly Dictionary<string, Pendulum> _pendulums = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
     private readonly Dictionary<string, Action<double>> _setters = [];
 
@@ -49,6 +50,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
     public IReadOnlyDictionary<string, WaterWheel> WaterWheels => _wheels;
     public IReadOnlyDictionary<string, Counterpoise> Counterpoises => _counterpoises;
+    /// <summary>Pendulums hung on a bearing (#:bearing-radius): swung here, not by Jolt, so their friction and wear can be checked.</summary>
+    public IReadOnlyDictionary<string, Pendulum> Pendulums => _pendulums;
     public double Time { get; private set; }
 
     /// <summary>
@@ -94,6 +97,16 @@ public sealed class MachineRuntime
                     break;
                 case "waterwheel": break; // built once the channels that drive it exist
                 case "counterpoise": break; // built once its vessel exists
+                case "pendulum" when part.Props.GetValueOrDefault("bearing-radius") is SNumber journal:
+                    _pendulums[part.Id] = new Pendulum(part.Id, part.Number("length"), materials[part.Material].Density,
+                        part.Number("start-angle-deg", 0) * Math.PI / 180,
+                        new Bearing(journal.Value)
+                        {
+                            Mu = part.Number("bearing-mu", 0),
+                            Drag = part.Number("bearing-drag", 0),
+                            WearRate = part.Number("bearing-wear", 0),
+                        });
+                    break;
                 case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
@@ -409,6 +422,22 @@ public sealed class MachineRuntime
             _getters[$"{id}.hanging"] = () => cp.Hanging;                           // kg on the vessel's rope
             _getters[$"{id}.torque"] = () => cp.Torque;                             // N·m, + opening
         }
+        foreach (var (id, p) in _pendulums)
+        {
+            _getters[$"{id}.angle"] = () => p.Angle * 180 / Math.PI;                // deg from hanging
+            _getters[$"{id}.amplitude"] = () => p.Amplitude * 180 / Math.PI;        // deg, at the last turning point
+            _getters[$"{id}.peak-time"] = () => p.PeakTime;                         // s, when it turned there
+            _getters[$"{id}.swings"] = () => p.Swings;                              // turning points since release
+            _getters[$"{id}.stopped"] = () => p.Stopped ? 1 : 0;
+            _getters[$"{id}.energy"] = () => p.Energy;                              // J of swing left
+            _getters[$"{id}.heat"] = () => p.Bearing.Heat;                          // J made in the bearing
+            _getters[$"{id}.sliding"] = () => p.Bearing.Sliding * 1000;             // mm the pin has slid in its eye
+            _getters[$"{id}.wear"] = () => p.Bearing.Wear;                          // mm³ worn off
+            _getters[$"{id}.mu"] = () => p.Bearing.Mu;
+            _getters[$"{id}.drag"] = () => p.Bearing.Drag;
+            _setters[$"{id}.mu"] = mu => p.Bearing.Mu = Math.Max(0, mu);
+            _setters[$"{id}.drag"] = c => p.Bearing.Drag = Math.Max(0, c);
+        }
     }
 
     public void Step(double dt)
@@ -427,6 +456,7 @@ public sealed class MachineRuntime
         }
         foreach (var lift in _lifts.Values) lift.Step(dt);
         foreach (var cp in _counterpoises.Values) cp.Step(dt);
+        foreach (var p in _pendulums.Values) p.Step(dt);
         foreach (var rotor in _rotors.Values) rotor.Step(dt); // steps its own boiler
         foreach (var c in _cylinders.Values) c.Step(dt);
         foreach (var (id, boiler) in _boilers)

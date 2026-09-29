@@ -32,7 +32,11 @@ public static class PartTemplates
             [new PortSpec("steam", "steam", 0.3)],
             null),
         "block" => new PartSpec(id, "block", material, at, Props(("size", 0.1), ("tilt-deg", 0)), [], null),
-        "pendulum" => new PartSpec(id, "pendulum", material, at, Props(("length", 0.5), ("start-angle-deg", 30)), [], null),
+        // no bearing (Jolt swings it) until given a #:bearing-radius; then the sim swings it against the bearing's friction
+        "pendulum" => new PartSpec(id, "pendulum", material, at,
+            Props(("length", 0.5), ("start-angle-deg", 30), ("bearing-radius", new SBool(false)),
+                  ("bearing-mu", 0), ("bearing-drag", 0), ("bearing-wear", 0)),
+            [], null),
         "lever" => new PartSpec(id, "lever", material, at,
             Props(("length", 1.0), ("start-angle-deg", 0), ("pivot-fraction", 0.5), ("limit-deg", 18),
                   ("damping", 8.0), ("spring-stiffness", 0), ("spring-rest-deg", 0))

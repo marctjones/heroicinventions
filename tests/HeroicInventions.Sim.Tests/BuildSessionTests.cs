@@ -333,6 +333,37 @@ public class BuildSessionTests
         Assert.Contains("(waterwheel wheel #:at (1 1.5 0) #:radius 1.2 #:width 0.3 #:mass 100 #:load 250 #:buckets 24 #:bucket-volume 0.01 #:spill-deg 120", File.ReadAllText(rkt));
     }
 
+    /// <summary>A pendulum scripted onto a greased bearing dies away inside A₀·exp(−c·t / 2I), I from its rod and ball; round-trips; one without a bearing stays with Jolt.</summary>
+    [Fact]
+    public void GreasedPendulumScriptRunsDownOnTheViscousEnvelopeAndRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "swing");
+        session.Execute("(pendulum bob #:at (0 1 0) #:length 0.5 #:start-angle-deg 10 #:material iron #:bearing-radius 0.01 #:bearing-drag 0.05)");
+        session.Execute("(pendulum loose #:at (1 1 0) #:length 0.5 #:material iron)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 30)");
+        Assert.False(session.LastRun!.Pendulums.ContainsKey("loose"));
+        var p = session.LastRun.Pendulums["bob"];
+
+        double rho = Materials["iron"].Density, L = 0.5, rb = 0.04;
+        double rod = rho * Math.PI * 0.01 * 0.01 * L, ball = rho * 4.0 / 3 * Math.PI * rb * rb * rb;
+        double inertia = rod * L * L / 3 + ball * (L * L + 0.4 * rb * rb);
+        double predicted = 10 * Math.Exp(-0.05 * p.PeakTime / (2 * inertia));
+        Assert.InRange(p.Amplitude * 180 / Math.PI, predicted * 0.99, predicted * 1.01);
+        Assert.True(p.Swings > 20);
+
+        string saved = Path.Combine(TempDir(), "swing.machine");
+        session.SaveFile(saved);
+        var def = MachineDef.Parse(File.ReadAllText(saved));
+        Assert.Equal(0.05, def.Part("bob")!.Number("bearing-drag"));
+        Assert.IsType<SBool>(def.Part("loose")!.Props["bearing-radius"]);
+        string rkt = Path.Combine(TempDir(), "swing.rkt");
+        session.ExportRkt(rkt);
+        string text = File.ReadAllText(rkt);
+        Assert.Contains("(pendulum bob #:at (0 1 0) #:length 0.5 #:start-angle-deg 10 #:material iron #:bearing-radius 0.01 #:bearing-mu 0 #:bearing-drag 0.05 #:bearing-wear 0)", text);
+        Assert.Contains("(pendulum loose #:at (1 1 0) #:length 0.5 #:start-angle-deg 30 #:material iron)", text);
+    }
+
     [Fact]
     public void ExportsCataloguePartsWaterAndLiftsToRacket()
     {

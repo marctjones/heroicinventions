@@ -400,3 +400,65 @@
   (define start (pv (car run)))
   (for ([f run]) (check-= (pv f) start (* 1e-9 start) (format "P V at ~a s" (car f))))
   (check-true (> (max-of run '(supply air-pressure)) 1) "and it was squeezed: over 1 kPa"))
+
+;; ---- #13 friction and wear in a pendulum's bearing (bearing-friction.rkt)
+;; All three pendulums are the same: 1 m of iron rod (1 cm radius) with an
+;; 8 cm ball, on a 1.5 cm pin, let go from 15 degrees. Their mass, moment of
+;; inertia and centre of mass, worked out here from that shape and iron's
+;; density in the material table.
+(require (only-in heroic/materials material-table material-field))
+(define iron-density (material-field (assq 'iron (material-table)) 'density))
+(define pend-len 1.0)
+(define pin 0.015)
+(define rod-mass (* iron-density pi 0.01 0.01 pend-len))
+(define ball-r (max 0.03 (* 0.08 pend-len)))
+(define ball-mass (* iron-density 4/3 pi (expt ball-r 3)))
+(define pend-m (+ rod-mass ball-mass))
+(define pend-I (+ (/ (* rod-mass pend-len pend-len) 3) (* ball-mass (+ (* pend-len pend-len) (* 0.4 ball-r ball-r)))))
+(define pend-d (/ (+ (* rod-mass pend-len 1/2) (* ball-mass pend-len)) pend-m))
+(define mgd (* pend-m 9.81 pend-d))
+(define a0 (* 15 (/ pi 180)))
+(define (deg rad) (* rad (/ 180 pi)))
+(define swing-energy (* mgd (- 1 (cos a0))))
+
+(test-case "Frictionless pin: the pendulum keeps its 15 degrees, swinging at the compound pendulum's period"
+  (define run (simulate 'bearing-friction #:seconds 60 #:step 0.01 #:sample-dt 10))
+  (check-= (final-of run '(perfect amplitude)) 15 1e-3 "deg")
+  (check-= (final-of run '(perfect heat)) 0 1e-12)
+  ;; T = 2 pi sqrt(I / m g d) (1 + A^2/16 + 11 A^4/3072) for a swing of amplitude A
+  (define half-period (* pi (sqrt (/ pend-I mgd)) (+ 1 (/ (* a0 a0) 16) (/ (* 11 (expt a0 4)) 3072))))
+  (check-= (/ (final-of run '(perfect peak-time)) (final-of run '(perfect swings))) half-period 1e-4 "s per swing"))
+
+(test-case "Greased pin: viscous drag c w dies the swing away inside the envelope A0 exp(-c t / 2I)"
+  (define c 0.6)
+  (define run (simulate 'bearing-friction #:seconds 60 #:step 0.01 #:sample-dt 10))
+  (define t (final-of run '(greased peak-time)))
+  (define predicted (* 15 (exp (- (/ (* c t) (* 2 pend-I))))))
+  (check-true (> (final-of run '(greased swings)) 50) "still swinging after a minute")
+  (check-= (final-of run '(greased amplitude)) predicted (* 0.01 predicted) (format "deg at ~a s" t))
+  (check-= (+ (final-of run '(greased heat)) (final-of run '(greased energy))) swing-energy (* 0.002 swing-energy)
+           "J: every joule the swing loses is heat in the pin"))
+
+(test-case "Dry pin: Coulomb friction takes the same angle every swing, stops it, and wears the pin by Archard's law"
+  (define mu 0.4) (define k 1e-4)                      ; k: mm^3 per N m
+  (define n-load (* pend-m 9.81))
+  (define tau (* mu n-load pin))
+  ;; each half swing from A to A' on the other side: m g d (cos A' - cos A) = tau (A + A');
+  ;; it stops at a turning point once m g d sin A can't overcome tau
+  (define (next a)
+    (let loop ([lo 0.0] [hi a] [i 80])
+      (define mid (/ (+ lo hi) 2))
+      (define f (- (* mgd (- (cos mid) (cos a))) (* tau (+ a mid))))
+      (cond [(zero? i) mid] [(> f 0) (loop mid hi (sub1 i))] [else (loop lo mid (sub1 i))])))
+  (define-values (swings rest travelled)
+    (let loop ([a a0] [n 0] [s 0.0])
+      (if (<= (* mgd (sin a)) tau) (values n a s)
+          (let ([a2 (next a)]) (loop a2 (add1 n) (+ s a a2))))))
+  (define run (simulate 'bearing-friction #:seconds 40 #:step 0.01 #:sample-dt 10))
+  (check-equal? (final-of run '(dry swings)) swings)
+  (check-= (final-of run '(dry stopped)) 1 0)
+  (check-= (abs (final-of run '(dry angle))) (deg rest) 0.01 "deg: where the pin holds it")
+  (check-= (final-of run '(dry heat)) (* mgd (- (cos rest) (cos a0))) 0.01 "J: its swing, all turned to heat")
+  (check-= (final-of run '(dry sliding)) (* 1000 pin travelled) 0.05 "mm slid")
+  (define wear (* k n-load pin travelled))
+  (check-= (final-of run '(dry wear)) wear (* 0.002 wear) "mm^3 worn: V = K N s"))
