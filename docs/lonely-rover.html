@@ -117,6 +117,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <li><a href="#routes">Routes to the call</a></li>
       <li><a href="#checked">Checked assumptions</a></li>
       <li><a href="#crater">The world: a crater</a></li>
+      <li><a href="#layers">Planet, map and scenario</a></li>
       <li><a href="#abilities">What the rover can do</a></li>
       <li><a href="#rover-power">The rover's own power</a></li>
       <li><a href="#rules">Physics as the rules</a></li>
@@ -178,11 +179,21 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
     <h2 id="crater">The world: a crater</h2>
     <p>The game takes place in one crater, about 800 m across and 70 m deep, modelled on Victoria crater, which Opportunity explored from 2006 to 2008 (#61). The rim bounds the world: its upper wall is bedrock cliff that the rover can't climb and its backhoe can't cut, so the world is the crater floor and lower slopes, and the view ends at the skyline. The crater's shape also supplies the geography:</p>
     <ul>
-      <li><strong>The slide.</strong> A section of rim wall failed in the storm and buried the cargo at its foot.</li>
+      <li><strong>The slide, played out.</strong> The game opens by watching a storm-weakened section of rim collapse onto the cargo. Wherever the rubble and boulders land is where the crates are buried: nothing is hand-placed (#61, #54).</li>
       <li><strong>Height.</strong> 70 m of relief gives reservoirs a useful head and a reason to build uphill.</li>
       <li><strong>Wind on the floor.</strong> The rover can't reach the rim, so the wind has to come to it. A notch in the rim funnels a regular but variable wind across the floor, strongest in a corridor below the notch, so windmill sites matter. The game needn't explain it, but real physics offers a hook: crater walls drive slope winds, cold air draining down them at night and warm air rising by day (as measured in Gale crater), so the wind turns with the time of day.</li>
       <li><strong>Resources in layers.</strong> Basalt dunes on the floor give dark glass; a light-toned, silica-rich layer in one bay of the wall gives clear glass; ice lingers on the colder, pole-facing wall. Generous-geography tuning (#60) decides how close and how rich these are.</li>
     </ul>
+
+    <h2 id="layers">Planet, map and scenario</h2>
+    <p>A world is three separate layers, so any map can sit on any planet:</p>
+    <ul>
+      <li><strong>Planet</strong> (#38): a config file of numbers fed into unchanged formulas: gravity, surface pressure, gas mix, temperature curves, sunlight, sol length, dust.</li>
+      <li><strong>Map</strong> (#61): the terrain: a heightfield with a material per cell.</li>
+      <li><strong>Scenario</strong> (#60): which planet and map, the cargo and where it starts, the goal, starting stocks and tuning.</li>
+    </ul>
+    <p>The planet never validates the map; the physics settles it, <strong>on screen</strong>, before play begins. Slopes steeper than their angle of repose slide, cliffs taller than their critical height 4c/(ρg)·tan(45° + φ/2) collapse, and open water flows downhill and freezes or boils. A cliff's critical height goes as 1/g, so Mars cliffs can stand 2.6 times taller: a Mars map loaded on Earth visibly crumbles, and an Earth map on Mars stands, overbuilt. Plants and fires read their own zone, not the planet, so a greenhouse works the same anywhere it has light and warmth.</p>
+    <p>The Lonely Rover's opening uses the same settling pass. Its scenario weakens one rim section, as if the storm sublimated the ice cementing it, leaving it just past its critical height, and the game begins with the player watching it fall onto the cargo. The simulation is deterministic, so a scenario test can check that the battery bank always ends up buried, reachable, and pinned by boulders too big for the backhoe.</p>
 
     <h2 id="abilities">What the rover can do</h2>
     <p>Some things are waved away so the game is about the machines, not the rover's chores. These are deliberate departures from physics, stated openly (#63):</p>
@@ -213,7 +224,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <table>
         <thead><tr><th>Phase</th><th>What the player does</th><th>Issues</th></tr></thead>
         <tbody>
-          <tr><td class="name">0. Wake</td><td>The storm clears. The rover sleeps a lot, explores the crater floor, and finds the slide over the cargo. A few crates are exposed: hand tools, gas cylinders, membranes, seeds.</td><td>#59, #61, #62</td></tr>
+          <tr><td class="name">0. Wake</td><td>The storm clears and a weakened rim section collapses onto the cargo, on screen. The rover sleeps a lot, explores the crater floor, and finds the slide over the cargo. A few crates are exposed: hand tools, gas cylinders, membranes, seeds.</td><td>#59, #61, #62</td></tr>
           <tr><td class="name">1. First companions</td><td>Automata made from rope, weights and sand timers, with nothing buried needed.</td><td>#46–#52</td></tr>
           <tr><td class="name">2. Water</td><td>Backhoe out ice-cemented soil and melt it with mirrors inside a membrane tent: the first liquid water.</td><td>#63, #22, #39, #42</td></tr>
           <tr><td class="name">3. Salvage</td><td>Dig out the crates, wash out sediment, and use levers, a crane and grips to free the battery bank from under boulders.</td><td>#53, #54, #55</td></tr>
