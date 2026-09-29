@@ -1114,6 +1114,7 @@ public partial class MachineView : Node3D
         DriveSprings();
         Runtime.Step(dt);
         Refresh();
+        TraceTick(dt);
     }
 
     /// <summary>Rotation and height of every dynamic body — a quick way to confirm Jolt is actually moving them (see HEROIC_DEBUG_PHYSICS).</summary>

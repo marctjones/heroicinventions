@@ -26,6 +26,9 @@ public readonly record struct CameraProfile(Vector3 Eye, Vector3 LookAt, float F
 ///   HEROIC_AUTORUN=1              start running immediately (no click)
 ///   HEROIC_AUTOSELECT=&lt;name&gt;       select a machine at startup
 ///   HEROIC_LIVE_LINK=1            open the Racket live-link TCP server
+///   HEROIC_TRACE=&lt;path&gt;          write a frame per HEROIC_TRACE_DT sim seconds
+///                                 (default 0.1) there, for heroic/godothost
+///   HEROIC_SET="t f v; ..."       set sim fields (target field value) before the first step
 /// </summary>
 public partial class Main : Node3D
 {
@@ -206,6 +209,8 @@ public partial class Main : Node3D
 
     public override void _Ready()
     {
+        // One gravity for both layers: Godot's default is 9.8, the sim core's 9.81.
+        PhysicsServer3D.AreaSetParam(GetWorld3D().Space, PhysicsServer3D.AreaParameter.Gravity, (float)HeroicInventions.Sim.Physics.Gravity);
         _materials = MaterialLibrary.LoadDefault();
         BuildEnvironment();
         ScanMachineFiles();
@@ -230,6 +235,18 @@ public partial class Main : Node3D
 
         if (double.TryParse(OS.GetEnvironment("HEROIC_QUIT_AFTER_SIM_SECONDS"), System.Globalization.CultureInfo.InvariantCulture, out double quitAfter))
             _quitAfterSimSeconds = quitAfter;
+
+        if (_current is not null)
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            foreach (var setting in OS.GetEnvironment("HEROIC_SET").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                if (setting.Split(' ', StringSplitOptions.RemoveEmptyEntries) is [var target, var field, var value])
+                    _current.Runtime.SetField(target, field, double.Parse(value, inv));
+                else GD.PrintErr($"HEROIC_SET: expected 'target field value', got '{setting}'");
+            string tracePath = OS.GetEnvironment("HEROIC_TRACE");
+            if (!string.IsNullOrEmpty(tracePath))
+                _current.StartTrace(tracePath, double.TryParse(OS.GetEnvironment("HEROIC_TRACE_DT"), inv, out double traceDt) ? traceDt : 0.1);
+        }
     }
 
     private void ScanMachineFiles()
@@ -767,6 +784,7 @@ public partial class Main : Node3D
         {
             if (_audit) GD.Print(_current.AuditReport());
             if (_debugPhysics) GD.Print($"[final] {_current.Details}");
+            _current.StopTrace();
             GetTree().Quit();
         }
 

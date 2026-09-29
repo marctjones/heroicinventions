@@ -12,7 +12,7 @@
 ;; HEROIC_AUTORUN headless-Godot smoke test instead.
 (require racket/system racket/port racket/runtime-path racket/path
          racket/string racket/list)
-(provide simulate max-of min-of final-of)
+(provide simulate max-of min-of final-of values-of)
 
 (define-runtime-path repo "../..")
 (define machines-dir (build-path repo "game" "machines"))

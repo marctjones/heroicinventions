@@ -66,34 +66,19 @@
 ;; ---------------------------------------------------------------------------
 ;; Machines checked against numbers worked out by hand (each .rkt file's
 ;; header shows the working). The simhost runs cover the fluid and thermal
-;; side; rigid bodies and the noria's drag exist only in the Godot game, so
-;; those are checked from its headless HEROIC_DEBUG_PHYSICS trace (skipped
-;; where Godot isn't installed).
+;; side; rigid bodies, ropes and the noria's drag exist only in the Godot
+;; game, so those are checked through heroic/godothost, which runs the real
+;; game headless and returns frames of the same shape (skipped where Godot
+;; isn't installed).
 
-(require racket/runtime-path racket/system racket/port racket/list racket/string racket/file)
+(require heroic/godothost racket/list racket/string)
 
-(define-runtime-path game-dir "../../../game")
-(define godot-binary "/Applications/Godot_mono.app/Contents/MacOS/Godot")
-
-;; The state lines "[12.50s] ..." of a headless run of a machine in Godot.
-(define (godot-trace machine sim-seconds)
-  (define out (open-output-string))
-  (parameterize ([current-directory game-dir]
-                 [current-output-port out]
-                 [current-error-port (open-output-nowhere)])
-    (putenv "HEROIC_DEBUG_PHYSICS" "1")
-    (putenv "HEROIC_AUTORUN" "1")
-    (putenv "HEROIC_AUTOSELECT" (symbol->string machine))
-    (putenv "HEROIC_QUIT_AFTER_SIM_SECONDS" (number->string sim-seconds))
-    (putenv "HEROIC_SPEED" "5")
-    (system* godot-binary "--headless" "."))
-  (for/list ([l (in-list (string-split (get-output-string out) "\n"))]
-             #:when (regexp-match? #px"^\\[[0-9.]+s\\] " l))
-    l))
-(define (line-at lines t) ; the trace line stamped t seconds
-  (or (for/first ([l (in-list lines)] #:when (string-prefix? l (format "[~as]" (real->decimal-string t 2)))) l)
-      (error 'line-at "no trace line at ~a s" t)))
-(define (field line rx) (string->number (cadr (regexp-match rx line))))
+;; A run's value of target.field in the frame nearest t seconds.
+(define (value-at run path t)
+  (define key (string->symbol (format "~a.~a" (car path) (cadr path))))
+  (define frame (for/fold ([best (car run)]) ([f (cdr run)])
+                  (if (< (abs (- (car f) t)) (abs (- (car best) t))) f best)))
+  (cadr (assq key (cdr frame))))
 
 (test-case "Hearth engine: the kettle settles at the boiling point its 2 kW can sustain, and the ball at the rpm air drag allows"
   ;; 60 g wood x 15 MJ/kg = 0.9 MJ at 4 kW x 0.5 efficiency -> 2 kW for 225 s.
@@ -281,31 +266,29 @@
   (check-= (final-of run '(gale power)) 28598.34 0.01))
 
 (test-case "Newcomen engine fed by a hearth pumps in Godot, and keeps pumping on stored heat after the fire is out"
-  (when (file-exists? godot-binary)
-    (define lines (godot-trace 'newcomen-hearth 100))
+  (when (godot-available?)
+    (define run (godot-simulate 'newcomen-hearth #:seconds 100 #:sample-dt 10))
     (define bore-stroke-litres (* 1000 (/ 3.141592653589793 4) 0.185 0.185 1.8)) ; 48.4 L a stroke
-    (define at-50 (line-at lines 50)) (define at-100 (line-at lines 100))
-    (check-true (> (field at-50 #px"strokes=(\\d+)") 10))
-    (check-true (> (field at-100 #px"strokes=(\\d+)") (field at-50 #px"strokes=(\\d+)"))
+    (check-true (> (value-at run '(cylinder strokes) 50) 10))
+    (check-true (> (final-of run '(cylinder strokes)) (value-at run '(cylinder strokes) 50))
                 "still stroking after the fire went out at 48 s")
     ;; the cistern holds one pump bore x stroke per completed stroke; the
     ;; stroke counter runs up to two ahead of the delivered water (a stroke
     ;; is counted as it starts)
-    (define delivered (/ (field at-100 #px"cistern=(\\d+)L") bore-stroke-litres))
-    (define strokes (field at-100 #px"strokes=(\\d+)"))
+    (define delivered (/ (final-of run '(cistern water)) bore-stroke-litres))
+    (define strokes (final-of run '(cylinder strokes)))
     (check-true (< (- strokes 2.5) delivered (+ strokes 0.5))
                 (format "~a strokes but ~a bore-stroke volumes in the cistern" strokes delivered))))
 
 (test-case "Post-and-lintel crane: the 116 kg counterweight (63.7 kg.m) beats the load side (about 46 kg.m) and lifts the load"
-  (when (file-exists? godot-binary)
-    (define lines (godot-trace 'post-and-lintel-crane 20))
-    (define end (last lines))
+  (when (godot-available?)
+    (define run (godot-simulate 'post-and-lintel-crane #:seconds 20 #:sample-dt 1))
     ;; the beam runs to its 15 degree stop
-    (check-= (field end #px"beam pos=\\([^)]*\\) rotZ=(-?[0-9.]+)") 15.0 0.3)
+    (check-= (final-of run '(beam rot-z)) 15.0 0.3)
     ;; the load began 1.11 m up (1 m pivot + 12.5 mm + 10 cm); at the stop it
     ;; can be at most 1.8 sin 15 + 0.109 above the pivot, i.e. 1.575 m, and has
     ;; slid a little inward down the tilt: 1.5 m or more
-    (define y (field end #px"load pos=\\([^,]*,([0-9.]+),"))
+    (define y (final-of run '(load y)))
     (check-true (< 1.45 y 1.58) (format "load height ~a" y))))
 
 (test-case "Water mill race: weir, Manning brook, and the wheel's lift, at the wheel's hand-solved speed"
@@ -324,13 +307,44 @@
   (check-= (final-of run '(tailrace flow)) 3.413 0.02))
 
 (test-case "Water mill race: in Godot the current on the paddles turns the wheel at the solved 3 rpm"
-  (when (file-exists? godot-binary)
-    (define lines (godot-trace 'water-mill-race 60))
-    (define (angle t) (field (line-at lines t) #px"mill-wheel pos=\\([^)]*\\) rotZ=(-?[0-9.]+)"))
-    ;; degrees turned in 1 s at 55 s, unwrapped: 3 rpm = 18 deg/s
-    (define turned (let ([d (- (angle 56) (angle 55))]) (cond [(< d -180) (+ d 360)] [(> d 180) (- d 360)] [else d])))
-    (check-= (/ turned 360 (/ 1 60)) 3.0 0.15)
-    (check-= (field (line-at lines 55) #px"raise ([0-9.]+)rpm") 3.0 0.15)))
+  (when (godot-available?)
+    (define run (godot-simulate 'water-mill-race #:seconds 60 #:sample-dt 5))
+    ;; 3 rpm = 0.31416 rad/s
+    (check-= (* (value-at run '(mill-wheel omega) 55) (/ 60 (* 2 pi))) 3.0 0.15)
+    (check-= (value-at run '(raise rpm) 55) 3.0 0.15)))
+
+(test-case "Fall and swing, in Jolt: a block falls at g, and a pendulum keeps Huygens' time"
+  (when (godot-available?)
+    (define run (godot-simulate 'fall-and-swing #:seconds 10.5 #:sample-dt (/ 1 120)))
+    ;; The engine steps at 120 Hz by symplectic Euler, and damps every body
+    ;; by 0.1 per second (Godot's default; not physics -- #33 is to replace
+    ;; it with air drag). The block starts one tick in. So, tick by tick,
+    ;; v <- v (1 - 0.1 dt) - g dt, y <- y + v dt: after the first tick it
+    ;; accelerates at g(1 - c dt) = 9.8018 m/s2, and stands at 3.8134 m at
+    ;; 0.5 s (plain 5 - g t^2/2 would be 3.7738 m, the damping costing 4 cm).
+    (define dt 1/120)
+    (define-values (v y)
+      (for/fold ([v 0.0] [y 5.0]) ([n (in-range 2 61)])
+        (define v* (- (* v (- 1 (* 0.1 dt))) (* 9.81 dt)))
+        (values v* (+ y (* v* dt)))))
+    (check-= (value-at run '(drop vy) (* 2 dt)) (- (* 9.81 dt)) 1e-6 "one tick of g: the engine's gravity is the sim's 9.81")
+    (check-= (/ (- (value-at run '(drop vy) (* 2 dt)) (value-at run '(drop vy) (* 3 dt))) dt)
+             (* 9.81 (- 1 (* 0.1 dt))) 5e-3 "g less a tick's damping")
+    (check-= (value-at run '(drop y) 0.5) y 2e-3)
+    (check-= (value-at run '(drop vy) 0.5) v 2e-3)
+    ;; The pendulum: I/(m d) = 0.979641 m for a 1 m, 1 cm rod and an 8 cm
+    ;; ball of one metal, so 2 pi sqrt(0.979641/9.81) = 1.985541 s for small
+    ;; swings, x (1 + theta^2/16) = 1.986486 s from 5 degrees (Huygens). The
+    ;; damping takes e^(-0.1 T / 2) = 0.9055 off each swing's height.
+    (define ts (times-of run))
+    (define zs (values-of run '(swing rot-z)))
+    (define crossings ; downward through the vertical, interpolated between frames
+      (for/list ([t0 ts] [t1 (cdr ts)] [a zs] [b (cdr zs)] #:when (and (> a 0) (<= b 0)))
+        (+ t0 (* (- t1 t0) (/ a (- a b))))))
+    (check-= (- (second crossings) (first crossings)) 1.986486 1e-3 "the first swing's period")
+    (define peaks
+      (for/list ([a zs] [b (cdr zs)] [c (cddr zs)] #:when (and (>= b a) (> b c) (> b 0))) b))
+    (check-= (/ (second peaks) (first peaks)) (exp (* -0.1 1.9865 1/2)) 2e-3 "each swing's height, damped")))
 
 (test-case "Water clock: a constant-head reservoir makes the receiver rise at a steady 2.967 mm/s"
   ;; surface settles where spill (0.5 - Qout L/s over a 20 cm lip) and
@@ -356,13 +370,6 @@
   (check-= (final-of run '(baths water)) 922.5 2.0)
   (check-= (final-of run '(castellum level)) 77.55 0.2)
   (check-true (> (final-of run '(to-fountains flow)) (final-of run '(to-baths flow))) "the lowest pipe gets most"))
-
-;; A run's value of target.field in the frame nearest t seconds.
-(define (value-at run path t)
-  (define key (string->symbol (format "~a.~a" (car path) (cadr path))))
-  (define frame (for/fold ([best (car run)]) ([f (cdr run)])
-                  (if (< (abs (- (car f) t)) (abs (- (car best) t))) f best)))
-  (cadr (assq key (cdr frame))))
 
 (test-case "Sluice gate: all of the spring runs under it, at the orifice head Q = 0.6 w a sqrt(2gh) predicts"
   ;; 20 L/s through a 30 cm wide slot a = opening x 1 m needs

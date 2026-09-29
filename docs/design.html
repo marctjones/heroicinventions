@@ -427,6 +427,11 @@ flowchart LR
   (define run (simulate herons-fountain #:seconds 60))
   (check-true (> (max-of run '(nozzle jet-height)) 0.0)))</code></pre>
     <p><code>simulate</code> (<code>heroic/simhost</code>) runs the machine in <code>HeroicInventions.SimHost</code>, a console host for the C# solvers with no Godot, and returns sampled telemetry.</p>
+    <p>Rigid bodies, joints, ropes and contacts live in Jolt, inside the game, so they get a second runner. <code>godot-simulate</code> (<code>heroic/godothost</code>, M10 #26) runs the real game headless with <code>--fixed-fps</code>, stepping exactly as in play but as fast as the machine allows, and returns frames of the same shape. Each frame adds every body's centre of mass, velocity, rotation, hinge angle, spin and contacts, every rope's tension, and the scene's kinetic and potential energy, so <code>final-of</code>, <code>max-of</code> and <code>min-of</code> work on both:</p>
+<pre><code>(test-case "a pendulum keeps Huygens' time"
+  (define run (godot-simulate 'fall-and-swing #:seconds 10 #:sample-dt 1/120))
+  ...)</code></pre>
+    <p>Its first run found two things the eye had missed: Jolt's gravity was Godot's default 9.8 m/s² against the sim core's 9.81 (now one value, set from the sim), and every body carries Godot's default damping of 0.1 per second, a stand-in for air drag that the tests now state openly until air drag (#33) replaces it.</p>
 
     <h2 id="godot"><span class="num">IV</span>Godot layer</h2>
     <p>Godot handles everything that runs every frame and must keep a steady frame rate. It works entirely from <code>.machine</code> data and generated meshes, so it has no dependency on Racket.</p>
