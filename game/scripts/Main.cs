@@ -56,6 +56,7 @@ public partial class Main : Node3D
         ["water-mill-race"] = new(new Vector3(5f, 3.5f, 13f), new Vector3(5f, 0.9f, 0), 55),
         ["water-clock"] = new(new Vector3(0, 1.4f, 5.0f), new Vector3(-0.2f, 1.0f, 0), 50),
         ["castellum-aquae"] = new(new Vector3(10.5f, 5.0f, 22f), new Vector3(10.5f, 2.6f, 0), 55),
+        ["fire-and-water"] = new(new Vector3(0.9f, 2.4f, 6.0f), new Vector3(0.9f, 0.4f, 0), 50),
         ["sluice-demo"] = new(new Vector3(4.5f, 3.2f, 9.5f), new Vector3(4.2f, 0.8f, -0.5f), 55),
     };
     private static readonly (double Scale, string Label)[] Speeds =
@@ -101,6 +102,7 @@ public partial class Main : Node3D
         ["water-clock"] = "Water Clock (Clepsydra)",
         ["castellum-aquae"] = "Castellum Aquae",
         ["sluice-demo"] = "Sluice Gate",
+        ["fire-and-water"] = "Fire and Water",
     };
 
     private static readonly Dictionary<string, string> Descriptions = new()
@@ -127,6 +129,7 @@ public partial class Main : Node3D
         ["water-mill-race"] = "A spring fills a header tank on a pier, spills over its weir (6.25 cm head) into a stone brook that winds through three bends and runs 2 cm deep at 1.3 m/s, drops into a millpond, and leaves over a tail weir. The brook's current on its paddles turns a small noria standing on its own posts. The wheel settles at 3 rpm, where the paddles' drag equals the weight of water it lifts, and raises 4.6 L/s to a flume on a pier.",
         ["water-clock"] = "A Ctesibian clepsydra. A spring keeps the reservoir brimming over its lip, so the pressure driving the outlet never changes; the outlet fills a tall receiver from the top, so the far end holds steady too. The receiver level therefore climbs at a constant 2.97 mm/s (0.1187 L/s over 0.04 m2): the water level is the time. There is no float here; the level is read off the water itself.",
         ["castellum-aquae"] = "A Roman castellum aquae, as Vitruvius describes: an aqueduct on an arcade of piers ends in a distribution tank with three pipes at three heights, fountains lowest, baths above, houses highest. The 6.7 L/s supply is less than the 9 L/s all three could carry, so the level falls past the houses' pipe and settles at 72 cm, where the fountains (3.7 L/s) and baths (3.0 L/s) take everything and the houses go dry.",
+        ["fire-and-water"] = "Water meets fire. Left: a cistern spills 20 g/s onto a 20 kW wood fire. Boiling a kilogram of 20 C water away takes 2.59 MJ, so the fire can boil off only 7.7 g/s; the rest soaks in, and when the soaked water outweighs the fuel left (at about 150 s) the fire drowns. Until then all its heat goes into the water, none into the pot. Right: a copper of 4 kg at 90 C takes 2 L of 20 C feed water and mixes to 66.7 C; its 2 kW stove needs about 7 minutes to bring it back to the boil.",
         ["sluice-demo"] = "A sluice gate on a mill race. A 20 L/s spring fills a head pool; a wooden gate 1 m tall, raised 5 cm, lets the water out under its lower edge as a jet, Q = 0.6 x slot area x sqrt(2 g h). All the spring must pass the slot, so the pool rises until the water stands 25.2 cm over the slot's middle. Below, the race runs into a reach that drains over a floor-level outfall into a pond. Shut the gate (gate.opening 0) and the race runs dry at once, the reach drains away over two minutes, and the pool backs up and spills over its waste weir.",
     };
 

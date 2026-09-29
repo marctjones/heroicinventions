@@ -13,6 +13,7 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
     public double HeatInput { get; set; } = heatInputW;             // W, from the fire
     public double HeatLossCoefficient { get; init; } = 2.0;         // W/K to surrounding air at 20 °C
     public double HeatDelivered { get; private set; }               // J, cumulative — the energy-dashboard's "input" term
+    public double HeatLost { get; private set; }                    // J, cumulative, to the air
 
     public double AbsolutePressure => SaturationPressure(Temperature);
     public double GaugePressure => Math.Max(0, AbsolutePressure - Physics.AtmosphericPressure);
@@ -28,13 +29,27 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
         HeatDelivered += HeatInput * dt;
         if (IsDry) return;
         double steamOut = Math.Min(steamOutflowKgPerS * dt, WaterMass);
-        double netHeat = HeatInput * dt
-                         - HeatLossCoefficient * (Temperature - 20) * dt
-                         - steamOut * Physics.LatentHeatVaporization;
+        double lost = HeatLossCoefficient * (Temperature - 20) * dt;
+        HeatLost += lost;
+        double netHeat = HeatInput * dt - lost - steamOut * Physics.LatentHeatVaporization;
         WaterMass -= steamOut;
         if (WaterMass > 0)
             Temperature += netHeat / (WaterMass * Physics.WaterSpecificHeat);
     }
+
+    /// <summary>
+    /// Pour in feed water. It mixes at once: the boiler's heat is shared
+    /// over the larger mass, T = (M·T + m·Tfeed) / (M + m).
+    /// </summary>
+    public void AddWater(double kg, double temperatureC)
+    {
+        if (kg <= 0) return;
+        Temperature = (WaterMass * Temperature + kg * temperatureC) / (WaterMass + kg);
+        WaterMass += kg;
+        WaterFed += kg;
+    }
+
+    public double WaterFed { get; private set; }                    // kg of feed water taken in
 
     /// <summary>
     /// Saturation pressure of water (Pa) from the Antoine equation, using the

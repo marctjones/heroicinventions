@@ -286,6 +286,30 @@ public class BuildSessionTests
         Assert.Contains("(sluice gate #:at (0.25 0.5 0) #:on race #:height 0.5 #:opening 0.1 #:material bronze)", File.ReadAllText(rkt));
     }
 
+    /// <summary>A channel run off the scene #:onto a boiler feeds it, and the clause round-trips.</summary>
+    [Fact]
+    public void ChannelOntoABoilerFeedsItAndRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "fed");
+        session.Execute("(tank feed #:at (0 1 0) #:area 0.02 #:height 0.4 #:water 0.004)");
+        session.Execute("(boiler copper #:at (1 0.2 0) #:radius 0.2 #:height 0.4 #:water 4 #:temperature 90)");
+        session.Execute("(channel chute feed.outlet off #:end (1 0.8 0) #:width 0.1 #:onto copper)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 60)");
+        var copper = session.LastRun!.Boilers["copper"];
+        Assert.True(copper.WaterFed > 0.1, $"fed {copper.WaterFed} kg");
+        // everything it holds is the old 4 kg at 90 C and the fed water at 20 C, less what it lost to the air
+        double mixed = (4 * 90 + copper.WaterFed * 20) / (4 + copper.WaterFed);
+        Assert.Equal(mixed, copper.Temperature + copper.HeatLost / ((4 + copper.WaterFed) * 4186), precision: 6);
+
+        string saved = Path.Combine(TempDir(), "fed.machine");
+        session.SaveFile(saved);
+        Assert.Equal("copper", MachineDef.Parse(File.ReadAllText(saved)).Channels.Single().Onto);
+        string rkt = Path.Combine(TempDir(), "fed.rkt");
+        session.ExportRkt(rkt);
+        Assert.Contains("#:onto copper)", File.ReadAllText(rkt));
+    }
+
     [Fact]
     public void ExportsCataloguePartsWaterAndLiftsToRacket()
     {

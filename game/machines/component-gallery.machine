@@ -23,5 +23,5 @@
   (pipe drain (from upper outlet) (to lower inlet) (conductance 0.0004) (jet #f) (srcloc "racket/machines/component-gallery.rkt" 39 2))
   (connect (kettle steam) (ball steam-in) (srcloc "racket/machines/component-gallery.rkt" 54 2))
   (inflow spring (into header) (flow 0.003) (srcloc "racket/machines/component-gallery.rkt" 58 2))
-  (channel brook (from header spill) (to pond inlet) (end) (via (5.0 2.0) (7.0 -1.5) (9.0 1.0)) (width 0.3) (length #f) (srcloc "racket/machines/component-gallery.rkt" 64 2))
-  (channel tailrace (from pond spill) (to off) (end 13.0 0.3 0.0) (via) (width 0.3) (length #f) (srcloc "racket/machines/component-gallery.rkt" 67 2)))
+  (channel brook (from header spill) (to pond inlet) (end) (via (5.0 2.0) (7.0 -1.5) (9.0 1.0)) (width 0.3) (length #f) (onto #f) (srcloc "racket/machines/component-gallery.rkt" 64 2))
+  (channel tailrace (from pond spill) (to off) (end 13.0 0.3 0.0) (via) (width 0.3) (length #f) (onto #f) (srcloc "racket/machines/component-gallery.rkt" 67 2)))

@@ -73,7 +73,7 @@ public sealed record SourceSpec(string Id, string Into, double Flow, SourceLocat
 
 /// <summary>An open channel from a tank's port to another's (To), or out of the scene to End.</summary>
 public sealed record ChannelSpec(string Id, PortRef From, PortRef? To, Vec3? End, double Width, double? Length, SourceLocation? Location,
-                          IReadOnlyList<(double X, double Z)>? Via = null);
+                          IReadOnlyList<(double X, double Z)>? Via = null, string? Onto = null);
 
 /// <summary>A Newcomen atmospheric cylinder driving Piston, with steam from Boiler.</summary>
 public sealed record CylinderSpec(string Id, string Piston, string Boiler, double InjectionTemperature, SourceLocation? Location);
@@ -171,7 +171,8 @@ public sealed class MachineDef
                     loc,
                     c.Field("via") is { } via
                         ? via.Items.Skip(1).OfType<SList>().Select(p => (Num(p, 0, loc), Num(p, 1, loc))).ToList()
-                        : []);
+                        : [],
+                    c.Field("onto")?.Items.ElementAtOrDefault(1) is SSymbol onto ? onto.Name : null);
             }).ToList(),
             Cylinders = clauses.Where(c => c.Head == "atmospheric-cylinder").Select(c =>
             {

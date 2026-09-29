@@ -233,7 +233,10 @@ public sealed class BuildSession
                 ? (Num(xz.Items[0], "channel"), Num(xz.Items[1], "channel"))
                 : throw new FormatException("channel #:via: expected ((x z) ...)")).ToList()
             : null;
-        Document.AddChannel(id, from, to, end, width, length, via);
+        string? onto = Kw(cmd, "onto") is { } o
+            ? o is SSymbol os ? os.Name : throw new FormatException("channel #:onto needs a hearth or boiler name")
+            : null;
+        Document.AddChannel(id, from, to, end, width, length, via, onto);
         return $"channel {id}: {from} -> {(to is { } t ? t.ToString() : "off")}";
     }
 

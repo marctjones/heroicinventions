@@ -15,4 +15,4 @@
   (pipe to-baths (from castellum baths-out) (to baths inlet) (conductance 0.0008) (jet #f) (srcloc "racket/machines/castellum-aquae.rkt" 41 2))
   (pipe to-houses (from castellum houses-out) (to houses inlet) (conductance 0.0005) (jet #f) (srcloc "racket/machines/castellum-aquae.rkt" 42 2))
   (inflow spring (into head-tank) (flow 0.0067) (srcloc "racket/machines/castellum-aquae.rkt" 25 2))
-  (channel aqueduct (from head-tank spill) (to castellum inlet) (end) (via) (width 0.3) (length #f) (srcloc "racket/machines/castellum-aquae.rkt" 33 2)))
+  (channel aqueduct (from head-tank spill) (to castellum inlet) (end) (via) (width 0.3) (length #f) (onto #f) (srcloc "racket/machines/castellum-aquae.rkt" 33 2)))

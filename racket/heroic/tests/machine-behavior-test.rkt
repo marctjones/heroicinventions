@@ -242,3 +242,56 @@
   ;; and the pool backs up to the waste weir: 80 cm + 11.52 cm over the sill, 20 L/s spilling
   (check-= (final-of run '(waste-weir flow)) 20.0 0.01)
   (check-= (final-of run '(pool level)) (- 101.52 0.04) 0.02))
+
+;; ---- #10 quenching and #11 feed water (fire-and-water.rkt)
+(define quench-heat (+ (* 4186 80) 2.257e6))   ; J/kg: 20 C water warmed and boiled away
+
+;; The first time t in a run at which target.field reaches at least v.
+(define (first-time-at-least run path v)
+  (define key (string->symbol (format "~a.~a" (car path) (cadr path))))
+  (for/first ([f run] #:when (>= (cadr (assq key (cdr f))) v)) (car f)))
+
+(test-case "Quench: water faster than a fire can boil it off soaks in and drowns it"
+  (define q 0.020) (define p 20000) (define fuel0 2) (define density 15e6)
+  ;; what the cistern holds over its 5 cm lip while passing q: h = (q / 1.705 b)^(2/3)
+  (define stored (* 0.01 (expt (/ (/ q 1000) (* 1.705 0.05)) 2/3) 1000))
+  (define boil-rate (/ p quench-heat))
+  (define predicted (/ (+ fuel0 stored) (+ (- q boil-rate) (/ p density))))
+  (define run (simulate 'fire-and-water #:seconds 200 #:step 0.01 #:sample-dt 0.5))
+  (define out (first-time-at-least run '(campfire drowned) 1))
+  (check-= out predicted (* 0.01 predicted) (format "drowned at ~a s, predicted ~a s" out predicted))
+  ;; drowned, it burns no more: fuel burned is what p/density burns until then
+  (check-= (final-of run '(campfire burned)) (* (/ p density) out) 0.005)
+  ;; everything it boiled off took all its heat: the pot never got warmer than it cools
+  (check-true (< (max-of run '(pot temperature)) 20.5))
+  (check-= (final-of run '(campfire boiled)) (/ (* p out) quench-heat) 0.02))
+
+(test-case "Quench: a fire hot enough to boil off all that arrives stays lit, heating with what's left"
+  (define run (simulate 'fire-and-water #:seconds 100 #:step 0.01 #:sample-dt 5 #:set '((campfire power 60000))))
+  (check-= (final-of run '(campfire drowned)) 0 1e-9)
+  (check-= (final-of run '(campfire soak)) 0 (* 0.020 0.01) "it boils every drop, within the one step's water landing after it burns")
+  (check-= (final-of run '(pot fire)) (* (- 60000 (* 0.020 quench-heat)) 0.3) 1.0 "W to the pot")
+  (check-= (final-of run '(campfire burned)) (* (/ 60000 15e6) 100) 1e-6))
+
+(test-case "Feed water mixes into a boiler by energy balance"
+  ;; stove out: 4 kg at 90 C takes the feed tank's 2 L (all it holds over its lip) at 20 C
+  (define c 4186)
+  (define run (simulate 'fire-and-water #:seconds 60 #:step 0.01 #:sample-dt 5 #:set '((stove fuel 0))))
+  (define fed (final-of run '(copper fed)))
+  (check-= fed 2.0 0.002 "kg: the feed tank empties to its lip")
+  (define mixed (/ (+ (* 4 90) (* 2 20)) 6))
+  ;; the copper's only other exchange is what it lost to the air
+  (define lost-k (/ (* 1000 (final-of run '(copper lost))) (* (+ 4 fed) c)))
+  (check-= (+ (final-of run '(copper temperature)) lost-k) mixed 0.01
+           (format "mixes to ~a C, less the ~a K lost to the air" mixed lost-k))
+  (check-true (< lost-k 0.5)))
+
+(test-case "Feed water: the fire needs the heat to warm it before the copper boils again"
+  ;; 6 kg from 20 C to 100 C, less the 4 kg at 90 C it had: 837.2 kJ, at 5 kW x 0.4 = 2 kW
+  (define c 4186)
+  (define need (- (* 6 c 80) (* 4 c 70)))
+  (define run (simulate 'fire-and-water #:seconds 600 #:step 0.01 #:sample-dt 1))
+  (define t100 (first-time-at-least run '(copper temperature) 100))
+  (define lost (* 1000 (final-of (simulate 'fire-and-water #:seconds t100 #:step 0.01 #:sample-dt 1) '(copper lost))))
+  (check-= t100 (/ (+ need lost) 2000) 1.0 (format "boils again at ~a s" t100))
+  (check-true (< (/ need 2000) t100 (/ need (- 2000 (* 2 80)))) "between no loss and the worst-case loss"))

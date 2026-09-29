@@ -52,6 +52,8 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
 
     /// <summary>A sluice gate across the head of the channel, if it has one.</summary>
     public SluiceGate? Gate { get; set; }
+    /// <summary>Where water run off the scene lands, if on something that cares (m³ each step).</summary>
+    public Action<double>? Pour { get; set; }
 
     public double Flow { get; private set; }       // m³/s
     public double Depth { get; private set; }      // m, running down the channel
@@ -93,6 +95,7 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
         double moved = Math.Max(0, Math.Min(q * dt, Math.Min(available, room)));
         From.WaterVolume -= moved;
         if (To is not null) To.WaterVolume += moved;
+        else Pour?.Invoke(moved);
         Flow = moved / dt;
         Depth = NormalDepth(Flow, Width, Slope);
         Velocity = Depth > 0 ? Flow / (Width * Depth) : 0;

@@ -243,3 +243,54 @@ public class OpenChannelTests
         Assert.Equal(Channel.WeirFlow(0.3, 0.1), race.Flow, precision: 9);
     }
 }
+
+public class QuenchAndFeedTests
+{
+    private static readonly double QuenchHeat = 4186 * 80 + 2.257e6;
+
+    /// <summary>
+    /// Water poured faster than the fire boils it off soaks in at
+    /// q − P/L; the fuel burns down at P/ρ; the fire drowns where they
+    /// meet, t = F0 / (q − P/L + P/ρ). Until then it heats nothing.
+    /// </summary>
+    [Fact]
+    public void AFireDrownsWhenTheWaterSoakedInOutweighsTheFuelLeft()
+    {
+        var pot = new Boiler(1, heatInputW: 0);
+        var fire = new Hearth(pot, 20000, 2, "wood", 0.3);
+        double q = 0.02, dt = 0.01, t = 0;
+        while (fire.Lit && t < 1000)
+        {
+            fire.Douse(q * dt);
+            fire.Step(dt);
+            Assert.Equal(0, pot.HeatInput, precision: 9);
+            t += dt;
+        }
+        double predicted = 2 / (q - 20000 / QuenchHeat + 20000 / 15e6);
+        Assert.True(fire.Drowned);
+        Assert.InRange(t, predicted - 0.05, predicted + 0.05);
+        Assert.Equal(fire.Doused, fire.Soak + fire.Boiled, precision: 9);
+    }
+
+    [Fact]
+    public void AFireThatBoilsOffEverythingHeatsWithWhatIsLeft()
+    {
+        var pot = new Boiler(1, heatInputW: 0);
+        var fire = new Hearth(pot, 60000, 2, "wood", 0.3);
+        fire.Douse(0.02 * 0.01);
+        fire.Step(0.01);
+        Assert.False(fire.Drowned);
+        Assert.Equal(0, fire.Soak, precision: 12);
+        Assert.Equal((60000 - 0.02 * QuenchHeat) * 0.3, pot.HeatInput, precision: 6);
+    }
+
+    [Fact]
+    public void FeedWaterMixesByMassWeightedTemperature()
+    {
+        var copper = new Boiler(4, temperatureC: 90, heatInputW: 0);
+        copper.AddWater(2, 20);
+        Assert.Equal(6, copper.WaterMass, precision: 12);
+        Assert.Equal((4 * 90 + 2 * 20) / 6.0, copper.Temperature, precision: 12);
+        Assert.Equal(2, copper.WaterFed, precision: 12);
+    }
+}

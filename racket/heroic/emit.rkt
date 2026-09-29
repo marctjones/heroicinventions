@@ -92,6 +92,7 @@
                           (via ,@(for/list ([p (channel-spec-via c)]) (for/list ([x p]) (num "channel #:via" x))))
                           (width ,(num (format "channel ~a #:width" id) (channel-spec-width c)))
                           (length ,(let ([l (channel-spec-length c)]) (if l (num "channel #:length" l) #f)))
+                          (onto ,(channel-spec-onto c))
                           ,(loc->sexp (channel-spec-loc c) root)))
             ,@(for/list ([c (machine-cylinders m)])
                 `(atmospheric-cylinder ,(cylinder-spec-id c) (piston ,(cylinder-spec-piston c))

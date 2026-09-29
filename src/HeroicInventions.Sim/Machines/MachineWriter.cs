@@ -106,6 +106,7 @@ public static class MachineWriter
             Tagged("via", (c.Via ?? []).Select(p => (SExpr)List(Num(p.X), Num(p.Z))).ToArray()),
             Tagged("width", Num(c.Width)),
             Tagged("length", NumOrFalse(c.Length)),
+            Tagged("onto", SymOrFalse(c.Onto)),
             SrcLoc(c.Location));
 
     private static SExpr CylinderClause(CylinderSpec c) =>

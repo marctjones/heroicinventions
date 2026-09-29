@@ -49,7 +49,8 @@ public static class RktExporter
             sb.Append($"  (channel {c.Id} #:from {c.From.Part}.{c.From.Port} " +
                       (c.To is { } to ? $"#:to {to.Part}.{to.Port}" : $"#:to off #:end {Vec(c.End!.Value)}") +
                       (c.Via is { Count: > 0 } via ? $" #:via ({string.Join(" ", via.Select(p => $"({F(p.X)} {F(p.Z)})"))})" : "") +
-                      $" #:width {F(c.Width)}" + (c.Length is { } len ? $" #:length {F(len)}" : "") + ")\n");
+                      $" #:width {F(c.Width)}" + (c.Length is { } len ? $" #:length {F(len)}" : "") +
+                      (c.Onto is { } onto ? $" #:onto {onto}" : "") + ")\n");
         foreach (var c in m.Cylinders)
             sb.Append($"  (atmospheric-cylinder {c.Id} #:piston {c.Piston} #:steam-from {c.Boiler} #:injection-temperature {F(c.InjectionTemperature)})\n");
 

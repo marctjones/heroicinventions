@@ -34,6 +34,7 @@ public partial class MachineView
         public required MeshInstance3D Fall;
         public required float FallTop;         // world height the water leaves the end at
         public required Tank? Into;            // what it spills into, if anything in the scene
+        public float? Onto;                    // or the world height of the fire or boiler it pours onto
         public required Vector3 FallAt;        // world point just inside that tank's wall
         public required Vector3 Along;         // world direction of flow, level
         public required List<(MeshInstance3D node, float lateral)> Flecks;
@@ -77,6 +78,8 @@ public partial class MachineView
                 var end = At(i + 1) + (i + 2 < course.Count ? dir * reach : Vector3.Zero);
                 bool final = i + 2 == course.Count;
                 var trough = MakeTrough(start, end, (float)channel.Width, final ? channel.To : null, end + dir * 0.05f);
+                if (final && spec.Onto is { } onto && Runtime.Def.Part(onto) is { } target)
+                    trough.Onto = (float)(target.At.Y + (target.Kind == "boiler" ? target.Number("height") : 0.1));
                 _troughs.Add((channel, null, trough));
                 if (i == 0) AddLabel(spec.Id, (start + end) / 2 + Vector3.Up * (trough.Width / 3 + 0.15f));
                 if (i == 0 && channel.Gate is { } gate) BuildGate(gate, trough);
@@ -224,8 +227,8 @@ public partial class MachineView
             }
 
             // spilling off the end into a lower pool
-            float bottom = t.Into is { } into ? (float)into.SurfaceElevation : float.NaN;
-            bool falls = running && t.Into is not null && t.FallTop - bottom > 0.01f;
+            float bottom = t.Into is { } into ? (float)into.SurfaceElevation : t.Onto ?? float.NaN;
+            bool falls = running && !float.IsNaN(bottom) && t.FallTop - bottom > 0.01f;
             t.Fall.Visible = falls;
             if (falls)
             {

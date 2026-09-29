@@ -54,7 +54,8 @@
 ;; from: (list tank port); to: (list tank port) or 'off; end: (list x y z) or #f;
 ;; via: list of (x z) waypoints the channel bends through, in order; length: m or #f
 ;; (worked out from the tanks' positions and the waypoints).
-(struct channel-spec (id from to end via width length loc) #:transparent)
+;; onto: a hearth or boiler the water falls onto at #:end, or #f
+(struct channel-spec (id from to end via width length loc onto) #:transparent)
 
 ;; A sluice with no #:at stands at the lip where its channel leaves its
 ;; tank: on the tank's wall, facing the way the channel runs.
@@ -157,7 +158,7 @@
   (struct iinfo (id into))           ; an inflow
   (struct hinfo (id heats))          ; a hearth: the boiler it heats
   (struct sinfo (id on))             ; a sluice gate: the channel it stands across
-  (struct chinfo (id from to))       ; a channel: from a ref, to a ref or #f (off the scene)
+  (struct chinfo (id from to onto))  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
 
   (define known-materials (material-ids))
 
@@ -537,20 +538,24 @@
     ;; weir over the lip; how deep and fast it runs, the slope and width.
     ;; #:via ((x z) ...) bends it through waypoints, so a stream can follow
     ;; any course; #:length defaults to the path between the tanks' walls.
+    ;; A channel run #:to off can pour #:onto a hearth (drowning it) or a
+    ;; boiler (feeding it cold water) standing at its #:end.
     (pattern (channel id:id
                       (~alt (~once (~seq #:from from:ref))
                             (~once (~seq #:to (~or* (~and off-kw off) to:ref)))
                             (~optional (~seq #:end end:vec3))
                             (~optional (~seq #:via (via:xz ...)))
                             (~once (~seq #:width width-v:expr))
-                            (~optional (~seq #:length len-v:expr))) ...)
+                            (~optional (~seq #:length len-v:expr))
+                            (~optional (~seq #:onto onto:id))) ...)
       #:fail-when (and (attribute off-kw) (not (attribute end)) #'id) "a channel running off the scene needs an #:end (x y z)"
-      #:attr info (chinfo #'id #'from (and (attribute to) #'to))
+      #:fail-when (and (attribute onto) (not (attribute off-kw)) #'onto) "only a channel running #:to off can pour #:onto a hearth or boiler"
+      #:attr info (chinfo #'id #'from (and (attribute to) #'to) (attribute onto))
       #:with expr #`(channel-spec 'id (list 'from.part-id 'from.port-id)
                                   (~? (list 'to.part-id 'to.port-id) 'off)
                                   (~? (list end.x end.y end.z) #f)
                                   (~? (list (list via.x via.z) ...) '())
-                                  width-v (~? len-v #f) #,(loc-of this-syntax)))
+                                  width-v (~? len-v #f) #,(loc-of this-syntax) (~? 'onto #f)))
 
     (pattern (mesh a:id b:id)
       #:attr info (minfo #'a #'b)
@@ -735,7 +740,13 @@
       (for ([r (filter values (list (chinfo-from c) (chinfo-to c)))])
         (define-values (p kind) (resolve r))
         (unless (eq? (pinfo-kind p) 'tank)
-          (fail (format "a channel runs between tanks' ports; ~a is a ~a" (syntax-e r) (pinfo-kind p)) r))))
+          (fail (format "a channel runs between tanks' ports; ~a is a ~a" (syntax-e r) (pinfo-kind p)) r)))
+      (when (chinfo-onto c)
+        (define onto (syntax-e (chinfo-onto c)))
+        (define p (hash-ref parts onto #f))
+        (unless (or (and p (eq? (pinfo-kind p) 'boiler))
+                    (for/or ([h infos]) (and (hinfo? h) (eq? (syntax-e (hinfo-id h)) onto))))
+          (fail (format "~a is not a hearth or boiler; a channel pours #:onto one of those" (syntax-e (chinfo-onto c))) (chinfo-onto c)))))
 
     (define gated (make-hasheq))
     (for ([g infos] #:when (sinfo? g))

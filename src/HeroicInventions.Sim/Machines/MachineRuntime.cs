@@ -147,7 +147,18 @@ public sealed class MachineRuntime
         foreach (var lift in def.Lifts) _lifts[lift.Id] = BuildLift(def, lift);
         foreach (var src in def.Sources)
             _sources[src.Id] = new WaterSource(src.Id, TankNamed(src.Into, src.Location), src.Flow);
-        foreach (var ch in def.Channels) _channels[ch.Id] = BuildChannel(def, ch);
+        foreach (var ch in def.Channels)
+        {
+            var channel = _channels[ch.Id] = BuildChannel(def, ch);
+            if (ch.Onto is not { } onto) continue;
+            if (_hearths.TryGetValue(onto, out var hearth))
+                channel.Pour = m3 => hearth.Douse(m3 * Physics.WaterDensity);
+            else if (_boilers.TryGetValue(onto, out var boiler))
+                channel.Pour = m3 => boiler.AddWater(m3 * Physics.WaterDensity, Hearth.WaterTemperature);
+            else throw new MachineFormatException($"channel {ch.Id} pours onto {onto}, which is not a hearth or boiler", ch.Location);
+            if (ch.To is not null)
+                throw new MachineFormatException($"channel {ch.Id} runs into a tank; only a channel run off the scene can pour onto {onto}", ch.Location);
+        }
         foreach (var part in def.Parts.Where(p => p.Kind == "sluice"))
         {
             var on = part.Symbol("on", "");
@@ -273,6 +284,9 @@ public sealed class MachineRuntime
             _getters[$"{id}.temperature"] = () => boiler.Temperature;  // °C
             _getters[$"{id}.pressure"] = () => boiler.GaugePressure / 1000; // kPa
             _getters[$"{id}.water"] = () => boiler.WaterMass;          // kg
+            _getters[$"{id}.fed"] = () => boiler.WaterFed;             // kg of feed water taken in
+            _getters[$"{id}.heat"] = () => boiler.HeatDelivered / 1000; // kJ from the fire, all told
+            _getters[$"{id}.lost"] = () => boiler.HeatLost / 1000;      // kJ lost to the air, all told
             _setters[$"{id}.fire"] = watts => boiler.HeatInput = Math.Max(0, watts);
         }
         foreach (var (id, h) in _hearths)
@@ -282,6 +296,10 @@ public sealed class MachineRuntime
             _getters[$"{id}.lit"] = () => h.Lit ? 1 : 0;
             _getters[$"{id}.burned"] = () => h.FuelBurned;             // kg
             _getters[$"{id}.energy"] = () => h.EnergyReleased / 1e6;   // MJ
+            _getters[$"{id}.soak"] = () => h.Soak;                     // kg of water lying on the fuel
+            _getters[$"{id}.doused"] = () => h.Doused;                 // kg poured on, all told
+            _getters[$"{id}.boiled"] = () => h.Boiled;                 // kg of it boiled off
+            _getters[$"{id}.drowned"] = () => h.Drowned ? 1 : 0;
             _setters[$"{id}.fuel"] = kg => h.Fuel = Math.Max(0, kg);
             _setters[$"{id}.power"] = w => h.Power = Math.Max(0, w);
         }
