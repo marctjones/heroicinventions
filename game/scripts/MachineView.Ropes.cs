@@ -23,6 +23,16 @@ public partial class MachineView
     // Parts on a hinge, with the hinge's pivot and axis in world space.
     private readonly Dictionary<RigidBody3D, (Vector3 Pivot, Vector3 Axis)> _hinges = [];
     private readonly List<Rope> _ropes = [];
+
+    /// <summary>
+    /// Last tick's stretch-correction impulses, taken back at the start of
+    /// the next (a split impulse): the correction closes the stretch over
+    /// one step without leaving that speed in the bodies. As a lasting
+    /// velocity kick it put energy in every time the trebuchet's chain was
+    /// yanked taut, and the machine climbed to 155% of its starting energy
+    /// after its throw (issue #45).
+    /// </summary>
+    private readonly List<(RigidBody3D Body, Vector3 Impulse, Vector3 Offset)> _ropeBias = [];
     // Wheels keyed to one arbor turn together: each one's partners.
     private readonly Dictionary<RigidBody3D, List<RigidBody3D>> _arborMates = [];
 
@@ -184,6 +194,7 @@ public partial class MachineView
               + angular.GetValueOrDefault(body).Cross(point - CentreOfMass(body));
         void Push(RigidBody3D? body, Vector3 point, Vector3 impulse)
         {
+            // (the running tally of this tick's velocity changes; see below)
             if (body is null || body.Freeze) return;
             if (_hinges.TryGetValue(body, out var hinge))
             {
@@ -196,6 +207,18 @@ public partial class MachineView
             linear[body] = linear.GetValueOrDefault(body) + impulse / body.Mass;
             angular[body] = angular.GetValueOrDefault(body) + state.InverseInertiaTensor * (point - CentreOfMass(body)).Cross(impulse);
         }
+
+        // Take back last tick's stretch correction, and count that in the
+        // tally too: the bodies' velocities still include it, so without it
+        // the solve would read the correction as the rope's ends closing,
+        // decide the rope was going slack, and stop holding its load.
+        foreach (var (body, impulse, offset) in _ropeBias)
+        {
+            if (!IsInstanceValid(body) || body.Freeze) continue;
+            body.ApplyImpulse(-impulse, offset);
+            Push(body, body.GlobalPosition + offset, -impulse);
+        }
+        _ropeBias.Clear();
 
         var active = new List<(Rope Rope, List<Vector3> Path, Vector3 A, Vector3 B, Vector3 Ua, Vector3 Ub, float Stretch, float W)>();
         foreach (var r in _ropes)
@@ -225,12 +248,31 @@ public partial class MachineView
                 // how fast the ends are pulling apart along the rope, with every impulse so far
                 float separating = -ua.Dot(Velocity(r.A, a)) - ub.Dot(Velocity(r.B, b));
                 // slack: let the gap close within this step, no further; taut or
-                // stretched: no separation, and take back a third of the stretch
-                float allowed = stretch < 0 ? -stretch / dt : -0.3f * stretch / dt;
+                // stretched: no separation. The stretch itself is taken back
+                // separately below, so this impulse is never more than
+                // inelastic and can't put energy in.
+                float allowed = stretch < 0 ? -stretch / dt : 0;
                 float delta = (separating - allowed) / w;
                 float before = total[i];
                 total[i] = Mathf.Max(0, before + delta);
                 float applied = total[i] - before;
+                Push(r.A, a, ua * applied);
+                Push(r.B, b, ub * applied);
+            }
+
+        // Stretch correction: close a third of any stretch this step, solved
+        // on top of the real impulses, applied now and taken back next tick.
+        var bias = new float[active.Count];
+        for (int pass = 0; pass < 4; pass++)
+            for (int i = 0; i < active.Count; i++)
+            {
+                var (r, _, a, b, ua, ub, stretch, w) = active[i];
+                if (w <= 0 || stretch <= 0) continue;
+                float separating = -ua.Dot(Velocity(r.A, a)) - ub.Dot(Velocity(r.B, b));
+                float delta = (separating + 0.3f * stretch / dt) / w;
+                float before = bias[i];
+                bias[i] = Mathf.Max(0, before + delta);
+                float applied = bias[i] - before;
                 Push(r.A, a, ua * applied);
                 Push(r.B, b, ub * applied);
             }
@@ -261,6 +303,19 @@ public partial class MachineView
             {
                 r.A?.ApplyImpulse(ua * total[i], a - r.A.GlobalPosition);
                 r.B?.ApplyImpulse(ub * total[i], b - r.B.GlobalPosition);
+            }
+            if (bias[i] > 0)
+            {
+                if (r.A is { Freeze: false } bodyA)
+                {
+                    bodyA.ApplyImpulse(ua * bias[i], a - bodyA.GlobalPosition);
+                    _ropeBias.Add((bodyA, ua * bias[i], a - bodyA.GlobalPosition));
+                }
+                if (r.B is { Freeze: false } bodyB)
+                {
+                    bodyB.ApplyImpulse(ub * bias[i], b - bodyB.GlobalPosition);
+                    _ropeBias.Add((bodyB, ub * bias[i], b - bodyB.GlobalPosition));
+                }
             }
             CheckRelease(r, a, b);
             TurnPulley(r, active[i].Path);

@@ -939,3 +939,33 @@
   (check-= (final-of run '(short delivered)) (* 10 1000 sl-per-stroke) 1e-6 "not a drop more")
   (check-= (final-of run '(short stalled)) 1 0)
   (check-= (final-of run '(short strokes)) 10 0))
+
+(test-case "Trebuchet: after the sling lets go (~0.9 s) the machine never gains energy, and the stone flies well clear"
+  ;; Issue #45: an uncapped stretch correction in the rope solver kicked the
+  ;; arm every time the counterweight's chain snapped taut, and the machine
+  ;; climbed to 155% of its starting energy. A passive machine can only lose it.
+  (when (godot-available?)
+    (define run (godot-simulate 'trebuchet #:seconds 12 #:sample-dt 0.1))
+    (define start (value-at run '(scene mechanical) 0))
+    (define after (for/list ([f run] #:when (>= (car f) 1.0))
+                    (cadr (assq 'scene.mechanical (cdr f)))))
+    (check-true (<= (apply max after) (* 1.02 start))
+                (format "peak ~a J after release against ~a J at the start" (apply max after) start))
+    ;; throws toward -X; traced at about 20 m
+    (check-true (< (final-of run '(stone x)) -12) (format "stone landed at x = ~a" (final-of run '(stone x))))))
+
+(test-case "Vitruvian catapulta: the bolt stays on the ground and comes to rest a sensible distance out"
+  ;; The floor used to be 100 m across; the bolt landed ~11 m out, skidded
+  ;; off the edge and fell forever. It flies toward +Z.
+  (when (godot-available?)
+    (define run (godot-simulate 'vitruvian-catapulta #:seconds 20 #:sample-dt 0.5))
+    (check-true (> (min-of run '(bolt y)) -0.1) (format "bolt fell to y = ~a" (min-of run '(bolt y))))
+    (define z (final-of run '(bolt z)))
+    (check-true (< 10 z 100) (format "bolt at rest at z = ~a" z))
+    (check-true (< (final-of run '(bolt speed)) 0.1) "and it has stopped")))
+
+(test-case "Roman crane: two walkers in the treadwheel lift the granite block"
+  (when (godot-available?)
+    (define run (godot-simulate 'roman-crane #:seconds 20 #:sample-dt 1))
+    (define rise (- (final-of run '(stone y)) (value-at run '(stone y) 0)))
+    (check-true (> rise 0.5) (format "the stone rose ~a m in 20 s" rise))))
