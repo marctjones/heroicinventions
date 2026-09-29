@@ -8,7 +8,7 @@ using HeroicInventions.Sim.Materials;
 // touches HeroicInventions.Sim, so it can run in `raco test` or CI
 // without Godot installed.
 //
-// Command:  (simulate "<path-to>.machine" <seconds> <step> <sample-dt> [(set (<target> <field> <value>) ...)])
+// Command:  (simulate "<path-to>.machine" <seconds> <step> <sample-dt> [(set (<target> <field> <value> [<at-seconds>]) ...)])
 // Reply:    (run (<time> (<target.field> <value>) ...) (<time> ...) ...)
 //        or (error "<message>")
 var materials = MaterialLibrary.LoadDefault();
@@ -41,19 +41,33 @@ static string Handle(string line, MaterialLibrary materials)
     var items = form.Items;
     if (items.Count is not (5 or 6) || items[1] is not SString path || items[2] is not SNumber seconds
         || items[3] is not SNumber step || items[4] is not SNumber sampleDt)
-        throw new FormatException("usage: (simulate \"<path>.machine\" <seconds> <step> <sample-dt> [(set (<target> <field> <value>) ...)])");
+        throw new FormatException("usage: (simulate \"<path>.machine\" <seconds> <step> <sample-dt> [(set (<target> <field> <value> [<at-seconds>]) ...)])");
     if (step.Value <= 0) throw new FormatException("step must be positive");
     if (sampleDt.Value <= 0) throw new FormatException("sample-dt must be positive");
 
     var def = MachineDef.Parse(File.ReadAllText(path.Value));
     var run = new MachineRuntime(def, materials);
-    // Settings applied before the first step — what the game's engine side
-    // or a player would otherwise supply (a screw's turning speed, a fire).
+    // Settings — what the game's engine side or a player would otherwise
+    // supply (a screw's turning speed, a fire) — applied before the first
+    // step, or once the clock reaches <at-seconds> (a player's hand on a tap).
+    var pending = new List<(string Target, string Field, double Value, double At)>();
     if (items.Count == 6)
         foreach (var setting in ((SList)items[5]).Items.Skip(1).OfType<SList>())
-            if (setting.Items is [SSymbol target, SSymbol field, SNumber value])
-                run.SetField(target.Name, field.Name, value.Value);
-            else throw new FormatException("each setting is (target field value)");
+            pending.Add(setting.Items switch
+            {
+                [SSymbol target, SSymbol field, SNumber value] => (target.Name, field.Name, value.Value, 0),
+                [SSymbol target, SSymbol field, SNumber value, SNumber at] => (target.Name, field.Name, value.Value, at.Value),
+                _ => throw new FormatException("each setting is (target field value [at-seconds])"),
+            });
+    void ApplyDue()
+    {
+        foreach (var due in pending.Where(p => p.At <= run.Time + 1e-9).ToList())
+        {
+            run.SetField(due.Target, due.Field, due.Value);
+            pending.Remove(due);
+        }
+    }
+    ApplyDue();
 
     int totalSteps = (int)Math.Round(seconds.Value / step.Value);
     var frames = new List<string>(capacity: (int)(seconds.Value / sampleDt.Value) + 2);
@@ -66,6 +80,7 @@ static string Handle(string line, MaterialLibrary materials)
             nextSampleAt += sampleDt.Value;
         }
         if (i < totalSteps) run.Step(step.Value);
+        ApplyDue();
     }
     return $"(run {string.Join(' ', frames)})";
 }

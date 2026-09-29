@@ -74,7 +74,8 @@
 ;; every #:step seconds; a frame is recorded only every #:sample-dt
 ;; seconds, so a long or fine-grained run doesn't have to send back one
 ;; line per physics tick. #:set gives fields a value before the first step,
-;; standing in for what the game's engine side supplies: '((lift rpm 12)).
+;; standing in for what the game's engine side supplies: '((lift rpm 12)),
+;; or at a given time, as a player's hand would: '((tap opening 0.04 120)).
 (define (simulate machine-name #:seconds seconds #:step [step 0.01] #:sample-dt [sample-dt step]
                   #:set [settings '()])
   (define path (build-path machines-dir (format "~a.machine" machine-name)))
@@ -86,7 +87,7 @@
                            (if (null? settings)
                                '()
                                (list (cons 'set (for/list ([s settings])
-                                                  (list (car s) (cadr s) (exact->inexact (caddr s))))))))))
+                                                  (list* (car s) (cadr s) (map exact->inexact (cddr s))))))))))
   (cond
     [(and (pair? reply) (eq? (car reply) 'run)) (cdr reply)]
     [(and (pair? reply) (eq? (car reply) 'error)) (error 'simulate "~a" (cadr reply))]

@@ -11,10 +11,12 @@ public sealed class WaterSource(string name, Tank into, double flow)
     public Tank Into { get; } = into;
     public double Rate { get; } = flow;            // m³/s offered
     public double Flow { get; private set; }       // m³/s that found room, last step
+    /// <summary>A float valve in the tank it fills, throttling it, if it has one.</summary>
+    public FloatValve? Valve { get; set; }
 
     public void Step(double dt)
     {
-        double added = Math.Min(Rate * dt, Into.Capacity - Into.WaterVolume);
+        double added = Math.Min(Rate * (Valve?.Opening ?? 1) * dt, Into.Capacity - Into.WaterVolume);
         Into.WaterVolume += Math.Max(0, added);
         Flow = Math.Max(0, added) / dt;
     }
@@ -52,6 +54,8 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
 
     /// <summary>A sluice gate across the head of the channel, if it has one.</summary>
     public SluiceGate? Gate { get; set; }
+    /// <summary>A float valve in the tank it runs into, throttling it, if it has one.</summary>
+    public FloatValve? Valve { get; set; }
     /// <summary>Where water run off the scene lands, if on something that cares (m³ each step).</summary>
     public Action<double>? Pour { get; set; }
 
@@ -89,6 +93,7 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
         double q = Gate is { } gate
             ? gate.Discharge(From.SurfaceElevation, LipElevation, downstream, WeirFlow(Width, Head))
             : WeirFlow(Width, Head);
+        q *= Valve?.Opening ?? 1;
         // can't take more than stands above the lip, nor put more than fits
         double available = Math.Max(0, (From.SurfaceElevation - LipElevation) * From.Area);
         double room = To is null ? double.PositiveInfinity : To.Capacity - To.WaterVolume;

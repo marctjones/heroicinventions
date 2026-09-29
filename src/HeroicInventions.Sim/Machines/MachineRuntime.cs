@@ -29,6 +29,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, WaterSource> _sources = [];
     private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, SluiceGate> _gates = [];
+    private readonly Dictionary<string, (FloatValve Valve, Func<double> Flow)> _floatValves = [];
     private readonly Dictionary<string, WaterWheel> _wheels = [];
     private readonly Dictionary<string, Counterpoise> _counterpoises = [];
     private readonly Dictionary<string, Pendulum> _pendulums = [];
@@ -48,6 +49,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, WaterSource> Sources => _sources;
     public IReadOnlyDictionary<string, Channel> Channels => _channels;
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
+    /// <summary>Float valves, each with the flow of the feed it throttles (m³/s).</summary>
+    public IReadOnlyDictionary<string, (FloatValve Valve, Func<double> Flow)> FloatValves => _floatValves;
     public IReadOnlyDictionary<string, WaterWheel> WaterWheels => _wheels;
     public IReadOnlyDictionary<string, Counterpoise> Counterpoises => _counterpoises;
     /// <summary>Pendulums hung on a bearing (#:bearing-radius): swung here, not by Jolt, so their friction and wear can be checked.</summary>
@@ -107,7 +110,7 @@ public sealed class MachineRuntime
                             WearRate = part.Number("bearing-wear", 0),
                         });
                     break;
-                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice":
+                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice" or "float-valve":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -219,6 +222,7 @@ public sealed class MachineRuntime
                 throw new MachineFormatException($"sluice {part.Id}: channel {on} already has a gate", part.Location);
             channel.Gate = _gates[part.Id] = new SluiceGate(part.Number("width", channel.Width), part.Number("height"), part.Number("opening", 1));
         }
+        foreach (var part in def.Parts.Where(p => p.Kind == "float-valve")) BuildFloatValve(part);
         foreach (var c in def.Cylinders)
         {
             var piston = def.Part(c.Piston) ?? throw new MachineFormatException($"cylinder {c.Id}: no piston {c.Piston}", c.Location);
@@ -232,6 +236,41 @@ public sealed class MachineRuntime
         }
 
         RegisterFields();
+    }
+
+    /// <summary>
+    /// A float valve rides in the tank its feed fills — an inflow's, a
+    /// pipe's or a channel's far tank — and throttles that feed.
+    /// </summary>
+    private void BuildFloatValve(PartSpec part)
+    {
+        var on = part.Symbol("on", "");
+        FloatValve Make(Tank tank) => new(tank, part.Number("shut"), part.Number("travel"));
+        FloatValve valve;
+        Func<double> flow;
+        string Taken(string feed) => $"float-valve {part.Id}: {feed} {on} already has a float valve";
+        if (_sources.TryGetValue(on, out var src))
+        {
+            if (src.Valve is not null) throw new MachineFormatException(Taken("inflow"), part.Location);
+            src.Valve = valve = Make(src.Into);
+            flow = () => src.Flow;
+        }
+        else if (_pipes.TryGetValue(on, out var pipe))
+        {
+            if (pipe.Valve is not null) throw new MachineFormatException(Taken("pipe"), part.Location);
+            pipe.Valve = valve = Make(pipe.To);
+            flow = () => pipe.Flow;
+        }
+        else if (_channels.TryGetValue(on, out var ch))
+        {
+            if (ch.To is null)
+                throw new MachineFormatException($"float-valve {part.Id}: channel {on} runs off the scene; the float rides in the tank a feed fills", part.Location);
+            if (ch.Valve is not null) throw new MachineFormatException(Taken("channel"), part.Location);
+            ch.Valve = valve = Make(ch.To);
+            flow = () => ch.Flow;
+        }
+        else throw new MachineFormatException($"float-valve {part.Id} is on {on}, which is not an inflow, pipe or channel", part.Location);
+        _floatValves[part.Id] = (valve, flow);
     }
 
     /// <summary>
@@ -387,6 +426,13 @@ public sealed class MachineRuntime
             _getters[$"{id}.over"] = () => g.OverFlow * 1000;          // L/s over its top
             _getters[$"{id}.head"] = () => g.OrificeHead * 100;        // cm above the slot's middle
             _setters[$"{id}.opening"] = o => g.Opening = o;
+        }
+        foreach (var (id, (v, flow)) in _floatValves)
+        {
+            _getters[$"{id}.opening"] = () => v.Opening;               // 0 seated .. 1 fully clear
+            _getters[$"{id}.flow"] = () => flow() * 1000;              // L/s let through
+            _getters[$"{id}.shut"] = () => v.ShutLevel * 100;          // cm above the tank's floor
+            _setters[$"{id}.shut"] = cm => v.ShutLevel = Math.Clamp(cm / 100, 0, v.Tank.Height);
         }
         foreach (var (id, w) in _wheels)
         {

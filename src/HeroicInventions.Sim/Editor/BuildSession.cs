@@ -22,6 +22,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (tank id #:at (x y z) #:area A #:height H [#:water W] [#:material M] ...)
 ///   (boiler|block|pendulum|lever|ramp|piston|post id #:at (x y z) ... similarly)
 ///   (sluice id #:at (x y z) #:on channel #:height H [#:opening o] [#:width w])
+///   (float-valve id #:at (x y z) #:on feed #:shut S #:travel T)   ; feed: an inflow, pipe or channel into a tank
 ///   (wheel|screw|fixture id #:catalogue entry-id #:at (x y z) [#:material M])
 ///   (pipe id from.port to.port #:conductance C)
 ///   (connect a.port b.port)

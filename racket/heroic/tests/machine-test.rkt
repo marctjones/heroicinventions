@@ -83,3 +83,17 @@
 (test-case "a pendulum's bearing friction needs a pin radius"
   (check-compile-error #rx"needs a #:bearing-radius"
     (pendulum bob #:at (0 1 0) #:length 0.5 #:material iron #:bearing-mu 0.4)))
+
+(test-case "a float valve throttles a feed into a tank"
+  (check-compile-error #rx"cistern is not an inflow, pipe or channel"
+    (tank cistern #:at (0 0 0) #:area 0.25 #:height 0.6 (port spout #:height 0))
+    (float-valve ball #:on cistern #:shut 0.4 #:travel 0.02))
+  (check-compile-error #rx"spill runs off the scene"
+    (tank cistern #:at (0 0 0) #:area 0.25 #:height 0.6 (port spout #:height 0))
+    (channel spill #:from cistern.spout #:to off #:end (2 0 0) #:width 0.1)
+    (float-valve ball #:on spill #:shut 0.4 #:travel 0.02))
+  (check-compile-error #rx"aqueduct already has a float valve"
+    (tank cistern #:at (0 0 0) #:area 0.25 #:height 0.6)
+    (inflow aqueduct #:into cistern #:flow 0.002)
+    (float-valve ball #:on aqueduct #:shut 0.4 #:travel 0.02)
+    (float-valve cork #:on aqueduct #:shut 0.3 #:travel 0.02)))

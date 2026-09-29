@@ -117,6 +117,8 @@ public sealed class Pipe(string name, Tank from, double fromPortElevation, Tank 
     public double ToPortElevation => To.BaseElevation + _toPort;
     public double Conductance { get; } = conductance; // m³/s per metre of head
     public double Flow { get; internal set; }         // m³/s, positive = From → To
+    /// <summary>A float valve in the tank it feeds, throttling it, if it has one.</summary>
+    public FloatValve? Valve { get; set; }
 
     /// <summary>For a pipe ending in a nozzle, how far above the outlet the jet would rise.</summary>
     public double JetHeight => Math.Max(0, From.HeadAt(FromPortElevation) - ToPortElevation);
@@ -150,7 +152,7 @@ public sealed class FluidNetwork
             double q = p.Conductance * (p.From.HeadAt(p.FromPortElevation) - p.To.HeadAt(p.ToPortElevation));
             if (q > 0 && !p.From.IsSubmerged(p.FromPortElevation)) q = 0;
             if (q < 0 && !p.To.IsSubmerged(p.ToPortElevation)) q = 0;
-            p.Flow = q;
+            p.Flow = q * (p.Valve?.Opening ?? 1);
         }
 
         foreach (var p in Pipes)

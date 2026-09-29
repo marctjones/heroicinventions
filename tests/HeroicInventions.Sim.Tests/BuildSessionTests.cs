@@ -286,6 +286,46 @@ public class BuildSessionTests
         Assert.Contains("(sluice gate #:at (0.25 0.5 0) #:on race #:height 0.5 #:opening 0.1 #:material bronze)", File.ReadAllText(rkt));
     }
 
+    /// <summary>
+    /// A float valve placed from the palette on an inflow: the cistern settles
+    /// where the valve's feed, Q·(shut − h)/travel, equals the tap's orifice
+    /// draw 0.6·w·a·√(2g(h − a/2)), inside the valve's band; then the design
+    /// round-trips through .machine and exports as a Racket clause.
+    /// </summary>
+    [Fact]
+    public void FloatValveScriptHoldsTheCisternWhereFeedMeetsDrawAndRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "head");
+        session.Execute("(tank cistern #:at (0 0.8 0) #:area 0.25 #:height 0.6 #:water 0.1)");
+        session.Execute("(tank receiver #:at (2 0 0) #:area 0.5 #:height 0.75)");
+        session.Execute("(inflow aqueduct #:into cistern #:flow 0.002)");
+        session.Execute("(channel outlet cistern.outlet receiver.inlet #:width 0.05)");
+        session.Execute("(sluice tap #:at (0.25 0.8 0) #:on outlet #:height 0.5 #:opening 0.02)");
+        session.Execute("(float-valve ball #:at (0 1.2 0) #:on aqueduct #:shut 0.4 #:travel 0.02)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 60)");
+
+        double Draw(double level) => 0.6 * 0.05 * 0.01 * Math.Sqrt(2 * 9.81 * (level - 0.005));
+        double h = 0.4;
+        for (int i = 0; i < 200; i++) h = 0.4 - 0.02 * Draw(h) / 0.002;   // 39.17 cm
+        var run = session.LastRun!;
+        Assert.Equal(h, run.Tanks["cistern"].Level, precision: 4);
+        Assert.Equal(Draw(h), run.Sources["aqueduct"].Flow, precision: 6);
+        Assert.Equal((0.4 - h) / 0.02, run.FloatValves["ball"].Valve.Opening, precision: 3);
+
+        string saved = Path.Combine(TempDir(), "head.machine");
+        session.SaveFile(saved);
+        var valve = MachineDef.Parse(File.ReadAllText(saved)).Part("ball")!;
+        Assert.Equal("float-valve", valve.Kind);
+        Assert.Equal("aqueduct", valve.Symbol("on", ""));
+        Assert.Equal(0.4, valve.Number("shut"));
+        Assert.Equal(0.02, valve.Number("travel"));
+
+        string rkt = Path.Combine(TempDir(), "head.rkt");
+        session.ExportRkt(rkt);
+        Assert.Contains("(float-valve ball #:at (0 1.2 0) #:on aqueduct #:shut 0.4 #:travel 0.02 #:material bronze)", File.ReadAllText(rkt));
+    }
+
     /// <summary>A channel run off the scene #:onto a boiler feeds it, and the clause round-trips.</summary>
     [Fact]
     public void ChannelOntoABoilerFeedsItAndRoundTrips()

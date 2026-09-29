@@ -462,3 +462,71 @@
   (check-= (final-of run '(dry sliding)) (* 1000 pin travelled) 0.05 "mm slid")
   (define wear (* k n-load pin travelled))
   (check-= (final-of run '(dry wear)) wear (* 0.002 wear) "mm^3 worn: V = K N s"))
+
+;; constant-head.rkt: a 0.25 m2 cistern fed 2 L/s through a float valve that
+;; seats at 40 cm with 2 cm of travel, drawn through a tap (an orifice 5 cm
+;; wide on its floor) into a 0.5 m2 receiver; beside it an identical cistern
+;; and tap with no feed at all.
+(define ch-g 9.81)
+(define ch-area 0.25)
+(define ch-feed 0.002)      ; m3/s, the aqueduct wide open
+(define ch-shut 0.40)
+(define ch-travel 0.02)
+(define (tap-flow h slot) (* 0.6 0.05 slot (sqrt (* 2 ch-g (- h (/ slot 2))))))
+;; where the valve's feed, Q_feed (shut - h) / travel, equals the tap's draw
+(define (held-level slot)
+  (for/fold ([h ch-shut]) ([_ 200]) (- ch-shut (* ch-travel (/ (tap-flow h slot) ch-feed)))))
+;; the bare cistern: sqrt(h - a/2) falls at 0.6 w a sqrt(2g) / 2A
+(define (drained-level h0 slot t)
+  (+ (/ slot 2) (expt (- (sqrt (- h0 (/ slot 2))) (* (/ (* 0.6 0.05 slot (sqrt (* 2 ch-g))) (* 2 ch-area)) t)) 2)))
+
+(test-case "Float valve: the cistern holds the head where feed and draw balance, and a doubled draw costs it b dQ / Q_feed"
+  ;; the tap raised 1 cm, then at 120 s to 2 cm. The valve sees the level
+  ;; before each step's outflow, Q dt / A (< 0.1 mm) above what is read, and
+  ;; passes 1 L/s per cm of level: flows agree to a few 1e-4 L/s
+  (define run (simulate 'constant-head #:seconds 240 #:step 0.01 #:sample-dt 1
+                        #:set '((tap opening 0.04 120) (bare-tap opening 0.04 120))))
+  (define h1 (held-level 0.01))
+  (define h2 (held-level 0.02))
+  (define q1 (* 1000 (tap-flow h1 0.01)))
+  (define q2 (* 1000 (tap-flow h2 0.02)))
+  (for ([t '(60 110)])
+    (check-= (value-at run '(cistern level) t) (* 100 h1) 0.005 (format "held at 39.17 cm at ~a s" t))
+    (check-= (value-at run '(aqueduct flow) t) q1 5e-4 "the valve lets in 0.826 L/s")
+    (check-= (value-at run '(outlet flow) t) q1 5e-4 "and the tap draws the same"))
+  (for ([t '(180 235)])
+    (check-= (value-at run '(cistern level) t) (* 100 h2) 0.005 (format "held at 38.38 cm at ~a s" t))
+    (check-= (value-at run '(aqueduct flow) t) q2 5e-4 "the valve lets in 1.625 L/s")
+    (check-= (value-at run '(outlet flow) t) q2 5e-4))
+  (check-= (- (value-at run '(cistern level) 110) (value-at run '(cistern level) 235))
+           (* 100 ch-travel (/ (- q2 q1) 1000 ch-feed)) 0.005 "the draw nearly doubles; the head gives 0.80 cm")
+  (check-true (<= (max-of run '(cistern level)) (* 100 ch-shut)) "never above the seat")
+  (check-true (>= (min-of run '(cistern level)) (* 100 (- ch-shut ch-travel))) "never below the band")
+  ;; a clock: the receiver rises Q / 0.5 m2 at a steady rate
+  (check-= (/ (- (value-at run '(receiver level) 110) (value-at run '(receiver level) 60)) 50)
+           (/ (/ q1 1000) 0.5 1/100) 1e-4 "1.653 mm/s, in cm/s")
+  (check-= (/ (- (value-at run '(receiver level) 235) (value-at run '(receiver level) 180)) 55)
+           (/ (/ q2 1000) 0.5 1/100) 1e-4 "3.250 mm/s, in cm/s")
+  ;; the same cistern and tap with no float valve feeding it drains away
+  (define b120 (drained-level 0.40 0.01 120))
+  (for ([t '(30 60 120)])
+    (check-= (value-at run '(bare level) t) (* 100 (drained-level 0.40 0.01 t)) 0.005 (format "bare at ~a s" t))
+    (check-= (value-at run '(bare-receiver level) t) (* 100 (/ (* ch-area (- 0.40 (drained-level 0.40 0.01 t))) 0.5)) 0.005))
+  (check-= (value-at run '(bare level) 150) (* 100 (drained-level b120 0.02 30)) 0.005 "3.01 cm at 150 s")
+  (check-true (< (value-at run '(bare level) 120) 10.1) "a quarter of the head it started with"))
+
+(test-case "Float valve: filling from empty, the cistern rises at Q_feed / A to the band, then closes on the seat with tau = A b / Q_feed"
+  (define run (simulate 'constant-head #:seconds 80 #:step 0.01 #:sample-dt 0.5
+                        #:set '((tap opening 0) (cistern water 0))))
+  (define rise (/ ch-feed ch-area))                         ; 8 mm/s
+  (define t1 (/ (- ch-shut ch-travel) rise))                ; 47.5 s to reach the band
+  (define tau (/ (* ch-area ch-travel) ch-feed))            ; 2.5 s
+  (check-= (value-at run '(cistern level) 30) (* 100 rise 30) 0.01 "24 cm at 30 s: the valve wide open")
+  (check-= (value-at run '(ball opening) 30) 1.0 1e-12)
+  (check-= (value-at run '(cistern level) 45) (* 100 rise 45) 0.01)
+  (for ([dt '(2.5 5 10)])
+    (check-= (value-at run '(cistern level) (+ t1 dt)) (* 100 (- ch-shut (* ch-travel (exp (- (/ dt tau)))))) 0.01
+             (format "~a s into the band" dt))
+    (check-= (value-at run '(aqueduct flow) (+ t1 dt)) (* 1000 ch-feed (exp (- (/ dt tau)))) 0.002))
+  (check-true (< (max-of run '(cistern level)) (* 100 ch-shut)) "it never overfills")
+  (check-= (final-of run '(receiver water)) 0 1e-12 "the tap stays shut"))

@@ -16,7 +16,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise
+         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -90,9 +90,37 @@
                                         (+ tz (* half (/ dz len))))])])]
       [else p])))
 
+;; A float valve with no #:at floats in the middle of the tank its feed
+;; fills, at the level where it shuts.
+(define (place-float-valves parts items)
+  (for/list ([p parts])
+    (cond
+      [(eq? (part-kind p) 'float-valve)
+       (define (prop k) (cdr (assq k (part-props p))))
+       (unless (and (real? (prop 'travel)) (> (prop 'travel) 0))
+         (define loc (part-loc p))
+         (error 'define-machine "~a:~a:~a: float-valve ~a: #:travel must be a positive length, got ~e"
+                (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) (prop 'travel)))
+       (define on (prop 'on))
+       (define fed
+         (for/or ([i items])
+           (cond [(and (inflow-spec? i) (eq? (inflow-spec-id i) on)) (inflow-spec-into i)]
+                 [(and (pipe-spec? i) (eq? (pipe-spec-id i) on)) (car (pipe-spec-to i))]
+                 [(and (channel-spec? i) (eq? (channel-spec-id i) on) (pair? (channel-spec-to i)))
+                  (car (channel-spec-to i))]
+                 [else #f])))
+       (define tank (for/first ([t parts] #:when (eq? (part-id t) fed)) t))
+       (cond
+         [(part-at p) p]
+         [(not tank) (struct-copy part p [at (list 0 0 0)])]
+         [else
+          (define-values (tx ty tz) (apply values (part-at tank)))
+          (struct-copy part p [at (list tx (+ ty (prop 'shut)) tz)])])]
+      [else p])))
+
 (define (make-machine name source items)
   (machine name source
-           (place-sluices (filter part? items) (filter channel-spec? items))
+           (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -120,7 +148,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -160,6 +188,7 @@
   (struct iinfo (id into))           ; an inflow
   (struct hinfo (id heats))          ; a hearth: the boiler it heats
   (struct sinfo (id on))             ; a sluice gate: the channel it stands across
+  (struct fvinfo (id feed mat))      ; a float valve: the inflow, pipe or channel it throttles
   (struct cpinfo (id vessel))        ; a counterpoise: the tank that hangs from it
   (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
   (struct chinfo (id from to onto))  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
@@ -204,8 +233,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice, waterwheel, counterpoise) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice, waterwheel, counterpoise, float-valve) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise float-valve piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -540,6 +569,29 @@
                           '()
                           #,(loc-of this-syntax)))
 
+    ;; A float valve, as Ctesibius and Philo built one to hold a water
+    ;; clock's head steady: a float riding in the tank that feed #:on fills
+    ;; (an inflow, a pipe, or a channel running into a tank) lifts a conical
+    ;; plug into the feed's mouth. The plug seats once the water stands
+    ;; #:shut (m) above the tank's floor and is clear once the level has
+    ;; fallen #:travel (m) below that, the gap opening in proportion in
+    ;; between: the feed passes (shut - level) / travel of its flow, so the
+    ;; level settles inside that band however hard the tank is drawn, as
+    ;; long as the open feed can outrun the draw. #:at defaults to the
+    ;; middle of the tank at the shut level. Set (valve shut cm) at run time
+    ;; to reset the float.
+    (pattern (float-valve id:id
+                          (~alt (~once (~seq #:on feed:id))
+                                (~once (~seq #:shut shut-v:expr))
+                                (~once (~seq #:travel travel-v:expr))
+                                (~optional (~seq #:at at:vec3))
+                                (~optional (~seq #:material mat:id))) ...)
+      #:attr info (fvinfo #'id #'feed (attribute mat))
+      #:with expr #`(part 'id 'float-valve '(~? mat bronze) (~? (list at.x at.y at.z) #f)
+                          (list (cons 'on 'feed) (cons 'shut shut-v) (cons 'travel travel-v))
+                          '()
+                          #,(loc-of this-syntax)))
+
     ;; A rope (or chain) between two parts. It only pulls, never pushes: it
     ;; goes slack when its ends come closer than its length. Each end is a
     ;; point on a part, in that part's own frame — (arm 0.9 0 0) is 0.9 m
@@ -857,6 +909,24 @@
       (when (hash-ref gated on #f)
         (fail (format "channel ~a already has a gate" on) (sinfo-on g)))
       (hash-set! gated on #t))
+
+    (define valved (make-hasheq))
+    (for ([v infos] #:when (fvinfo? v))
+      (define feed (syntax-e (fvinfo-feed v)))
+      (define (named? pred id-of) (for/or ([i infos]) (and (pred i) (id-of i) (eq? (syntax-e (id-of i)) feed) i)))
+      (define ch (named? chinfo? chinfo-id))
+      (unless (or (named? iinfo? iinfo-id)
+                  (named? (λ (l) (and (linfo? l) (eq? (linfo-type l) 'pipe))) linfo-id)
+                  ch)
+        (fail (format "~a is not an inflow, pipe or channel; a float valve throttles the feed into a tank" feed) (fvinfo-feed v)))
+      (when (and ch (not (chinfo-to ch)))
+        (fail (format "channel ~a runs off the scene; a float valve rides in the tank its feed fills" feed) (fvinfo-feed v)))
+      (when (hash-ref valved feed #f)
+        (fail (format "~a already has a float valve" feed) (fvinfo-feed v)))
+      (hash-set! valved feed #t)
+      (define mat (fvinfo-mat v))
+      (when (and mat (not (memq (syntax-e mat) known-materials)))
+        (fail (format "unknown material ~a" (syntax-e mat)) mat)))
 
     (for ([h infos] #:when (hinfo? h))
       (define heats (syntax-e (hinfo-heats h)))

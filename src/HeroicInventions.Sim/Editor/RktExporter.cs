@@ -127,6 +127,8 @@ public static class RktExporter
             case "sluice":
                 return $"  (sluice {p.Id} {At()} #:on {Sym("on", "?")} #:height {F(N("height"))} #:opening {F(N("opening", 1))}" +
                        Opt("width", "width") + $" {Mat()})\n";
+            case "float-valve":
+                return $"  (float-valve {p.Id} {At()} #:on {Sym("on", "?")} #:shut {F(N("shut"))} #:travel {F(N("travel"))} {Mat()})\n";
             case "counterpoise":
                 return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +
                        $"#:counterweight {F(N("counterweight"))} #:radius {F(N("radius"))} #:turn-deg {F(N("turn-deg"))} " +

@@ -322,3 +322,60 @@ public class BearingTests
         Assert.Equal(0.5 * inertia * (100 - omega * omega), bearing.Heat, precision: 9);
     }
 }
+
+public class FloatValveTests
+{
+    /// <summary>
+    /// A 2 L/s spring into a 0.25 m² tank drained by a pipe passing C·h: the
+    /// level settles where Q_feed·(s − h)/b = C·h, h = (Q_feed·s/b) / (Q_feed/b + C).
+    /// </summary>
+    [Fact]
+    public void AFloatValveHoldsTheLevelWhereFeedAndDrawBalance()
+    {
+        const double feed = 0.002, shut = 0.4, travel = 0.02, c = 0.002;
+        var net = new FluidNetwork();
+        var cistern = net.AddTank(new Tank("cistern", 0, 0.25, 0.6, waterVolume: 0.05));
+        var sink = net.AddTank(new Tank("sink", -5, 100, 10));
+        var drain = net.AddPipe(new Pipe("drain", cistern, 0, sink, 0, c));
+        var spring = new WaterSource("spring", cistern, feed) { Valve = new FloatValve(cistern, shut, travel) };
+        for (int i = 0; i < 20000; i++) { spring.Step(0.01); net.Step(0.01); }
+
+        double h = feed * shut / travel / (feed / travel + c);
+        Assert.Equal(h, cistern.Level, precision: 4);
+        Assert.Equal(drain.Flow, spring.Flow, precision: 6);
+        Assert.InRange(cistern.Level, shut - travel, shut);
+    }
+
+    [Fact]
+    public void ThePlugSeatsAtTheShutLevelAndOpensInProportionBelowIt()
+    {
+        double Opening(double level) => new FloatValve(new Tank("t", 0, 1, 1, waterVolume: level), 0.5, 0.04).Opening;
+        Assert.Equal(0, Opening(0.5));
+        Assert.Equal(0.25, Opening(0.49), precision: 12);
+        Assert.Equal(1, Opening(0.3));
+        var tank = new Tank("t", 0, 1, 1, waterVolume: 0.5);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FloatValve(tank, 0.5, 0));
+
+        var spring = new WaterSource("s", tank, 0.01) { Valve = new FloatValve(tank, 0.3, 0.1) };
+        spring.Step(0.01);
+        Assert.Equal(0, spring.Flow);                       // brimming past the seat: nothing comes in
+    }
+
+    /// <summary>Piped or channelled in, the feed passes Opening × what it would unchecked.</summary>
+    [Fact]
+    public void APipeOrChannelFeedPassesItsOpeningTimesTheUncheckedFlow()
+    {
+        var net = new FluidNetwork();
+        var supply = net.AddTank(new Tank("supply", 2, 10, 1, waterVolume: 5));      // surface 2.5 m
+        var cistern = net.AddTank(new Tank("cistern", 0, 1, 1, waterVolume: 0.39));  // 1 cm below a 40 cm seat
+        var pipe = net.AddPipe(new Pipe("feed", supply, 2, cistern, 1, 0.001) { Valve = new FloatValve(cistern, 0.40, 0.04) });
+        net.Step(0.001);
+        Assert.Equal(0.25 * 0.001 * (2.5 - 1.0), pipe.Flow, precision: 9);
+
+        var pool = new Tank("pool", 1, 1, 1, waterVolume: 0.1);                        // 10 cm over a lip at 1 m
+        var basin = new Tank("basin", 0, 1, 1, waterVolume: 0.38);                     // 2 cm below the seat
+        var race = new Channel("race", pool, 1, basin, 0.9, width: 0.3, length: 2) { Valve = new FloatValve(basin, 0.40, 0.04) };
+        race.Step(0.001);
+        Assert.Equal(0.5 * Channel.WeirFlow(0.3, 0.1), race.Flow, precision: 9);
+    }
+}

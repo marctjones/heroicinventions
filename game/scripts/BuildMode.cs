@@ -378,6 +378,7 @@ public partial class BuildMode : Node3D
             "post" => Shapes.Box(new Vector3((float)part.Number("size-x"), (float)part.Number("size-y"), (float)part.Number("size-z")), mat),
             "counterpoise" => Shapes.Box(new Vector3((float)part.Number("leaf-width", 1) * 2, (float)part.Number("leaf-height", 2), 0.06f), mat),
             "waterwheel" => Shapes.Cylinder((float)part.Number("radius"), (float)part.Number("width"), mat),
+            "float-valve" => Shapes.Cylinder(0.08f, 0.05f, mat),
             "sluice" => Shapes.Box(new Vector3(0.05f, (float)part.Number("height"), (float)part.Number("width", 0.3)), mat),
             "piston" => Shapes.Cylinder((float)part.Number("bore"), (float)part.Number("stroke"), mat),
             _ => CatalogueVisual(part, mat),
