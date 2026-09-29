@@ -6,7 +6,7 @@ namespace HeroicInventions.Sim.Thermo;
 /// Steam that leaves carries away latent heat, which is what limits an
 /// aeolipile's top speed for a given fire.
 /// </summary>
-public sealed class Boiler(double waterMassKg, double temperatureC = 20, double heatInputW = 2000)
+public sealed class Boiler(double waterMassKg, double temperatureC = 20, double heatInputW = 2000) : IHeated
 {
     public double WaterMass { get; private set; } = waterMassKg; // kg
     public double Temperature { get; private set; } = temperatureC; // °C

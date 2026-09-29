@@ -15,7 +15,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel
+         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -34,7 +34,8 @@
 (struct port-spec (name kind height) #:transparent)          ; kind: 'water | 'steam
 (struct pipe-spec (id from to conductance jet? loc) #:transparent) ; from/to: (list part port)
 (struct connect-spec (from to loc) #:transparent)
-(struct air-spec (tanks tube-volume loc) #:transparent)
+;; heat-loss: W/K through the vessels' walls; heat-capacity: J/K of the vessels themselves
+(struct air-spec (tanks tube-volume loc heat-loss heat-capacity) #:transparent)
 ;; from/to: (list part-or-world x y z), the point in that part's own frame
 ;; (for world, in world coordinates); over: fixed points the rope runs
 ;; over (pulleys); wind-on: a wheel the from end winds onto, or #f;
@@ -118,7 +119,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -158,6 +159,7 @@
   (struct iinfo (id into))           ; an inflow
   (struct hinfo (id heats))          ; a hearth: the boiler it heats
   (struct sinfo (id on))             ; a sluice gate: the channel it stands across
+  (struct cpinfo (id vessel))        ; a counterpoise: the tank that hangs from it
   (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
   (struct chinfo (id from to onto))  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
 
@@ -201,8 +203,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice, waterwheel) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, sluice, waterwheel, counterpoise) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth sluice waterwheel counterpoise piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -471,6 +473,32 @@
                           '()
                           #,(loc-of this-syntax)))
 
+    ;; A #:vessel (a tank) hanging on a rope wound round a spindle #:radius
+    ;; across, against a #:counterweight kg wound the other way: Heron's
+    ;; temple doors. Heavier than the counterweight with its water, the
+    ;; vessel sinks and turns the spindle, up to #:turn-deg (the doors wide
+    ;; open); lighter, the counterweight turns it back shut. The spindle
+    ;; stands at #:at; #:leaf (w h) sizes the door leaf it swings.
+    (pattern (counterpoise id:id
+                           (~alt (~once (~seq #:at at:vec3))
+                                 (~once (~seq #:vessel vessel-tank:id))
+                                 (~once (~seq #:vessel-mass vmass-v:expr))
+                                 (~once (~seq #:counterweight cw-v:expr))
+                                 (~once (~seq #:radius radius-v:expr))
+                                 (~once (~seq #:turn-deg turn-v:expr))
+                                 (~optional (~seq #:friction fr-v:expr))
+                                 (~optional (~seq #:leaf-inertia li-v:expr))
+                                 (~optional (~seq #:leaf (leaf-w:expr leaf-h:expr)))
+                                 (~optional (~seq #:material mat:id))) ...)
+      #:attr info (cpinfo #'id #'vessel-tank)
+      #:with expr #`(part 'id 'counterpoise '(~? mat oak) (list at.x at.y at.z)
+                          (list (cons 'vessel 'vessel-tank) (cons 'vessel-mass vmass-v) (cons 'counterweight cw-v)
+                                (cons 'radius radius-v) (cons 'turn-deg turn-v)
+                                (cons 'friction (~? fr-v 0)) (cons 'leaf-inertia (~? li-v 0))
+                                (cons 'leaf-width (~? leaf-w 1)) (cons 'leaf-height (~? leaf-h 2)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     ;; A sluice gate across the head of channel #:on: a plate #:height tall
     ;; (m) sliding in grooves at the channel's lip, raised by #:opening (0
     ;; shut .. 1 drawn right up; default 1). Water runs out under it as an
@@ -645,9 +673,14 @@
       #:with expr #`(connect-spec (list 'a.part-id 'a.port-id) (list 'b.part-id 'b.port-id)
                                   #,(loc-of this-syntax)))
 
-    (pattern (sealed-air (t:id ...+) (~optional (~seq #:tube tube:expr)))
+    ;; #:heat-loss (W/K through the walls) and #:heat-capacity (J/K of the
+    ;; vessels themselves) matter once a hearth #:heats one of its tanks:
+    ;; the air's pressure follows its temperature, P = m R T / V.
+    (pattern (sealed-air (t:id ...+) (~alt (~optional (~seq #:tube tube:expr))
+                                           (~optional (~seq #:heat-loss loss-v:expr))
+                                           (~optional (~seq #:heat-capacity cap-v:expr))) ...)
       #:attr info (ainfo (syntax->list #'(t ...)))
-      #:with expr #`(air-spec '(t ...) (~? tube 0) #,(loc-of this-syntax))))
+      #:with expr #`(air-spec '(t ...) (~? tube 0) #,(loc-of this-syntax) (~? loss-v 0) (~? cap-v 0))))
 
   ;; Checks the whole machine. Each error names the offending clause so
   ;; DrRacket and `racket` both point at the exact source location.
@@ -807,9 +840,15 @@
       (hash-set! gated on #t))
 
     (for ([h infos] #:when (hinfo? h))
-      (define b (hash-ref parts (syntax-e (hinfo-heats h)) #f))
-      (unless (and b (eq? (pinfo-kind b) 'boiler))
-        (fail (format "~a is not a boiler; a hearth heats a boiler" (syntax-e (hinfo-heats h))) (hinfo-heats h))))
+      (define heats (syntax-e (hinfo-heats h)))
+      (define b (hash-ref parts heats #f))
+      (unless (or (and b (eq? (pinfo-kind b) 'boiler))
+                  (for/or ([a infos]) (and (ainfo? a) (memq heats (map syntax-e (ainfo-tanks a))))))
+        (fail (format "~a is neither a boiler nor a tank in a sealed-air; a hearth heats one of those" heats) (hinfo-heats h))))
+    (for ([c infos] #:when (cpinfo? c))
+      (define v (hash-ref parts (syntax-e (cpinfo-vessel c)) #f))
+      (unless (and v (eq? (pinfo-kind v) 'tank))
+        (fail (format "~a is not a tank; a counterpoise hangs a tank" (syntax-e (cpinfo-vessel c))) (cpinfo-vessel c))))
 
     (define sealed (make-hasheq))
     (for ([a infos] #:when (ainfo? a))

@@ -342,3 +342,61 @@
   (define kinetic (* 1/2 1000 area (expt v 3)))
   (check-= (final-of run '(undershot power)) (* 8/27 kinetic) 0.5 "W")
   (check-= (rpm->rad (final-of run '(undershot rpm))) (/ v 3) 1e-4))
+
+;; ---- #23 heated sealed air: Heron's temple doors (heron-temple-doors.rkt)
+(define p0 101325.0)
+(define r-air 287.05)
+(define (kelvin c) (+ c 273.15))
+(define v0 (+ 0.075 0.020 0.0005))                          ; m3: altar + globe's air + tube
+(define air-mass (/ (* p0 v0) (* r-air (kelvin 20))))
+(define altar-c (+ 1900 (* air-mass 718)))                  ; J/K
+(define tau (/ altar-c 3))                                  ; s
+(define heat-in (* 150 0.6))                                ; W
+
+(test-case "Temple doors: sealed air warms toward 20 + Q/h and its pressure rises as T at fixed volume"
+  (define run (simulate 'heron-temple-doors #:seconds 250 #:step 0.05 #:sample-dt 50))
+  (for ([t '(100 200 250)])
+    (define predicted (+ 20 (* (/ heat-in 3) (- 1 (exp (- (/ t tau)))))))
+    (check-= (value-at run '(altar air-temperature) t) predicted 0.005 (format "T at ~a s" t))
+    ;; no water has moved yet (it needs 3.9 kPa), so V is still V0
+    (check-= (value-at run '(altar air-pressure) t) (/ (* p0 (- (/ (kelvin predicted) (kelvin 20)) 1)) 1000) 0.005 "kPa")))
+
+(test-case "Temple doors: at 50 C the air holds up the water it balances, and the doors stand open"
+  ;; plenty of fuel, a long run: the altar settles at 20 + 90/3 = 50 C
+  (define run (simulate 'heron-temple-doors #:seconds 7000 #:step 0.05 #:sample-dt 500 #:set '((offering fuel 1))))
+  (define t-steady (+ 20 (/ heat-in 3)))
+  (check-= (final-of run '(altar air-temperature)) t-steady 0.01)
+  ;; bucket water dv (m3) where the air's gauge pressure equals the column
+  ;; from the globe's surface up to the bucket's (the bucket let down r x 90 deg)
+  (define bucket-base (- 0.6 (* 0.05 (/ pi 2))))
+  (define (imbalance dv)
+    (- (- (/ (* air-mass r-air (kelvin t-steady)) (+ v0 dv)) p0)
+       (* 1000 9.81 (- (+ bucket-base (/ dv 0.04)) (- 0.2 (/ dv 0.1))))))
+  (define dv (let loop ([lo 0.0] [hi 0.02] [n 60])
+               (define mid (/ (+ lo hi) 2))
+               (cond [(zero? n) mid] [(> (imbalance mid) 0) (loop mid hi (sub1 n))] [else (loop lo mid (sub1 n))])))
+  (check-= (final-of run '(bucket water)) (* 1000 dv) 0.01 (format "L in the bucket, predicted ~a" (* 1000 dv)))
+  (check-= (final-of run '(doors angle)) 90 1e-9)
+  (check-true (> (* 1000 dv) 2) "more than the 2 kg the counterweight outweighs the empty bucket by"))
+
+(test-case "Temple doors: they open only once the bucket outweighs the counterweight, and shut when the fire dies"
+  (define run (simulate 'heron-temple-doors #:seconds 6000 #:step 0.05 #:sample-dt 10))
+  ;; up to the first moment they move, the bucket never held less than the 2 kg it takes
+  (define first-open (for/first ([f run] #:when (> (cadr (assq 'doors.angle (cdr f))) 0)) f))
+  (check-true (>= (cadr (assq 'bucket.water (cdr first-open))) 2.0)
+              (format "first moved at ~a s" (car first-open)))
+  (for ([f run] #:when (< (car f) (car first-open)))
+    (check-true (< (cadr (assq 'bucket.water (cdr f))) 2.0) "and before then it was still lighter"))
+  (check-true (> (max-of run '(doors angle)) 89.99) "they swing wide open")
+  ;; 30 g of wood at 150 W: out at 30e-3 x 15e6 / 150 = 3000 s; then all the water runs back
+  (check-= (final-of run '(offering lit)) 0 1e-9)
+  (check-= (final-of run '(bucket water)) 0 1e-6)
+  (check-= (final-of run '(doors angle)) 0 1e-9)
+  (check-true (< (final-of run '(altar air-temperature)) 21)))
+
+(test-case "Heron's fountain: its unheated air keeps P V constant (Boyle), as sealed"
+  (define run (simulate 'herons-fountain #:seconds 60 #:step 0.05 #:sample-dt 5))
+  (define (pv f) (* (+ p0 (* 1000 (cadr (assq 'supply.air-pressure (cdr f))))) (cadr (assq 'supply.air-volume (cdr f)))))
+  (define start (pv (car run)))
+  (for ([f run]) (check-= (pv f) start (* 1e-9 start) (format "P V at ~a s" (car f))))
+  (check-true (> (max-of run '(supply air-pressure)) 1) "and it was squeezed: over 1 kPa"))

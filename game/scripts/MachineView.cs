@@ -20,6 +20,7 @@ public partial class MachineView : Node3D
 
     private readonly MaterialLibrary _materials;
     private readonly List<(Tank tank, PartSpec spec, MeshInstance3D water)> _water = [];
+    private readonly Dictionary<Tank, MeshInstance3D> _tankShells = [];
     private readonly List<(Pipe pipe, Vector3 outlet, MeshInstance3D jet)> _jets = [];
     private readonly List<(Aeolipile rotor, Node3D node)> _rotors = [];
     private readonly List<(Boiler boiler, MeshInstance3D fire, StandardMaterial3D glow, GpuParticles3D flame)> _fires = [];
@@ -77,6 +78,7 @@ public partial class MachineView : Node3D
                 case "post": BuildPost(part); break;
                 case "hearth": BuildHearth(part); break;
                 case "waterwheel": BuildWaterWheel(part); break;
+                case "counterpoise": BuildCounterpoise(part); break;
             }
         }
         foreach (var pipe in Runtime.Def.Pipes) BuildPipe(pipe);
@@ -196,6 +198,13 @@ public partial class MachineView : Node3D
                                Shapes.Mat(Shapes.Water, roughness: 0.2f, alpha: 0.8f));
         AddChild(water);
         _water.Add((Runtime.Tanks[part.Id], part, water));
+        _tankShells[Runtime.Tanks[part.Id]] = shell;
+        bool hung = Runtime.Counterpoises.Values.Any(c => c.Vessel == Runtime.Tanks[part.Id]);
+        if (hung)
+        {
+            AddLabel(part.Id, new Vector3(0, height / 2 + 0.06f, 0), shell);
+            return;   // it hangs on its rope, not on a post
+        }
         AddLabel(part.Id, V(part.At) + new Vector3(0, height + 0.06f, 0));
 
         // A tank raised above the ground (Heron's fountain's three
@@ -1102,8 +1111,12 @@ public partial class MachineView : Node3D
         foreach (var (tank, spec, water) in _water)
         {
             float level = Mathf.Max((float)tank.Level, 0.001f);
+            water.Visible = tank.Level > 0.001;
             water.Scale = new Vector3(1, level, 1);
-            water.Position = V(spec.At) + new Vector3(0, level / 2, 0);
+            // a hanging vessel rides up and down on its rope
+            water.Position = new Vector3((float)spec.At.X, (float)tank.BaseElevation + level / 2, (float)spec.At.Z);
+            if (_tankShells.TryGetValue(tank, out var shell))
+                shell.Position = new Vector3(shell.Position.X, (float)tank.BaseElevation + (float)tank.Height / 2, shell.Position.Z);
         }
         foreach (var (pipe, outlet, jet) in _jets)
         {
@@ -1136,6 +1149,7 @@ public partial class MachineView : Node3D
         DrawCylinders();
         DrawHearths();
         DrawWaterWheels();
+        DrawCounterpoises();
     }
 
     public void ToggleFire()
@@ -1224,7 +1238,7 @@ public partial class MachineView : Node3D
         // Not for a driven machine: whoever turns the crank (or the river
         // under a noria, a spring filling a tank) keeps adding energy, so "retained" means nothing.
         double? retained = Runtime.Boilers.Count == 0 && !_axles.Any(a => a.Driven) && _liftDrives.Count == 0
-                           && Runtime.Sources.Count == 0 && Runtime.WaterWheels.Count == 0
+                           && Runtime.Sources.Count == 0 && Runtime.WaterWheels.Count == 0 && Runtime.Hearths.Count == 0
                            && _initialMechanicalEnergy is { } init && init > 1e-6
             ? (rotorKe + bodyKe + pe) / init * 100
             : null;

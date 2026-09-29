@@ -111,6 +111,8 @@
             ,@(for/list ([a (machine-airs m)])
                 `(sealed-air (tanks ,@(air-spec-tanks a))
                              (tube-volume ,(num "sealed-air #:tube" (air-spec-tube-volume a)))
+                             (heat-loss ,(num "sealed-air #:heat-loss" (air-spec-heat-loss a)))
+                             (heat-capacity ,(num "sealed-air #:heat-capacity" (air-spec-heat-capacity a)))
                              ,(loc->sexp (air-spec-loc a) root)))))
 
 (define (write-machine-file m path #:root [root #f] #:from [from #f])

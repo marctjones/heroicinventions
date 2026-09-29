@@ -36,7 +36,9 @@ public static class RktExporter
         foreach (var c in m.Connects)
             sb.Append($"  (connect {c.A.Part}.{c.A.Port} {c.B.Part}.{c.B.Port})\n");
         foreach (var a in m.SealedAir)
-            sb.Append($"  (sealed-air ({string.Join(' ', a.Tanks)}) #:tube {F(a.TubeVolume)})\n");
+            sb.Append($"  (sealed-air ({string.Join(' ', a.Tanks)}) #:tube {F(a.TubeVolume)}" +
+                      (a.HeatLoss > 0 ? $" #:heat-loss {F(a.HeatLoss)}" : "") +
+                      (a.HeatCapacity > 0 ? $" #:heat-capacity {F(a.HeatCapacity)}" : "") + ")\n");
         foreach (var r in m.Ropes) sb.Append(RopeClause(r));
         foreach (var a in m.Arbors) sb.Append($"  (arbor {string.Join(' ', a.Parts)})\n");
         foreach (var x in m.Meshes) sb.Append($"  (mesh {x.A} {x.B})\n");
@@ -122,6 +124,11 @@ public static class RktExporter
             case "sluice":
                 return $"  (sluice {p.Id} {At()} #:on {Sym("on", "?")} #:height {F(N("height"))} #:opening {F(N("opening", 1))}" +
                        Opt("width", "width") + $" {Mat()})\n";
+            case "counterpoise":
+                return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +
+                       $"#:counterweight {F(N("counterweight"))} #:radius {F(N("radius"))} #:turn-deg {F(N("turn-deg"))} " +
+                       $"#:friction {F(N("friction"))} #:leaf-inertia {F(N("leaf-inertia"))} " +
+                       $"#:leaf ({F(N("leaf-width", 1))} {F(N("leaf-height", 2))}) {Mat()})\n";
             case "waterwheel":
                 return $"  (waterwheel {p.Id} {At()} #:radius {F(N("radius"))} #:width {F(N("width"))} #:mass {F(N("mass"))} #:load {F(N("load"))}" +
                        (N("buckets") > 0 ? $" #:buckets {F(N("buckets"))} #:bucket-volume {F(N("bucket-volume"))} #:spill-deg {F(N("spill-deg", 120))}" : "") +

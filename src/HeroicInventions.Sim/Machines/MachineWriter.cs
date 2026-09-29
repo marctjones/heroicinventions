@@ -131,5 +131,7 @@ public static class MachineWriter
         Tagged("sealed-air",
             new SList([Sym("tanks"), .. a.Tanks.Select(t => (SExpr)Sym(t))]),
             Tagged("tube-volume", Num(a.TubeVolume)),
+            Tagged("heat-loss", Num(a.HeatLoss)),
+            Tagged("heat-capacity", Num(a.HeatCapacity)),
             SrcLoc(a.Location));
 }

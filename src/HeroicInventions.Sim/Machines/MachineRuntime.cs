@@ -30,6 +30,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, WaterWheel> _wheels = [];
+    private readonly Dictionary<string, Counterpoise> _counterpoises = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
     private readonly Dictionary<string, Action<double>> _setters = [];
 
@@ -47,6 +48,7 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Channel> Channels => _channels;
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
     public IReadOnlyDictionary<string, WaterWheel> WaterWheels => _wheels;
+    public IReadOnlyDictionary<string, Counterpoise> Counterpoises => _counterpoises;
     public double Time { get; private set; }
 
     /// <summary>
@@ -91,6 +93,7 @@ public sealed class MachineRuntime
                     _boilers[part.Id] = new Boiler(part.Number("water"), part.Number("temperature", 20), heatInputW: part.Number("fire", 0));
                     break;
                 case "waterwheel": break; // built once the channels that drive it exist
+                case "counterpoise": break; // built once its vessel exists
                 case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "sluice":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
@@ -101,7 +104,11 @@ public sealed class MachineRuntime
         // Sealed air is created after the tanks are filled: its P·V constant
         // is fixed from the air volume at the moment it is sealed.
         foreach (var air in def.SealedAir)
-            _air.Add(new AirPocket(air.Tanks.Select(t => TankNamed(t, air.Location)), air.TubeVolume));
+            _air.Add(new AirPocket(air.Tanks.Select(t => TankNamed(t, air.Location)), air.TubeVolume)
+            {
+                HeatLoss = air.HeatLoss,
+                VesselHeatCapacity = air.HeatCapacity,
+            });
 
         foreach (var pipe in def.Pipes)
         {
@@ -141,15 +148,23 @@ public sealed class MachineRuntime
         foreach (var part in def.Parts.Where(p => p.Kind == "hearth"))
         {
             var heats = part.Symbol("heats", "");
-            if (!_boilers.TryGetValue(heats, out var boiler))
-                throw new MachineFormatException($"hearth {part.Id} heats {heats}, which is not a boiler", part.Location);
-            _hearths[part.Id] = new Hearth(boiler, part.Number("power"), part.Number("fuel"),
+            IHeated target = _boilers.TryGetValue(heats, out var boiler) ? boiler
+                : _tanks.TryGetValue(heats, out var vessel) && vessel.Air is { } air ? air
+                : throw new MachineFormatException($"hearth {part.Id} heats {heats}, which is neither a boiler nor a sealed vessel", part.Location);
+            _hearths[part.Id] = new Hearth(target, part.Number("power"), part.Number("fuel"),
                                            part.Symbol("fuel-kind", "wood"), part.Number("efficiency", 0.5));
         }
 
         foreach (var lift in def.Lifts) _lifts[lift.Id] = BuildLift(def, lift);
         foreach (var src in def.Sources)
             _sources[src.Id] = new WaterSource(src.Id, TankNamed(src.Into, src.Location), src.Flow);
+        foreach (var part in def.Parts.Where(p => p.Kind == "counterpoise"))
+            _counterpoises[part.Id] = new Counterpoise(part.Id, TankNamed(part.Symbol("vessel", ""), part.Location),
+                part.Number("vessel-mass"), part.Number("counterweight"), part.Number("radius"), part.Number("turn-deg") * Math.PI / 180)
+            {
+                Friction = part.Number("friction", 0),
+                LeafInertia = part.Number("leaf-inertia", 0),
+            };
         foreach (var ch in def.Channels) _channels[ch.Id] = BuildChannel(def, ch);
         foreach (var part in def.Parts.Where(p => p.Kind == "waterwheel"))
         {
@@ -383,12 +398,23 @@ public sealed class MachineRuntime
         }
         foreach (var air in _air)
             foreach (var tank in _tanks.Values.Where(t => t.Air == air))
+            {
                 _getters[$"{tank.Name}.air-pressure"] = () => air.GaugePressure / 1000; // kPa
+                _getters[$"{tank.Name}.air-temperature"] = () => air.Temperature;     // °C
+                _getters[$"{tank.Name}.air-volume"] = () => air.Volume * 1000;        // L
+            }
+        foreach (var (id, cp) in _counterpoises)
+        {
+            _getters[$"{id}.angle"] = () => cp.Angle * 180 / Math.PI;               // deg, 0 shut
+            _getters[$"{id}.hanging"] = () => cp.Hanging;                           // kg on the vessel's rope
+            _getters[$"{id}.torque"] = () => cp.Torque;                             // N·m, + opening
+        }
     }
 
     public void Step(double dt)
     {
         foreach (var h in _hearths.Values) h.Step(dt);
+        foreach (var air in _air) air.Step(dt);
         Fluids.Step(dt);
         // Springs and open channels, in steps short enough that a weir can't
         // overshoot: a pool's level answers its own outflow within a second.
@@ -400,6 +426,7 @@ public sealed class MachineRuntime
             foreach (var w in _wheels.Values) w.Step(dt / n);
         }
         foreach (var lift in _lifts.Values) lift.Step(dt);
+        foreach (var cp in _counterpoises.Values) cp.Step(dt);
         foreach (var rotor in _rotors.Values) rotor.Step(dt); // steps its own boiler
         foreach (var c in _cylinders.Values) c.Step(dt);
         foreach (var (id, boiler) in _boilers)

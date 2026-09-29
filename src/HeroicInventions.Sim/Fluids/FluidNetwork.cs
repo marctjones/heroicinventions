@@ -7,7 +7,7 @@ namespace HeroicInventions.Sim.Fluids;
 public sealed class Tank(string name, double baseElevation, double area, double height, double waterVolume = 0)
 {
     public string Name { get; } = name;
-    public double BaseElevation { get; } = baseElevation; // m, bottom of the tank
+    public double BaseElevation { get; internal set; } = baseElevation; // m, bottom of the tank (a hanging vessel moves)
     public double Area { get; } = area;                   // m², horizontal cross-section
     public double Height { get; } = height;               // m
     public double WaterVolume { get; internal set; } = waterVolume; // m³
@@ -31,25 +31,74 @@ public sealed class Tank(string name, double baseElevation, double area, double 
 
 /// <summary>
 /// A sealed body of air shared by one or more tanks (plus the tubes that
-/// join them). Isothermal: P·V is constant from the moment it is sealed.
+/// join them), sealed at atmospheric pressure and <see cref="SealedAt"/> °C.
+/// Its mass never changes, so its pressure is the ideal gas law,
+/// P = m·R·T / V: squeezed by water it rises as 1/V (Boyle, while its
+/// temperature holds), and heated it rises as T.
+///
+/// Heat reaches it from a fire (<see cref="HeatInput"/>) and leaks to the
+/// air outside through the vessel's walls, <see cref="HeatLoss"/> W per
+/// kelvin above <see cref="SealedAt"/>. Its heat capacity is the air's own,
+/// m·c_v, plus the vessel's (<see cref="VesselHeatCapacity"/>): a bronze
+/// altar holds far more heat than the air in it, and sets how slowly it
+/// warms. When it expands, pushing water out, it does P·dV of work and
+/// cools by that much. Given no walls and no fire it stays at the
+/// temperature it was sealed at (<see cref="Isothermal"/>).
 /// </summary>
-public sealed class AirPocket
+public sealed class AirPocket : IHeated
 {
     private readonly List<Tank> _tanks;
-    private readonly double _pvConstant;
+    private double _lastVolume;
 
-    public AirPocket(IEnumerable<Tank> tanks, double tubeVolume = 0)
+    public AirPocket(IEnumerable<Tank> tanks, double tubeVolume = 0, double sealedAtC = 20)
     {
         _tanks = tanks.ToList();
         TubeVolume = tubeVolume;
         foreach (var t in _tanks) t.Air = this;
-        _pvConstant = Physics.AtmosphericPressure * Volume;
+        SealedAt = Temperature = sealedAtC;
+        _lastVolume = Volume;
+        Mass = Physics.AtmosphericPressure * Volume / (Physics.AirGasConstant * Physics.ToKelvin(sealedAtC));
     }
 
     public double TubeVolume { get; }
+    public double SealedAt { get; }                               // °C, and the air outside
+    public double Mass { get; }                                   // kg of air
+    public double Temperature { get; private set; }               // °C
+    public double HeatInput { get; set; }                         // W from a fire
+    public double HeatLoss { get; init; }                         // W/K through the walls
+    public double VesselHeatCapacity { get; init; }               // J/K of the vessel itself
+    public double HeatCapacity => Mass * Physics.AirSpecificHeatCv + VesselHeatCapacity;
+    /// <summary>
+    /// With no walls described and no fire, the vessel is taken to hold the
+    /// air at the temperature it was sealed at, whatever it is squeezed to —
+    /// Boyle's law, as Heron's fountain has always run.
+    /// </summary>
+    public bool Isothermal => HeatLoss == 0 && VesselHeatCapacity == 0 && HeatInput == 0 && Temperature == SealedAt;
+
     public double Volume => TubeVolume + _tanks.Sum(t => t.Capacity - t.WaterVolume);
-    public double AbsolutePressure => _pvConstant / Volume;
+    public double AbsolutePressure => Mass * Physics.AirGasConstant * Physics.ToKelvin(Temperature) / Volume;
     public double GaugePressure => AbsolutePressure - Physics.AtmosphericPressure;
+
+    /// <summary>
+    /// Heat for dt seconds. The walls' loss pulls it toward where heat in
+    /// equals heat out, SealedAt + HeatInput / HeatLoss, exponentially with
+    /// time constant C / HeatLoss — solved exactly, since for air alone that
+    /// can be far shorter than a step.
+    /// </summary>
+    public void Step(double dt)
+    {
+        if (Isothermal) return;
+        double c = HeatCapacity;
+        if (HeatLoss > 0)
+        {
+            double steady = SealedAt + HeatInput / HeatLoss;
+            Temperature = steady + (Temperature - steady) * Math.Exp(-HeatLoss * dt / c);
+        }
+        else Temperature += HeatInput * dt / c;
+        double v = Volume;
+        Temperature -= AbsolutePressure * (v - _lastVolume) / c;   // work done pushing water out
+        _lastVolume = v;
+    }
 }
 
 /// <summary>
@@ -58,11 +107,14 @@ public sealed class AirPocket
 /// </summary>
 public sealed class Pipe(string name, Tank from, double fromPortElevation, Tank to, double toPortElevation, double conductance)
 {
+    // ports are fixed in their tanks, so they move with a tank that moves (a hanging bucket)
+    private readonly double _fromPort = fromPortElevation - from.BaseElevation, _toPort = toPortElevation - to.BaseElevation;
+
     public string Name { get; } = name;
     public Tank From { get; } = from;
-    public double FromPortElevation { get; } = fromPortElevation;
+    public double FromPortElevation => From.BaseElevation + _fromPort;
     public Tank To { get; } = to;
-    public double ToPortElevation { get; } = toPortElevation;
+    public double ToPortElevation => To.BaseElevation + _toPort;
     public double Conductance { get; } = conductance; // m³/s per metre of head
     public double Flow { get; internal set; }         // m³/s, positive = From → To
 

@@ -6,4 +6,4 @@
   (part receiver tank (material bronze) (at -0.2 0.0 0.0) (props (area 0.02) (height 0.06) (water 0.0)) (ports (inlet water 0.06)) (srcloc "racket/machines/herons-fountain.rkt" 21 2))
   (pipe drain (from basin drain) (to receiver inlet) (conductance 0.0015) (jet #f) (srcloc "racket/machines/herons-fountain.rkt" 27 2))
   (pipe nozzle (from supply outlet) (to basin jet) (conductance 0.0001) (jet #t) (srcloc "racket/machines/herons-fountain.rkt" 28 2))
-  (sealed-air (tanks supply receiver) (tube-volume 4e-5) (srcloc "racket/machines/herons-fountain.rkt" 32 2)))
+  (sealed-air (tanks supply receiver) (tube-volume 4e-5) (heat-loss 0.0) (heat-capacity 0.0) (srcloc "racket/machines/herons-fountain.rkt" 32 2)))

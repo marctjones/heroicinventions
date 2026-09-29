@@ -1,7 +1,7 @@
 namespace HeroicInventions.Sim.Thermo;
 
 /// <summary>
-/// A fire under a boiler. It burns a store of fuel at a steady heat output
+/// A fire under a boiler, or under a vessel of sealed air. It burns a store of fuel at a steady heat output
 /// (W); the fraction of that heat that reaches the water is its efficiency
 /// (an open hearth loses most of it up the chimney). Fuel burns at
 /// power ÷ energy density, and the fire goes out when it is gone — so the
@@ -15,7 +15,7 @@ namespace HeroicInventions.Sim.Thermo;
 /// and once the soaked water outweighs the fuel left the fire is drowned:
 /// wet wood won't burn, and it stays out.
 /// </summary>
-public sealed class Hearth(Boiler boiler, double powerW, double fuelKg, string fuelKind = "wood", double efficiency = 0.5)
+public sealed class Hearth(IHeated target, double powerW, double fuelKg, string fuelKind = "wood", double efficiency = 0.5)
 {
     /// <summary>Lower heating values, J/kg: air-dried wood, charcoal, bituminous coal.</summary>
     public static double EnergyDensity(string kind) => kind switch
@@ -33,7 +33,7 @@ public sealed class Hearth(Boiler boiler, double powerW, double fuelKg, string f
     public static double QuenchHeat =>
         Physics.WaterSpecificHeat * (100 - WaterTemperature) + Physics.LatentHeatVaporization;
 
-    public Boiler Boiler { get; } = boiler;
+    public IHeated Target { get; } = target;
     public string FuelKind { get; } = fuelKind;
     public double Efficiency { get; } = efficiency;
     public double Power { get; set; } = powerW;                    // W of heat released while burning
@@ -57,7 +57,7 @@ public sealed class Hearth(Boiler boiler, double powerW, double fuelKg, string f
     /// <summary>Burn for dt seconds, setting what the boiler is heated by this step.</summary>
     public void Step(double dt)
     {
-        if (!Lit) { Boiler.HeatInput = 0; return; }
+        if (!Lit) { Target.HeatInput = 0; return; }
         double density = EnergyDensity(FuelKind);
         double burn = Math.Min(Fuel, Power * dt / density);
         double released = burn * density;
@@ -67,7 +67,7 @@ public sealed class Hearth(Boiler boiler, double powerW, double fuelKg, string f
         double boiled = Math.Min(Soak, released / QuenchHeat);
         Soak -= boiled;
         Boiled += boiled;
-        Boiler.HeatInput = (released - boiled * QuenchHeat) * Efficiency / dt;
+        Target.HeatInput = (released - boiled * QuenchHeat) * Efficiency / dt;
         if (Soak > 0 && Soak >= Fuel) Drowned = true;
     }
 }

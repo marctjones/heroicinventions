@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -59,6 +59,15 @@ public static class PartTemplates
                 ["radius"] = new SNumber(1.0), ["width"] = new SNumber(0.3), ["mass"] = new SNumber(100), ["load"] = new SNumber(0),
                 ["buckets"] = new SNumber(12), ["bucket-volume"] = new SNumber(0.005), ["spill-deg"] = new SNumber(120),
                 ["tail"] = new SBool(false), ["race"] = new SBool(false), ["paddle-depth"] = new SNumber(0),
+            },
+            [], null),
+        // a spindle turned by a hanging vessel against a counterweight; #:vessel names the tank
+        "counterpoise" => new PartSpec(id, "counterpoise", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["vessel"] = new SSymbol("?"), ["vessel-mass"] = new SNumber(2), ["counterweight"] = new SNumber(4),
+                ["radius"] = new SNumber(0.05), ["turn-deg"] = new SNumber(90), ["friction"] = new SNumber(0),
+                ["leaf-inertia"] = new SNumber(0), ["leaf-width"] = new SNumber(1), ["leaf-height"] = new SNumber(2),
             },
             [], null),
         _ => throw new ArgumentException($"not a primitive part kind: {kind}; catalogue kinds are placed from a CatalogueEntry instead"),

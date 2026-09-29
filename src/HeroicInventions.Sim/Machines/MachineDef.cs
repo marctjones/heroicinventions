@@ -56,7 +56,8 @@ public sealed record PartSpec(
 
 public sealed record PipeSpec(string Id, PortRef From, PortRef To, double Conductance, bool Jet, SourceLocation? Location);
 public sealed record ConnectSpec(PortRef A, PortRef B, SourceLocation? Location);
-public sealed record SealedAirSpec(IReadOnlyList<string> Tanks, double TubeVolume, SourceLocation? Location);
+public sealed record SealedAirSpec(IReadOnlyList<string> Tanks, double TubeVolume, SourceLocation? Location,
+                                   double HeatLoss = 0, double HeatCapacity = 0);
 
 /// <summary>
 /// Water lifted by a screw, noria or pump (By) from one tank to another.
@@ -272,7 +273,9 @@ public sealed class MachineDef
         return new SealedAirSpec(
             tanks.Items.Skip(1).Select((_, i) => Sym(tanks, i + 1, loc)).ToList(),
             c.Field("tube-volume") is { } v ? Num(v, 1, loc) : 0,
-            loc);
+            loc,
+            c.Field("heat-loss") is { } hl ? Num(hl, 1, loc) : 0,
+            c.Field("heat-capacity") is { } hc ? Num(hc, 1, loc) : 0);
     }
 
     private static SourceLocation? ParseLoc(SList c) =>
