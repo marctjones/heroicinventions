@@ -189,7 +189,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
     <p>A world is three separate layers, so any map can sit on any planet:</p>
     <ul>
       <li><strong>Planet</strong> (#38): a config file of numbers fed into unchanged formulas: gravity, surface pressure, gas mix, temperature curves, sunlight, sol length, dust.</li>
-      <li><strong>Map</strong> (#61): the terrain: a heightfield with a material per cell.</li>
+      <li><strong>Map</strong> (#37, #61): the terrain: a heightfield with a material per cell, written in Racket with <code>define-map</code> the way machines are written with <code>define-machine</code>, and generated from a few numbers where it can be (a crater from its diameter, depth and rim). Every machine in a world stands on the one map.</li>
       <li><strong>Scenario</strong> (#60): which planet and map, the cargo and where it starts, the goal, starting stocks and tuning.</li>
     </ul>
     <p>The planet never validates the map; the physics settles it, <strong>on screen</strong>, before play begins. Slopes steeper than their angle of repose slide, cliffs taller than their critical height 4c/(ρg)·tan(45° + φ/2) collapse, and open water flows downhill and freezes or boils. A cliff's critical height goes as 1/g, so Mars cliffs can stand 2.6 times taller: a Mars map loaded on Earth visibly crumbles, and an Earth map on Mars stands, overbuilt. Plants and fires read their own zone, not the planet, so a greenhouse works the same anywhere it has light and warmth.</p>
