@@ -632,15 +632,20 @@ flowchart LR
         <tbody>
           <tr><td class="name">0 · Scaffold</td><td>C# solvers, Godot project, material blocks in Jolt</td><td><span class="verdict yes">done</span></td></tr>
           <tr><td class="name">1 · #lang heroic</td><td><code>define-machine</code> with compile-time checks, <code>.machine</code> output, C# reader and runtime, generic <code>MachineView</code>, three blueprints, materials exported from Racket</td><td><span class="verdict yes">done</span></td></tr>
-          <tr><td class="name">2 · Live link</td><td>TCP server in Godot, REPL client, run and pause, parameter changes, telemetry, <code>redefine-part</code></td><td><span class="verdict part">next</span></td></tr>
-          <tr><td class="name">3 · Machine tests</td><td>Headless host, <code>simulate</code> in Racket, a behaviour test for each blueprint</td><td>—</td></tr>
-          <tr><td class="name">4 · Generated geometry</td><td>Involute gears, screws, pulleys, glTF export, part catalogue</td><td>—</td></tr>
-          <tr><td class="name">5 · Build mode</td><td>In-game editor with port snapping and a material picker. It saves <code>.machine</code> files.</td><td>—</td></tr>
-          <tr><td class="name">6 · Crane, gears, piston engine</td><td>Rope and pulley constraints, gear meshes, cylinder coupling, stress breakage, generated parts in loops</td><td>—</td></tr>
-          <tr><td class="name">7 · Leonardo &amp; Franklin</td><td>Gear-direction checks, an electrical network reusing the fluid solver, convection</td><td>—</td></tr>
+          <tr><td class="name">2 · Live link</td><td>TCP server in Godot, REPL client, run and pause, parameter changes, telemetry, <code>redefine-part</code></td><td><span class="verdict yes">done</span></td></tr>
+          <tr><td class="name">3 · Machine tests</td><td>Headless host, <code>simulate</code> in Racket, a behaviour test for each blueprint</td><td><span class="verdict yes">done</span></td></tr>
+          <tr><td class="name">4 · Generated geometry</td><td>Involute gears, screws, pulleys, glTF export, part catalogue</td><td><span class="verdict yes">done</span></td></tr>
+          <tr><td class="name">5 · Build mode</td><td>In-game editor with port snapping and a material picker. It saves <code>.machine</code> files.</td><td><span class="verdict yes">done</span></td></tr>
+          <tr><td class="name">6 · Crane, gears, piston engine</td><td>Rope and pulley constraints, gear meshes, cylinder coupling, stress breakage, generated parts in loops</td><td><span class="verdict yes">done</span></td></tr>
+          <tr><td class="name">7 · Leonardo &amp; Franklin</td><td>Gear-direction checks, an electrical network reusing the fluid solver, convection</td><td>later (stage 6)</td></tr>
+          <tr><td class="name">8 · Water, fire and wear</td><td>Sluices, quenching, boiler feed, water wheels, float valves, leaks, safety valves, pumps, bellows, wind, rope friction</td><td><span class="verdict yes">done</span>; the rest moved into the stages below</td></tr>
+          <tr><td class="name">9 · Ambient and sun</td><td>Scene temperature, ice and cooling; the sun and heliostat mirrors</td><td><span class="verdict yes">done</span></td></tr>
+          <tr><td class="name">10 · Engine physics</td><td>Headless Godot runner for Jolt-side checks</td><td><span class="verdict yes">done</span>; the rest moved into the stages below</td></tr>
         </tbody>
       </table>
     </div>
+
+    <p>From here the work is organised in five stages, each ending in something playable, so the game builds out from a working sandbox: <strong>1 Sandbox world</strong> (point-and-click building of any machine, many machines running together in one world, editing while it runs, saving), <strong>2 Mechanisms</strong> (Heron's toolkit on Earth), <strong>3 Ground and water</strong>, <strong>4 Heat and air</strong>, and <strong>5 The Lonely Rover</strong>, the Mars game built on all of it, with <strong>6 Later</strong> for exploratory work. The stages and their issues are listed in <a href="lonely-rover.html#milestones">The Lonely Rover's build order</a> and on the GitHub milestones.</p>
 
     <h2 id="sources"><span class="num">XII</span>Sources</h2>
     <ul>

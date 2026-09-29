@@ -131,7 +131,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <li><a href="#trees">Trees, oxygen and wood</a></li>
       <li><a href="#pace">Time and waiting</a></li>
       <li><a href="#tuning">Game tuning</a></li>
-      <li><a href="#milestones">Milestones M11–M15</a></li>
+      <li><a href="#milestones">Build order</a></li>
       <li><a href="#open">Open questions</a></li>
     </ol>
   </nav>
@@ -141,7 +141,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <div class="eyebrow">Heroic Inventions · game concept</div>
       <h1>The Lonely Rover</h1>
       <p class="lede">A Mars rover wakes up to find it can think, and that Earth has stopped answering. Beside the landing site are the crates for a human habitat that was never occupied. It cannot make electronics, only mechanisms, so it builds itself a community of Heron-style automata, and every machine obeys the same physics as the rest of Heroic Inventions, with Mars's numbers in the formulas.</p>
-      <div class="meta"><span>Status: proposal, filed as M11–M15</span><span>Follows milestones M8–M10</span><span>Companion to <code>docs/design.html</code></span></div>
+      <div class="meta"><span>Status: proposal, built in stages 1–5</span><span>Companion to <code>docs/design.html</code></span></div>
     </header>
 
     <h2 id="premise">Premise</h2>
@@ -442,7 +442,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <li><strong>Liquid water</strong> needs more than water's vapour pressure: 0.87 kPa at 5 °C, 2.34 kPa at 20 °C.</li>
       <li><strong>A lift pump</strong> raising water <var>h</var> metres needs ρ·g·<var>h</var> plus that vapour pressure. On Mars a 3 m lift at 20 °C needs 13.5 kPa; on Earth the same lift would need 31.8 kPa.</li>
       <li><strong>A boiler</strong> boils where the vapour pressure reaches the enclosure's pressure: 81 °C at 50 kPa, 52 °C at 13.5 kPa.</li>
-      <li><strong>Fire</strong> needs enough oxygen above the limiting fraction M13 defines, which in a thin enclosure means an oxygen-rich mix, and that raises the risk of fire.</li>
+      <li><strong>Fire</strong> needs enough oxygen above the limiting fraction #40 defines, which in a thin enclosure means an oxygen-rich mix, and that raises the risk of fire.</li>
       <li><strong>Heron's automata</strong> mostly need none of this. They run on weight, sand and rope, which is why they are the rover's first companions.</li>
     </ul>
     <p>The player chooses each enclosure's pressure and pays for it in gas. An enclosure run near its minimum keeps Mars visible even indoors: water boils at a low temperature and pumps come close to their limit.</p>
@@ -495,10 +495,10 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <li><strong>A belt (#51)</strong>: an endless loop between two drums, for scrolling scenery. A rope that never pushes can't do it alone.</li>
       <li><strong>Loose balls (#52)</strong>, for thunder and for the ball-and-track machines that Rube Goldberg chains like. Today free bodies are blocks.</li>
     </ol>
-    <p>Beyond the physics, the automata need decorative figures on their levers and axles (Dionysus, the Bacchantes, the birds). That is meshes and content, not simulation. All but the cart are filed as milestone M16.</p>
+    <p>Beyond the physics, the automata need decorative figures on their levers and axles (Dionysus, the Bacchantes, the birds). That is meshes and content, not simulation. All are filed in stage 2, Mechanisms (the cart is #25).</p>
 
     <h2 id="salvage">Salvage</h2>
-    <p>The cargo lies under a dust slide. Getting it out is the first long task, and it uses machines the engine already has or has planned: terrain and water over open ground (#37), digging by the soil's shear strength (#44), fracture (#43), and the trebuchet's sling for flinging spoil and stones. Three pieces are new, filed as milestone M17:</p>
+    <p>The cargo lies under a dust slide. Getting it out is the first long task, and it uses machines the engine already has or has planned: terrain and water over open ground (#37), digging by the soil's shear strength (#44), fracture (#43), and the trebuchet's sling for flinging spoil and stones. Three pieces are new, filed in stage 3, Ground and water:</p>
     <ul>
       <li><strong>Sediment transport (#53).</strong> Flowing water scours the ground where its shear passes the grains' threshold (the Shields number) and drops it where it slows, so a released reservoir cuts a gully, as in Roman hushing. A sluice box sorts dense metal from light sand. On Mars there's a catch: outdoors a water jet boils and freezes before it can do any work, so hushing needs a pressurised dig tent or heated water. Wind moves sand outdoors, but only in winds five to ten times stronger than on Earth, and that is how the storm buried the crates.</li>
       <li><strong>Buried bodies and slides (#54).</strong> A crate under the terrain is held by the ground above it and freed once dug or scoured to within a fraction of its height. A slope steeper than its angle of repose slides and buries what lies below.</li>
@@ -522,7 +522,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <li><strong>The sand.</strong> Most Mars sand is basalt, which melts to dark, nearly opaque glass. Clear glass needs silica-rich sand, like the nearly pure silica Spirit found at Home Plate, which gives the rover a reason to explore.</li>
       <li><strong>Pressure.</strong> A pane's bending stress goes as (size/thickness)². At 13.5 kPa a 1 m pane must be 2.4 cm thick, a 30 cm pane 7 mm, so walls are small panes in a frame, as Roman windows were.</li>
     </ul>
-    <p>Filed as milestone M18: glassmaking (#56), glass walls (#57), and evaporation and condensation (#58).</p>
+    <p>Filed in stage 4, Heat and air: glassmaking (#56), glass walls (#57), and evaporation and condensation (#58).</p>
 
     <h2 id="trees">Trees, oxygen and wood</h2>
     <p>The cargo's seed stock includes a few tree species, and a glazed greenhouse can grow them (#42). The fastest woody plants (willow and poplar grown for coppicing, and bamboo, a woody grass) make 1–2 kg of dry wood per square metre per year on Earth. Mars sunlight is 43% of Earth's and glass takes a little more, so expect about half a kilogram per square metre per year unless mirrors add light: roughly 5 kg a year from a 10 m² greenhouse.</p>
@@ -555,11 +555,26 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <li><strong>Advanced tuning:</strong> gravity, the gas laws' constants, latent heats, efficiencies and temperature limits can also be changed, under a separate Advanced panel with a clear warning. These carry the game's lessons (rain is a poor engine, flat mirrors can't melt basalt, wood gives back only what the tree took), so changing them changes what the player learns. They are there for experiments ("what if Mars had Earth's gravity?") and for tuning difficulty, not for everyday play.</li>
     </ul>
 
-    <h2 id="milestones">Milestones M11–M15</h2>
-    <p>Each milestone follows the project's rule: implemented through the DSL, simulation, view and editor, exercised by a scene, and checked by a test against a hand-computed prediction.</p>
+    <h2 id="milestones">Build order</h2>
+    <p>The issues are grouped into five stages, each ending in something playable. The first gives a working sandbox; every later stage adds to that same world, so the game builds out naturally. Each feature issue routes through the editor (its Done-when includes BuildSession and PartTemplates), so every part arrives clickable.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Stage</th><th>Playable when it closes</th><th>Issues</th></tr></thead>
+        <tbody>
+          <tr><td class="name">1 Sandbox world</td><td>Build any machine by pointing and clicking, in one world where dozens of machines run together, keep their state while you change them, and save.</td><td>#73 → #74 → #75, #76, #67, #59, #24</td></tr>
+          <tr><td class="name">2 Mechanisms</td><td>Heron's toolkit works on Earth: contacts, joints, triggers, carts, valves, cams, ratchets, belts, sand timers, balls and sound.</td><td>#27, #28, #30, #32, #45, #13, #20, #25, #34, #46–#52</td></tr>
+          <tr><td class="name">3 Ground and water</td><td>Terrain to dig, water that runs over it and moves sediment, things that break, float and get buried, and grips to pick them up.</td><td>#37, #36, #44, #43, #29, #31, #33, #53, #54, #55</td></tr>
+          <tr><td class="name">4 Heat and air</td><td>Other planets, enclosures with their own air, fire that needs oxygen, doors, heat stores, Mars-capable engines, sols and weather, and glass.</td><td>#38, #39, #40, #41, #71, #65, #69, #56, #57, #58</td></tr>
+          <tr><td class="name">5 The Lonely Rover</td><td>The Mars game: the crater, the rover and its backhoe, found electrics and the call, resources, goals, tuning, the greenhouse and wear.</td><td>#61, #63, #72, #64, #66, #68, #60, #42, #70, #62</td></tr>
+          <tr><td class="name">6 Later</td><td>Exploratory or deferred.</td><td>#6, #35</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Feature notes: air, fire and the greenhouse</h3>
+    <p>Each follows the project's rule: implemented through the DSL, simulation, view and editor, exercised by a scene, and checked by a test against a hand-computed prediction.</p>
 
     <div class="ms">
-      <h3>M11 · Planet settings <a href="https://github.com/marctjones/heroicinventions/issues/38" style="font-size:15px">#38</a></h3>
+      <h3>Planet settings <a href="https://github.com/marctjones/heroicinventions/issues/38" style="font-size:15px">#38</a></h3>
       <div class="tag">depends on #21 ambient, #22 sunlight</div>
       <dl>
         <dt>Adds</dt><dd>A scene-level planet: gravity, surface pressure, gas composition, mean temperature and solar constant, with <code>#:planet earth</code> and <code>#:planet mars</code> presets. Gravity and atmospheric pressure stop being constants, in the C# sim and in Jolt.</dd>
@@ -569,8 +584,8 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
     </div>
 
     <div class="ms">
-      <h3>M12 · Enclosures and gas mixtures <a href="https://github.com/marctjones/heroicinventions/issues/39" style="font-size:15px">#39</a></h3>
-      <div class="tag">depends on M11</div>
+      <h3>Enclosures and gas mixtures <a href="https://github.com/marctjones/heroicinventions/issues/39" style="font-size:15px">#39</a></h3>
+      <div class="tag">depends on #38</div>
       <dl>
         <dt>Adds</dt><dd>An enclosure part with volume, wall insulation and leak area, holding a mixture of O₂, N₂, CO₂, H₂O and Ar at its own temperature. Parts inside read the enclosure's conditions instead of the planet's.</dd>
         <dt>Predicts</dt><dd>Pressure through a small hole decays exponentially while the flow is choked, with a time constant set by volume, hole area and gas temperature. A heated enclosure settles at the outside temperature plus heat input divided by the walls' loss coefficient.</dd>
@@ -579,8 +594,8 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
     </div>
 
     <div class="ms">
-      <h3>M13 · Oxygen-limited fire <a href="https://github.com/marctjones/heroicinventions/issues/40" style="font-size:15px">#40</a></h3>
-      <div class="tag">depends on M12</div>
+      <h3>Oxygen-limited fire <a href="https://github.com/marctjones/heroicinventions/issues/40" style="font-size:15px">#40</a></h3>
+      <div class="tag">depends on #39</div>
       <dl>
         <dt>Adds</dt><dd>Hearths that draw oxygen from their zone at the fuel's stoichiometric rate (about 1.19 kg of O₂ per kg of wood), release CO₂ and water vapour into it, and go out below a limiting oxygen fraction.</dd>
         <dt>Predicts</dt><dd>The time a fire burns in a sealed room: the oxygen above the limit divided by the consumption rate. Also the room's pressure rise as it heats.</dd>
@@ -589,8 +604,8 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
     </div>
 
     <div class="ms">
-      <h3>M14 · Doors and airlocks <a href="https://github.com/marctjones/heroicinventions/issues/41" style="font-size:15px">#41</a></h3>
-      <div class="tag">depends on M12</div>
+      <h3>Doors and airlocks <a href="https://github.com/marctjones/heroicinventions/issues/41" style="font-size:15px">#41</a></h3>
+      <div class="tag">depends on #39</div>
       <dl>
         <dt>Adds</dt><dd>Door and hatch parts that connect two zones, with flow through the opening; an airlock that pumps down or bleeds its chamber between a greenhouse and outside.</dd>
         <dt>Predicts</dt><dd>The time two zones take to equalise through an opening; the gas lost per airlock cycle, which is the chamber volume times the gas density left in it.</dd>
@@ -599,8 +614,8 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
     </div>
 
     <div class="ms">
-      <h3>M15 · Greenhouse and wood <a href="https://github.com/marctjones/heroicinventions/issues/42" style="font-size:15px">#42</a></h3>
-      <div class="tag">depends on M12, #22, M13</div>
+      <h3>Greenhouse and wood <a href="https://github.com/marctjones/heroicinventions/issues/42" style="font-size:15px">#42</a></h3>
+      <div class="tag">depends on #39, #22, #40</div>
       <dl>
         <dt>Adds</dt><dd>An ice drill and melter; greenhouse plants, including fast trees, that take up CO₂ and water in light, give off O₂ and grow wood. No life support for people. An electrolyser is available but usually a poor trade: electrolysed oxygen costs about 21 MJ per kg of wood burned, more than the 18 MJ the fire returns.</dd>
         <dt>Predicts</dt><dd>Ice melted per joule (334 kJ/kg plus warming); O₂ and biomass per unit of light absorbed (about 1.07 kg of O₂ per kg of wood); a grow-then-burn cycle returning O₂ and CO₂ to where they started.</dd>
@@ -613,9 +628,9 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <li><strong>Should the middle be required?</strong> Settled: no. The fastest route skips glass and stays interesting; glass is the natural upgrade because membranes are opaque, and large enclosures need it because few membranes survived (see <a href="#glass">Glass</a>).</li>
       <li><strong>Game or sandbox?</strong> Settled: a game, won by calling Earth (see <a href="#goal">The goal</a>). Still open: what does the ending show: the first people arriving to what the rover built?</li>
       <li><strong>How literal is Mars?</strong> Real seasons and dust storms change pressure by ±30% and sunlight by far more. Do they belong in the first version?</li>
-      <li><strong>Electricity.</strong> Settled: found parts and unlimited wire, with no circuit model (#64), so the game doesn't wait on M7's electrical network.</li>
+      <li><strong>Electricity.</strong> Settled: found parts and unlimited wire, with no circuit model (#64), so the game doesn't wait on #6's electrical network.</li>
       <li><strong>How fast does electronics wear?</strong> Wear drives the economy. Too slow and the finite column never bites; too fast and the game becomes a scramble. Real panel dust loss (Opportunity lost a few tenths of a percent of power per sol between cleaning events) is one calibration point.</li>
-      <li><strong>Are the missing components milestones?</strong> Sound, the lever valve, the peg wheel and ratchet, and the sand timer help Heroic Inventions on Earth too. They may belong in the main roadmap ahead of M11.</li>
+      <li><strong>Are the missing components milestones?</strong> Settled: the mechanisms are stage 2, built and playable on Earth before any Mars work (see <a href="#milestones">Build order</a>).</li>
       <li><strong>Rover as player.</strong> Is the rover a Jolt vehicle the player drives (see #34, VehicleBody3D), or a camera and editor like build mode today?</li>
     </ul>
   </main>
