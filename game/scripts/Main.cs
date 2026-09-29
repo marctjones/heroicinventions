@@ -129,6 +129,16 @@ public partial class Main : Node3D
     private Button _detailsButton = null!;
     private readonly List<Button> _speedButtons = [];
 
+    // Build mode (M5, GitHub issue #4): a separate mode from running a
+    // machine, entered from the menu like any machine but with its own
+    // scene (BuildMode.cs) instead of a MachineView. HEROIC_EDITOR_* lets a
+    // headless run drive it the same way HEROIC_AUTOSELECT/HEROIC_AUTORUN
+    // drive machine selection, for scripted screenshots and save/load checks.
+    private BuildMode? _buildMode;
+    private double? _editorQuitAfterSeconds; // wall-clock: the editor has no simulated time of its own
+    private double _editorTimer;
+    private PanelContainer _leftPanel = null!; // hidden while build mode's own panel is up, so the two don't overlap
+
     public override void _Ready()
     {
         _materials = MaterialLibrary.LoadDefault();
@@ -145,6 +155,10 @@ public partial class Main : Node3D
             SelectMachine(autoSelect);
         else if (OS.GetEnvironment("HEROIC_AUTORUN") == "1" && _machineFiles.Count > 0)
             SelectMachine(_machineFiles.Keys.First());
+
+        if (OS.GetEnvironment("HEROIC_EDITOR") == "1") SelectBuildMode();
+        if (double.TryParse(OS.GetEnvironment("HEROIC_EDITOR_QUIT_AFTER_SECONDS"), System.Globalization.CultureInfo.InvariantCulture, out double editorQuit))
+            _editorQuitAfterSeconds = editorQuit;
 
         if (double.TryParse(OS.GetEnvironment("HEROIC_SPEED"), System.Globalization.CultureInfo.InvariantCulture, out double speed))
             SetSpeed(speed);
@@ -177,7 +191,7 @@ public partial class Main : Node3D
         var layer = new CanvasLayer();
         AddChild(layer);
 
-        var panel = new PanelContainer { Position = new Vector2(20, 20) };
+        var panel = _leftPanel = new PanelContainer { Position = new Vector2(20, 20) };
         layer.AddChild(panel);
         var col = new VBoxContainer { CustomMinimumSize = new Vector2(260, 0) };
         col.AddThemeConstantOverride("separation", 10);
@@ -195,6 +209,12 @@ public partial class Main : Node3D
             button.Pressed += () => SelectMachine(name);
             col.AddChild(button);
         }
+
+        col.AddChild(new HSeparator());
+
+        var buildModeButton = BigButton("Build Mode");
+        buildModeButton.Pressed += SelectBuildMode;
+        col.AddChild(buildModeButton);
 
         col.AddChild(new HSeparator());
 
@@ -374,6 +394,53 @@ public partial class Main : Node3D
     private void RestartCurrent()
     {
         if (_currentName is { } name) SelectMachine(name);
+    }
+
+    /// <summary>
+    /// Opens build mode: its own scene (BuildMode.cs), replacing whatever
+    /// machine was selected. Distinct from SelectMachine/DeselectMachine
+    /// because the editor isn't a running simulation — no speed, pause or
+    /// restart controls apply to it.
+    /// </summary>
+    private void SelectBuildMode()
+    {
+        _current?.QueueFree();
+        _current = null;
+        _currentName = null;
+        _byName.Clear();
+        SetRunning(false);
+
+        _leftPanel.Visible = false;
+        _buildMode = new BuildMode(_materials);
+        _buildMode.RunRequested += RunBuiltMachine;
+        AddChild(_buildMode);
+        ApplyCamera(MenuCamera with { Eye = new Vector3(0, 3, 4), LookAt = new Vector3(0, 0.3f, 0) });
+    }
+
+    private void DeselectBuildMode()
+    {
+        _buildMode?.QueueFree();
+        _buildMode = null;
+        _leftPanel.Visible = true;
+        ApplyCamera(MenuCamera);
+    }
+
+    /// <summary>"Run this machine" in build mode: hands the session's current MachineDef straight to a MachineView, the same as picking a saved machine from the menu.</summary>
+    private void RunBuiltMachine()
+    {
+        var def = _buildMode!.CurrentMachineDef();
+        DeselectBuildMode();
+        var view = new MachineView(new MachineRuntime(def, _materials), _materials) { Position = Vector3.Zero };
+        AddChild(view);
+        _current = view;
+        _currentName = def.Name;
+        _byName[def.Name] = view;
+        ApplyCamera(MenuCamera with { Eye = new Vector3(0, 1, 2) });
+        SetRunning(true);
+        _restartButton.Disabled = true; // no file to restart from until saved
+        _menuButton.Disabled = false;
+        _runButton.Disabled = false;
+        _detailsButton.Disabled = false;
     }
 
     private void DeselectMachine()
@@ -567,6 +634,11 @@ public partial class Main : Node3D
         {
             if (_audit) GD.Print(_current.AuditReport());
             if (_debugPhysics) GD.Print($"[final] {_current.Details}");
+            GetTree().Quit();
+        }
+
+        if (_editorQuitAfterSeconds is { } editorLimit && _buildMode is not null && (_editorTimer += delta) >= editorLimit)
+        {
             GetTree().Quit();
         }
 
