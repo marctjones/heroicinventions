@@ -21,6 +21,11 @@ public partial class MaterialBlock : RigidBody3D
         // to sleep before it ever got going, and a demo about which blocks
         // slide would quietly get the marginal one wrong.
         CanSleep = false;
+        // Loose blocks are what gets thrown: a catapulta's bolt leaves at
+        // 25 m/s, 0.4 m per physics tick, far more than its own 2.5 cm
+        // section or the floor's thickness, so without a swept test it can
+        // pass through the ground between two ticks and fall forever.
+        ContinuousCd = true;
         AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
         AddChild(Shapes.Box(size, Shapes.Mat(color)));
     }

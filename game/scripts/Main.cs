@@ -642,11 +642,15 @@ public partial class Main : Node3D
         AddChild(_sun);
         _sun.RotationDegrees = new Vector3(-50, 30, 0);
 
-        // Big enough for a trebuchet's stone, or a catapult bolt skidding on, to land on.
-        var floor = new StaticBody3D { Position = new Vector3(0, -0.05f, 0) };
-        floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(100, 0.1f, 100) } });
+        // 2 km across: a catapulta's bolt lands ~11 m out at 25 m/s and then
+        // skids on for tens of metres (oak on stone stops it in ~80 m), and at
+        // 100 m across it used to slide off the edge and fall forever. 2 m
+        // deep (top still at y = 0) so a fast body can't tunnel through it
+        // between ticks even without its swept test.
+        var floor = new StaticBody3D { Position = new Vector3(0, -1f, 0) };
+        floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(2000, 2f, 2000) } });
         _floorMaterial = Shapes.Mat(Shapes.Stone);
-        floor.AddChild(Shapes.Box(new Vector3(100, 0.1f, 100), _floorMaterial));
+        floor.AddChild(Shapes.Box(new Vector3(2000, 2f, 2000), _floorMaterial));
         AddChild(floor);
 
         _camera = new Camera3D();
