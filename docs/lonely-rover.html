@@ -223,7 +223,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
     <p>Around the path sits the game layer (#66–#70): a resource store so building costs materials, saving a whole world, goals and Heron's catalogue as achievements, sols and dust storms, and wear on the salvaged motors and bank.</p>
 
     <h2 id="night">Night heat</h2>
-    <p>An enclosure loses heat at U·A·ΔT. A well-insulated box losing 2 W per kelvin, held 80 K above the −80 °C night, needs about 160 W for 12 hours: roughly 7 MJ each night. Three ways to supply it:</p>
+    <p>An enclosure loses heat at U·A·ΔT. A well-insulated membrane box losing 2 W per kelvin, held 80 K above the −80 °C night, needs about 160 W for 12 hours: roughly 7 MJ each night. A regolith vault does four times better: Mars soil insulates like fibreglass (about 0.04 W/(m·K), because the gas in its pores is so thin), so 0.5 m of it over 6 m² loses about 0.5 W/K, about 1.7 MJ a night (#71). The bank needs warmth, not air, so the vault needs no membrane. Three ways to supply the heat (figures for the 7 MJ box; a vault needs a quarter):</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Night heat</th><th>Per night</th><th>Verdict</th></tr></thead>
@@ -243,8 +243,8 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
     <h3>The fastest route: about 3–4 sols</h3>
     <ol>
       <li><strong>Undermine the boulders.</strong> Dig a pit beside the boulders pinning the bank and undercut them; they roll aside under gravity (#54). No lifting.</li>
-      <li><strong>A membrane tent with a rock heat store.</strong> Heliostats heat basalt inside the tent by day. Rock can be heated to about 200 °C, so about 45 kg carries the 7 MJ night. No water, ice or glass needed.</li>
-      <li><strong>A thermostat.</strong> A sealed-air vent keeps the bank's side of the tent under 45 °C while the rock store runs hot.</li>
+      <li><strong>A regolith vault with a rock heat store.</strong> The backhoe buries the bank under 0.5 m of regolith, which insulates like fibreglass on Mars, so the vault loses only about 38 W on an −80 °C night: about 1.7 MJ. Heliostats heat basalt in the open by day to about 200 °C, and at dusk the rover pushes about 11 kg of it sideways into the vault. No membrane, water or glass needed.</li>
+      <li><strong>A thermostat.</strong> A sealed-air vent opens the vault to the outside if the fresh-in hot rock pushes it past 45 °C.</li>
       <li><strong>A Stirling engine on mirror heat</strong> (#65). Flat heliostats reach about 270 °C, enough for a hot-air engine with Mars as its cold side. It turns at a few hundred rpm, so a single gear stage brings it to the generator's cut-in. About 15% of 5 kW is about 750 W at the shaft and 600 W of charging: the bank fills in one sol.</li>
       <li><strong>A night windmill.</strong> Crater slope winds blow at night, so a windmill in the corridor, geared up about 125:1, tops up the warm bank.</li>
       <li><strong>Sleep until 03:00 and call.</strong></li>
@@ -254,7 +254,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <table>
         <thead><tr><th>Route</th><th>Machines, in order</th><th>Roughly</th><th>Verdict</th></tr></thead>
         <tbody>
-          <tr><td class="name">The windmiller</td><td>Lever and crane salvage, windmill, membrane tent, rock store</td><td class="num">7–10 sols</td><td>The simplest technology. About 72 W of charging, and none while the tent is cold.</td></tr>
+          <tr><td class="name">The windmiller</td><td>Lever and crane salvage, windmill, regolith vault, rock store</td><td class="num">7–10 sols</td><td>The simplest technology. About 72 W of charging, and none while the tent is cold.</td></tr>
           <tr><td class="name">Newcomen's mistake</td><td>A pressurised tent, then Earth's first steam engine</td><td class="num">stalls, then a rebuild</td><td>Mars air barely pushes the piston: about 14% of Earth's force in a 13.5 kPa tent. Rebuilding as high-pressure steam (about 5%) takes about 3 sols of daylight.</td></tr>
           <tr><td class="name">The forester</td><td>Glass, greenhouse, trees, wood-fired steam engine, wood fire at night</td><td class="num">years (months at ×20 growth)</td><td>Charging at 5% burns about 20 kg of wood: four years of a 10 m² greenhouse. The most content, the slowest route.</td></tr>
           <tr><td class="name">The hydraulic miner</td><td>Ice, rain-house, reservoir, a hushing flood to uncover the bank, a hot-water night store</td><td class="num">weeks</td><td>Salvage by flood and heat by water; charging still needs wind or an engine.</td></tr>
@@ -360,7 +360,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
         <ul>
           <li>Oxygen and nitrogen cylinders</li>
           <li>Stored water and a starter stock of seeds</li>
-          <li>Habitat membranes, seals and fittings</li>
+          <li>Habitat membranes, seals and fittings: mostly shredded by the storm, and opaque, so they never make a window</li>
           <li>Every electronic part: panels, batteries, motors, the drill's controller. They wear out and cannot be remade.</li>
         </ul>
       </div>
@@ -473,7 +473,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <li><strong>One sol</strong> lifts about 200 kg by 5 m: 3.7 kJ, about 1 Wh. Released over a minute that is about 60 W, a burst big enough to open the temple doors or run a fountain.</li>
       <li><strong>One month</strong> stores about 6 t. For mining, water mass matters more than its energy: six tonnes released at once is a flood that scours a slope (#53), Roman hushing on a timer.</li>
     </ul>
-    <p>Enclosures need walls that let the sun in. The cargo's membranes are finite; glass made from sand and sunlight is the endless replacement. Three limits shape it:</p>
+    <p>Enclosures that need light need glass. The cargo's habitat membranes are opaque layered fabric, not film, and the storm shredded most of them: what survives makes a few small tents for water and fire, never a window (#57, #66). So glass, made from sand and sunlight, is the only way to let light into a greenhouse, a rain-house or a solar-heated vault. It is optional on the fastest route and the natural upgrade after it. Three limits shape it:</p>
     <ul>
       <li><strong>Temperature, not just energy.</strong> A target under concentrated sunlight heats until it radiates away what it receives, εσT⁴ = C·I. Ten flat heliostats (C ≈ 10) peak near 270 °C; melting basalt near 1,200 °C needs C around 1,000, a curved burning mirror or a lens. Melting takes about 1.8 MJ/kg, so a 10 kg pane takes an hour of a 5 kW focused beam.</li>
       <li><strong>The sand.</strong> Most Mars sand is basalt, which melts to dark, nearly opaque glass. Clear glass needs silica-rich sand, like the nearly pure silica Spirit found at Home Plate, which gives the rover a reason to explore.</li>
@@ -567,7 +567,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
 
     <h2 id="open">Open questions</h2>
     <ul>
-      <li><strong>Should the middle be required?</strong> The fastest route skips glass, the greenhouse and the automata (see <a href="#routes">Routes</a>). Keep them optional, or add a gate?</li>
+      <li><strong>Should the middle be required?</strong> Settled: no. The fastest route skips glass and stays interesting; glass is the natural upgrade because membranes are opaque, and large enclosures need it because few membranes survived (see <a href="#glass">Glass</a>).</li>
       <li><strong>Game or sandbox?</strong> Settled: a game, won by calling Earth (see <a href="#goal">The goal</a>). Still open: what does the ending show: the first people arriving to what the rover built?</li>
       <li><strong>How literal is Mars?</strong> Real seasons and dust storms change pressure by ±30% and sunlight by far more. Do they belong in the first version?</li>
       <li><strong>Electricity.</strong> Settled: found parts and unlimited wire, with no circuit model (#64), so the game doesn't wait on M7's electrical network.</li>
