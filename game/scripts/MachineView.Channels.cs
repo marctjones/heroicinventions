@@ -15,7 +15,7 @@ namespace HeroicInventions;
 ///
 /// An inflow — water arriving from beyond the scene — is drawn the same
 /// way: a short trough coming in from outside (away from the machine's
-/// middle), spilling into its tank.
+/// middle), spilling into its tank, fed by a spring-head (see Springs).
 ///
 /// A sluice gate stands across the head of its channel: an oak plate in
 /// two grooved uprights, raised as far as its opening says, so a shut gate
@@ -81,6 +81,7 @@ public partial class MachineView
                 if (final && spec.Onto is { } onto && Runtime.Def.Part(onto) is { } target)
                     trough.Onto = (float)(target.At.Y + target.Kind switch { "boiler" => target.Number("height"), "waterwheel" => target.Number("radius"), _ => 0.1 });
                 _troughs.Add((channel, null, trough));
+                if (final && spec.To is null && spec.Onto is null) BuildOutfallMarker(spec.Id, end, dir);
                 if (i == 0) AddLabel(spec.Id, (start + end) / 2 + Vector3.Up * (trough.Width / 3 + 0.15f));
                 if (i == 0 && channel.Gate is { } gate) BuildGate(gate, trough);
             }
@@ -98,10 +99,10 @@ public partial class MachineView
             float half = Half(part), top = (float)(part.At.Y + part.Number("height"));
             float width = Mathf.Min(half * 1.2f, 0.25f + 1.5f * Mathf.Sqrt((float)source.Rate)); // a spring's runnel, a river's breadth
             var end = centre + outward * half + Vector3.Up * (top + 0.02f);
-            var start = end + outward * 1.5f + Vector3.Up * 0.03f;
+            var start = end + outward * 0.8f + Vector3.Up * 0.03f;   // short: the spring-head sits close enough to stay in view
             var trough = MakeTrough(start, end, width, source.Into, end - outward * 0.05f);
             _troughs.Add((null, source, trough));
-            AddLabel(spec.Id, start + Vector3.Up * (width / 3 + 0.15f));
+            BuildSpringHead(spec.Id, source, start, outward, width);
         }
 
         static float Half(PartSpec tank) => Mathf.Sqrt((float)tank.Number("area")) / 2;

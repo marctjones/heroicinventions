@@ -1189,6 +1189,7 @@ public partial class MachineView : Node3D
         DrawSafetyValves();
         DrawBellows();
         DrawWarmth();
+        DrawSprings();
         DrawPumps();
     }
 
