@@ -15,7 +15,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture
+         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -52,8 +52,9 @@
 ;; into: a tank; flow in m³/s.
 (struct inflow-spec (id into flow loc) #:transparent)
 ;; from: (list tank port); to: (list tank port) or 'off; end: (list x y z) or #f;
-;; length: m or #f (worked out from the tanks' positions).
-(struct channel-spec (id from to end width length loc) #:transparent)
+;; via: list of (x z) waypoints the channel bends through, in order; length: m or #f
+;; (worked out from the tanks' positions and the waypoints).
+(struct channel-spec (id from to end via width length loc) #:transparent)
 
 (define (make-machine name source items)
   (machine name source
@@ -85,7 +86,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture
+(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -123,6 +124,7 @@
   (struct linfo2 (id by from to))    ; a water lift
   (struct cinfo (id piston boiler))  ; an atmospheric cylinder
   (struct iinfo (id into))           ; an inflow
+  (struct hinfo (id heats))          ; a hearth: the boiler it heats
   (struct chinfo (id from to))       ; a channel: from a ref, to a ref or #f (off the scene)
 
   (define known-materials (material-ids))
@@ -138,6 +140,10 @@
   (define-syntax-class vec3
     #:description "a position (x y z)"
     (pattern (x:expr y:expr z:expr)))
+
+  (define-syntax-class xz
+    #:description "a waypoint (x z)"
+    (pattern (x:expr z:expr)))
 
   (define-syntax-class axis-name
     #:description "an axle direction: x, y or z"
@@ -161,8 +167,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -356,6 +362,43 @@
                                  (list (cons 'turn-deg (~? turn-v 0)))
                                  #,(loc-of this-syntax)))
 
+    ;; A post, pier or wall: a fixed block of #:material standing on the
+    ;; ground, #:at its base centre, #:size (width height depth). Other
+    ;; parts can rest on it or be held up by it; it never moves. #:round #t
+    ;; makes it a column (its width the diameter).
+    (pattern (post id:id
+                   (~alt (~once (~seq #:at at:vec3))
+                         (~once (~seq #:size size:vec3))
+                         (~once (~seq #:material mat:id))
+                         (~optional (~seq #:round round-v:expr))) ...)
+      #:attr info (pinfo #'id 'post (attribute mat) '())
+      #:with expr #`(part 'id 'post 'mat (list at.x at.y at.z)
+                          (list (cons 'size-x size.x) (cons 'size-y size.y) (cons 'size-z size.z)
+                                (cons 'round (and (~? round-v #f) #t)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A hearth: a fire of #:fuel kg of wood, charcoal or coal burning at
+    ;; #:power watts of heat, warming the boiler named by #:heats. Heat
+    ;; that reaches the water is power × #:efficiency (open fires waste
+    ;; most of theirs; default 0.5). It burns fuel at power ÷ energy density and
+    ;; goes out when the fuel is gone — feed it with (set hearth fuel).
+    (pattern (hearth id:id
+                     (~alt (~once (~seq #:at at:vec3))
+                           (~once (~seq #:heats boiler-id:id))
+                           (~once (~seq #:power power-v:expr))
+                           (~once (~seq #:fuel fuel-v:expr))
+                           (~optional (~seq #:fuel-kind kind:id))
+                           (~optional (~seq #:efficiency eff-v:expr))) ...)
+      #:fail-unless (memq (syntax-e (or (attribute kind) #'wood)) '(wood charcoal coal))
+                    "#:fuel-kind is wood, charcoal or coal"
+      #:attr info (hinfo #'id #'boiler-id)
+      #:with expr #`(part 'id 'hearth 'limestone (list at.x at.y at.z)
+                          (list (cons 'heats 'boiler-id) (cons 'power power-v) (cons 'fuel fuel-v)
+                                (cons 'fuel-kind '(~? kind wood)) (cons 'efficiency (~? eff-v 1/2)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     ;; A rope (or chain) between two parts. It only pulls, never pushes: it
     ;; goes slack when its ends come closer than its length. Each end is a
     ;; point on a part, in that part's own frame — (arm 0.9 0 0) is 0.9 m
@@ -438,11 +481,13 @@
     ;; port, over whose lip the water spills, down to another tank's port or
     ;; #:to off, out of the scene at #:end (x y z). How much flows is the
     ;; weir over the lip; how deep and fast it runs, the slope and width.
-    ;; #:length defaults to the gap between the tanks' walls.
+    ;; #:via ((x z) ...) bends it through waypoints, so a stream can follow
+    ;; any course; #:length defaults to the path between the tanks' walls.
     (pattern (channel id:id
                       (~alt (~once (~seq #:from from:ref))
                             (~once (~seq #:to (~or* (~and off-kw off) to:ref)))
                             (~optional (~seq #:end end:vec3))
+                            (~optional (~seq #:via (via:xz ...)))
                             (~once (~seq #:width width-v:expr))
                             (~optional (~seq #:length len-v:expr))) ...)
       #:fail-when (and (attribute off-kw) (not (attribute end)) #'id) "a channel running off the scene needs an #:end (x y z)"
@@ -450,6 +495,7 @@
       #:with expr #`(channel-spec 'id (list 'from.part-id 'from.port-id)
                                   (~? (list 'to.part-id 'to.port-id) 'off)
                                   (~? (list end.x end.y end.z) #f)
+                                  (~? (list (list via.x via.z) ...) '())
                                   width-v (~? len-v #f) #,(loc-of this-syntax)))
 
     (pattern (mesh a:id b:id)
@@ -636,6 +682,11 @@
         (define-values (p kind) (resolve r))
         (unless (eq? (pinfo-kind p) 'tank)
           (fail (format "a channel runs between tanks' ports; ~a is a ~a" (syntax-e r) (pinfo-kind p)) r))))
+
+    (for ([h infos] #:when (hinfo? h))
+      (define b (hash-ref parts (syntax-e (hinfo-heats h)) #f))
+      (unless (and b (eq? (pinfo-kind b) 'boiler))
+        (fail (format "~a is not a boiler; a hearth heats a boiler" (syntax-e (hinfo-heats h))) (hinfo-heats h))))
 
     (define sealed (make-hasheq))
     (for ([a infos] #:when (ainfo? a))

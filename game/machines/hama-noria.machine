@@ -8,6 +8,6 @@
   (part fields tank (material bronze) (at -2.0 0.0 -5.0) (props (area 4.0) (height 1.0) (water 0.0)) (ports (inlet water 1.0)) (srcloc "racket/machines/hama-noria.rkt" 48 2))
   (pipe conduit (from aqueduct channel) (to fields inlet) (conductance 0.002) (jet #f) (srcloc "racket/machines/hama-noria.rkt" 50 2))
   (inflow upstream (into weir-pool) (flow 0.5) (srcloc "racket/machines/hama-noria.rkt" 32 2))
-  (channel race (from weir-pool sluice) (to river inlet) (end) (width 1.2) (length #f) (srcloc "racket/machines/hama-noria.rkt" 35 2))
-  (channel tailrace (from river tail) (to off) (end -9.0 0.4 0.0) (width 1.2) (length #f) (srcloc "racket/machines/hama-noria.rkt" 41 2))
+  (channel race (from weir-pool sluice) (to river inlet) (end) (via) (width 1.2) (length #f) (srcloc "racket/machines/hama-noria.rkt" 35 2))
+  (channel tailrace (from river tail) (to off) (end -9.0 0.4 0.0) (via) (width 1.2) (length #f) (srcloc "racket/machines/hama-noria.rkt" 41 2))
   (lift raise (by naura) (from river) (to aqueduct) (current #f) (current-from race) (srcloc "racket/machines/hama-noria.rkt" 51 2)))

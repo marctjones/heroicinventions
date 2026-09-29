@@ -42,19 +42,39 @@ public partial class MachineView
         {
             var channel = Runtime.Channels[spec.Id];
             var fromPart = Runtime.Def.Part(spec.From.Part)!;
-            var fromC = new Vector3((float)fromPart.At.X, 0, (float)fromPart.At.Z);
-            Vector3 farC;
-            float farHalf = 0;
             PartSpec? toPart = spec.To is { } t ? Runtime.Def.Part(t.Part) : null;
-            if (toPart is not null) { farC = new Vector3((float)toPart.At.X, 0, (float)toPart.At.Z); farHalf = Half(toPart); }
-            else farC = new Vector3((float)spec.End!.Value.X, 0, (float)spec.End.Value.Z);
-            var along = (farC - fromC).Normalized();
-            var start = fromC + along * Half(fromPart) + Vector3.Up * (float)channel.LipElevation;
-            var end = (toPart is null ? farC : farC - along * farHalf) + Vector3.Up * (float)channel.EndElevation;
-            // the channel's own length sets its slope; drawn, it runs wall to wall
-            var trough = MakeTrough(start, end, (float)channel.Width, channel.To, end + along * 0.05f);
-            _troughs.Add((channel, null, trough));
-            AddLabel(spec.Id, (start + end) / 2 + Vector3.Up * (trough.Width / 3 + 0.15f));
+            float fromHalf = Half(fromPart), farHalf = toPart is null ? 0 : Half(toPart);
+
+            // the course: tank centre, any waypoints, then the far tank's centre (or the end point)
+            var course = new List<Vector3> { new((float)fromPart.At.X, 0, (float)fromPart.At.Z) };
+            foreach (var (x, z) in spec.Via ?? []) course.Add(new Vector3((float)x, 0, (float)z));
+            course.Add(toPart is not null
+                ? new Vector3((float)toPart.At.X, 0, (float)toPart.At.Z)
+                : new Vector3((float)spec.End!.Value.X, 0, (float)spec.End.Value.Z));
+
+            // trim the tanks' half-walls off the two ends
+            var first = (course[1] - course[0]).Normalized();
+            var last = (course[^1] - course[^2]).Normalized();
+            course[0] += first * fromHalf;
+            course[^1] -= last * farHalf;
+
+            // elevation falls evenly with distance along the course, lip to end
+            var cumulative = new List<float> { 0 };
+            for (int i = 1; i < course.Count; i++) cumulative.Add(cumulative[^1] + (course[i] - course[i - 1]).Length());
+            float lip = (float)channel.LipElevation, endY = (float)channel.EndElevation;
+            Vector3 At(int i) => course[i] + Vector3.Up * (lip + (endY - lip) * cumulative[i] / cumulative[^1]);
+
+            for (int i = 0; i + 1 < course.Count; i++)
+            {
+                var dir = (course[i + 1] - course[i]).Normalized();
+                float reach = (float)channel.Width / 2;   // overlap at the bends so the walls meet
+                var start = At(i) - (i > 0 ? dir * reach : Vector3.Zero);
+                var end = At(i + 1) + (i + 2 < course.Count ? dir * reach : Vector3.Zero);
+                bool final = i + 2 == course.Count;
+                var trough = MakeTrough(start, end, (float)channel.Width, final ? channel.To : null, end + dir * 0.05f);
+                _troughs.Add((channel, null, trough));
+                if (i == 0) AddLabel(spec.Id, (start + end) / 2 + Vector3.Up * (trough.Width / 3 + 0.15f));
+            }
         }
 
         foreach (var spec in Runtime.Def.Sources)

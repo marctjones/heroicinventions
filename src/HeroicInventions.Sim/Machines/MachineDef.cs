@@ -72,7 +72,8 @@ public sealed record LiftSpec(string Id, string By, string From, string To, doub
 public sealed record SourceSpec(string Id, string Into, double Flow, SourceLocation? Location);
 
 /// <summary>An open channel from a tank's port to another's (To), or out of the scene to End.</summary>
-public sealed record ChannelSpec(string Id, PortRef From, PortRef? To, Vec3? End, double Width, double? Length, SourceLocation? Location);
+public sealed record ChannelSpec(string Id, PortRef From, PortRef? To, Vec3? End, double Width, double? Length, SourceLocation? Location,
+                          IReadOnlyList<(double X, double Z)>? Via = null);
 
 /// <summary>A Newcomen atmospheric cylinder driving Piston, with steam from Boiler.</summary>
 public sealed record CylinderSpec(string Id, string Piston, string Boiler, double InjectionTemperature, SourceLocation? Location);
@@ -167,7 +168,10 @@ public sealed class MachineDef
                     c.Field("end") is { Items.Count: 4 } e ? new Vec3(Num(e, 1, loc), Num(e, 2, loc), Num(e, 3, loc)) : null,
                     c.Field("width") is { } w ? Num(w, 1, loc) : throw new MachineFormatException("channel has no width", loc),
                     c.Field("length")?.Items.ElementAtOrDefault(1) is SNumber l ? l.Value : null,
-                    loc);
+                    loc,
+                    c.Field("via") is { } via
+                        ? via.Items.Skip(1).OfType<SList>().Select(p => (Num(p, 0, loc), Num(p, 1, loc))).ToList()
+                        : []);
             }).ToList(),
             Cylinders = clauses.Where(c => c.Head == "atmospheric-cylinder").Select(c =>
             {

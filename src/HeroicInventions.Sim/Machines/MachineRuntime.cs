@@ -20,6 +20,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Tank> _tanks = [];
     private readonly Dictionary<string, Pipe> _pipes = [];
     private readonly Dictionary<string, Boiler> _boilers = [];
+    private readonly Dictionary<string, Hearth> _hearths = [];
     private readonly Dictionary<string, Aeolipile> _rotors = [];
     private readonly Dictionary<string, string> _rotorBoiler = []; // rotor id → boiler id
     private readonly List<AirPocket> _air = [];
@@ -35,6 +36,7 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Tank> Tanks => _tanks;
     public IReadOnlyDictionary<string, Pipe> Pipes => _pipes;
     public IReadOnlyDictionary<string, Boiler> Boilers => _boilers;
+    public IReadOnlyDictionary<string, Hearth> Hearths => _hearths;
     public IReadOnlyDictionary<string, Aeolipile> Rotors => _rotors;
     public IReadOnlyList<AirPocket> AirPockets => _air;
     public IReadOnlyDictionary<string, WaterLift> Lifts => _lifts;
@@ -84,7 +86,7 @@ public sealed class MachineRuntime
                 case "boiler":
                     _boilers[part.Id] = new Boiler(part.Number("water"), part.Number("temperature", 20), heatInputW: part.Number("fire", 0));
                     break;
-                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston":
+                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -129,6 +131,15 @@ public sealed class MachineRuntime
                 ArmRadius = part.Number("arm"),
                 MomentOfInertia = ShellInertia(materials[part.Material].Density, radius, part.Number("wall", 0.001)),
             };
+        }
+
+        foreach (var part in def.Parts.Where(p => p.Kind == "hearth"))
+        {
+            var heats = part.Symbol("heats", "");
+            if (!_boilers.TryGetValue(heats, out var boiler))
+                throw new MachineFormatException($"hearth {part.Id} heats {heats}, which is not a boiler", part.Location);
+            _hearths[part.Id] = new Hearth(boiler, part.Number("power"), part.Number("fuel"),
+                                           part.Symbol("fuel-kind", "wood"), part.Number("efficiency", 0.5));
         }
 
         foreach (var lift in def.Lifts) _lifts[lift.Id] = BuildLift(def, lift);
@@ -178,7 +189,14 @@ public sealed class MachineRuntime
             far = (end.X, end.Z);
         }
         else throw new MachineFormatException($"channel {spec.Id} needs a tank to run into, or an end point", spec.Location);
-        double apart = Math.Sqrt(Math.Pow(far.X - fromPart.At.X, 2) + Math.Pow(far.Z - fromPart.At.Z, 2));
+        // the path runs centre to centre through any waypoints; the tanks' half-walls come off the ends
+        double apart = 0;
+        (double X, double Z) prev = (fromPart.At.X, fromPart.At.Z);
+        foreach (var p in (spec.Via ?? []).Append(far))
+        {
+            apart += Math.Sqrt(Math.Pow(p.X - prev.X, 2) + Math.Pow(p.Z - prev.Z, 2));
+            prev = p;
+        }
         double length = spec.Length ?? Math.Max(0.1, apart - Half(fromPart) - farHalf);
         if (endY > lip)
             throw new MachineFormatException($"channel {spec.Id} would run uphill: its lip is at {lip:F2} m, its end at {endY:F2} m", spec.Location);
@@ -246,6 +264,16 @@ public sealed class MachineRuntime
             _getters[$"{id}.water"] = () => boiler.WaterMass;          // kg
             _setters[$"{id}.fire"] = watts => boiler.HeatInput = Math.Max(0, watts);
         }
+        foreach (var (id, h) in _hearths)
+        {
+            _getters[$"{id}.fuel"] = () => h.Fuel;                     // kg
+            _getters[$"{id}.power"] = () => h.Power;                   // W released
+            _getters[$"{id}.lit"] = () => h.Lit ? 1 : 0;
+            _getters[$"{id}.burned"] = () => h.FuelBurned;             // kg
+            _getters[$"{id}.energy"] = () => h.EnergyReleased / 1e6;   // MJ
+            _setters[$"{id}.fuel"] = kg => h.Fuel = Math.Max(0, kg);
+            _setters[$"{id}.power"] = w => h.Power = Math.Max(0, w);
+        }
         foreach (var (id, rotor) in _rotors)
         {
             _getters[$"{id}.rpm"] = () => rotor.Rpm;
@@ -288,6 +316,7 @@ public sealed class MachineRuntime
 
     public void Step(double dt)
     {
+        foreach (var h in _hearths.Values) h.Step(dt);
         Fluids.Step(dt);
         // Springs and open channels, in steps short enough that a weir can't
         // overshoot: a pool's level answers its own outflow within a second.

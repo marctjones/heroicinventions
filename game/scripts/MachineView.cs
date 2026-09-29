@@ -74,6 +74,8 @@ public partial class MachineView : Node3D
                 case "screw": BuildScrew(part); break;
                 case "fixture": BuildFixture(part); break;
                 case "piston": BuildPiston(part); break;
+                case "post": BuildPost(part); break;
+                case "hearth": BuildHearth(part); break;
             }
         }
         foreach (var pipe in Runtime.Def.Pipes) BuildPipe(pipe);
@@ -1131,6 +1133,7 @@ public partial class MachineView : Node3D
         DrawLiftStreams();
         DrawChannels();
         DrawCylinders();
+        DrawHearths();
     }
 
     public void ToggleFire()

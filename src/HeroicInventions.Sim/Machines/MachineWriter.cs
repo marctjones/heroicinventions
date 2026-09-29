@@ -103,6 +103,7 @@ public static class MachineWriter
             RefClause("from", c.From),
             c.To is { } to ? RefClause("to", to) : Tagged("to", Sym("off")),
             c.End is { } end ? Tagged("end", Num(end.X), Num(end.Y), Num(end.Z)) : Tagged("end"),
+            Tagged("via", (c.Via ?? []).Select(p => (SExpr)List(Num(p.X), Num(p.Z))).ToArray()),
             Tagged("width", Num(c.Width)),
             Tagged("length", NumOrFalse(c.Length)),
             SrcLoc(c.Location));

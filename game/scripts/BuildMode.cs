@@ -375,6 +375,7 @@ public partial class BuildMode : Node3D
             "pendulum" => Shapes.Sphere(0.08f, mat),
             "lever" => Shapes.Box(new Vector3((float)part.Number("length"), 0.05f, 0.2f), mat),
             "ramp" => Shapes.Box(new Vector3((float)part.Number("length"), 0.05f, (float)part.Number("width")), mat),
+            "post" => Shapes.Box(new Vector3((float)part.Number("size-x"), (float)part.Number("size-y"), (float)part.Number("size-z")), mat),
             "piston" => Shapes.Cylinder((float)part.Number("bore"), (float)part.Number("stroke"), mat),
             _ => CatalogueVisual(part, mat),
         };

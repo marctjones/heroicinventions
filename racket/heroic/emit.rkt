@@ -89,6 +89,7 @@
                 `(channel ,id (from ,@(channel-spec-from c))
                           (to ,@(let ([t (channel-spec-to c)]) (if (eq? t 'off) '(off) t)))
                           (end ,@(let ([e (channel-spec-end c)]) (if e (for/list ([x e]) (num "channel #:end" x)) '())))
+                          (via ,@(for/list ([p (channel-spec-via c)]) (for/list ([x p]) (num "channel #:via" x))))
                           (width ,(num (format "channel ~a #:width" id) (channel-spec-width c)))
                           (length ,(let ([l (channel-spec-length c)]) (if l (num "channel #:length" l) #f)))
                           ,(loc->sexp (channel-spec-loc c) root)))

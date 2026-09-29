@@ -223,7 +223,12 @@ public sealed class BuildSession
         double width = Num(RequireKw(cmd, "width"), "channel");
         double? length = Kw(cmd, "length") is { } l ? Num(l, "channel") : null;
         Snapshot();
-        Document.AddChannel(id, from, to, end, width, length);
+        var via = Kw(cmd, "via") is SList vl
+            ? vl.Items.Select(p => p is SList { Items.Count: 2 } xz
+                ? (Num(xz.Items[0], "channel"), Num(xz.Items[1], "channel"))
+                : throw new FormatException("channel #:via: expected ((x z) ...)")).ToList()
+            : null;
+        Document.AddChannel(id, from, to, end, width, length, via);
         return $"channel {id}: {from} -> {(to is { } t ? t.ToString() : "off")}";
     }
 

@@ -48,6 +48,7 @@ public static class RktExporter
         foreach (var c in m.Channels)
             sb.Append($"  (channel {c.Id} #:from {c.From.Part}.{c.From.Port} " +
                       (c.To is { } to ? $"#:to {to.Part}.{to.Port}" : $"#:to off #:end {Vec(c.End!.Value)}") +
+                      (c.Via is { Count: > 0 } via ? $" #:via ({string.Join(" ", via.Select(p => $"({F(p.X)} {F(p.Z)})"))})" : "") +
                       $" #:width {F(c.Width)}" + (c.Length is { } len ? $" #:length {F(len)}" : "") + ")\n");
         foreach (var c in m.Cylinders)
             sb.Append($"  (atmospheric-cylinder {c.Id} #:piston {c.Piston} #:steam-from {c.Boiler} #:injection-temperature {F(c.InjectionTemperature)})\n");
@@ -111,6 +112,12 @@ public static class RktExporter
             case "piston":
                 return $"  (piston {p.Id} {At()} #:bore {F(N("bore"))} #:stroke {F(N("stroke"))} {Mat()} " +
                        $"#:start {F(N("start"))} #:rod-mass {F(N("rod-mass"))})\n";
+            case "post":
+                return $"  (post {p.Id} {At()} #:size ({F(N("size-x"))} {F(N("size-y"))} {F(N("size-z"))}) {Mat()}" +
+                       (p.Props.TryGetValue("round", out var rd) && rd is SBool { Value: true } ? " #:round #t" : "") + ")\n";
+            case "hearth":
+                return $"  (hearth {p.Id} {At()} #:heats {Sym("heats", "?")} #:power {F(N("power"))} #:fuel {F(N("fuel"))} " +
+                       $"#:fuel-kind {Sym("fuel-kind", "wood")} #:efficiency {F(N("efficiency", 0.5))})\n";
             case "wheel":
             case "screw":
             case "fixture":

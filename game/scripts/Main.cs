@@ -49,6 +49,13 @@ public partial class Main : Node3D
         ["newcomen-engine"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
         ["roman-crane"] = new(new Vector3(3.0f, 3.8f, 10.5f), new Vector3(0.3f, 3.2f, 0.5f), 50),
         ["vitruvian-catapulta"] = new(new Vector3(1.7f, 1.4f, 2.0f), new Vector3(0, 0.7f, -0.3f), 50),
+        ["component-gallery"] = new(new Vector3(3.5f, 5.5f, 13f), new Vector3(3.5f, 0.6f, 0), 60),
+        ["newcomen-hearth"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
+        ["hearth-engine"] = new(new Vector3(0, 1.0f, 1.7f), new Vector3(0, 0.75f, 0), 45),
+        ["post-and-lintel-crane"] = new(new Vector3(2.2f, 1.7f, 4.6f), new Vector3(0, 1.1f, 0), 50),
+        ["water-mill-race"] = new(new Vector3(5f, 3.5f, 13f), new Vector3(5f, 0.9f, 0), 55),
+        ["water-clock"] = new(new Vector3(0, 1.4f, 5.0f), new Vector3(-0.2f, 1.0f, 0), 50),
+        ["castellum-aquae"] = new(new Vector3(10.5f, 5.0f, 22f), new Vector3(10.5f, 2.6f, 0), 55),
     };
     private static readonly (double Scale, string Label)[] Speeds =
         [(0.1, "0.1×"), (0.25, "0.25×"), (1, "1×"), (5, "5×"), (10, "10×"), (20, "20×")];
@@ -81,10 +88,17 @@ public partial class Main : Node3D
         ["torsion-catapult"] = "Torsion Catapult (Onager)",
         ["antikythera-lunar-train"] = "Antikythera Lunar Train",
         ["archimedes-screw"] = "Archimedes' Screw",
+        ["component-gallery"] = "Component Gallery",
         ["hama-noria"] = "Noria of Hama",
         ["newcomen-engine"] = "Newcomen Engine",
         ["roman-crane"] = "Roman Crane",
         ["vitruvian-catapulta"] = "Vitruvian Catapulta",
+        ["newcomen-hearth"] = "Newcomen Engine (Coal Hearth)",
+        ["hearth-engine"] = "Hearth-Fired Aeolipile",
+        ["post-and-lintel-crane"] = "Post-and-Lintel Crane",
+        ["water-mill-race"] = "Water Mill Race",
+        ["water-clock"] = "Water Clock (Clepsydra)",
+        ["castellum-aquae"] = "Castellum Aquae",
     };
 
     private static readonly Dictionary<string, string> Descriptions = new()
@@ -99,11 +113,18 @@ public partial class Main : Node3D
         ["trebuchet"] = "A counterweight trebuchet (medieval, but Archimedes' lever taken as far as it goes). A 73 kg counterweight hangs on a chain from the short arm; the long arm carries a sling, with the stone lying on the ground behind. The falling weight whips the arm over, the sling whips the stone round faster still, and it flies ~6 m forward. Only rope, hinge and gravity — nothing scripts the flight.",
         ["torsion-catapult"] = "The onager, a late-Roman one-armed stone-thrower (Ammianus Marcellinus, 4th c. AD). Its arm stands in a horizontal skein of twisted sinew — a torsion spring — winched down level. Loosed, the skein flings the arm up against a padded crossbeam near upright, and the stone, in a sling at the tip, whips round and flies ~15 m. The skein's stiffness is our estimate; Ammianus gives none.",
         ["antikythera-lunar-train"] = "Six bronze gears from the Antikythera mechanism (c. 100 BC), with their real tooth counts: 64→38, 48→24, 127→32. One turn of the first is a year; the last then turns 254/19 times — the Moon's circuits of the sky in that year. Triangular teeth, as the originals have. Here a crank turns b2 at 2 rpm and the train does the rest: each mesh reverses the sense and scales the speed by the tooth ratio, so e2 runs at 26.7 rpm.",
+        ["component-gallery"] = "Five benches, one per family of parts: a pipe settling two tanks (one on a post pier) to equal height; a trilithon of posts, lintel and load; a hearth burning 50 g of wood under a boiler that spins a rotor; a spring feeding a weir, a winding channel with waypoints, a pond and a tailrace; and a pendulum, a lever on a fulcrum post and a ramp.",
         ["archimedes-screw"] = "A water screw built only from Vitruvius's rules (De Architectura X.6) — core a sixteenth of its length, eight helical blades, whole an eighth of its length across, set on a 3-4-5 slope. A man treading it turns it at 12 rpm; its lower end stands in a pool, and each turn carries the water in each dip of its channels one pitch higher, 23 L a turn, pouring into the trough at the top. As the pool drops below the intake the scoops come up part-full and the flow falls off.",
         ["newcomen-engine"] = "Thomas Newcomen's atmospheric engine (1712), after the one at Dudley Castle — the first practical piston engine, built to pump water out of mines. Steam fills the cylinder (white) and the pump rod's weight draws the piston up; at the top a jet of cold water condenses the steam (blue), and the atmosphere — 18 kN on the 53 cm piston — drives it down, rocking the beam and lifting ~47 L of water 48 m up the mine shaft each stroke. It's the air that does the work. About 5% of the fire's heat becomes lifted water here; real engines managed under 1%, because each cold jet also chilled the cylinder walls — the waste Watt's separate condenser later cured.",
         ["hama-noria"] = "A noria, like those that have watered the fields of Hama on the Orontes since Roman times: the river turns it and it lifts the river. The current drags on the paddles dipping into it; buckets in the rim fill at the bottom and tip out at the top into an aqueduct that carries the water off to the fields. The river comes in from upstream (right) at 500 L/s, fills a weir pool, and spills into a stone race that runs 1.5 m/s — worked out from its slope and roughness, not typed in — into the wheel's basin, then leaves over the tailrace. Nothing sets the wheel's speed: it settles where the race's push balances the weight of water it's lifting, about 1.3 rpm. Choke the river and the race slows, the basin drops, and the wheel stalls, as norias do in a dry summer.",
         ["roman-crane"] = "A Roman building crane (Vitruvius X.2): two men walking in a 4.5 m treadwheel turn a 25 cm drum on the same axle, winding a rope over the jib's pulley to lift 580 kg of granite. The wheel and axle is the lever that makes it possible: the men push at 2.25 m, the stone pulls at 0.25 m, so they need only a ninth of its weight. Their ~1,550 N·m just beats the stone's ~1,430 N·m — one man alone couldn't lift it.",
         ["vitruvian-catapulta"] = "A two-armed bolt-shooter proportioned entirely from Vitruvius's table (X.10) — every part a multiple of the spring hole, the hole a ninth of the bolt: here a 69 cm bolt, 7.7 cm hole, 54 cm arms. Each arm turns in an upright spring of twisted sinew; drawn back, the springs twist further. Loosed, they throw the arms forward, the bowstring drives the bolt down the channel, the arms hit their stops and the bolt flies on at ~25 m/s, landing ~11 m away shot level. Vitruvius gives no spring stiffness; 300 N·m per radian is our estimate.",
+        ["newcomen-hearth"] = "Newcomen's atmospheric engine, as at Dudley Castle, but with an honest fire: 2 kg of coal (24 MJ/kg, 25% reaching the boiler) burns at 1 MW and goes out after 48 s, having put 12 MJ into 2 000 kg of water. The engine keeps pumping on the heat stored in the boiler, lifting about 48 L a stroke (the pump bore times its stroke) into the cistern.",
+        ["hearth-engine"] = "Hero's steam reaction engine with the fire made real. 60 g of wood (15 MJ/kg) burns for 225 s at 4 kW, half of it reaching the kettle: 2 kW, enough to hold the kettle at 105.9 C while steam leaving the two nozzles spins the ball to 2 740 rpm, where air drag balances the thrust. When the wood is gone the kettle cools and the ball slows.",
+        ["post-and-lintel-crane"] = "A Bronze Age counterweight lift, a shaduf on a trilithon: two posts and a lintel carry the axle of a 3 m oak beam. A 116 kg granite counterweight on the short arm (63.7 kg.m) outweighs the 21.6 kg load on the long arm plus the beam, so the beam swings to its 15 degree stop and raises the load about 0.4 m. The balance comes out of the densities and Jolt's contacts alone.",
+        ["water-mill-race"] = "A spring fills a header tank on a pier, spills over its weir (6.25 cm head) into a stone brook that winds through three bends and runs 2 cm deep at 1.3 m/s, drops into a millpond, and leaves over a tail weir. The brook's current on its paddles turns a small noria standing on its own posts. The wheel settles at 3 rpm, where the paddles' drag equals the weight of water it lifts, and raises 4.6 L/s to a flume on a pier.",
+        ["water-clock"] = "A Ctesibian clepsydra. A spring keeps the reservoir brimming over its lip, so the pressure driving the outlet never changes; the outlet fills a tall receiver from the top, so the far end holds steady too. The receiver level therefore climbs at a constant 2.97 mm/s (0.1187 L/s over 0.04 m2): the water level is the time. There is no float here; the level is read off the water itself.",
+        ["castellum-aquae"] = "A Roman castellum aquae, as Vitruvius describes: an aqueduct on an arcade of piers ends in a distribution tank with three pipes at three heights, fountains lowest, baths above, houses highest. The 6.7 L/s supply is less than the 9 L/s all three could carry, so the level falls past the houses' pipe and settles at 72 cm, where the fountains (3.7 L/s) and baths (3.0 L/s) take everything and the houses go dry.",
     };
 
     private MaterialLibrary _materials = null!;
