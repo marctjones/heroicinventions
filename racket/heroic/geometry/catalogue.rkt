@@ -54,6 +54,13 @@
      (list (string->symbol (format "drum-~acm" (inexact->exact (round (* 100 r)))))
            (format "Windlass drum, ~a cm radius" (* 100 r))
            (λ () (drum #:radius r #:length (* 4 r)))))
+   ;; Cart wheels: a solid plank wheel, and spoked wheels the size of a
+   ;; handcart's (30 cm) and a farm cart's (60 cm)
+   (list (list 'disc-wheel-30cm "Solid disc wheel, 30 cm across" (λ () (disc-wheel #:radius 0.15 #:width 0.05))))
+   (for/list ([r '(0.3 0.6)])
+     (list (string->symbol (format "cart-wheel-~acm" (inexact->exact (round (* 200 r)))))
+           (format "Spoked cart wheel, ~a cm across" (inexact->exact (round (* 200 r))))
+           (λ () (cart-wheel #:radius r #:width (* 0.12 r)))))
    ;; Roman crane treadwheels ran about 4–5 m across (the Capua relief,
    ;; the Bonn crane reconstruction)
    (for/list ([r '(2.0 2.5)])

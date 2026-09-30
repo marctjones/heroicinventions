@@ -102,6 +102,12 @@ public partial class MachineView
                 Add($"{id}.impact-energy-total", struck.TotalEnergy);
             }
         }
+        foreach (var c in _carried)
+        {
+            // a cart wheel's load (N) and the rolling resistance against it (N·m)
+            Add($"{c.Wheel.Name}.load", c.Load);
+            Add($"{c.Wheel.Name}.rolling-torque", c.Resisting);
+        }
         foreach (var r in _ropes)
         {
             Add($"{r.Spec.Id}.tension", r.Tension);

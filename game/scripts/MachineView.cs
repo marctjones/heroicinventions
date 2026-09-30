@@ -122,6 +122,7 @@ public partial class MachineView : Node3D
         BuildMirrors();
         BuildPumps();
         BuildPistonDrives();
+        BuildCarriedWheels();
         BuildJoints();
         BuildImpacts();
         Refresh();
@@ -937,6 +938,7 @@ public partial class MachineView : Node3D
         body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(width, thickness, length) } });
         body.AddChild(Shapes.Box(new Vector3(width, thickness, length), Surface(part.Material)));
         AddChild(body);
+        _surfaceMaterials[body.GetInstanceId()] = part.Material;
         AddLabel(part.Id, V(part.At) + new Vector3(0, 0.1f, 0));
     }
 
@@ -1024,7 +1026,17 @@ public partial class MachineView : Node3D
             CanSleep = false,
         };
         body.Transform = new Transform3D(toAxis * new Basis(new Vector3(0, 0, 1), Mathf.DegToRad(startAngleDeg)), V(part.At));
-        body.AddChild(new CollisionShape3D { Shape = mesh.CreateConvexShape() });
+        if (part.Symbol("shape", "") is "disc-wheel" or "cart-wheel")
+            // a wheel that rolls on the ground needs a round rim: a hull of the
+            // mesh's 64 facets bumps from flat to flat and loses to every bump
+            // (carts slowed at twice their rolling resistance)
+            body.AddChild(new CollisionShape3D
+            {
+                Shape = new CylinderShape3D { Radius = (float)part.Number("radius"), Height = (float)part.Number("width") },
+                Rotation = new Vector3(Mathf.Pi / 2, 0, 0),   // the cylinder's axis (its Y) along the axle (local Z)
+            });
+        else
+            body.AddChild(new CollisionShape3D { Shape = mesh.CreateConvexShape() });
         var extent = mesh.GetAabb().Size;
         body.AddChild(new MeshInstance3D { Mesh = mesh, MaterialOverride = PartSurface(part, Mathf.Max(extent.X, extent.Y)) });
         // A round, evenly toothed wheel looks the same at every angle, so a
@@ -1044,6 +1056,14 @@ public partial class MachineView : Node3D
         AddChild(body);
         _freezable.Add(body);
         _bodiesById[part.Id] = body;
+        if (part.Props.GetValueOrDefault("on") is SSymbol)
+        {
+            // a cart's wheel: its axle rides on the chassis, hinged there once
+            // every body is built (BuildCarriedWheels)
+            _toCarry.Add((part, body, axis));
+            AddLabel(part.Id, Vector3.Up * (float)(part.Number("radius", 0.1) + 0.1), body, LabelSizeFor((float)part.Number("radius", 0.1)));
+            return body;
+        }
         _hinges[body] = (V(part.At), axis);
 
         // A wheel riding on another's arbor is locked to it (BuildArbors),
@@ -1325,6 +1345,7 @@ public partial class MachineView : Node3D
         DriveLifts();
         DrivePistons();
         DriveSprings();
+        RollCarriedWheels();
         DriveFollows();
         DriveBelts(dt);
         DriveGrips(dt);

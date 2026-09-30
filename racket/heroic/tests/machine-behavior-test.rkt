@@ -1120,6 +1120,33 @@
     (check-= (apply min ratios) cb 0.003)
     (check-= (apply max ratios) (/ 1 cb) 0.003)))
 
+;; Issue #25: carts. Predicted before the first run (carts.rkt's header),
+;; from the wheels' own meshes: a = g (sin t - C_rr cos t) M / (M + sum I/r^2)
+;; down the slope, C_rr g M / (M + sum I/r^2) slowing on the flat.
+(test-case "Carts: down a 10 degree slope and along the flat as the wheels' inertia and rolling resistance say; the sledge holds"
+  (when (godot-available?)
+    (local-require heroic/geometry)
+    (define run (godot-simulate 'carts #:seconds 7 #:sample-dt 0.1))
+    (define (at f key) (cadr (assq key (cdr f))))
+    (define (frame t) (for/first ([f run] #:when (>= (car f) (- t 1e-6))) f))
+    (define th (* 10 (/ pi 180)))
+    (define g 9.81) (define crr 0.04) (define r 0.15)
+    (for ([cart '(disc-cart spoke-cart)]
+          [wheel (list (disc-wheel #:radius r #:width 0.05) (cart-wheel #:radius r #:width 0.05))]
+          [bed (list (* 720 0.4 0.08 0.8) (* 500 0.4 0.05 0.8))])
+      (define m (* 720 (shape-volume wheel)))
+      (define i (* 720 (vector-ref (shape-inertia wheel) 2)))
+      (define M (+ bed (* 4 m)))
+      (define k (/ M (+ M (* 4 (/ i r r)))))
+      (define (vz t) (at (frame t) (string->symbol (format "~a.vz" cart))))
+      ;; on the slope (0.3 to 1.5 s) its speed along it is vz / cos t
+      (define down (/ (- (vz 1.5) (vz 0.3)) 1.2 (cos th)))
+      (check-= down (* g (- (sin th) (* crr (cos th))) k) (* 0.01 down) (format "~a down the slope at ~a m/s2" cart down))
+      ;; on the flat (3 to 6 s)
+      (define slowing (/ (- (vz 3.0) (vz 6.0)) 3.0))
+      (check-= slowing (* crr g k) (* 0.02 slowing) (format "~a slows at ~a m/s2" cart slowing)))
+    (check-true (< (abs (- (at (frame 7) 'sledge.z) (at (frame 0) 'sledge.z))) 0.001) "the sledge holds on the slope")))
+
 ;; ---------------------------------------------------------------------------
 ;; One real-game check for each remaining rigid-body machine, each against
 ;; the prediction in its .rkt header. Measured 2026-09-29 before writing;

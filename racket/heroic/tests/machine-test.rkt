@@ -150,6 +150,20 @@
   (check-exn #rx"#:wind must be a speed" (λ () (build '(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind -1))))
   (check-not-exn (λ () (build '(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind 6 #:cp 16/27)))))
 
+(define (run-machine . clauses)   ; expands and runs it: the checks made when the machine is built
+  (parameterize ([current-namespace (make-base-namespace)])
+    (eval `(module test-machine heroic (define-machine test ,@clauses)))
+    (eval '(require 'test-machine))
+    (void)))
+
+(test-case "a cart wheel rides on a block"
+  (check-exn #rx"must name a block"
+    (λ () (run-machine '(post p #:at (0 0 0) #:size (0.1 1 0.1) #:material oak)
+                          '(wheel w #:shape (disc-wheel #:radius 0.15 #:width 0.05) #:at (0 0.15 0) #:material oak #:on p))))
+  (check-not-exn
+    (λ () (expand-machine '(block bed #:at (0 0.15 0) #:size 0.05 #:material oak)
+                          '(wheel w #:shape (cart-wheel #:radius 0.15 #:width 0.05) #:at (0.3 0.15 0) #:axis x #:material oak #:on bed #:rolling-resistance 0.02)))))
+
 (test-case "joints: a known kind, between moving parts, with what each kind needs"
   (define rod '(block rod #:at (0 1 0) #:size 0.05 #:material oak))
   (define bob '(block bob #:at (0 0.5 0) #:size 0.1 #:material iron))

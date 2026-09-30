@@ -248,6 +248,22 @@
 ;; A windmill's numbers are checked when the machine is built; its #:cp
 ;; above all, which no rotor can take past the Betz limit.
 ;; A capstan's numbers are checked when the machine is built.
+;; A wheel carried #:on a body (a cart's axle, not the world's): that body
+;; must be a block, the chassis.
+(define (check-carried-wheels parts)
+  (for ([p parts] #:when (and (eq? (part-kind p) 'wheel) (assq 'on (part-props p))))
+    (define on (cdr (assq 'on (part-props p))))
+    (define loc (part-loc p))
+    (define chassis (findf (λ (q) (eq? (part-id q) on)) parts))
+    (unless (and chassis (eq? (part-kind chassis) 'block))
+      (error 'define-machine "~a:~a:~a: wheel ~a: #:on ~a must name a block, the chassis that carries its axle"
+             (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) on))
+    (define rr (assq 'rolling-resistance (part-props p)))
+    (when (and rr (not (and (real? (cdr rr)) (>= (cdr rr) 0))))
+      (error 'define-machine "~a:~a:~a: wheel ~a: #:rolling-resistance must be 0 or more, got ~e"
+             (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) (cdr rr))))
+  parts)
+
 (define (check-capstans parts)
   (for ([p parts] #:when (eq? (part-kind p) 'capstan))
     (define (prop k) (cdr (assq k (part-props p))))
@@ -361,7 +377,7 @@
     (unless (and (real? time) (<= 0 time) (< time 24))
       (error 'define-machine "machine ~a: #:time must be solar hours in [0, 24), got ~e" name time)))
   (machine name source ambient sun planet-v
-           (check-zone-joins (check-enclosures (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)))))))))
+           (check-zone-joins (check-enclosures (check-carried-wheels (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -709,7 +725,13 @@
     ;;
     ;; A wheel turns on an axle through #:at along #:axis (z, the default,
     ;; faces the camera), or raised #:tilt-deg from it (an x or z axle
-    ;; tilts up toward y; a y axle leans toward x). #:angle-deg sets where it starts turned to — how
+    ;; tilts up toward y; a y axle leans toward x).
+    ;; #:on chassis carries the axle on that block instead of the world: a
+    ;; cart's wheel. It rolls on whatever it stands on, losing to rolling
+    ;; resistance a torque C_rr N r against its turn (N the load on it):
+    ;; #:rolling-resistance C_rr, else 0.002 for metal on metal (a railway
+    ;; wheel on its rail) and 0.04 for anything else (a 19th-century stage
+    ;; coach on a dirt road; both from Wikipedia's table of coefficients). #:angle-deg sets where it starts turned to — how
     ;; meshing gears are phased (see mate-angle). #:drive-rpm turns it at
     ;; that steady speed, as a man at a crank or a treadmill would; without
     ;; it the wheel turns only if something pushes it. #:drive-torque caps
@@ -724,12 +746,16 @@
                           (~optional (~seq #:axis ax:axis-name))
                           (~optional (~seq #:angle-deg angle-v:expr))
                           (~optional (~seq #:tilt-deg tilt-v:expr))
+                          (~optional (~seq #:on chassis:id))
+                          (~optional (~seq #:rolling-resistance rr-v:expr))
                           (~optional (~seq #:drive-rpm rpm-v:expr))
                           (~optional (~seq #:drive-torque torque-v:expr))) ...)
       #:attr info (pinfo #'id 'wheel (attribute mat) '())
       #:with expr #`(shaped-part 'id 'wheel 'mat (list at.x at.y at.z) shape-v
                                  (list (cons 'axis '(~? ax z)) (cons 'angle-deg (~? angle-v 0))
                                        (~@ . (~? ((cons 'tilt-deg tilt-v)) ()))
+                                       (~@ . (~? ((cons 'on 'chassis)) ()))
+                                       (~@ . (~? ((cons 'rolling-resistance rr-v)) ()))
                                        (cons 'drive-rpm (~? rpm-v 0)) (cons 'drive-torque (~? torque-v #f)))
                                  #,(loc-of this-syntax)))
 

@@ -230,7 +230,9 @@ public static class RktExporter
                 if (Sym("catalogue", "") is not { Length: > 0 } entry) break;
                 string extras = p.Kind switch
                 {
-                    "wheel" => $" #:axis {Sym("axis", "z")} #:angle-deg {F(N("angle-deg"))}" + Opt("tilt-deg", "tilt-deg") + $" #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque"),
+                    "wheel" => $" #:axis {Sym("axis", "z")} #:angle-deg {F(N("angle-deg"))}" + Opt("tilt-deg", "tilt-deg") +
+                                (p.Props.TryGetValue("on", out var on) && on is SSymbol chassis ? $" #:on {chassis.Name}" : "") +
+                                Opt("rolling-resistance", "rolling-resistance") + $" #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque"),
                     "screw" => $" #:tilt-deg {F(N("tilt-deg"))} #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque"),
                     _ => $" #:turn-deg {F(N("turn-deg"))}",
                 };

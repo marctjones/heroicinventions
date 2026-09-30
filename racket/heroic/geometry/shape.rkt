@@ -14,7 +14,7 @@
 (struct shape (kind mesh volume inertia props) #:transparent)
 
 ;; Shapes that are a wheel on an axle (as opposed to a screw or a frame).
-(define wheel-kinds '(gear pulley drum treadwheel noria))
+(define wheel-kinds '(gear pulley drum treadwheel noria disc-wheel cart-wheel))
 
 ;; Volume and inertia come from the mesh itself. A shape built from
 ;; several closed pieces (spokes, rims, buckets) counts each piece in

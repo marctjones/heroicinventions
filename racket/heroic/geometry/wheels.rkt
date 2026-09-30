@@ -2,7 +2,7 @@
 ;; Wheels on an axle: pulley sheaves, windlass drums, treadwheels and
 ;; norias. All centred on the origin, axle along Z.
 (require racket/math racket/list "mesh.rkt" "shape.rkt")
-(provide pulley drum treadwheel noria)
+(provide pulley drum treadwheel noria disc-wheel cart-wheel)
 
 (define (ring inner outer z0 z1 #:segments [n 64]) ; an annulus of rectangular section
   (revolve-profile (list (cons inner z0) (cons outer z0) (cons outer z1) (cons inner z1)) #:segments n))
@@ -35,6 +35,33 @@
               (revolve-profile (list (cons b (- h)) (cons f (- h)) (cons f (+ (- h) t)) (cons r (+ (- h) t))
                                      (cons r (- h t)) (cons f (- h t)) (cons f h) (cons b h)))
               `((radius . ,r) (length . ,len) (flange-radius . ,f) (bore . ,b))))
+
+;; A solid wheel: a disc of timber (or a millstone, or a cast iron disc)
+;; with a hole for its axle -- the oldest wheels were planks pinned into a
+;; disc. Its mass sits far out, I = 1/2 m r^2 (a little more with the bore).
+(define (disc-wheel #:radius r #:width w #:bore [bore #f])
+  (define b (or bore (* 0.1 r)))
+  (define h (/ w 2))
+  (make-shape 'disc-wheel
+              (revolve-profile (list (cons b (- h)) (cons r (- h)) (cons r h) (cons b h)))
+              `((radius . ,r) (width . ,w) (bore . ,b))))
+
+;; A spoked wheel: a felloe (rim), a hub and spokes -- the chariot's and
+;; cart's wheel, light for its size, its mass mostly in the rim.
+(define (cart-wheel #:radius r #:width w #:spokes [spokes 8])
+  (define rim-depth (* 0.1 r))
+  (define hub-r (* 0.18 r))
+  (define h (/ w 2))
+  (define inner (- r rim-depth))
+  (define spoke-len (- inner hub-r))
+  (define spoke (* 0.5 w))
+  (composite 'cart-wheel
+             (append (list (ring (* 0.35 hub-r) hub-r (- (* 1.5 h)) (* 1.5 h))
+                           (ring inner r (- h) h))
+                     (for/list ([i (in-range spokes)])
+                       (placed-box (+ spoke-len (* 0.5 rim-depth) (* 0.5 hub-r)) spoke spoke
+                                   (v3 (+ hub-r (/ spoke-len 2)) 0 0) (/ (* 2 pi i) spokes))))
+             `((radius . ,r) (width . ,w) (spokes . ,spokes))))
 
 ;; Hub, two rims and spokes — shared by treadwheels and norias.
 (define (spoked-frame r w spokes rim-depth rim-thick hub-r)
