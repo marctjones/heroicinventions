@@ -31,6 +31,9 @@ public sealed partial class Terrain
 
     public SoilSpec SoilOf(int cell) => Soils[Soil[cell]];
 
+    /// <summary>Marks the ground's shape as changed (water moving its bed, #53).</summary>
+    public void Touch() => Version++;
+
     /// <summary>Takes <paramref name="depth"/> m off a cell's top; returns the m³ taken.</summary>
     public double Dig(int cell, double depth)
     {

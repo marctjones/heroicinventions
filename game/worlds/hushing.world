@@ -1,0 +1,7 @@
+;; Hushing (issue #53; Pliny, Natural History XXXIII.21): a pond let go at
+;; the top of a sandy slope scours a gully below its spout and drops the
+;; sand in a fan where the flow spreads out. The hillside pond
+;; (racket/machines/hillside-pond.rkt) on the sand-slope map.
+(world hushing
+  (map sand-slope)
+  (place pond hillside-pond (at -2 0 0)))

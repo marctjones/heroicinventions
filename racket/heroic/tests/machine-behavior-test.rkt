@@ -2025,3 +2025,23 @@
   ;; every gram: what the pond lost is in the gutter or the air
   (define vapour-kg (* (/ (* (final-of run '(house h2o-pressure)) 1000 80) (* 8.314 293.15)) 0.018015))
   (check-= (- 200 (final-of run '(basin water))) (+ (final-of run '(gutter water)) vapour-kg) 1e-6))
+;; ---------------------------------------------------------------------------
+;; Sediment transport (issue #53)
+
+(test-case "Sluice box (#53): at the race's steady flow it keeps grains denser than 7340 kg/m3: the gold, not the sand"
+  ;; placer-sluice.rkt: tau = rho g R S at the Manning depth for 2 L/s = 1.46 Pa; cutoff 1000 + tau / (0.047 g d)
+  (define run (simulate 'placer-sluice #:seconds 360 #:step 0.01 #:sample-dt 60))
+  (check-= (value-at run '(race flow) 300) 2 0.01)
+  (check-= (value-at run '(riffles shear) 300) 1.46 0.01)
+  (check-= (value-at run '(riffles cutoff) 300) 7340 10)
+  (define (gain k) (- (final-of run (list 'riffles k)) (value-at run (list 'riffles k) 300)))
+  (check-= (gain 'kept-heavy) (* 0.02 0.1 60) 1e-6 "every gram of gold fed in the last minute kept")
+  (check-= (gain 'kept-light) 0 1e-9 "no sand kept at the steady flow")
+  (check-= (gain 'passed-heavy) 0 1e-9))
+
+(test-case "Hushing (#53): the pond let go on the sand slope moves sand, and none of it is lost from the ledger"
+  (when (godot-available?)
+    (define world (godot-simulate-world 'hushing #:seconds 60 #:sample-dt 10))
+    (define g (hash-ref world 'links))
+    (check-true (> (final-of g '(map poured)) 1) "the pond ran out onto the slope")
+    (check-true (> (final-of g '(map bed-moved)) 0.01) "and moved sand")))

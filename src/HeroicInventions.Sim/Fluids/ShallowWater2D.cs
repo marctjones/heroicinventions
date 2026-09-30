@@ -16,7 +16,7 @@ namespace HeroicInventions.Sim.Fluids;
 /// run onto the ground) = what stands on it + what soaked in + what ran off
 /// an open edge.
 /// </summary>
-public sealed class ShallowWater2D
+public sealed partial class ShallowWater2D
 {
     public Terrain Ground { get; }
     public double Gravity { get; set; } = Physics.Gravity;
@@ -67,6 +67,19 @@ public sealed class ShallowWater2D
                 _qx[c] = _qz[c] = 0;
             }
         Poured += Volume - before;
+    }
+
+    /// <summary>Sets the water on the ground and how it runs: a depth and a velocity (u along x, w along z) at each cell centre. Counted as poured.</summary>
+    public void Fill(Func<double, double, double> depthAt, Func<double, double, (double U, double W)> velocityAt)
+    {
+        Fill(depthAt);
+        for (int j = 0; j < Ground.Nz; j++)
+            for (int i = 0; i < Ground.Nx; i++)
+            {
+                int c = i + j * Ground.Nx;
+                var (u, w) = velocityAt(Ground.CellX(i), Ground.CellZ(j));
+                (_qx[c], _qz[c]) = (_h[c] * u, _h[c] * w);
+            }
     }
 
     /// <summary>Pours m³ onto the ground at a world point (a channel running off a machine onto it). Off the map, it runs away: false.</summary>
@@ -186,7 +199,9 @@ public sealed class ShallowWater2D
                 _qx[c] = qx * damp;
                 _qz[c] = qz * damp;
             }
+        if (_erodes ??= Ground.Soils.Any(s => s.Erodible)) MoveSediment(dt);
     }
+    private bool? _erodes;
 
     /// <summary>
     /// A face on the map's edge, next to cell c, the edge lying in direction

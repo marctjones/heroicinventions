@@ -99,6 +99,7 @@ public partial class MachineView : Node3D
                 case "counterpoise": BuildCounterpoise(part); break;
                 case "digger": BuildDigger(part); break;
                 case "float": BuildFloat(part); break;
+                case "sluice-box": BuildSluiceBox(part); break;
             }
             _partNodes[part.Id] = Enumerable.Range(before, GetChildCount() - before)
                 .Select(i => GetChild(i)).OfType<Node3D>().ToList();
@@ -1514,6 +1515,7 @@ public partial class MachineView : Node3D
         DrawPumps();
         DrawDiggers();
         DrawFloats();
+        DrawSluiceBoxes();
     }
 
     public void ToggleFire()

@@ -22,11 +22,13 @@ public partial class TerrainView : Node3D
     private MeshInstance3D _groundMesh = null!;
     private StaticBody3D _body = null!;
     private int _shownVersion;
+    private double[] _startHeights = [];   // the ground as it was loaded: what was scoured or laid down since shows (#53)
 
     public void Show(Terrain ground, ShallowWater2D water)
     {
         _ground = ground;
         _water = water;
+        _startHeights = (double[])ground.Heights.Clone();
         foreach (var c in GetChildren()) c.QueueFree();
         AddChild(_groundMesh = new MeshInstance3D { Mesh = GroundMesh(), Name = "Ground" });
         AddChild(_body = Collision());
@@ -63,6 +65,10 @@ public partial class TerrainView : Node3D
                 float shade = 0.65f + 0.35f * Mathf.Max(0, normal.Dot(light));
                 var c = Shapes.ColorFor(soil);
                 if (_ground.Loose[i + j * nx]) c = c.Lightened(0.18f);   // spoil and slumped ground: loose, paler (#44)
+                // ground the water has cut away shows darker and wetter, ground it has laid down paler (#53); a 5 cm change at full strength
+                double moved = _ground.Heights[i + j * nx] - _startHeights[i + j * nx];
+                if (Math.Abs(moved) > 0.002)
+                    c = moved < 0 ? c.Darkened(Mathf.Clamp((float)(-moved / 0.05), 0, 0.45f)) : c.Lerp(new Color(0.98f, 0.95f, 0.85f), Mathf.Clamp((float)(moved / 0.05), 0, 0.6f));
                 st.SetColor(new Color(c.R * shade, c.G * shade, c.B * shade));
                 st.SetNormal(normal);
                 st.AddVertex(Centre(i, j));

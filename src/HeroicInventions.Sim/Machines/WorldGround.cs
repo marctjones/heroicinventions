@@ -42,6 +42,8 @@ public sealed class WorldGround
         _getters["map.poured"] = () => Water.Poured;
         _getters["map.infiltrated"] = () => Water.Infiltrated;
         _getters["map.leaked"] = () => Water.Leaked;
+        _getters["map.bed-moved"] = () => Water.BedMoved;      // m³ of sand the water has shifted (#53)
+        _getters["map.bed-lost"] = () => Water.BedLost;        // m³ of it carried off the map
         _getters["map.probe-x"] = () => _probeX;
         _getters["map.probe-z"] = () => _probeZ;
         _setters["map.probe-x"] = x => _probeX = x;

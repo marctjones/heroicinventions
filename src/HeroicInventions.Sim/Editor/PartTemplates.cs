@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "hopper", "pane", "pond", "roof", "stirling"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "roof", "stirling"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -78,6 +78,10 @@ public static class PartTemplates
         "piston" => new PartSpec(id, "piston", material, at, Props(("bore", 0.1), ("stroke", 0.3), ("start", 0), ("rod-mass", 0)), [], null),
         // a digging gang (issue #44): a trench from #:at along +x, the spoil thrown to the +z side
         // a float riding a tank's water (issue #29); #:in names the tank (the editor's placeholder until set)
+        // a riffled box sorting ore in a channel's flow (issue #53); #:on names the channel
+        "sluice-box" => new PartSpec(id, "sluice-box", material, at,
+            new Dictionary<string, SExpr> { ["on"] = new SSymbol("?"), ["feed"] = new SNumber(0.1), ["grain"] = new SNumber(0.0005),
+                                            ["heavy-density"] = new SNumber(19300), ["heavy-fraction"] = new SNumber(0.02), ["light-density"] = new SNumber(2650) }, [], null),
         "float" => new PartSpec(id, "float", material, at,
             new Dictionary<string, SExpr> { ["in"] = new SSymbol("?"), ["mass"] = new SNumber(0.5), ["area"] = new SNumber(0.01), ["height"] = new SNumber(0.1) }, [], null),
         "digger" => new PartSpec(id, "digger", material, at,

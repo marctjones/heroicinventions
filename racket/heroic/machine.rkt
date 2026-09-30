@@ -39,7 +39,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane pond roof stirling
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -485,7 +485,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane pond roof stirling
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt wake joint)
 
@@ -586,8 +586,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, ratchet, crucible, burning-mirror, hopper, pane, pond, roof, stirling) or link (pipe, connect, sealed-air)"
-    #:literals (stirling hopper enclosure grip door air-pump cam digger float ratchet crucible burning-mirror pane pond roof tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt wake joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, roof, stirling) or link (pipe, connect, sealed-air)"
+    #:literals (stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond roof tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1458,6 +1458,28 @@
     ;; #:lift (m, default 0: shut) off its seat: the water passes the curtain
     ;; π·bore·lift, up to the bore's own area once the plug is a quarter of the
     ;; bore clear. Set (hole lift mm) at run time, or let a #:follow work it.
+    ;; A sluice box (issue #53): riffles in the channel #:on names, fed #:feed kg/s
+    ;; of crushed ore while the water runs, grains #:grain m across, a
+    ;; #:heavy-fraction of them #:heavy-density (gold, 19300 kg/m³) and the rest
+    ;; #:light-density (sand, 2650). It keeps the grains the flow can't lift,
+    ;; those denser than 1000 + tau / (0.047 g d), tau the flow's drag on its
+    ;; floor, and washes the rest on.
+    (pattern (sluice-box id:id
+                         (~alt (~once (~seq #:on ch:id))
+                               (~once (~seq #:feed feed-v:expr))
+                               (~once (~seq #:grain grain-v:expr))
+                               (~once (~seq #:heavy-density hd-v:expr))
+                               (~once (~seq #:heavy-fraction hf-v:expr))
+                               (~optional (~seq #:light-density ld-v:expr))
+                               (~optional (~seq #:at at:vec3))
+                               (~optional (~seq #:material mat:id))) ...)
+      #:attr info (pinfo #'id 'sluice-box (attribute mat) '())
+      #:with expr #`(part 'id 'sluice-box '(~? mat oak) (~? (list at.x at.y at.z) (list 0 0 0))
+                          (list (cons 'on 'ch) (cons 'feed feed-v) (cons 'grain grain-v)
+                                (cons 'heavy-density hd-v) (cons 'heavy-fraction hf-v) (cons 'light-density (~? ld-v 2650)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     ;; A float riding a tank's water (issue #29): #:mass kg on a flat bottom
     ;; #:area m², #:height m tall (default 0.1), in the tank #:in names. Afloat
     ;; it draws m / (rho A) of water and rides that far below the surface; in

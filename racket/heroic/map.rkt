@@ -12,6 +12,8 @@
 ;;     #:soil loam                                       ; or (λ (x z) 'clay)
 ;;     #:infiltration ((loam 1e-6) (sand 2e-5))          ; m/s each soil soaks away; 0 if not given
 ;;     #:cohesion ((clay 10000))                         ; Pa each intact soil holds together by (#44); 0 if not given
+;;     #:grain ((sand 0.0005) (gravel 0.01 2650))        ; m its grains are across [and kg/m³ they weigh, 2650 if not
+;;                                                       ; given]: flowing water can carry them off (#53); 0: it can't
 ;;     #:edges open #:roughness 0.03
 ;;     (source spring #:at (2 0) #:flow 0.05))
 ;;
@@ -33,7 +35,7 @@
 
 (struct map-source (id x z flow) #:transparent)
 ;; heights: a vector, x fastest (i + j nx); soil: a vector of material symbols, the same order
-(struct ground-map (name origin cell nx nz heights soil infiltration edges roughness sources loc [cohesion #:auto #:mutable]) #:transparent)
+(struct ground-map (name origin cell nx nz heights soil infiltration edges roughness sources loc [cohesion #:auto #:mutable] [grain #:auto #:mutable]) #:transparent)
 
 (define registry '())
 (define (register-map! m) (set! registry (cons m registry)))
@@ -84,7 +86,7 @@
 ;; ---------------------------------------------------------------------------
 ;; define-map
 
-(define (build-map name origin cell size heights soil infiltration edges roughness sources loc [cohesion '()])
+(define (build-map name origin cell size heights soil infiltration edges roughness sources loc [cohesion '()] [grain '()])
   (define (fail fmt . args) (raise-user-error name (apply format fmt args)))
   (unless (and (real? cell) (>= cell min-map-cell))
     (fail "#:cell must be at least ~a m (the grid is coarse on purpose: features smaller than a cell belong in a channel), got ~e" min-map-cell cell))
@@ -114,7 +116,7 @@
           [(procedure? soil) (for*/vector #:length (* nx nz) ([j nz] [i nx]) (soil (cx i) (cz j)))]
           [else (fail "#:soil is a material or a procedure (x z) -> material")]))
   (define known (material-ids))
-  (for ([m (remove-duplicates (append (vector->list sv) (map car infiltration) (map car cohesion)))])
+  (for ([m (remove-duplicates (append (vector->list sv) (map car infiltration) (map car cohesion) (map car grain)))])
     (unless (memq m known) (fail "unknown soil ~a; known materials: ~a" m known)))
   (unless (memq edges '(open closed)) (fail "#:edges is open or closed, got ~e" edges))
   (for ([s sources])
@@ -123,7 +125,12 @@
   (for ([c cohesion])
     (unless (and (real? (cadr c)) (>= (cadr c) 0)) (fail "#:cohesion of ~a must be 0 or more (Pa), got ~e" (car c) (cadr c))))
   (define m (ground-map name origin cell nx nz hv sv infiltration edges roughness sources loc))
+  (for ([g grain])
+    (unless (and (real? (cadr g)) (>= (cadr g) 0)) (fail "#:grain size of ~a must be 0 or more (m), got ~e" (car g) (cadr g)))
+    (when (and (pair? (cddr g)) (not (and (real? (caddr g)) (> (caddr g) 1000))))
+      (fail "#:grain density of ~a must be more than water's, 1000 kg/m³, got ~e" (car g) (caddr g))))
   (set-ground-map-cohesion! m cohesion)
+  (set-ground-map-grain! m grain)
   m)
 
 (begin-for-syntax
@@ -142,6 +149,7 @@
                       (~optional (~seq #:soil soil:expr))
                       (~optional (~seq #:infiltration ((im:id ir:expr) ...)))
                       (~optional (~seq #:cohesion ((cm:id cv:expr) ...)))
+                      (~optional (~seq #:grain ((gm:id gv:expr ...+) ...)))
                       (~optional (~seq #:edges edges:id))
                       (~optional (~seq #:roughness rough:expr))) ...
         s:source-clause ...)
@@ -169,5 +177,6 @@
                       '#,(let ([src (syntax-source stx)])
                            (vector (cond [(path? src) (path->string src)] [(string? src) src] [else "?"])
                                    (syntax-line stx) (syntax-column stx)))
-                      (list (~? (~@ (list 'cm cv) ...)))))
+                      (list (~? (~@ (list 'cm cv) ...)))
+                      (list (~? (~@ (list 'gm gv ...) ...)))))
          (register-map! name))]))

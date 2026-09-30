@@ -221,6 +221,11 @@
   (define (cohesion s)
     (cond [(assq s (or (ground-map-cohesion m) '())) => (λ (e) (num (format "map ~a #:cohesion" name) (cadr e)))] [else 0.0]))
   (define (field s k) (num (format "soil ~a ~a" s k) (material-field (assq s (material-table)) k)))
+  ;; its grains (issue #53): size (0: nothing flowing water can lift) and density (quartz, 2650, unless given)
+  (define (grain s)
+    (cond [(assq s (or (ground-map-grain m) '()))
+           => (λ (e) (list (num "map #:grain" (cadr e)) (num "map #:grain" (if (pair? (cddr e)) (caddr e) 2650))))]
+          [else (list 0.0 2650.0)]))
   (define (rate s)
     (cond [(assq s (ground-map-infiltration m)) => (λ (e) (num (format "map ~a #:infiltration" name) (cadr e)))]
           [else 0.0]))
@@ -231,7 +236,7 @@
         (size ,(ground-map-nx m) ,(ground-map-nz m))
         (edges ,(ground-map-edges m))
         (roughness ,(num "map #:roughness" (ground-map-roughness m)))
-        (soils ,@(for/list ([s soils]) (list s (rate s) (cohesion s) (field s 'friction) (field s 'density))))
+        (soils ,@(for/list ([s soils]) (list* s (rate s) (cohesion s) (field s 'friction) (field s 'density) (grain s))))
         ,@(for/list ([s (ground-map-sources m)])
             `(source ,(map-source-id s) ,(num "source #:at" (map-source-x s)) ,(num "source #:at" (map-source-z s))
                      ,(num "source #:flow" (map-source-flow s))))

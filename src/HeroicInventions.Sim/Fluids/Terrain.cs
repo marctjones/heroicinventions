@@ -10,8 +10,12 @@ namespace HeroicInventions.Sim.Fluids;
 /// tan φ, the tangent of its angle of repose, with its density (kg/m³).
 /// Shear strength at depth z is c + γ·z·tan φ, γ = ρ·g.
 /// </summary>
-public sealed record SoilSpec(string Material, double Infiltration, double Cohesion = 0, double Friction = 0.6, double Density = 1600)
+public sealed record SoilSpec(string Material, double Infiltration, double Cohesion = 0, double Friction = 0.6, double Density = 1600,
+                              double GrainSize = 0, double GrainDensity = 2650)
 {
+    /// <summary>Whether flowing water can lift its grains at all (issue #53): it has a grain size.</summary>
+    public bool Erodible => GrainSize > 0;
+
     /// <summary>
     /// How tall a cut face of this soil stands unsupported: 4c/γ · tan(45° + φ/2)
     /// (Terzaghi's critical height of a vertical cut). Loose soil (c = 0) stands at none.
@@ -98,7 +102,9 @@ public sealed partial class Terrain
                                       Num(s.Items[1]),
                                       s.Items.Count > 2 ? Num(s.Items[2]) : 0,
                                       s.Items.Count > 3 ? Num(s.Items[3]) : 0.6,
-                                      s.Items.Count > 4 ? Num(s.Items[4]) : 1600)).ToList();
+                                      s.Items.Count > 4 ? Num(s.Items[4]) : 1600,
+                                      s.Items.Count > 5 ? Num(s.Items[5]) : 0,
+                                      s.Items.Count > 6 ? Num(s.Items[6]) : 2650)).ToList();
         var soilItems = root.Field("soil")?.Items.Skip(1).Select(x => (int)Num(x)).ToArray() ?? [];
         var soil = soilItems.Length == 1 ? Enumerable.Repeat(soilItems[0], nx * nz).ToArray()
                  : soilItems.Length == nx * nz ? soilItems
@@ -129,7 +135,7 @@ public sealed partial class Terrain
         static string N(double v) => SExprWriter.Number(v);
         var sb = new StringBuilder();
         sb.Append($"(map {Name}\n  (origin {N(X0)} {N(Z0)}) (cell {N(Cell)}) (size {Nx} {Nz}) (edges {(OpenEdges ? "open" : "closed")}) (roughness {N(Roughness)})\n");
-        sb.Append("  (soils").Append(string.Concat(Soils.Select(s => $" ({s.Material} {N(s.Infiltration)} {N(s.Cohesion)} {N(s.Friction)} {N(s.Density)})"))).Append(")\n");
+        sb.Append("  (soils").Append(string.Concat(Soils.Select(s => $" ({s.Material} {N(s.Infiltration)} {N(s.Cohesion)} {N(s.Friction)} {N(s.Density)} {N(s.GrainSize)} {N(s.GrainDensity)})"))).Append(")\n");
         foreach (var s in Sources) sb.Append($"  (source {s.Id} {N(s.X)} {N(s.Z)} {N(s.Flow)})\n");
         sb.Append("  (heights");
         for (int k = 0; k < Heights.Length; k++) sb.Append(k % Nx == 0 ? "\n   " : " ").Append(Heights[k].ToString("0.####", CultureInfo.InvariantCulture));

@@ -65,6 +65,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Pendulum> _pendulums = [];
     private readonly Dictionary<string, Digger> _diggers = [];
     private readonly Dictionary<string, Float> _floats = [];
+    private readonly Dictionary<string, SluiceBox> _sluiceBoxes = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
     private readonly Dictionary<string, Action<double>> _setters = [];
 
@@ -170,6 +171,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Digger> Diggers => _diggers;
     /// <summary>Floats riding tanks' water (issue #29).</summary>
     public IReadOnlyDictionary<string, Float> Floats => _floats;
+    /// <summary>Sluice boxes sorting ore in a channel's flow (issue #53).</summary>
+    public IReadOnlyDictionary<string, SluiceBox> SluiceBoxes => _sluiceBoxes;
     public double Time { get; private set; }
 
     /// <summary>
@@ -370,6 +373,7 @@ public sealed class MachineRuntime
                     break;
                 }
                 case "float": break;   // built once its tank exists
+                case "sluice-box": break;   // built once its channel exists
                 case "digger":
                 {
                     double len = part.Number("length"), w = part.Number("width"), d = part.Number("depth");
@@ -600,6 +604,16 @@ public sealed class MachineRuntime
         }
         foreach (var part in def.Parts.Where(p => p.Kind == "float-valve")) BuildFloatValve(part);
         foreach (var part in def.Parts.Where(p => p.Kind == "leak")) BuildLeak(part);
+        foreach (var part in def.Parts.Where(p => p.Kind == "sluice-box"))
+        {
+            var on = part.Symbol("on", "");
+            if (!_channels.TryGetValue(on, out var channel))
+                throw new MachineFormatException($"sluice-box {part.Id} is on {on}, which is not a channel", part.Location);
+            double d = part.Number("grain"), heavy = part.Number("heavy-density"), frac = part.Number("heavy-fraction"), light = part.Number("light-density", 2650);
+            if (!(d > 0) || heavy <= Physics.WaterDensity || light <= Physics.WaterDensity || frac is < 0 or > 1 || part.Number("feed") < 0)
+                throw new MachineFormatException($"sluice-box {part.Id}: grain above 0, densities above water's, a heavy fraction from 0 to 1 and a feed not below 0", part.Location);
+            _sluiceBoxes[part.Id] = new SluiceBox(part.Id, channel, part.Number("feed"), d, heavy, frac, light);
+        }
         foreach (var part in def.Parts.Where(p => p.Kind == "float"))
         {
             var tank = TankNamed(part.Symbol("in", ""), part.Location);
@@ -1543,6 +1557,17 @@ public sealed class MachineRuntime
             _getters[$"{id}.hanging"] = () => cp.Hanging;                           // kg on the vessel's rope
             _getters[$"{id}.torque"] = () => cp.Torque;                             // N·m, + opening
         }
+        foreach (var (id, b) in _sluiceBoxes)
+        {
+            _getters[$"{id}.shear"] = () => b.Shear;                   // Pa on the box's floor
+            _getters[$"{id}.cutoff"] = () => b.Cutoff;                 // kg/m³: denser grains stay
+            _getters[$"{id}.kept-heavy"] = () => b.KeptHeavy;          // kg
+            _getters[$"{id}.kept-light"] = () => b.KeptLight;
+            _getters[$"{id}.passed-heavy"] = () => b.PassedHeavy;
+            _getters[$"{id}.passed-light"] = () => b.PassedLight;
+            _getters[$"{id}.feed"] = () => b.Feed;                     // kg/s of ore
+            _setters[$"{id}.feed"] = f => b.Feed = Math.Max(0, f);
+        }
         foreach (var (id, f) in _floats)
         {
             _getters[$"{id}.height"] = () => f.Bottom;                 // m, the elevation of its bottom
@@ -1637,6 +1662,7 @@ public sealed class MachineRuntime
         foreach (var c in _capstans.Values) c.Step(dt);
         foreach (var p in _pendulums.Values) p.Step(dt);
         foreach (var d in _diggers.Values) d.Step(dt);
+        foreach (var b in _sluiceBoxes.Values) b.Step(dt);
         foreach (var rotor in _rotors.Values) rotor.Step(dt); // steps its own boiler
         foreach (var w in _jetWheels.Values) w.Step(dt);      // so does a jet wheel
         foreach (var c in _cylinders.Values) c.Step(dt);
