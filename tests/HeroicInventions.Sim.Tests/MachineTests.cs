@@ -40,6 +40,33 @@ public class MachineFileTests
     private static MachineDef Load(string name) =>
         MachineDef.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "machines", name + ".machine")));
 
+    /// <summary>
+    /// A machine moved somewhere else in a shared world (issue #74) behaves
+    /// exactly as it did where it was written: every traced number matches
+    /// the untranslated run, step for step. Covers channels with bends
+    /// (the mill race), sealed air and siphons (temple doors), mirrors aimed
+    /// at a pot (the solar steam wheel), leaks, and a hearth under a boiler.
+    /// </summary>
+    [Theory]
+    [InlineData("water-mill-race")]
+    [InlineData("heron-temple-doors")]
+    [InlineData("solar-steam-wheel")]
+    [InlineData("tank-leaks")]
+    [InlineData("branca-steam-wheel")]
+    [InlineData("sluice-demo")]
+    public void TranslatedMachineBehavesIdentically(string name)
+    {
+        var def = Load(name);
+        var moved = def.Translated(new Vec3(37, 2, -11));
+        Assert.All(moved.Parts.Zip(def.Parts), p => Assert.Equal(p.Second.At.X + 37, p.First.At.X, 9));
+        var here = new MachineRuntime(def, Materials);
+        var there = new MachineRuntime(moved, Materials);
+        for (int i = 0; i < 3000; i++) { here.Step(0.02); there.Step(0.02); }   // a minute
+        foreach (var (field, get) in here.FieldGetters)
+            Assert.True(Math.Abs(get() - there.FieldGetters[field]()) <= 1e-9 * Math.Max(1, Math.Abs(get())),
+                        $"{name} {field}: {get()} here, {there.FieldGetters[field]()} moved");
+    }
+
     [Fact]
     public void AeolipileBlueprintKeepsItsRacketSourceLocations()
     {

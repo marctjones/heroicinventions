@@ -136,6 +136,42 @@ public sealed class MachineDef
 
     public PartSpec? Part(string id) => Parts.FirstOrDefault(p => p.Id == id);
 
+    /// <summary>
+    /// The same machine moved by <paramref name="offset"/>: every position it
+    /// holds in world coordinates (its parts, its channels' ends and bends, its
+    /// ropes' over-points) shifted together, so it stands somewhere else in a
+    /// shared world and behaves exactly as it did. Rope ends are local to their
+    /// parts and move with them. Only translation: a heading would also have to
+    /// turn every part's axis, which is written as a symbol (x, z) and only
+    /// quarter-turns map cleanly.
+    /// </summary>
+    public MachineDef Translated(Vec3 offset, string? name = null)
+    {
+        Vec3 Move(Vec3 v) => new(v.X + offset.X, v.Y + offset.Y, v.Z + offset.Z);
+        return new MachineDef
+        {
+            Name = name ?? Name,
+            Source = Source,
+            Ambient = Ambient,
+            Sun = Sun,
+            Parts = Parts.Select(p => p with { At = Move(p.At) }).ToList(),
+            Pipes = Pipes,
+            Connects = Connects,
+            SealedAir = SealedAir,
+            Ropes = Ropes.Select(r => r with { Over = r.Over.Select(Move).ToList() }).ToList(),
+            Arbors = Arbors,
+            Meshes = Meshes,
+            Lifts = Lifts,
+            Sources = Sources,
+            Channels = Channels.Select(c => c with
+            {
+                End = c.End is { } e ? Move(e) : null,
+                Via = c.Via?.Select(v => (v.X + offset.X, v.Z + offset.Z)).ToList(),
+            }).ToList(),
+            Cylinders = Cylinders,
+        };
+    }
+
     public static MachineDef Parse(string text)
     {
         var forms = SExprReader.ReadAll(text);
