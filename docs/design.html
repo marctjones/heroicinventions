@@ -444,6 +444,15 @@ flowchart LR
       <li><strong>Headless host</strong> (built): the same solvers run without rendering, for Racket's tests and for continuous integration.</li>
     </ul>
 
+    <h3>Carts: rigid wheels or VehicleBody3D <span class="chip mech">measured · #34</span></h3>
+    <p>Measured in the game's own physics (Jolt at 120 Hz, <code>game/scenes/CartEval.tscn</code>, checked by <code>heroic/tests/cart-eval-test.rkt</code>): a 28 kg cart, four 2 kg disc wheels of 15 cm radius on hinges, on a 10&deg; slope and coasting at 2 m/s.</p>
+    <table>
+      <tr><th></th><th>Predicted</th><th>Rigid wheels</th><th>VehicleBody3D</th></tr>
+      <tr><td>Slope, m/s&sup2; &nbsp;g&nbsp;sin&thinsp;&theta; / (1 + &Sigma;I/r&sup2; / M)</td><td>1.491</td><td>1.479</td><td>0 (holds still)</td></tr>
+      <tr><td>Coast, m/s&sup2; &nbsp;C<sub>rr</sub> g / (1 + &Sigma;I/r&sup2; / M), C<sub>rr</sub> = 0.02</td><td>0.172</td><td>0.177</td><td>stopped within 0.25 s</td></tr>
+    </table>
+    <p><strong>Result: rigid wheels.</strong> They match the formulas to about 2% with nothing added but a rolling-resistance torque; <code>VehicleBody3D</code> under Jolt does not roll freely (its drivetrain brakes with no engine force and no brake set), so it cannot model an honest cart. Two things to carry into #25: the coasting figure is C<sub>rr</sub>&thinsp;g only for light wheels, and with these wheels it is 12.5% lower because the wheels store kinetic energy; and Godot's default damping of 0.1 per second costs a fifth of the slope acceleration by 3 m/s, so #33's zero damping matters before any rolling-resistance number can be trusted. Jolt has no rolling resistance of its own: add a torque C<sub>rr</sub>&thinsp;N&thinsp;r against each wheel's spin.</p>
+
     <h2 id="sim"><span class="num">V</span>Simulation</h2>
     <p>No game engine simulates rigid bodies, water and steam well together. Jolt handles parts that move. The C# library handles the working fluids with <strong>lumped network models</strong>, the approach engineering tools such as Modelica and Simscape use. Couplings pass forces and flows between the two on every tick.</p>
     <h3>Fluid network</h3>
