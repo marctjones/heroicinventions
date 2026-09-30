@@ -35,6 +35,9 @@ namespace HeroicInventions;
 ///   move     drag a part: it slides over surfaces, stacking on what it
 ///            crosses; hold Ctrl to raise or lower it instead; positions
 ///            snap to a 5 cm grid (G toggles); ports snap on release
+///   join     the Join-parts buttons: a rope, a gear mesh, an axle (arbor),
+///            shared air, or a piston's cylinder. Click the parts in turn (Enter
+///            ends an axle or shared air); each is one command, like every edit
 ///   edit     the inspector shows the selected part's numbers and material;
 ///            Delete removes; Ctrl/Cmd+D duplicates; Ctrl/Cmd+Z undoes;
 ///            Ctrl/Cmd+Shift+Z redoes
@@ -76,6 +79,9 @@ public partial class BuildMode : Node3D
     private string? _placingPaletteId;
     private Node3D? _ghost;
     private float _ghostBottom;                  // the ghost part's lowest point, relative to its #:at
+    private LinkGestures.Kind? _link;            // a Join-parts tool is active
+    private readonly List<string> _linkPicks = [];
+    private static readonly Color PickColor = new(0.3f, 0.8f, 1f, 0.4f);
     private string? _pressedId;                  // left button down on this part
     private Vector2 _pressPos;
     private bool _dragging;
@@ -97,6 +103,7 @@ public partial class BuildMode : Node3D
     private FileDialog _saveDialog = null!, _loadDialog = null!;
 
     private static readonly StandardMaterial3D SelectedOverlay = Overlay(new Color(1f, 0.62f, 0.1f, 0.35f));
+    private static readonly StandardMaterial3D PickedOverlay = Overlay(PickColor);
     private static readonly StandardMaterial3D HoverOverlay = Overlay(new Color(1f, 1f, 1f, 0.18f));
 
     /// <summary>
@@ -280,6 +287,19 @@ public partial class BuildMode : Node3D
                     Mouse(at, MouseButton.Left, false);
                     return;
                 }
+                case "link":
+                    StartLink(Enum.Parse<LinkGestures.Kind>(w[1], ignoreCase: true));
+                    return;
+                case "click-part":
+                {
+                    // click a part wherever it is on screen: "click-part gear-1"
+                    if (BoundsOf(NodesOf(w[1])) is not { } box) { GD.Print($"[BuildMode] no part {w[1]}"); return; }
+                    var at = GetViewport().GetScreenTransform() * _camera.UnprojectPosition(box.GetCenter());
+                    Mouse(at);
+                    Mouse(at, MouseButton.Left, true);
+                    Mouse(at, MouseButton.Left, false);
+                    return;
+                }
                 case "log":
                     GD.Print($"[BuildMode] state: selected={_selectedId ?? "none"} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})"))}");
                     continue;
@@ -353,6 +373,23 @@ public partial class BuildMode : Node3D
         leftCol.AddChild(_paletteList);
         _partHelp = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(230, 0), Modulate = new Color(1, 1, 1, 0.75f) };
         leftCol.AddChild(_partHelp);
+
+        leftCol.AddChild(new Label { Text = "Join parts: pick a tool, then click the parts" });
+        var joinGrid = new GridContainer { Columns = 2 };
+        foreach (var (kind, label, tip) in new[]
+        {
+            (LinkGestures.Kind.Rope, "Rope", "A rope between two parts (click one, then the other); trim its length in the inspector"),
+            (LinkGestures.Kind.Mesh, "Gear mesh", "Two gears in mesh (click both)"),
+            (LinkGestures.Kind.Arbor, "Axle", "Wheels fixed on one axle: click them, then Enter. The first carries the bearing"),
+            (LinkGestures.Kind.SealedAir, "Shared air", "Tanks sharing one sealed air space: click them, then Enter"),
+            (LinkGestures.Kind.Cylinder, "Cylinder", "A piston joined to the boiler that feeds it (click both)"),
+        })
+        {
+            var b = new Button { Text = label, TooltipText = tip, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+            b.Pressed += () => StartLink(kind);
+            joinGrid.AddChild(b);
+        }
+        leftCol.AddChild(joinGrid);
 
         leftCol.AddChild(new Label { Text = "New parts are made of" });
         _materialBox = new OptionButton();
@@ -581,6 +618,7 @@ public partial class BuildMode : Node3D
         _status.Text = problem is null
             ? (_placingPaletteId is { } p ? $"Placing {p}: click to place, Shift keeps placing, Esc cancels" : _selectedId is { } s ? $"Selected {s}" : "")
             : problem;
+        DrawLinks();
         DrawPorts();
         RefreshHighlights();
         RebuildInspector();
@@ -675,7 +713,7 @@ public partial class BuildMode : Node3D
     {
         foreach (var id in _session.Document.Parts.Keys)
         {
-            var overlay = id == _selectedId ? SelectedOverlay : id == _hoverId ? HoverOverlay : null;
+            var overlay = id == _selectedId ? SelectedOverlay : _linkPicks.Contains(id) ? PickedOverlay : id == _hoverId ? HoverOverlay : null;
             foreach (var root in NodesOf(id))
                 foreach (var g in Descendants(root).OfType<GeometryInstance3D>())
                     if (g is not Label3D) g.MaterialOverlay = overlay;
@@ -734,20 +772,79 @@ public partial class BuildMode : Node3D
             var row = new HBoxContainer();
             row.AddChild(new Label { Text = key, CustomMinimumSize = new Vector2(120, 0), ClipText = true, TooltipText = key });
             if (value is SNumber n)
-                row.AddChild(NumberField(n.Value, text => { if (TryNumber(text, out double v)) RunCommand($"(set {id} #:{key} {F(v)})"); }));
-            else if (value is SSymbol sym && key is not ("shape" or "axis" or "rope" or "fuel-kind"))
             {
-                // A prop naming another part: pick it from the parts on the bench.
+                row.AddChild(NumberField(n.Value, text => { if (TryNumber(text, out double v)) RunCommand($"(set {id} #:{key} {F(v)})"); }));
+                if (IsOptionalNumber(part.Kind, key))
+                {
+                    var clear = new Button { Text = "×", TooltipText = "clear (none)" };
+                    clear.Pressed += () => RunCommand($"(set {id} #:{key} #f)");
+                    row.AddChild(clear);
+                }
+            }
+            else if (value is SSymbol sym && SymbolChoices(key) is { } choices)
+            {
+                // A prop with a fixed set of answers: a dropdown of them.
                 var pick = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-                var targets = _session.Document.Parts.Keys.Where(k => k != id).OrderBy(k => k).ToList();
-                pick.AddItem(sym.Name == "?" ? "(choose a part)" : sym.Name);
-                foreach (var t in targets.Where(t => t != sym.Name)) pick.AddItem(t);
+                var options = choices.Contains(sym.Name) ? choices : [sym.Name, .. choices];
+                foreach (var o in options) pick.AddItem(o);
+                pick.Select(options.IndexOf(sym.Name));
+                pick.ItemSelected += index => RunCommand($"(set {id} #:{key} {options[(int)index]})");
+                row.AddChild(pick);
+            }
+            else if (value is SSymbol && key is not "shape")
+            {
+                // A prop naming another part (or a channel or inflow): pick it from what is on the bench.
+                var pick = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                var doc = _session.Document;
+                var targets = doc.Parts.Keys.Concat(doc.Channels.Select(c => c.Id)).Concat(doc.Sources.Select(x => x.Id)).Concat(doc.Pipes.Keys)
+                    .Where(k => k != id).Distinct().OrderBy(k => k).ToList();
+                var sym2 = ((SSymbol)value).Name;
+                pick.AddItem(sym2 == "?" ? "(choose one)" : sym2);
+                foreach (var t in targets.Where(t => t != sym2)) pick.AddItem(t);
                 pick.ItemSelected += index => { if (index > 0) RunCommand($"(set {id} #:{key} {pick.GetItemText((int)index)})"); };
                 row.AddChild(pick);
+            }
+            else if (value is SBool flag && IsFlag(key))
+            {
+                var box = new CheckBox { Text = flag.Value ? "yes" : "no", ButtonPressed = flag.Value };
+                box.Toggled += on => RunCommand($"(set {id} #:{key} {(on ? "#t" : "#f")})");
+                row.AddChild(box);
+            }
+            else if (value is SBool)
+            {
+                // An optional number that is not set (#f): type one to set it.
+                var field = new LineEdit { PlaceholderText = "not set: type a number", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                field.TextSubmitted += text => { if (TryNumber(text, out double v)) RunCommand($"(set {id} #:{key} {F(v)})"); };
+                row.AddChild(field);
             }
             else
                 row.AddChild(new Label { Text = SExprText(value), TooltipText = "set in the console", Modulate = new Color(1, 1, 1, 0.6f) });
             _inspector.AddChild(row);
+        }
+
+        var links = LinkGestures.LinksOn(_session.Document, id);
+        if (links.Count > 0)
+        {
+            _inspector.AddChild(new HSeparator());
+            _inspector.AddChild(new Label { Text = "Joined to" });
+            foreach (var (label, remove, ropeId) in links)
+            {
+                var row = new HBoxContainer();
+                row.AddChild(new Label { Text = label, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, AutowrapMode = TextServer.AutowrapMode.WordSmart });
+                var take = new Button { Text = "Remove" };
+                take.Pressed += () => RunCommand(remove);
+                row.AddChild(take);
+                _inspector.AddChild(row);
+                if (ropeId is not null && _session.Document.Ropes.FirstOrDefault(r => r.Id == ropeId) is { } rope)
+                {
+                    var trim = new HBoxContainer();
+                    trim.AddChild(new Label { Text = "  length (m)" });
+                    trim.AddChild(NumberField(rope.Length, text => { if (TryNumber(text, out double v)) RunCommand($"(set-rope {ropeId} #:length {F(v)})"); }));
+                    trim.AddChild(new Label { Text = "diameter" });
+                    trim.AddChild(NumberField(rope.Diameter, text => { if (TryNumber(text, out double v)) RunCommand($"(set-rope {ropeId} #:diameter {F(v)})"); }));
+                    _inspector.AddChild(trim);
+                }
+            }
         }
 
         var buttons = new HBoxContainer();
@@ -759,6 +856,22 @@ public partial class BuildMode : Node3D
         buttons.AddChild(del);
         _inspector.AddChild(buttons);
     }
+
+    /// <summary>The fixed answers of a symbol prop, or null when it names a part or something free-form.</summary>
+    private List<string>? SymbolChoices(string key) => key switch
+    {
+        "axis" => ["x", "y", "z"],
+        "fuel-kind" => ["wood", "charcoal", "coal"],
+        "rope" => _materialIds,
+        _ => null,
+    };
+
+    /// <summary>A true/false prop, as opposed to an optional number that is #f until set.</summary>
+    private static bool IsFlag(string key) => key is "round";
+
+    /// <summary>A number the part's template starts as #f (a sluice's width, a pendulum's bearing): it can be cleared back to none.</summary>
+    private static bool IsOptionalNumber(string kind, string key) =>
+        PartTemplates.PrimitiveKinds.Contains(kind) && PartTemplates.Create(kind, "x", new Vec3(0, 0, 0), "bronze").Props.GetValueOrDefault(key) is SBool;
 
     private static string SExprText(SExpr e) => e switch
     {
@@ -883,8 +996,12 @@ public partial class BuildMode : Node3D
         bool cmd = key.CtrlPressed || key.MetaPressed;
         switch (key.Keycode)
         {
+            case Key.Enter or Key.KpEnter:
+                if (_link is { } l) FinishLink(l);
+                break;
             case Key.Escape:
-                if (_connectFrom is not null) { CancelConnect(); _status.Text = ""; }
+                if (_link is not null) { CancelLink(); _status.Text = ""; }
+                else if (_connectFrom is not null) { CancelConnect(); _status.Text = ""; }
                 else if (_placingPaletteId is not null) CancelPlacing();
                 else if (_selectedId is not null) Select(null);
                 else ExitRequested?.Invoke();
@@ -986,6 +1103,11 @@ public partial class BuildMode : Node3D
         if (_placingPaletteId is { } paletteId)
         {
             PlaceGhost(paletteId, shift);
+            return;
+        }
+        if (_link is { } link)
+        {
+            if (PickPart(screen, out _) is { } hit) PickForLink(link, hit);
             return;
         }
         if (PickPort(screen) is { } port)
@@ -1171,6 +1293,79 @@ public partial class BuildMode : Node3D
         string catalogueArg = part.Props.GetValueOrDefault("catalogue") is SSymbol c ? $" #:catalogue {c.Name}" : "";
         var at = new Vector3((float)part.At.X + 0.5f, (float)part.At.Y, (float)part.At.Z);
         if (RunCommand($"({part.Kind} {copy} #:at {Xyz(at)}{catalogueArg} #:material {part.Material}{props})")) Select(copy);
+    }
+
+    // ---------------------------------------------------------- join parts
+
+    private void StartLink(LinkGestures.Kind kind)
+    {
+        CancelPlacing();
+        CancelConnect();
+        _linkPicks.Clear();
+        _link = kind;
+        _status.Text = LinkGestures.Prompt(kind, 0);
+        RefreshHighlights();
+    }
+
+    private void CancelLink()
+    {
+        _link = null;
+        _linkPicks.Clear();
+        RefreshHighlights();
+    }
+
+    /// <summary>A click on a part while a Join tool is active: two-part tools finish on the second pick, axles and shared air wait for Enter.</summary>
+    private void PickForLink(LinkGestures.Kind kind, string id)
+    {
+        if (_linkPicks.Contains(id)) { _linkPicks.Remove(id); }
+        else _linkPicks.Add(id);
+        RefreshHighlights();
+        var (min, max) = LinkGestures.Picks(kind);
+        if (max is { } m && _linkPicks.Count == m) FinishLink(kind);
+        else _status.Text = LinkGestures.Prompt(kind, _linkPicks.Count);
+    }
+
+    private void FinishLink(LinkGestures.Kind kind)
+    {
+        try
+        {
+            string command = LinkGestures.Command(_session.Document, kind, _linkPicks);
+            var last = _linkPicks[^1];
+            _linkPicks.Clear();
+            _link = null;
+            RunCommand(command);
+            Select(last);
+        }
+        catch (InvalidOperationException e)
+        {
+            // keep the tool active: the person can fix the picks (click a picked part again to drop it)
+            _console.AddText($"error: {e.Message}\n");
+            _status.Text = e.Message;
+            RefreshHighlights();
+        }
+    }
+
+    /// <summary>
+    /// Thin lines for the links that aren't drawn as parts: a gear mesh
+    /// (amber), an axle (grey), shared air (pale blue), a cylinder (orange).
+    /// Ropes are drawn by the machine view itself.
+    /// </summary>
+    private void DrawLinks()
+    {
+        var doc = _session.Document;
+        Vector3? Centre(string id) => BoundsOf(NodesOf(id)) is { } b ? b.GetCenter()
+            : doc.Parts.TryGetValue(id, out var p) ? new Vector3((float)p.At.X, (float)p.At.Y, (float)p.At.Z) : null;
+        void Line(string a, string b, Color c)
+        {
+            if (Centre(a) is not { } pa || Centre(b) is not { } pb || pa.DistanceTo(pb) < 0.01f) return;
+            var rod = Shapes.Rod(pa, pb, 0.008f, Shapes.Mat(c));
+            AddChild(rod);
+            _pipeVisuals.Add(rod);
+        }
+        foreach (var g in doc.Meshes) Line(g.A, g.B, new Color(1f, 0.75f, 0.2f));
+        foreach (var a in doc.Arbors) for (int i = 1; i < a.Parts.Count; i++) Line(a.Parts[0], a.Parts[i], new Color(0.7f, 0.7f, 0.75f));
+        foreach (var a in doc.SealedAir) for (int i = 1; i < a.Tanks.Count; i++) Line(a.Tanks[0], a.Tanks[i], new Color(0.6f, 0.85f, 1f));
+        foreach (var c in doc.Cylinders) Line(c.Piston, c.Boiler, new Color(1f, 0.5f, 0.2f));
     }
 
     // -------------------------------------------------------------- ports

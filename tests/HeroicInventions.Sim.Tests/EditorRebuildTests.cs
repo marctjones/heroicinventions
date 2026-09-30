@@ -137,4 +137,100 @@ public class EditorRebuildTests
         Assert.True(s.Document.Parts["pillar"].Props["round"] is SBool { Value: true });
         Assert.Throws<InvalidOperationException>(() => s.Execute("(set fire #:heats nowhere)"));
     }
+
+    // ---- the Join-parts gestures: picks in, one command out
+
+    private static BuildSession Rebuilt(string machine)
+    {
+        var original = MachineDef.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "machines", machine + ".machine")));
+        var s = Fresh(original.Name);
+        foreach (string line in CommandScript.For(original)) s.Execute(line);
+        return s;
+    }
+
+    /// <summary>Take the Antikythera train's meshes and arbors apart, put them back with the gestures a person would make, and the machine is the one we started with.</summary>
+    [Fact]
+    public void GearMeshAndAxleGesturesRebuildTheAntikytheraTrain()
+    {
+        var s = Rebuilt("antikythera-lunar-train");
+        string before = Canonical(s.Document.ToMachineDef());
+        var meshes = s.Document.Meshes.ToList();
+        var arbors = s.Document.Arbors.ToList();
+        Assert.True(meshes.Count > 0 && arbors.Count > 0, "the train should use both meshes and arbors");
+
+        foreach (var g in meshes) s.Execute($"(unmesh {g.A} {g.B})");
+        foreach (var a in arbors) s.Execute($"(unarbor {a.Parts[0]})");
+        Assert.Empty(s.Document.Meshes);
+        Assert.Empty(s.Document.Arbors);
+        Assert.NotEqual(before, Canonical(s.Document.ToMachineDef()));
+
+        foreach (var a in arbors)
+            s.Execute(LinkGestures.Command(s.Document, LinkGestures.Kind.Arbor, a.Parts));
+        foreach (var g in meshes)
+            s.Execute(LinkGestures.Command(s.Document, LinkGestures.Kind.Mesh, [g.A, g.B]));
+        Assert.Equal(before, Canonical(s.Document.ToMachineDef()));
+    }
+
+    [Fact]
+    public void CylinderGestureAcceptsEitherOrderAndRefusesTwoBoilers()
+    {
+        var s = Rebuilt("newcomen-engine");
+        var cyl = Assert.Single(s.Document.Cylinders);
+        string before = Canonical(s.Document.ToMachineDef());
+        s.Execute($"(remove {cyl.Id})");
+        Assert.Empty(s.Document.Cylinders);
+
+        string command = LinkGestures.Command(s.Document, LinkGestures.Kind.Cylinder, [cyl.Boiler, cyl.Piston]); // boiler picked first
+        Assert.Contains($"#:piston {cyl.Piston} #:steam-from {cyl.Boiler}", command);
+        s.Execute(command);
+        Assert.StartsWith("ok:", s.Execute("(check)"));
+        Assert.Single(s.Document.Cylinders);
+
+        // a cylinder needs one piston and one boiler, each once
+        Assert.Throws<InvalidOperationException>(() => LinkGestures.Command(s.Document, LinkGestures.Kind.Cylinder, [cyl.Piston, cyl.Piston]));
+        s.Execute("(boiler spare #:at (5 0 0))");
+        Assert.Contains("a cylinder joins a piston to a boiler",
+            Assert.Throws<InvalidOperationException>(() => LinkGestures.Command(s.Document, LinkGestures.Kind.Cylinder, [cyl.Boiler, "spare"])).Message);
+    }
+
+    [Fact]
+    public void GesturesRefuseWhatCannotBeJoined()
+    {
+        var s = Fresh("bench");
+        s.Execute("(tank a #:at (0 0 0))");
+        s.Execute("(tank b #:at (1 0 0))");
+        s.Execute("(post p #:at (2 0 0))");
+        var doc = s.Document;
+        Assert.Contains("a gear meshes with another gear", Assert.Throws<InvalidOperationException>(() => LinkGestures.Command(doc, LinkGestures.Kind.Mesh, ["a", "b"])).Message);
+        Assert.Contains("shared air joins tanks", Assert.Throws<InvalidOperationException>(() => LinkGestures.Command(doc, LinkGestures.Kind.SealedAir, ["a", "p"])).Message);
+        Assert.Throws<InvalidOperationException>(() => LinkGestures.Command(doc, LinkGestures.Kind.Rope, ["a", "a"]));
+        Assert.Throws<InvalidOperationException>(() => LinkGestures.Command(doc, LinkGestures.Kind.Cylinder, ["a", "b"]));
+
+        // shared air between tanks is fine, and the group survives losing one tank only if two remain
+        s.Execute(LinkGestures.Command(doc, LinkGestures.Kind.SealedAir, ["a", "b"]));
+        Assert.Single(s.Document.SealedAir);
+        s.Execute("(remove-air a)");
+        Assert.Empty(s.Document.SealedAir);
+    }
+
+    [Fact]
+    public void RopeGestureCutsTheRopeToTheDistanceAndTheInspectorTrimsIt()
+    {
+        var s = Fresh("bench");
+        s.Execute("(post tower #:at (0 0 0))");
+        s.Execute("(block load #:at (3 4 0))");
+        string command = LinkGestures.Command(s.Document, LinkGestures.Kind.Rope, ["tower", "load"]);
+        Assert.Contains("rope-1", command);
+        Assert.Contains("#:length 5", command);           // a 3-4-5 triangle
+        s.Execute(command);
+        s.Execute("(set-rope rope-1 #:length 5.5 #:diameter 0.03)");
+        var rope = Assert.Single(s.Document.Ropes);
+        Assert.Equal(5.5, rope.Length);
+        Assert.Equal(0.03, rope.Diameter);
+        Assert.Equal("rope-2", LinkGestures.NextId(s.Document, "rope"));
+        var links = LinkGestures.LinksOn(s.Document, "tower");
+        Assert.Contains(links, l => l.RopeId == "rope-1" && l.Remove == "(remove rope-1)");
+        s.Execute(links.Single().Remove);
+        Assert.Empty(s.Document.Ropes);
+    }
 }

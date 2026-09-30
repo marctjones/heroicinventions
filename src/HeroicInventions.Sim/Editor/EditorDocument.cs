@@ -307,6 +307,17 @@ public sealed class EditorDocument
         return rope;
     }
 
+    /// <summary>Replaces the rope with the same id.</summary>
+    public void ReplaceRope(RopeSpec rope) => _ropes = _ropes.Select(r => r.Id == rope.Id ? rope : r).ToList();
+
+    /// <summary>Takes a tank out of its sealed-air group (a group left with one tank goes).</summary>
+    public bool RemoveFromSealedAir(string tank)
+    {
+        int n = _sealedAir.Sum(a => a.Tanks.Count);
+        _sealedAir = _sealedAir.Select(a => a with { Tanks = a.Tanks.Where(t => t != tank).ToList() }).Where(a => a.Tanks.Count >= 2).ToList();
+        return _sealedAir.Sum(a => a.Tanks.Count) != n;
+    }
+
     /// <summary>Puts two gears in mesh (the same pair twice is a no-op).</summary>
     public MeshSpec AddMesh(string a, string b)
     {

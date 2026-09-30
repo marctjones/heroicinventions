@@ -41,7 +41,8 @@ namespace HeroicInventions.Sim.Editor;
 ///   (atmospheric-cylinder id #:piston p #:steam-from boiler [#:injection-temperature C])
 ///   (inflow id #:into tank #:flow m3/s) (channel id from.port to.port|off ...) (lift id #:by part #:from tank #:to tank)
 ///   (port part name kind height) (remove-port part name)   ; add or replace a port on a part
-///   (unmesh a b) (unarbor part)                   ; take a link apart again
+///   (set-rope id #:length L [#:diameter D] [#:material M] [#:release-deg d] [#:wind-on part] [#:turns part] [#:nocked #t])   ; change a rope
+///   (unmesh a b) (unarbor part) (remove-air tank)   ; take a link apart again
 ///   (source "text")                               ; where the machine comes from
 ///   (raw-part (part id kind ...))                 ; a part clause verbatim, for shaped parts no catalogue entry describes
 ///   (sun [#:latitude deg] [#:day n] [#:time hours])   ; the scene under the sun (default Alexandria, midsummer, noon)
@@ -111,6 +112,8 @@ public sealed class BuildSession
         "atmospheric-cylinder" => CreateCylinder(cmd),
         "port" => SetPort(cmd),
         "remove-port" => RemovePortCmd(cmd),
+        "set-rope" => SetRope(cmd),
+        "remove-air" => RemoveAir(cmd),
         "unmesh" => Unmesh(cmd),
         "unarbor" => Unarbor(cmd),
         "source" => SetSource(cmd),
@@ -319,6 +322,34 @@ public sealed class BuildSession
         Snapshot();
         Document.AddRope(spec);
         return $"rope {id}: {from.Part} to {to.Part}, {length} m";
+    }
+
+    /// <summary>(set-rope id #:key value …): changes the fields it names, keeps the rest.</summary>
+    private string SetRope(SList cmd)
+    {
+        string id = Id(cmd, 1);
+        var rope = Document.Ropes.FirstOrDefault(r => r.Id == id) ?? throw new InvalidOperationException($"no rope named {id}");
+        var next = rope;
+        if (Kw(cmd, "length") is { } l) next = next with { Length = Num(l, $"rope {id} #:length") };
+        if (Kw(cmd, "diameter") is { } d) next = next with { Diameter = Num(d, $"rope {id} #:diameter") };
+        if (Kw(cmd, "material") is SSymbol m) next = next with { Material = m.Name };
+        if (Kw(cmd, "release-deg") is { } r) next = next with { ReleaseDeg = r is SBool { Value: false } ? null : Num(r, $"rope {id} #:release-deg") };
+        if (Kw(cmd, "wind-on") is { } w) next = next with { WindOn = w is SSymbol ws ? ws.Name : null };
+        if (Kw(cmd, "turns") is { } t) next = next with { Turns = t is SSymbol ts ? ts.Name : null };
+        if (Kw(cmd, "nocked") is SBool nk) next = next with { Nocked = nk.Value };
+        if (next.Length <= 0) throw new FormatException($"rope {id}: #:length must be positive");
+        Snapshot();
+        Document.ReplaceRope(next);
+        return $"rope {id}: {next.Length} m";
+    }
+
+    /// <summary>(remove-air tank): takes a tank out of the sealed-air group it is in.</summary>
+    private string RemoveAir(SList cmd)
+    {
+        string tank = Id(cmd, 1);
+        Snapshot();
+        if (!Document.RemoveFromSealedAir(tank)) throw new InvalidOperationException($"{tank} shares no air");
+        return $"{tank} no longer shares air";
     }
 
     private string CreateMesh(SList cmd)
