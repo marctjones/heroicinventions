@@ -1147,6 +1147,24 @@
       (check-= slowing (* crr g k) (* 0.02 slowing) (format "~a slows at ~a m/s2" cart slowing)))
     (check-true (< (abs (- (at (frame 7) 'sledge.z) (at (frame 0) 'sledge.z))) 0.001) "the sledge holds on the slope")))
 
+(test-case "Rail wagons: on a 1 degree grade the wagon on iron rails rolls away at g (sin t - 0.002 cos t) k; the one on the road stays"
+  ;; predicted before the first run (rail-wagons.rkt): 0.1029 m/s2
+  (when (godot-available?)
+    (local-require heroic/geometry)
+    (define run (godot-simulate 'rail-wagons #:seconds 8 #:sample-dt 1))
+    (define (at t key) (cadr (assq key (cdr (for/first ([f run] #:when (>= (car f) (- t 1e-6))) f)))))
+    (define th (* 1 (/ pi 180)))
+    (define wheel (drum #:radius 0.1 #:length 0.08 #:flange-radius 0.12))
+    (define m (* 7700 (shape-volume wheel)))
+    (define i (* 7700 (vector-ref (shape-inertia wheel) 2)))
+    (define M (+ (* 720 0.5 0.06 0.8) (* 4 m)))
+    (define predicted (* 9.81 (- (sin th) (* 0.002 (cos th))) (/ M (+ M (* 4 (/ i 0.01))))))
+    (check-= predicted 0.1029 0.0001)
+    (define a (/ (- (at 8 'rail-wagon.vz) (at 1 'rail-wagon.vz)) 7 (cos th)))
+    (check-= a predicted (* 0.01 predicted) (format "the rail wagon rolls at ~a m/s2" a))
+    (check-= (at 8 'rail-wagon.x) (at 0 'rail-wagon.x) 0.01 "and stays on its rails")
+    (check-true (< (abs (- (at 8 'road-wagon.z) (at 0 'road-wagon.z))) 0.005) "the road wagon holds")))
+
 ;; ---------------------------------------------------------------------------
 ;; One real-game check for each remaining rigid-body machine, each against
 ;; the prediction in its .rkt header. Measured 2026-09-29 before writing;

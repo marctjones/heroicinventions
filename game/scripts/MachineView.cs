@@ -1035,6 +1035,20 @@ public partial class MachineView : Node3D
                 Shape = new CylinderShape3D { Radius = (float)part.Number("radius"), Height = (float)part.Number("width") },
                 Rotation = new Vector3(Mathf.Pi / 2, 0, 0),   // the cylinder's axis (its Y) along the axle (local Z)
             });
+        else if (part.Symbol("shape", "") == "drum" && part.Props.ContainsKey("on"))
+        {
+            // a flanged wheel (a drum, carried as a wagon's wheel): its barrel is
+            // the tread and its flanges straddle a rail. A hull would fill the
+            // groove and roll it on its flanges, so: three true cylinders.
+            float len = (float)part.Number("length"), t = 0.08f * len;   // the drum's own flange thickness
+            float tread = (float)part.Number("radius"), flange = (float)part.Number("flange-radius");
+            foreach (var (radius, height, z) in new[] { (tread, len - 2 * t, 0f), (flange, t, len / 2 - t / 2), (flange, t, -(len / 2 - t / 2)) })
+                body.AddChild(new CollisionShape3D
+                {
+                    Shape = new CylinderShape3D { Radius = radius, Height = height },
+                    Transform = new Transform3D(new Basis(Vector3.Right, Mathf.Pi / 2), new Vector3(0, 0, z)),
+                });
+        }
         else
             body.AddChild(new CollisionShape3D { Shape = mesh.CreateConvexShape() });
         var extent = mesh.GetAabb().Size;

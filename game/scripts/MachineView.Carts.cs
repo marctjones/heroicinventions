@@ -83,6 +83,8 @@ public partial class MachineView
         {
             var chassis = cart.Key;
             var wheels = cart.ToList();
+            var gravity = PhysicsServer3D.BodyGetDirectState(chassis.GetRid()).TotalGravity * chassis.GravityScale;
+            var down = gravity.LengthSquared() > 1e-8f ? gravity.Normalized() : Vector3.Down;
             var touching = new List<(CarriedWheel Wheel, Vector3 Normal, bool OnMetal)>();
             foreach (var c in wheels)
             {
@@ -93,7 +95,10 @@ public partial class MachineView
                 {
                     ulong other = state.GetContactColliderId(i);
                     if (other == chassis.GetInstanceId()) continue;
-                    normal += state.GetContactLocalNormal(i);
+                    // what it stands on, not a flange brushing a rail's side
+                    var n = state.GetContactLocalNormal(i);
+                    if (-n.Dot(down) < 0.7f) continue;
+                    normal += n;
                     onMetal |= _surfaceMaterials.TryGetValue(other, out var m) && _materials[m].Category == MaterialCategory.Metal;
                 }
                 c.Load = 0;
@@ -101,7 +106,6 @@ public partial class MachineView
                 if (normal.LengthSquared() > 1e-8f) touching.Add((c, normal.Normalized(), onMetal));
             }
             if (touching.Count == 0) continue;
-            var gravity = PhysicsServer3D.BodyGetDirectState(chassis.GetRid()).TotalGravity * chassis.GravityScale;
             float weight = (chassis.Mass + wheels.Sum(w => w.Wheel.Mass)) / touching.Count;
             foreach (var (c, normal, onMetal) in touching)
             {
@@ -110,11 +114,23 @@ public partial class MachineView
                 var axis = (chassis.GlobalBasis * c.LocalAxis).Normalized();
                 float turning = (c.Wheel.AngularVelocity - chassis.AngularVelocity).Dot(axis);
                 c.Load = load;
-                if (Mathf.Abs(turning) * c.Radius < 1e-3f) continue;
-                // never more than stops its turn this tick
+                if (Mathf.Abs(turning) * c.Radius < 1e-3f)
+                {
+                    // standing: the slope would roll it toward axle × normal
+                    // (v = w r (axis × n)); hold against that, as far as C_rr allows
+                    float pull = weight * gravity.Dot(axis.Cross(normal));
+                    float hold = Mathf.Min(crr * load * c.Radius, Mathf.Abs(pull) * c.Radius);
+                    c.Resisting = hold;
+                    c.Wheel.ApplyTorque(-Mathf.Sign(pull) * hold * axis);
+                    continue;
+                }
+                // never more than stops its turn, and its share of the cart, this
+                // tick against what the grade adds: at a crawl rolling resistance
+                // holds a cart like static friction, rather than letting it creep
                 var state = PhysicsServer3D.BodyGetDirectState(c.Wheel.GetRid());
-                float inertia = axis.Dot(state.InverseInertiaTensor.Inverse() * axis);
-                float torque = Mathf.Min(crr * load * c.Radius, inertia * Mathf.Abs(turning) / dt);
+                float inertia = axis.Dot(state.InverseInertiaTensor.Inverse() * axis) + weight * c.Radius * c.Radius;
+                float slope = Mathf.Abs(weight * gravity.Dot(axis.Cross(normal))) * c.Radius;   // what the grade adds this tick
+                float torque = Mathf.Min(crr * load * c.Radius, inertia * Mathf.Abs(turning) / dt + slope);
                 c.Resisting = torque;
                 c.Wheel.ApplyTorque(-Mathf.Sign(turning) * torque * axis);
             }
