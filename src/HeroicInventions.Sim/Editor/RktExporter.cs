@@ -175,6 +175,9 @@ public static class RktExporter
             case "windmill":
                 return $"  (windmill {p.Id} {At()} #:radius {F(N("radius"))} #:mass {F(N("mass"))} #:wind {F(N("wind"))} #:load {F(N("load"))} " +
                        $"#:cp {F(N("cp", 0.3))} #:tip-speed-ratio {F(N("tip-speed-ratio", 2.5))} {Mat()})\n";
+            case "grip":
+                return $"  (grip {p.Id} {At()} #:on {Sym("on", "world")} #:kind {Sym("kind", "tongs")} #:reach {F(N("reach", 0.15))} " +
+                       $"#:force {F(N("force"))} #:strength {F(N("strength"))} #:closed {F(N("closed"))} {Mat()})\n";
             case "bellows":
                 return $"  (bellows {p.Id} {At()} #:on {Sym("on", "?")} #:airflow {F(N("airflow"))} {Mat()})\n";
             case "sluice":

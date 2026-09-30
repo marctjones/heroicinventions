@@ -1503,3 +1503,40 @@
   (check-= (at 28800 'stove2.lit) 1 0)
   ;; outdoors: 8 h burn 1.986 kg of the 3
   (check-= (at 28800 'stove3.fuel) 1.0138 0.001))
+
+
+(test-case "Crate tongs: tongs hold what 2 mu N allows, drop what it doesn't, and let go on cue"
+  ;; bronze on iron: mu = min(0.30, 0.40) = 0.30; tongs of N carry 2 mu N -- 60 N at 100 N, 84 N at 140 N.
+  ;; light crate 8.7 cm iron = 5.07 kg -> 49.7 N: held. heavy 9.9 cm = 7.47 kg -> 73.3 N: over 60, dropped
+  ;; (needs 122 N), but held by the 140 N tongs. The light one is let go after 1 s, 1.2 m up, onto a
+  ;; step 0.3 m up: its middle falls 0.8565 m, lands after sqrt(2 h / g) = 0.418 s at sqrt(2 g h) = 4.10 m/s.
+  (when (godot-available?)
+    (define run (godot-simulate 'crate-tongs #:seconds 3 #:sample-dt 0.01))
+    (define (t-first pred path)               ; the first sample time at which pred holds for a field
+      (for/first ([t (times-of run)] [v (values-of run path)] #:when (pred v)) t))
+    ;; the limits and the loads, in newtons
+    (check-= (value-at run '(light-tongs capacity) 0.5) 60.0 0.05)
+    (check-= (value-at run '(firm-tongs capacity) 0.5) 84.0 0.05)
+    (check-= (value-at run '(light-tongs load) 0.5) (* 5.07 9.81) 0.6 "8.7 cm of iron, 5.07 kg")
+    (check-= (value-at run '(firm-tongs load) 0.5) (* 7.47 9.81) 0.9 "9.9 cm of iron, 7.47 kg")
+    (check-true (< (value-at run '(light-tongs load) 0.5) (value-at run '(light-tongs capacity) 0.5)) "the light crate is inside the limit")
+    (check-true (> (* 7.47 9.81) 60.0) "and the heavy one is past the 100 N tongs' limit")
+    ;; the light crate is held until it is let go; the firm tongs never let go; the heavy crate is dropped at once
+    (check-= (value-at run '(light-tongs held) 0.5) 1 0)
+    (check-= (value-at run '(light-crate y) 0.5) 1.2 0.005)
+    (check-= (value-at run '(firm-tongs held) 2.9) 1 0)
+    (check-= (min-of run '(firm-crate y)) 1.2 0.005 "held in the air the whole time")
+    (check-= (value-at run '(heavy-tongs overloaded) 0.5) 1 0 "the 100 N tongs gave way under the heavy crate")
+    (check-= (value-at run '(heavy-tongs held) 0.5) 0 0)
+    ;; let go on cue: the trigger fires at 1 s of holding, and the crate falls the predicted height in the predicted time
+    (define let-go (final-of run '(let-go fired-at)))
+    (check-= let-go 1.0 0.03)
+    (define landed (t-first (λ (y) (< y 0.36)) '(light-crate y)))
+    (check-= (- landed let-go) (sqrt (/ (* 2 0.8565) 9.81)) 0.04 "the time to fall 0.8565 m")
+    (check-= (- (min-of run '(light-crate vy))) (sqrt (* 2 9.81 0.8565)) 0.15 "the speed it lands at")
+    ;; the heavy crate falls 0.8505 m the moment the tongs give way
+    (define heavy-landed (t-first (λ (y) (< y 0.36)) '(heavy-crate y)))
+    (check-= heavy-landed (sqrt (/ (* 2 0.8505) 9.81)) 0.05)
+    ;; and comes to rest on the step, its middle half its height up: 0.3 + 0.0495
+    (check-= (final-of run '(heavy-crate y)) 0.3495 0.005)
+    (check-= (final-of run '(light-crate y)) 0.3435 0.005)))

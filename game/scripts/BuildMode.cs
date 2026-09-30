@@ -120,6 +120,7 @@ public partial class BuildMode : Node3D
         ["rotor"] = ("Steam ball (aeolipile)", "Fire, water and steam", "Heron's ball, spun by its own steam jets. Connect a pot's steam to it."),
         ["mirror"] = ("Mirror", "Fire, water and steam", "Throws sunlight onto a pot. Pick the pot in the inspector."),
         ["enclosure"] = ("Enclosure", "Structure", "A room with its own air: set its pressure, gases (o2, n2 …) and walls. Parts inside read its air instead of the planet's."),
+        ["grip"] = ("Tongs or hook (grip)", "Weights and levers", "Takes hold of a loose block within reach while closed, and lets go when opened or overloaded. Hang it on a lever or the world."),
         ["bellows"] = ("Bellows", "Fire, water and steam", "Blows air into a fire so it burns hotter."),
         ["safety-valve"] = ("Safety valve", "Fire, water and steam", "Lets steam out of a pot before it bursts."),
         ["tank"] = ("Tank of water", "Water", "Holds water. Join tanks with pipes at their water points."),
@@ -896,6 +897,7 @@ public partial class BuildMode : Node3D
     {
         "axis" => ["x", "y", "z"],
         "fuel-kind" => ["wood", "charcoal", "coal"],
+        "kind" => ["tongs", "hook"],
         "rope" => _materialIds,
         _ => null,
     };

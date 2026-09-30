@@ -36,7 +36,7 @@
          "geometry/shape.rkt" "planets.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -376,7 +376,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt joint)
 
@@ -424,6 +424,7 @@
   (struct puinfo (id from to mat))   ; a lift pump: the tank it draws from, the tank it fills
   (struct cpinfo (id vessel))        ; a counterpoise: the tank that hangs from it
   (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
+  (struct grinfo (id on mat))        ; a grip: the body it hangs on (or #f: the world)
   (struct beinfo (id a b))           ; a belt: the two drums it runs on
   (struct fwinfo (id lever rope))    ; a follow: the lever it follows, or the rope
   (struct jinfo (id kind a b))       ; a joint: its kind and the two parts (or world)
@@ -470,8 +471,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure) or link (pipe, connect, sealed-air)"
-    #:literals (enclosure tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip) or link (pipe, connect, sealed-air)"
+    #:literals (enclosure grip tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -834,6 +835,31 @@
                                  (cons 'heater (~? heater-v 0)) (cons 'leak (~? leak-v 0)) (cons 'supply (~? supply-v 0))
                                  (cons 'coefficient (~? cd-v 0.6))
                                  (enclosure-air-props 'id (~? air-v #f) #,(loc-of this-syntax)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; Tongs or a hook at #:at, hung on the body #:on names (a lever, a wheel,
+    ;; a block...) or on the world (the default). While closed it takes hold
+    ;; of the nearest loose block within #:reach (default 15 cm) and carries it;
+    ;; opened, or overloaded, it lets go. #:kind tongs squeeze with #:force N a
+    ;; jaw and carry 2 mu F, mu the lower of the jaws' and the load's friction,
+    ;; so a mass m needs F >= m g / (2 mu); #:kind hook carries #:strength N.
+    ;; It starts open; #:closed 1 starts it shut. Set (grip closed 1) or 0 at
+    ;; run time, or let a trigger or a follow do it.
+    (pattern (grip id:id
+                   (~alt (~once (~seq #:at at:vec3))
+                         (~optional (~seq #:on on-id:id))
+                         (~optional (~seq #:kind kind:id))
+                         (~optional (~seq #:reach reach-v:expr))
+                         (~optional (~seq #:force force-v:expr))
+                         (~optional (~seq #:strength strength-v:expr))
+                         (~optional (~seq #:closed closed-v:expr))
+                         (~optional (~seq #:material mat:id))) ...)
+      #:fail-when (and (attribute kind) (not (memq (syntax-e #'kind) '(tongs hook))) #'kind) "#:kind is tongs or hook"
+      #:attr info (grinfo #'id (and (attribute on-id) #'on-id) (attribute mat))
+      #:with expr #`(part 'id 'grip '(~? mat bronze) (list at.x at.y at.z)
+                          (list (cons 'on '(~? on-id world)) (cons 'kind '(~? kind tongs)) (cons 'reach (~? reach-v 0.15))
+                                (cons 'force (~? force-v 0)) (cons 'strength (~? strength-v 0)) (cons 'closed (~? closed-v 0)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1489,6 +1515,11 @@
     (for ([t infos] #:when (and (trinfo? t) (trinfo-body t)))
       (unless (hash-ref parts (syntax-e (trinfo-body t)) #f)
         (fail (format "~a is not a part; a trigger watches a part's centre" (syntax-e (trinfo-body t))) (trinfo-body t))))
+
+    (for ([g infos] #:when (and (grinfo? g) (grinfo-on g)))
+      (define p (hash-ref parts (syntax-e (grinfo-on g)) #f))
+      (unless (and p (memq (pinfo-kind p) '(block lever wheel screw fixture post piston pendulum ramp)))
+        (fail (format "~a is not a body a grip can hang from (a block, lever, wheel, post ...); leave #:on out to hang it on the world" (syntax-e (grinfo-on g))) (grinfo-on g))))
 
     (for ([bt infos] #:when (beinfo? bt))
       (for ([d (list (beinfo-a bt) (beinfo-b bt))])

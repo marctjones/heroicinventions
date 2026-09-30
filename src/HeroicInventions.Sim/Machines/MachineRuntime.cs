@@ -32,6 +32,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Trigger> _triggers = [];
     private readonly Dictionary<string, Follow> _follows = [];
     private readonly Dictionary<string, Belt> _belts = [];
+    private readonly Dictionary<string, Grip> _grips = [];
     private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, (FloatValve Valve, Func<double> Flow)> _floatValves = [];
@@ -74,6 +75,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Follow> Follows => _follows;
     /// <summary>Belts between drums, by id. Whoever owns the drums (the view) grips them each tick with <see cref="Belt.Grip"/>.</summary>
     public IReadOnlyDictionary<string, Belt> Belts => _belts;
+    /// <summary>Grips, by id: hooks and tongs that pick up loose bodies. The view owns the bodies and the joints; the grip's state and limits live here.</summary>
+    public IReadOnlyDictionary<string, Grip> Grips => _grips;
     public IReadOnlyDictionary<string, Channel> Channels => _channels;
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
     /// <summary>Float valves, each with the flow of the feed it throttles (m³/s).</summary>
@@ -262,7 +265,7 @@ public sealed class MachineRuntime
                     break;
                 case "mirror": break; // built once what it heats exists
                 case "enclosure": break; // built first: every other part reads its zone
-                case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump":
+                case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump" or "grip":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -451,9 +454,48 @@ public sealed class MachineRuntime
         SetZones();
         Ambient = _ambient;   // hand it to every part now they all exist
         RegisterFields();
+        // belts and grips register their own fields, which triggers and follows may watch and set: build them first
+        BuildBelts(def);
+        BuildGrips(def);
         BuildTriggers(def);
         BuildFollows(def);
-        BuildBelts(def);
+    }
+
+    private void BuildGrips(MachineDef def)
+    {
+        foreach (var part in def.Parts.Where(p => p.Kind == "grip"))
+        {
+            string on = part.Symbol("on", "world");
+            if (on != "world" && (def.Part(on) is not { } host || host.Kind is "tank" or "boiler" or "grip" or "hearth" or "bellows" or "leak" or "sluice" or "float-valve" or "safety-valve" or "pump"))
+                throw new MachineFormatException($"grip {part.Id} is on {on}, which is not a body it can hang from (a lever, wheel, block, post or other rigid part, or world)", part.Location);
+            string kind = part.Symbol("kind", "tongs");
+            if (kind is not ("tongs" or "hook"))
+                throw new MachineFormatException($"grip {part.Id}: #:kind is tongs or hook, not {kind}", part.Location);
+            double reach = part.Number("reach", 0.15), force = part.Number("force", 0), strength = part.Number("strength", 0);
+            if (reach <= 0) throw new MachineFormatException($"grip {part.Id}: #:reach must be more than 0", part.Location);
+            if (kind == "tongs" && force <= 0) throw new MachineFormatException($"tongs {part.Id} need a #:force above 0 to hold anything", part.Location);
+            if (kind == "hook" && strength <= 0) throw new MachineFormatException($"hook {part.Id} needs a #:strength above 0 to carry anything", part.Location);
+            var grip = _grips[part.Id] = new Grip(part.Id, reach, kind == "tongs", force, strength, _materials[part.Material].Friction)
+            {
+                Closed = part.Number("closed", 0) != 0,
+            };
+            string id = part.Id;
+            _getters[$"{id}.closed"] = () => grip.Closed ? 1 : 0;
+            _setters[$"{id}.closed"] = v =>
+            {
+                bool closed = v != 0;
+                if (!closed) { grip.Overloaded = false; }
+                grip.Closed = closed;
+            };
+            _getters[$"{id}.held"] = () => grip.Held ? 1 : 0;
+            _getters[$"{id}.held-for"] = () => grip.HeldFor;                  // s
+            _getters[$"{id}.load"] = () => grip.Load;                         // N
+            _getters[$"{id}.capacity"] = () => grip.Capacity;                 // N
+            _getters[$"{id}.overloaded"] = () => grip.Overloaded ? 1 : 0;
+            _getters[$"{id}.force"] = () => grip.Force;                       // N a jaw presses with
+            _setters[$"{id}.force"] = n => grip.Force = Math.Max(0, n);       // squeeze harder
+            _setters[$"{id}.strength"] = n => grip.Strength = Math.Max(0, n);
+        }
     }
 
     private static double DrumRadius(PartSpec p) =>
@@ -1203,6 +1245,7 @@ public sealed class MachineRuntime
                 room.AddHeat(boiler.HeatLost - _boilerLossSeen.GetValueOrDefault(id));
                 _boilerLossSeen[id] = boiler.HeatLost;
             }
+        foreach (var g in _grips.Values) if (g.Held) g.HeldFor += dt;
         Time += dt;
         StepFieldTriggers();
     }
