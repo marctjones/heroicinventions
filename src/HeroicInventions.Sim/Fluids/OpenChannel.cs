@@ -92,8 +92,163 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
         return (lo + hi) / 2;
     }
 
+    // ------------------------------------------------------------------
+    // A channel that holds water (issue #36): the reach cut into Cells cells
+    // along its length, each with its own depth and discharge, solved by the
+    // 1-D shallow-water equations (ShallowWater). Water poured in at the
+    // head takes time to run down it, a wave travels and flattens, and the
+    // reach can run dry below a shut gate. The steady channel above stays
+    // what a channel with no cells does, so old scenes keep their numbers.
+    // ------------------------------------------------------------------
+
+    /// <summary>How many cells the reach is cut into; 0, the steady channel (weir at the head, Manning depth all along).</summary>
+    public int Cells { get; init; }
+    public bool Dynamic => Cells > 0;
+    /// <summary>Manning's n for a dynamic reach (dressed stone unless changed; 0, frictionless).</summary>
+    public double Manning { get; set; } = Roughness;
+
+    // not readonly: a live edit carries them over (StateCopy copies plain arrays of the same length)
+    private double[] _h = [], _q = [];
+    private double _clock;
+    private bool _wasDryAtFoot = true;
+
+    /// <summary>Metres of water standing in each cell, head to foot.</summary>
+    public IReadOnlyList<double> Depths => _h;
+    /// <summary>Each cell's speed down the reach, m/s.</summary>
+    public double VelocityAt(int cell) => ShallowWater.Velocity(_h[cell], _q[cell]);
+    public double CellLength => Length / Math.Max(1, Cells);
+    /// <summary>The bed's elevation at a cell: falling evenly from the lip (first cell) to the end (last).</summary>
+    public double BedAt(int cell) => Cells <= 1 ? LipElevation : LipElevation + (EndElevation - LipElevation) * cell / (Cells - 1);
+    public int CellAt(double metres) => Math.Clamp((int)(metres / CellLength), 0, Math.Max(0, Cells - 1));
+    /// <summary>m³ of water in the reach.</summary>
+    public double Stored => _h.Sum() * Width * CellLength;
+    /// <summary>m³/s leaving the foot (into the far tank, or off the scene), last step; negative, running back up.</summary>
+    public double Outflow { get; private set; }
+    /// <summary>m from the head to the far edge of the last wet cell (over 1 mm), 0 dry.</summary>
+    public double Front { get; private set; }
+    /// <summary>s after the reach was built when water first reached its foot; −1 until it has.</summary>
+    public double Arrival { get; private set; } = -1;
+    /// <summary>m³ taken out of the arithmetic by clipping a cell's depth at zero, all told (should stay ~0: the mass ledger's error).</summary>
+    public double Clipped { get; private set; }
+
+    private void EnsureCells()
+    {
+        if (_h.Length == Cells) return;
+        _h = new double[Cells];
+        _q = new double[Cells];
+    }
+
+    /// <summary>Sets the water standing in the reach: a depth (and optionally a speed) at each distance from the head, m.</summary>
+    public void Fill(Func<double, double> depthAt, Func<double, double>? velocityAt = null)
+    {
+        EnsureCells();
+        for (int i = 0; i < Cells; i++)
+        {
+            double x = (i + 0.5) * CellLength;
+            _h[i] = Math.Max(0, depthAt(x));
+            _q[i] = _h[i] * (velocityAt?.Invoke(x) ?? 0);
+        }
+        _wasDryAtFoot = _h[^1] <= 1e-3;
+    }
+
+    /// <summary>The unit discharge and momentum flux where the reach meets its head tank (positive: into the reach).</summary>
+    private (double Q, double P) HeadFlux(double g)
+    {
+        double h0 = _h[0], u0 = ShallowWater.Velocity(h0, _q[0]);
+        double head = From.SurfaceElevation - LipElevation;
+        double hb, ub;
+        (hb, ub) = head > 0 ? ShallowWater.Inlet(head, h0, u0, g) : (0, -1);
+        if (ub < 0)
+        {
+            // running back: the reach spills over the lip into its tank (or is held by the tank's level)
+            var (ho, vo) = ShallowWater.Outlet(h0, -u0, From.SurfaceElevation - BedAt(0), g);
+            (hb, ub) = (ho, -vo);
+            if (Gate is { } shut && shut.Opening * shut.Height <= 0 && ub < 0) (hb, ub) = (h0, 0);   // a shut gate is a wall both ways
+        }
+        double q = hb * ub;
+        if (q > 0 && Gate is { } gate)
+        {
+            double through = gate.Discharge(From.SurfaceElevation, LipElevation, BedAt(0) + h0, q * Width) / Width;
+            if (through < q) { ub = hb > 0 ? through / hb : 0; q = through; }
+        }
+        return (q, hb * ub * ub + g * hb * hb / 2);
+    }
+
+    /// <summary>The unit discharge and momentum flux where the reach meets its far tank, or falls off the scene (positive: out of the reach).</summary>
+    private (double Q, double P) FootFlux(double g)
+    {
+        int n = Cells - 1;
+        double h = _h[n], u = ShallowWater.Velocity(h, _q[n]);
+        double downstream = To is null ? double.NegativeInfinity : To.SurfaceElevation - BedAt(n);
+        var (hb, vb) = ShallowWater.Outlet(h, u, downstream, g);
+        double q = hb * vb;
+        if (q > 0 && Valve is { } valve) { q *= valve.Opening; vb = hb > 0 ? q / hb : 0; }
+        return (q, hb * vb * vb + g * hb * hb / 2);
+    }
+
+    private void StepDynamic(double dt)
+    {
+        EnsureCells();
+        double g = Gravity, dx = CellLength;
+        int n = Cells;
+        var mass = new double[n + 1];
+        var momL = new double[n + 1];   // momentum flux through face j, as the cell on its left sees it
+        var momR = new double[n + 1];   // ... and as the cell on its right sees it
+        double inflow = 0, outflow = 0;
+        for (double t = 0; t < dt - 1e-12;)
+        {
+            double fastest = Math.Sqrt(g * Math.Max(From.SurfaceElevation - LipElevation, 0));
+            for (int i = 0; i < n; i++)
+                if (_h[i] > ShallowWater.Dry) fastest = Math.Max(fastest, Math.Abs(_q[i] / _h[i]) + Math.Sqrt(g * _h[i]));
+            if (To is not null) fastest = Math.Max(fastest, Math.Sqrt(g * Math.Max(0, To.SurfaceElevation - BedAt(n - 1))));
+            double sub = Math.Min(dt - t, fastest > 0 ? 0.45 * dx / fastest : dt - t);
+
+            var (qh, ph) = HeadFlux(g);
+            var (qf, pf) = FootFlux(g);
+            // the tanks can only give what stands above the lip / end, and take what fits
+            if (qh > 0) qh = Math.Min(qh, Math.Max(0, (From.SurfaceElevation - LipElevation) * From.Area) / (Width * sub));
+            else if (qh < 0) qh = -Math.Min(-qh, Math.Max(0, From.Capacity - From.WaterVolume) / (Width * sub));
+            if (To is not null)
+            {
+                if (qf > 0) qf = Math.Min(qf, Math.Max(0, To.Capacity - To.WaterVolume) / (Width * sub));
+                else if (qf < 0) qf = -Math.Min(-qf, Math.Max(0, (To.SurfaceElevation - EndElevation) * To.Area) / (Width * sub));
+            }
+            (mass[0], momR[0]) = (qh, ph);
+            (mass[n], momL[n]) = (qf, pf);
+            for (int j = 1; j < n; j++)
+                (mass[j], momL[j], momR[j]) = ShallowWater.Face(BedAt(j - 1), _h[j - 1], ShallowWater.Velocity(_h[j - 1], _q[j - 1]),
+                                                                  BedAt(j), _h[j], ShallowWater.Velocity(_h[j], _q[j]), g);
+            for (int i = 0; i < n; i++)
+            {
+                double h = _h[i] - sub / dx * (mass[i + 1] - mass[i]);
+                double q = _q[i] - sub / dx * (momL[i + 1] - momR[i]);
+                if (h < ShallowWater.Dry) { Clipped -= Math.Min(h, 0) * Width * dx; h = Math.Max(h, 0); q = 0; }
+                _h[i] = h;
+                _q[i] = ShallowWater.Friction(h, q, sub, Manning, Width, g);
+            }
+            From.WaterVolume -= qh * Width * sub;
+            inflow += qh * Width * sub;
+            if (To is not null) To.WaterVolume += qf * Width * sub;
+            else if (qf > 0) Pour?.Invoke(qf * Width * sub);
+            outflow += qf * Width * sub;
+            t += sub;
+            _clock += sub;
+        }
+        Flow = inflow / dt;
+        Outflow = outflow / dt;
+        int mid = n / 2;
+        Depth = _h[mid];
+        Velocity = ShallowWater.Velocity(_h[mid], _q[mid]);
+        int last = Array.FindLastIndex(_h, h => h > 1e-3);
+        Front = last < 0 ? 0 : (last + 1) * dx;
+        bool dryAtFoot = _h[n - 1] <= 1e-3;
+        if (Arrival < 0 && _wasDryAtFoot && !dryAtFoot) Arrival = _clock;
+        _wasDryAtFoot = dryAtFoot;
+    }
+
     public void Step(double dt)
     {
+        if (Dynamic) { StepDynamic(dt); return; }
         double downstream = To?.SurfaceElevation ?? double.NegativeInfinity;
         double q = Gate is { } gate
             ? gate.Discharge(From.SurfaceElevation, LipElevation, downstream, WeirFlow(Width, Head, Gravity))
