@@ -101,6 +101,9 @@ public static class RktExporter
             case "rotor":
                 return $"  (rotor {p.Id} {At()} #:radius {F(N("radius"))} {Mat()} #:bore {F(N("bore"))} #:arm {F(N("arm"))} " +
                        $"#:wall {F(N("wall", 0.001))} #:nozzles {F(N("nozzles", 2))})\n";
+            case "jetwheel":
+                return $"  (jetwheel {p.Id} {At()} #:radius {F(N("radius"))} {Mat()} #:bore {F(N("bore"))} " +
+                       $"#:paddles {F(N("paddles", 8))} #:width {F(N("width", 0.03))} #:mass {F(N("mass", 0.5))} #:load {F(N("load"))})\n";
             case "block":
                 return $"  (block {p.Id} {At()} #:size {F(N("size"))} #:tilt-deg {F(N("tilt-deg"))}" +
                        (p.Props.ContainsKey("dim-x") ? $" #:dimensions ({F(N("dim-x"))} {F(N("dim-y"))} {F(N("dim-z"))})" : "") + $" {Mat()})\n";

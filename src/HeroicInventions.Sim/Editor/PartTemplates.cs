@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -28,8 +28,27 @@ public static class PartTemplates
             [new PortSpec("inlet", "water", 0), new PortSpec("outlet", "water", 0)],
             null),
         "boiler" => new PartSpec(id, "boiler", material, at,
-            Props(("radius", 0.15), ("height", 0.3), ("water", 0.01), ("fire", 0), ("temperature", 20), ("burst", 0)),
+            // a litre of water, heated by a hearth or a mirror aimed at it (or its own #:fire)
+            Props(("radius", 0.15), ("height", 0.3), ("water", 1.0), ("fire", 0), ("temperature", 20), ("burst", 0)),
             [new PortSpec("steam", "steam", 0.3)],
+            null),
+        // a wood fire; #:heats names the pot it sits under
+        "hearth" => new PartSpec(id, "hearth", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["heats"] = new SSymbol("?"), ["power"] = new SNumber(3000), ["fuel"] = new SNumber(1.0),
+                ["fuel-kind"] = new SSymbol("wood"), ["efficiency"] = new SNumber(0.5),
+            },
+            [], null),
+        // Branca's wheel: flat paddles struck by a boiler's steam jet
+        "jetwheel" => new PartSpec(id, "jetwheel", material, at,
+            Props(("radius", 0.15), ("bore", 0.005), ("paddles", 8), ("width", 0.03), ("mass", 0.5), ("load", 0)),
+            [new PortSpec("steam-in", "steam", 0)],
+            null),
+        // Heron's aeolipile: a sphere spun by its own steam jets
+        "rotor" => new PartSpec(id, "rotor", material, at,
+            Props(("radius", 0.06), ("wall", 0.001), ("bore", 0.002), ("arm", 0.08), ("nozzles", 2)),
+            [new PortSpec("steam-in", "steam", 0)],
             null),
         "block" => new PartSpec(id, "block", material, at, Props(("size", 0.1), ("tilt-deg", 0)), [], null),
         // no bearing (Jolt swings it) until given a #:bearing-radius; then the sim swings it against the bearing's friction

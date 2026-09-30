@@ -27,7 +27,7 @@
          "geometry/shape.rkt")
 
 (provide define-machine
-         tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
+         tank boiler rotor jetwheel block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -301,7 +301,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
+(define-clause-keywords tank boiler rotor jetwheel block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off)
 
@@ -391,8 +391,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:description "a part (tank, boiler, rotor, jetwheel, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
+    #:literals (tank boiler rotor jetwheel block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -439,6 +439,29 @@
       #:with expr #`(part 'id 'rotor 'mat (list at.x at.y at.z)
                           (list (cons 'radius radius-v) (cons 'wall (~? wall-v 1/1000))
                                 (cons 'bore bore-v) (cons 'arm arm-v) (cons 'nozzles (~? nozzles-v 2)))
+                          (list (port-spec 'steam-in 'steam 0))
+                          #,(loc-of this-syntax)))
+
+    ;; A paddle wheel turned by a jet of steam, after Giovanni Branca's 1629
+    ;; design: a spout of #:bore on the boiler blows steam at flat paddles
+    ;; on a wheel of #:radius. The push on the paddles is the jet's mass flow
+    ;; times how much faster the steam moves than the paddles, so the wheel
+    ;; runs up until that balances its #:load (a torque, N·m) and its
+    ;; bearing. #:mass sits at the rim (I = m r²).
+    (pattern (jetwheel id:id
+                    (~alt (~once (~seq #:at at:vec3))
+                          (~once (~seq #:radius radius-v:expr))
+                          (~once (~seq #:material mat:id))
+                          (~once (~seq #:bore bore-v:expr))
+                          (~optional (~seq #:paddles paddles-v:expr))
+                          (~optional (~seq #:width width-v:expr))
+                          (~optional (~seq #:mass mass-v:expr))
+                          (~optional (~seq #:load load-v:expr))) ...)
+      #:attr info (pinfo #'id 'jetwheel (attribute mat) (list (cons 'steam-in 'steam)))
+      #:with expr #`(part 'id 'jetwheel 'mat (list at.x at.y at.z)
+                          (list (cons 'radius radius-v) (cons 'bore bore-v)
+                                (cons 'paddles (~? paddles-v 8)) (cons 'width (~? width-v 3/100))
+                                (cons 'mass (~? mass-v 1/2)) (cons 'load (~? load-v 0)))
                           (list (port-spec 'steam-in 'steam 0))
                           #,(loc-of this-syntax)))
 
@@ -1146,19 +1169,19 @@
                  (linfo-to l)))
          (when (eq? ka 'steam)
            (define-values (b r)
-             (cond [(and (eq? (pinfo-kind pa) 'boiler) (eq? (pinfo-kind pb) 'rotor)) (values pa pb)]
-                   [(and (eq? (pinfo-kind pb) 'boiler) (eq? (pinfo-kind pa) 'rotor)) (values pb pa)]
-                   [else (fail "a steam connection must join a boiler to a rotor" (linfo-to l))]))
+             (cond [(and (eq? (pinfo-kind pa) 'boiler) (memq (pinfo-kind pb) '(rotor jetwheel))) (values pa pb)]
+                   [(and (eq? (pinfo-kind pb) 'boiler) (memq (pinfo-kind pa) '(rotor jetwheel))) (values pb pa)]
+                   [else (fail "a steam connection must join a boiler to a rotor or a jetwheel" (linfo-to l))]))
            (define b-sym (syntax-e (pinfo-id b)))
            (hash-set! steam-feeds (syntax-e (pinfo-id r)) b-sym)
            (hash-update! boiler-loads b-sym add1 0)
            (when (> (hash-ref boiler-loads b-sym) 1)
-             (fail (format "boiler ~a already feeds a rotor; one rotor per boiler for now" b-sym)
+             (fail (format "boiler ~a already feeds a rotor or jetwheel; one per boiler for now" b-sym)
                    (linfo-to l))))]))
 
-    (for ([(sym p) parts] #:when (eq? (pinfo-kind p) 'rotor))
+    (for ([(sym p) parts] #:when (memq (pinfo-kind p) '(rotor jetwheel)))
       (unless (hash-ref steam-feeds sym #f)
-        (fail (format "rotor ~a has no steam supply; add (connect <boiler>.steam ~a.steam-in)" sym sym)
+        (fail (format "~a ~a has no steam supply; add (connect <boiler>.steam ~a.steam-in)" (pinfo-kind p) sym sym)
               (pinfo-id p))))
 
     (for ([r infos] #:when (rinfo? r))

@@ -23,7 +23,8 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Hearth> _hearths = [];
     private readonly Dictionary<string, Hearth> _bellows = []; // bellows id → the hearth it forces draught into
     private readonly Dictionary<string, Aeolipile> _rotors = [];
-    private readonly Dictionary<string, string> _rotorBoiler = []; // rotor id → boiler id
+    private readonly Dictionary<string, string> _rotorBoiler = []; // rotor or jet wheel id → boiler id
+    private readonly Dictionary<string, JetWheel> _jetWheels = [];
     private readonly List<AirPocket> _air = [];
     private readonly Dictionary<string, WaterLift> _lifts = [];
     private readonly Dictionary<string, AtmosphericCylinder> _cylinders = [];
@@ -55,6 +56,7 @@ public sealed class MachineRuntime
     /// <summary>Bellows, each with the hearth it forces draught into.</summary>
     public IReadOnlyDictionary<string, Hearth> Bellows => _bellows;
     public IReadOnlyDictionary<string, Aeolipile> Rotors => _rotors;
+    public IReadOnlyDictionary<string, JetWheel> JetWheels => _jetWheels;
     public IReadOnlyList<AirPocket> AirPockets => _air;
     public IReadOnlyDictionary<string, WaterLift> Lifts => _lifts;
     public IReadOnlyDictionary<string, AtmosphericCylinder> Cylinders => _cylinders;
@@ -195,7 +197,7 @@ public sealed class MachineRuntime
                         });
                     break;
                 case "mirror": break; // built once what it heats exists
-                case "rotor" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump":
+                case "rotor" or "jetwheel" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -224,10 +226,10 @@ public sealed class MachineRuntime
                 _boilers.ContainsKey(c.A.Part) ? (c.A, c.B) :
                 _boilers.ContainsKey(c.B.Part) ? (c.B, c.A) :
                 throw new MachineFormatException($"connect {c.A} {c.B}: a steam connection needs a boiler", c.Location);
-            if (def.Part(rotorRef.Part) is not { Kind: "rotor" })
-                throw new MachineFormatException($"connect {c.A} {c.B}: {rotorRef.Part} is not a rotor", c.Location);
+            if (def.Part(rotorRef.Part) is not { Kind: "rotor" or "jetwheel" })
+                throw new MachineFormatException($"connect {c.A} {c.B}: {rotorRef.Part} is not a rotor or jetwheel", c.Location);
             if (_rotorBoiler.ContainsValue(boilerRef.Part))
-                throw new MachineFormatException($"boiler {boilerRef.Part} already feeds a rotor", c.Location);
+                throw new MachineFormatException($"boiler {boilerRef.Part} already feeds a rotor or jetwheel", c.Location);
             _rotorBoiler[rotorRef.Part] = boilerRef.Part;
         }
 
@@ -243,6 +245,24 @@ public sealed class MachineRuntime
                 NozzleArea = Math.PI * bore * bore / 4,
                 ArmRadius = part.Number("arm"),
                 MomentOfInertia = ShellInertia(materials[part.Material].Density, radius, part.Number("wall", 0.001)),
+            };
+        }
+
+        foreach (var part in def.Parts.Where(p => p.Kind == "jetwheel"))
+        {
+            if (!_rotorBoiler.TryGetValue(part.Id, out var boilerId))
+                throw new MachineFormatException($"jetwheel {part.Id} has no steam supply: connect a boiler's steam to its steam-in", part.Location);
+            double radius = part.Number("radius");
+            double bore = part.Number("bore");
+            _jetWheels[part.Id] = new JetWheel(_boilers[boilerId])
+            {
+                SpoutArea = Math.PI * bore * bore / 4,
+                Radius = radius,
+                MomentOfInertia = Math.Max(1e-5, part.Number("mass", 0.5) * radius * radius),
+                Load = part.Number("load", 0),
+                // square paddles #:width across, beating the scene's air
+                AirDrag = JetWheel.Windage(Physics.AirDensityAt(_ambient), (int)part.Number("paddles", 8),
+                                           part.Number("width", 0.03) * part.Number("width", 0.03), radius),
             };
         }
 
@@ -617,6 +637,17 @@ public sealed class MachineRuntime
             _getters[$"{id}.rpm"] = () => rotor.Rpm;
             _getters[$"{id}.thrust"] = () => rotor.Thrust;
         }
+        foreach (var (id, w) in _jetWheels)
+        {
+            _getters[$"{id}.rpm"] = () => w.Rpm;
+            _getters[$"{id}.omega"] = () => w.AngularVelocity;
+            _getters[$"{id}.jet-speed"] = () => w.JetVelocity;
+            _getters[$"{id}.steam-flow"] = () => w.SteamFlow * 1000;      // g/s
+            _getters[$"{id}.push"] = () => w.Push;
+            _getters[$"{id}.power"] = () => w.Power;
+            _getters[$"{id}.load"] = () => w.Load;
+            _setters[$"{id}.load"] = nm => w.Load = Math.Max(0, nm);
+        }
         foreach (var (id, pipe) in _pipes)
         {
             _getters[$"{id}.flow"] = () => pipe.Flow * 1000;               // L/s
@@ -805,6 +836,7 @@ public sealed class MachineRuntime
         foreach (var c in _capstans.Values) c.Step(dt);
         foreach (var p in _pendulums.Values) p.Step(dt);
         foreach (var rotor in _rotors.Values) rotor.Step(dt); // steps its own boiler
+        foreach (var w in _jetWheels.Values) w.Step(dt);      // so does a jet wheel
         foreach (var c in _cylinders.Values) c.Step(dt);
         foreach (var (id, boiler) in _boilers)
             if (!_rotorBoiler.ContainsValue(id))

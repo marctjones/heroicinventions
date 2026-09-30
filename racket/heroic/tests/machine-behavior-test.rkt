@@ -1061,3 +1061,23 @@
     (check-true (> (reach 'ball-4) 20) (format "the far ball reaches ~a degrees" (reach 'ball-4)))
     (for ([b '(ball-1 ball-2 ball-3)])
       (check-true (< (reach b) 3) (format "~a moves ~a degrees" b (reach b))))))
+
+(test-case "Branca's steam wheel: steam = the pot's net heat / latent heat, and the wheel balances jet push against load, bearing and windage"
+  ;; see racket/machines/branca-steam-wheel.rkt for the working
+  (define run (simulate 'branca-steam-wheel #:seconds 600 #:step 0.01 #:sample-dt 100))
+  (define T (final-of run '(pot temperature)))
+  (define latent (* 1000 (- 2501 (* 2.361 T))))              ; J/kg, water's latent heat near 100 C
+  (define mdot (/ (final-of run '(wheel steam-flow)) 1000))   ; kg/s
+  (check-= mdot (/ (- (* 0.5 3000) (* 2 (- T 20))) latent) (* 0.02 mdot) "heat in, less the pot's loss, becomes steam")
+  (define v (final-of run '(wheel jet-speed)))
+  (define r 0.15)
+  (define drag (* 0.5 1.2041 1.2 8 0.03 0.03 r r r))          ; windage of eight 3 cm paddles at 15 cm
+  ;; mdot (v - w r) r = load + bearing + drag w^2, solved for w
+  (define a drag) (define b (* mdot r r)) (define c (- (+ 0.003 0.002) (* mdot v r)))
+  (define w (/ (+ (- b) (sqrt (- (* b b) (* 4 a c)))) (* 2 a)))
+  (check-= (final-of run '(wheel omega)) w (* 0.01 w)))
+
+(test-case "Solar steam wheel: four mirrors boil the pot with no fire at all, and its steam turns the wheel"
+  (define run (simulate 'solar-steam-wheel #:seconds 900 #:step 0.01 #:sample-dt 100))
+  (check-true (> (final-of run '(pot temperature)) 100) "the pot boils")
+  (check-true (> (final-of run '(wheel rpm)) 300) (format "the wheel turns at ~a rpm" (final-of run '(wheel rpm)))))

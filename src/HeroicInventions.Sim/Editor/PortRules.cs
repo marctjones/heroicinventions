@@ -43,7 +43,10 @@ public static class PortRules
     }
 
     private static bool IsBoilerRotorPair(PartSpec a, PartSpec b) =>
-        (a.Kind == "boiler" && b.Kind == "rotor") || (a.Kind == "rotor" && b.Kind == "boiler");
+        (a.Kind == "boiler" && IsSteamDriven(b)) || (IsSteamDriven(a) && b.Kind == "boiler");
+
+    /// <summary>A part a boiler's steam drives: Heron's aeolipile or Branca's jet wheel.</summary>
+    private static bool IsSteamDriven(PartSpec p) => p.Kind is "rotor" or "jetwheel";
 
     /// <summary>A boiler already feeding a rotor by <c>connect</c> can't feed a second one (machine.rkt L570-572).</summary>
     public static bool BoilerAlreadyFeedsARotor(MachineDef m, string boilerId) =>
@@ -53,7 +56,7 @@ public static class PortRules
     {
         var partA = m.Part(c.A.Part);
         var partB = m.Part(c.B.Part);
-        return (partA?.Id == boilerId && partB?.Kind == "rotor") || (partB?.Id == boilerId && partA?.Kind == "rotor");
+        return (partA?.Id == boilerId && partB is { Kind: "rotor" or "jetwheel" }) || (partB?.Id == boilerId && partA is { Kind: "rotor" or "jetwheel" });
     }
 
     /// <summary>Two tanks' ports can be joined by an open channel (machine.rkt L634-638).</summary>

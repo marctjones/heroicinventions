@@ -25,7 +25,7 @@ public partial class MachineView : Node3D
     private readonly List<(Pipe pipe, Vector3 outlet, MeshInstance3D jet)> _jets = [];
     private readonly List<(Aeolipile rotor, Node3D node)> _rotors = [];
     private readonly List<(Boiler boiler, MeshInstance3D fire, StandardMaterial3D glow, GpuParticles3D flame)> _fires = [];
-    private readonly List<(Aeolipile rotor, GpuParticles3D puff)> _steamPuffs = []; // approximate — not a modelled steam flow, just where it exits
+    private readonly List<(Func<double> steamFlow, GpuParticles3D puff)> _steamPuffs = []; // approximate — not a modelled steam flow, just where it exits
     private readonly List<RigidBody3D> _freezable = []; // every dynamic body: blocks, pendulums, levers
     // Local-space centre-of-mass offset for each body, for real potential
     // energy. Blocks are centred on their own origin (no entry needed —
@@ -81,6 +81,7 @@ public partial class MachineView : Node3D
                 case "tank": BuildTank(part); break;
                 case "boiler": BuildBoiler(part); break;
                 case "rotor": BuildRotor(part); break;
+                case "jetwheel": BuildJetWheel(part); break;
                 case "block": BuildBlock(part); break;
                 case "pendulum": BuildPendulum(part); break;
                 case "lever": BuildLever(part); break;
@@ -269,7 +270,7 @@ public partial class MachineView : Node3D
     /// LocalCoords=false so spawned puffs drift in world space rather
     /// than being dragged around by the spinning rotor they came from.
     /// </summary>
-    private GpuParticles3D BuildSteamPuffs(Aeolipile rotor, Vector3 localPosition)
+    private GpuParticles3D BuildSteamPuffs(Func<double> steamFlow, Vector3 localPosition)
     {
         var gradient = new Gradient();
         gradient.SetColor(0, new Color(1, 1, 1, 0.55f));
@@ -315,7 +316,7 @@ public partial class MachineView : Node3D
                 },
             },
         };
-        _steamPuffs.Add((rotor, particles));
+        _steamPuffs.Add((steamFlow, particles));
         return particles;
     }
 
@@ -463,10 +464,74 @@ public partial class MachineView : Node3D
         {
             node.AddChild(Shapes.Rod(new Vector3(0, s * radius, 0), new Vector3(0, s * arm, 0), 0.006f, surface));
             node.AddChild(Shapes.Rod(new Vector3(0, s * arm, 0), new Vector3(0, s * arm, s * 0.025f), 0.006f, surface));
-            node.AddChild(BuildSteamPuffs(rotor, new Vector3(0, s * arm, s * 0.05f)));
+            node.AddChild(BuildSteamPuffs(() => rotor.SteamFlow, new Vector3(0, s * arm, s * 0.05f)));
         }
         _rotors.Add((rotor, node));
         AddLabel(part.Id, axle + new Vector3(0, radius + arm + 0.05f, 0));
+    }
+
+    private readonly List<(JetWheel wheel, Node3D node, MeshInstance3D jet)> _jetWheelViews = [];
+
+    /// <summary>
+    /// Branca's wheel: a hub on an axle along Z with flat paddles round its
+    /// rim, and a spout piped from its boiler's lid that ends just short of
+    /// the lowest paddle, aimed along +X so the jet drives the rim forward.
+    /// The jet is drawn as a translucent tapering stream while steam flows.
+    /// </summary>
+    private void BuildJetWheel(PartSpec part)
+    {
+        var surface = Surface(part.Material);
+        float radius = (float)part.Number("radius");
+        float width = (float)part.Number("width", 0.03);
+        int paddles = (int)part.Number("paddles", 8);
+        var axle = V(part.At);
+        var wheel = Runtime.JetWheels[part.Id];
+
+        // the axle on two posts
+        foreach (float side in new[] { -1f, 1f })
+        {
+            var postTop = axle + new Vector3(0, 0, side * (width + 0.03f));
+            AddChild(Shapes.Rod(postTop with { Y = 0 }, postTop, 0.012f, Surface("oak")));
+        }
+        AddChild(Shapes.Rod(axle + new Vector3(0, 0, -(width + 0.03f)), axle + new Vector3(0, 0, width + 0.03f), 0.006f, surface));
+
+        var node = new Node3D { Position = axle };
+        AddChild(node);
+        var hub = Shapes.Cylinder(radius * 0.18f, width * 0.8f, surface);
+        hub.RotationDegrees = new Vector3(90, 0, 0);
+        node.AddChild(hub);
+        for (int i = 0; i < paddles; i++)
+        {
+            float a = Mathf.Tau * i / paddles;
+            var dir = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0);
+            node.AddChild(Shapes.Rod(dir * radius * 0.15f, dir * (radius - width / 2), 0.004f, surface));
+            var paddle = Shapes.Box(new Vector3(width, 0.004f, width), surface);
+            paddle.Position = dir * (radius - width / 2);
+            paddle.Rotation = new Vector3(0, 0, a);
+            node.AddChild(paddle);
+        }
+
+        // the spout: up from the boiler's lid, then across to just short of the lowest paddle
+        var nozzle = axle + new Vector3(-0.07f, -radius + width / 2, 0);
+        if (Runtime.Def.Part(Runtime.BoilerFor(part.Id)) is { } boiler)
+        {
+            var lid = V(boiler.At) + new Vector3(0, (float)boiler.Number("height"), 0);
+            var bend = new Vector3(lid.X, nozzle.Y, lid.Z);
+            AddChild(Shapes.Rod(lid, bend, 0.008f, Surface(boiler.Material)));
+            AddChild(Shapes.Rod(bend, nozzle, 0.008f, Surface(boiler.Material)));
+        }
+        var jetMat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.95f, 0.97f, 1f, 0.6f),
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        };
+        var jet = Shapes.Rod(nozzle, nozzle + new Vector3(0.07f + width, 0, 0), 0.006f, jetMat);
+        jet.Visible = false;
+        AddChild(jet);
+        AddChild(BuildSteamPuffs(() => wheel.SteamFlow, nozzle + new Vector3(0.07f + width, 0, 0)));
+        _jetWheelViews.Add((wheel, node, jet));
+        AddLabel(part.Id, axle + new Vector3(0, radius + 0.06f, 0));
     }
 
     private void BuildBlock(PartSpec part)
@@ -1213,8 +1278,15 @@ public partial class MachineView : Node3D
                 glow.EmissionEnergyMultiplier = 2.5f + 0.7f * (float)(Math.Sin(t * 11.3) + Math.Sin(t * 5.1)) / 2f;
             }
         }
-        foreach (var (rotor, puff) in _steamPuffs)
-            puff.Emitting = rotor.SteamFlow > 1e-6;
+        foreach (var (steamFlow, puff) in _steamPuffs)
+            puff.Emitting = steamFlow() > 1e-6;
+        foreach (var (wheel, node, jet) in _jetWheelViews)
+        {
+            node.Rotation = new Vector3(0, 0, (float)wheel.Angle);
+            // the jet shows while steam flows, fuller the faster it comes
+            jet.Visible = wheel.SteamFlow > 1e-6;
+            jet.Transparency = Mathf.Clamp(1f - (float)(wheel.JetVelocity / 300.0), 0.3f, 0.85f);
+        }
         foreach (var rope in _ropes) DrawRope(rope);
         DrawLiftStreams();
         DrawChannels();
