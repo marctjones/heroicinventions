@@ -144,7 +144,8 @@ public static class RktExporter
                        $"#:chimney-height {F(N("chimney-height", 2))} #:chimney-area {F(N("chimney-area", 0.05))})\n";
             case "block":
                 return $"  (block {p.Id} {At()} #:size {F(N("size"))} #:tilt-deg {F(N("tilt-deg"))}" +
-                       (p.Props.ContainsKey("dim-x") ? $" #:dimensions ({F(N("dim-x"))} {F(N("dim-y"))} {F(N("dim-z"))})" : "") + $" {Mat()})\n";
+                       (p.Props.ContainsKey("dim-x") ? $" #:dimensions ({F(N("dim-x"))} {F(N("dim-y"))} {F(N("dim-z"))})" : "") +
+                       (p.Props.GetValueOrDefault("fast") is SBool { Value: false } ? " #:fast #f" : "") + $" {Mat()})\n";
             case "pendulum":
                 return $"  (pendulum {p.Id} {At()} #:length {F(N("length"))} #:start-angle-deg {F(N("start-angle-deg"))} {Mat()}" +
                        (p.Props.GetValueOrDefault("bearing-radius") is SNumber pin

@@ -78,7 +78,7 @@
     (check-equal? (cadr sexp) 'row)
     (define block (assq 'part (cddr sexp)))
     (check-equal? (assq 'at (cdddr block)) '(at 0.25 0.0 0.0))
-    (check-equal? (assq 'props (cdddr block)) '(props (size 0.1) (tilt-deg 0.0)))))
+    (check-equal? (assq 'props (cdddr block)) '(props (size 0.1) (tilt-deg 0.0) (fast #t)))))
 
 (test-case "a pendulum's bearing friction needs a pin radius"
   (check-compile-error #rx"needs a #:bearing-radius"

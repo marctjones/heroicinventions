@@ -2,5 +2,5 @@
 (machine lever-demo
   (source "Classic mechanics demonstration")
   (part beam lever (material oak) (at 0.0 0.5 0.0) (props (length 1.2) (start-angle-deg 0.0) (pivot-fraction 0.5) (limit-deg 10.0) (damping 8.0) (axis z) (limit-lower-deg #f) (limit-upper-deg #f) (spring-stiffness 0.0) (spring-rest-deg 0.0) (section #f)) (ports) (srcloc "racket/machines/lever.rkt" 9 2))
-  (part heavy block (material granite) (at -0.5 0.59 0.0) (props (size 0.14) (tilt-deg 0.0)) (ports) (srcloc "racket/machines/lever.rkt" 14 2))
-  (part light block (material cedar) (at 0.5 0.59 0.0) (props (size 0.14) (tilt-deg 0.0)) (ports) (srcloc "racket/machines/lever.rkt" 15 2)))
+  (part heavy block (material granite) (at -0.5 0.59 0.0) (props (size 0.14) (tilt-deg 0.0) (fast #t)) (ports) (srcloc "racket/machines/lever.rkt" 14 2))
+  (part light block (material cedar) (at 0.5 0.59 0.0) (props (size 0.14) (tilt-deg 0.0) (fast #t)) (ports) (srcloc "racket/machines/lever.rkt" 15 2)))

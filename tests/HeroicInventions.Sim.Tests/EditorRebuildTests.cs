@@ -295,4 +295,23 @@ public class EditorRebuildTests
         s.Execute("(remove bob)");                                   // a joint goes with its part
         Assert.Equal(["slide"], s.Document.Joints.Select(j => j.Id));
     }
+
+    /// <summary>Issue #28: a block is swept by default; #:fast #f turns that off, and the editor and the Racket exporter carry it.</summary>
+    [Fact]
+    public void ABlocksFastFlagDefaultsOnAndTheEditorAndExporterCarryItOff()
+    {
+        var s = Fresh("bench");
+        s.Execute("(block bolt #:at (0 5 0))");
+        Assert.True(s.Document.Parts["bolt"].Props["fast"] is SBool { Value: true });
+        Assert.DoesNotContain("#:fast", RktExporter.Write(s.Document.ToMachineDef()));
+
+        s.Execute("(set bolt #:fast #f)");
+        Assert.True(s.Document.Parts["bolt"].Props["fast"] is SBool { Value: false });
+        Assert.Contains("(block bolt", RktExporter.Write(s.Document.ToMachineDef()));
+        Assert.Contains("#:fast #f", RktExporter.Write(s.Document.ToMachineDef()));
+
+        var again = Fresh("bench");                                   // and it survives a round trip through the command script
+        foreach (string line in CommandScript.For(MachineDef.Parse(MachineWriter.Write(s.Document.ToMachineDef())))) again.Execute(line);
+        Assert.True(again.Document.Parts["bolt"].Props["fast"] is SBool { Value: false });
+    }
 }

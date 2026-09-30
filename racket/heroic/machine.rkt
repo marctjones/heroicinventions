@@ -574,17 +574,22 @@
     ;; the material table. #:tilt-deg turns it about the X axis, the way a
     ;; ramp tilts — so it can start resting flat on a slope instead of being
     ;; dropped onto it. #:dimensions (x y z) makes it a box of that size
-    ;; instead (a catapult's bolt).
+    ;; instead (a catapult's bolt). #:fast #f turns off continuous collision
+    ;; detection for it: by default a block is swept along its path each step,
+    ;; so a bolt at 60 m/s (half a metre a tick) cannot tunnel through a thin
+    ;; plank; a heap of slow blocks can save the cost of that.
     (pattern (block id:id
                     (~alt (~once (~seq #:at at:vec3))
                           (~once (~seq #:size size-v:expr))
                           (~once (~seq #:material mat:id))
                           (~optional (~seq #:tilt-deg tilt-v:expr))
+                          (~optional (~seq #:fast fast-v:expr))
                           (~optional (~seq #:dimensions dims:vec3))) ...)
       #:attr info (pinfo #'id 'block (attribute mat) '())
       #:with expr #`(part 'id 'block 'mat (list at.x at.y at.z)
                           (list (cons 'size size-v)
                                 (cons 'tilt-deg (~? tilt-v 0))
+                                (cons 'fast (~? fast-v #t))
                                 (~@ . (~? ((cons 'dim-x dims.x) (cons 'dim-y dims.y) (cons 'dim-z dims.z)) ())))
                           '()
                           #,(loc-of this-syntax)))

@@ -1556,3 +1556,20 @@
              (format "at ~a s pond + race + low pond = what there was + the stream's" (car f))))
   ;; the free weir at the head once the gate is up: 1.705 x 0.5 x (level - 0.2 m)^1.5
   (check-= (value-at run '(race flow) 25) (* 1.705 0.5 (expt (- (/ (value-at run '(millpond level) 25) 100) 0.2) 1.5) 1000) 2))
+
+
+(test-case "Continuous collision detection: a bolt at 58 m/s is stopped by a 2 cm plank, and without it goes through"
+  ;; 299 m of fall, with the engine's default damping, is 8.97 s and 58.1 m/s: 0.48 m a tick at 120 Hz,
+  ;; against a plank 2 cm thick and a bolt 5 cm across (7 cm): a bolt only tested where it stands
+  ;; each tick can be on one side of the plank one tick and the far side the next
+  (when (godot-available?)
+    (define run (godot-simulate 'tunnel-test #:seconds 12 #:sample-dt 0.05))
+    (define fastest (- (min-of run '(bolt-fast vy))))
+    (check-= fastest 58.1 2.0 "it arrives at the speed the fall gives")
+    (check-true (> (/ fastest 120) 0.07) "each tick it moves further than the plank and the bolt are thick")
+    ;; swept: it never gets below the plank (1.0 m up); its middle stays above 1.0 m the whole run
+    (check-true (> (min-of run '(bolt-fast y)) 1.0) (format "the swept bolt stayed above its plank (lowest ~a m)" (min-of run '(bolt-fast y))))
+    ;; not swept: through the plank and on to the floor, its middle reaching ground level
+    (check-true (< (min-of run '(bolt-plain y)) 0.3) (format "the plain bolt went through (lowest ~a m)" (min-of run '(bolt-plain y))))
+    ;; the same bolt, the same fall, the same speed: only the sweep differs
+    (check-= (- (min-of run '(bolt-plain vy))) fastest 0.5)))

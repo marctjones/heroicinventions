@@ -636,6 +636,8 @@ public partial class MachineView : Node3D
             AddLabel($"{materialName}\nμ{_materials[part.Material].Friction:F2}", new Vector3(0, size / 2 + 0.05f, 0), block);
         else
             AddLabel($"{materialName}\n{block.Mass:0.##} kg", new Vector3(0, size / 2 + 0.05f, 0), block);
+        // swept along its path each step unless the machine says #:fast #f (MaterialBlock turns it on)
+        block.ContinuousCd = part.Props.GetValueOrDefault("fast") is not SBool { Value: false };
         Blocks.Add(block);
         _freezable.Add(block);
         _bodiesById[part.Id] = block;
@@ -670,6 +672,7 @@ public partial class MachineView : Node3D
             Position = V(part.At), // the pivot: body rotates about its own origin
             Mass = (float)mat.MassOf(rodVolume + bobVolume),
             PhysicsMaterialOverride = ContactFor(part.Material),
+            ContinuousCd = true, // the bob is fast at the bottom of the swing
             // Bobs meet each other through ResolveBobImpacts; everything
             // else (blocks, the floor) through Jolt as usual.
             CollisionLayer = PendulumLayer,
@@ -754,6 +757,7 @@ public partial class MachineView : Node3D
             Transform = new Transform3D(toAxis, V(part.At)), // the pivot, level
             Mass = (float)mat.MassOf(length * thickness * depth),
             PhysicsMaterialOverride = ContactFor(part.Material),
+            ContinuousCd = true, // a trebuchet arm's tip moves at tens of metres a second
             // A real pivot has bearing friction; without any damping a
             // see-saw snaps to its limit faster than a resting block can
             // settle onto the rising end, and it tumbles off instead.
