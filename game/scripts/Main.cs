@@ -209,6 +209,7 @@ public partial class Main : Node3D
     private readonly Dictionary<MachineView, Aabb> _viewBounds = [];
     private WorldDef? _world;
     private Vector2 _pressAt;
+    private double? _liveEditAfter = double.TryParse(OS.GetEnvironment("HEROIC_LIVE_EDIT_AFTER"), System.Globalization.CultureInfo.InvariantCulture, out double t) ? t : null;
     private string? _currentName;
     private bool _running;
     private double _timeScale = 1;
@@ -240,6 +241,7 @@ public partial class Main : Node3D
     private PanelContainer _infoPanel = null!; // the running machine's HUD, hidden in build mode for the same reason
     private VBoxContainer _machineList = null!, _windowSection = null!;
     private Button _machinesToggle = null!;
+    private Button _editButton = null!;
     private ScrollContainer _leftScroll = null!;
     private bool _hudHidden;
     private RigidBody3D? _follow;
@@ -408,6 +410,11 @@ public partial class Main : Node3D
         };
         col.AddChild(_detailsButton);
 
+        _editButton = BigButton("Edit this machine (E)");
+        _editButton.Visible = false;
+        _editButton.Pressed += EditFocused;
+        col.AddChild(_editButton);
+
         _menuButton = BigButton("Back to menu");
         _menuButton.Disabled = true;
         _menuButton.Pressed += DeselectMachine;
@@ -539,6 +546,7 @@ public partial class Main : Node3D
     /// <summary>Frees every machine a world placed (the focused one included) and leaves world mode.</summary>
     private void ClearWorld()
     {
+        if (_editButton is not null) _editButton.Visible = false;
         foreach (var v in _views) v.QueueFree();
         if (_current is not null && _views.Contains(_current)) _current = null;
         _views.Clear();
@@ -591,6 +599,61 @@ public partial class Main : Node3D
         _detailsButton.Disabled = false;
         SetMenuCollapsed(true);
         _follow = null;
+        _editButton.Visible = true;
+    }
+
+    /// <summary>
+    /// A live edit (issue #75): rebuilds one machine in the running world
+    /// from its edited definition, carrying over its running state (water,
+    /// heat, speeds, bodies in motion) so it carries on rather than starting
+    /// again; every other machine is untouched. Throws if the definition
+    /// can't be built, leaving the old machine running.
+    /// </summary>
+    private MachineView ReplaceView(MachineView old, MachineDef def)
+    {
+        var runtime = new MachineRuntime(def, _materials);
+        runtime.TakeStateFrom(old.Runtime);
+        var view = new MachineView(runtime, _materials) { Name = old.Name, Position = Vector3.Zero };
+        AddChild(view);
+        view.TakeBodiesFrom(old);
+        view.TakeTraceFrom(old);
+        view.SetFrozen(!_running);
+        int index = _views.IndexOf(old);
+        if (index >= 0) _views[index] = view;
+        _viewMachine[view] = _viewMachine.GetValueOrDefault(old, def.Name);
+        _viewMachine.Remove(old);
+        _viewBounds.Remove(old);
+        _byName[view.Name] = view;
+        if (_current == old) _current = view;
+        old.QueueFree();
+        return view;
+    }
+
+    /// <summary>
+    /// "Edit this machine" in a world: build mode opens on the focused
+    /// machine while the world keeps running, and every change rebuilds it
+    /// in place with its state carried over.
+    /// </summary>
+    private void EditFocused()
+    {
+        if (_current is null || _views.Count == 0 || _buildMode is not null) return;
+        var target = _current;
+        _leftPanel.Visible = false;
+        _infoPanel.Visible = false;
+        _buildMode = new BuildMode(_materials, target.Runtime.Def, def => target = ReplaceView(target, def), () => target);
+        _buildMode.ExitRequested += () => CallDeferred(MethodName.CloseLiveEdit);
+        _buildMode.RunRequested += () => CallDeferred(MethodName.CloseLiveEdit);
+        AddChild(_buildMode);
+    }
+
+    private void CloseLiveEdit()
+    {
+        _buildMode?.QueueFree();
+        _buildMode = null;
+        _leftPanel.Visible = true;
+        _infoPanel.Visible = !_hudHidden;
+        _camera.MakeCurrent();
+        UpdateInfoPanel();
     }
 
     private void LoadWorldNamed(string name)
@@ -998,6 +1061,9 @@ public partial class Main : Node3D
             case Key.D when _current is not null:
                 _detailsButton.EmitSignal(BaseButton.SignalName.Pressed);
                 break;
+            case Key.E when _views.Count > 0:
+                EditFocused();
+                break;
             case Key.H:
                 _hudHidden = !_hudHidden;
                 _infoPanel.Visible = !_hudHidden;
@@ -1054,6 +1120,13 @@ public partial class Main : Node3D
             GD.Print($"[{_current.Runtime.Time:F2}s] {_current.DebugState()}\n{_current.EnergyHud()}");
         }
 
+        // HEROIC_LIVE_EDIT_AFTER=<s>: open live editing on the focused machine once
+        // the world has run that long (for recorded and scripted checks of #75)
+        if (_liveEditAfter is { } editAt && _views.Count > 0 && _current is not null && _current.Runtime.Time >= editAt)
+        {
+            _liveEditAfter = null;
+            CallDeferred(MethodName.EditFocused);   // after this physics step, as a click would be
+        }
         FollowMissile();
         ShowSky(_current?.Runtime);
         UpdateInfoPanel();

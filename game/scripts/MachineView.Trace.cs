@@ -49,6 +49,14 @@ public partial class MachineView
     }
 
     /// <summary>Called after each step: writes a frame once the sim clock reaches the next sample (by count, so no drift).</summary>
+    /// <summary>After a live edit, keeps writing the same trace, so the record runs on across the rebuild.</summary>
+    public void TakeTraceFrom(MachineView old)
+    {
+        (_trace, old._trace) = (old._trace, null);
+        _traceDt = old._traceDt;
+        _traceFrames = old._traceFrames;
+    }
+
     private void TraceTick(double dt)
     {
         if (_trace is null) return;

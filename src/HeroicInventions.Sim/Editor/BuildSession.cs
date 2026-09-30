@@ -423,6 +423,9 @@ public sealed class BuildSession
     }
 
     /// <summary>Load from an exact path.</summary>
+    /// <summary>Opens a machine that's already running in a world, to edit it live (issue #75). Not undoable: it's where editing starts.</summary>
+    public void Open(MachineDef def) => Document = EditorDocument.Load(def);
+
     public string LoadFile(string path)
     {
         var def = MachineDef.Parse(File.ReadAllText(path));

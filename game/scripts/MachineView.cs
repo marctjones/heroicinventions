@@ -1399,6 +1399,46 @@ public partial class MachineView : Node3D
             boiler.HeatInput = boiler.HeatInput > 0 ? 0 : 3000;
     }
 
+    /// <summary>
+    /// After a live edit (issue #75), takes over the previous build's moving
+    /// bodies: each body whose part stands where it stood (same id, kind and
+    /// position in both definitions) gets the old body's pose and velocities,
+    /// so a swinging pendulum or a stone in flight carries on; a part the
+    /// edit moved starts at its new place. Ropes that are unchanged keep what
+    /// they had wound, released or broken. The simulation-side state is
+    /// carried separately, by MachineRuntime.TakeStateFrom, before this view
+    /// is built.
+    /// </summary>
+    public void TakeBodiesFrom(MachineView old)
+    {
+        foreach (var (id, body) in _bodiesById)
+        {
+            if (!old._bodiesById.TryGetValue(id, out var was) || !IsInstanceValid(was)) continue;
+            var before = old.Runtime.Def.Part(id);
+            var now = Runtime.Def.Part(id);
+            if (before is null || now is null || before.Kind != now.Kind || before.At != now.At) continue;
+            // Read from the physics server, not the node: a body's node is only
+            // brought up to date at the start of the next physics step, so
+            // between steps it still shows the previous tick, and copying it
+            // left the rebuilt machine one tick behind its own clock.
+            var state = PhysicsServer3D.BodyGetDirectState(was.GetRid());
+            body.GlobalTransform = state.Transform;
+            body.LinearVelocity = state.LinearVelocity;
+            body.AngularVelocity = state.AngularVelocity;
+        }
+        foreach (var rope in _ropes)
+            if (old._ropes.FirstOrDefault(r => r.Spec.Id == rope.Spec.Id) is { } was
+                && was.Spec.From == rope.Spec.From && was.Spec.To == rope.Spec.To && was.Spec.Length == rope.Spec.Length)
+            {
+                rope.Wound = was.Wound;
+                rope.Released = was.Released;
+                rope.Broken = was.Broken;
+                rope.ArmTurned = was.ArmTurned;
+                foreach (var seg in rope.Segments) seg.Visible = !rope.Released && !rope.Broken;
+            }
+        _initialMechanicalEnergy = old._initialMechanicalEnergy;
+    }
+
     public void SetFrozen(bool frozen)
     {
         foreach (var b in _freezable) b.Freeze = frozen;

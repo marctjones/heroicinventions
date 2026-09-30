@@ -1106,3 +1106,17 @@
       (check-equal? (length run) (length alone) (format "~a has a full trace" label))
       (for ([a (tilts alone)] [b (tilts run)])
         (check-= b a 0.01 (format "~a swings as the pendulum alone" label))))))
+
+(test-case "Editing a machine while it runs (#75): a block added to the swinging pendulum at 2 s leaves its swing exactly as it was"
+  (when (godot-available?)
+    (define alone (godot-simulate 'pendulum-demo #:seconds 5 #:sample-dt 0.25))
+    (define world (godot-simulate-world 'live-edit-check #:seconds 5 #:sample-dt 0.25
+                    #:env '(("HEROIC_LIVE_EDIT_AFTER" . "2")
+                            ("HEROIC_EDITOR_INPUT" . "wait 2; cmd (block extra #:at (1.5 0.05 1.5) #:size 0.1); wait 5"))))
+    (define edited (hash-ref world 'swinging))
+    (check-equal? (length edited) (length alone) "the trace runs on across the edit")
+    (for ([a alone] [b edited])
+      (check-= (cadr (assq 'rod.rot-z (cdr b))) (cadr (assq 'rod.rot-z (cdr a))) 0.01
+               (format "at ~a s the edited pendulum swings as the untouched one" (car a))))
+    ;; and the edit really happened: the new block is in the machine by the end
+    (check-true (assq 'extra.y (cdr (last edited))) "the added block is part of the running machine")))

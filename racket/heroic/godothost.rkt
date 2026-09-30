@@ -67,7 +67,7 @@
 ;; headless and returns each placed machine's trace, by placement label:
 ;; (hash label frames ...). Traces come from the game's own per-machine
 ;; files, <trace>.<label>.
-(define (godot-simulate-world world-name #:seconds seconds #:sample-dt [sample-dt 0.1])
+(define (godot-simulate-world world-name #:seconds seconds #:sample-dt [sample-dt 0.1] #:env [extra-env '()])
   (unless (godot-available?)
     (error 'godot-simulate-world "Godot not found at ~a (set HEROIC_GODOT)" godot-binary))
   (define world-file (build-path game-dir "worlds" (format "~a.world" world-name)))
@@ -82,6 +82,7 @@
   (env! "HEROIC_QUIT_AFTER_SIM_SECONDS" (number->string (exact->inexact seconds)))
   (env! "HEROIC_TRACE" (path->string trace))
   (env! "HEROIC_TRACE_DT" (number->string (exact->inexact sample-dt)))
+  (for ([kv extra-env]) (env! (car kv) (cdr kv)))   ; e.g. HEROIC_LIVE_EDIT_AFTER, HEROIC_EDITOR_INPUT
   (parameterize ([current-directory game-dir]
                  [current-environment-variables env]
                  [current-output-port (open-output-nowhere)]

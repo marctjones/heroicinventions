@@ -1,0 +1,5 @@
+;; Two machines for checking live editing (issue #75): the pendulum is
+;; edited while it swings; the steam wheel beside it is left alone.
+(world live-edit-check
+  (place swinging pendulum-demo (at 0 0 0))
+  (place wheel branca-steam-wheel (at 3 0 0)))

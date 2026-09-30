@@ -249,6 +249,28 @@ public class BuildSessionTests
     }
 
     /// <summary>
+    /// Opening a running machine in the editor to edit it live (issue #75)
+    /// must not change it: the machine the editor hands back, before any
+    /// edit, is the machine that was running.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ShippedMachines))]
+    public void OpeningAMachineInTheEditorChangesNothing(string file)
+    {
+        var def = MachineDef.Parse(File.ReadAllText(file));
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "live");
+        session.Open(def);
+        var reopened = session.Document.ToMachineDef();
+        var a = MachineWriter.Write(def).Split('\n').Where(l => !l.TrimStart().StartsWith(";;")).ToList();
+        var b = MachineWriter.Write(reopened).Split('\n').Where(l => !l.TrimStart().StartsWith(";;")).ToList();
+        var firstDifference = a.Zip(b).FirstOrDefault(p => p.First != p.Second);
+        Assert.True(a.SequenceEqual(b), $"{Path.GetFileName(file)}: {firstDifference.First}\n  became {firstDifference.Second}");
+    }
+
+    public static IEnumerable<object[]> ShippedMachines() =>
+        Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "machines"), "*.machine").Select(f => new object[] { f });
+
+    /// <summary>
     /// The first thing a person tried to build: a fire, a pot of water on it,
     /// and a paddle wheel the pot's steam turns. These are the commands the
     /// editor issues for those clicks (place three parts from the palette,

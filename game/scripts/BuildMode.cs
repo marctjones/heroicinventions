@@ -136,6 +136,23 @@ public partial class BuildMode : Node3D
     public event Action? ExitRequested;
 
     public BuildMode(MaterialLibrary materials) => _materials = materials;
+
+    // Live editing (issue #75): editing a machine that is running in a world.
+    // Each change rebuilds the real machine in place, state carried over,
+    // instead of a frozen preview; the world keeps running meanwhile.
+    private readonly MachineDef? _liveStart;
+    private readonly Func<MachineDef, MachineView>? _applyLive;
+    private readonly Func<MachineView>? _liveView;
+    private string? _lastApplied;
+    private bool Live => _applyLive is not null;
+
+    public BuildMode(MaterialLibrary materials, MachineDef running, Func<MachineDef, MachineView> applyLive, Func<MachineView> liveView)
+        : this(materials)
+    {
+        _liveStart = running;
+        _applyLive = applyLive;
+        _liveView = liveView;
+    }
     public BuildMode() : this(MaterialLibrary.LoadDefault()) { }
 
     public override void _Ready()
@@ -145,6 +162,12 @@ public partial class BuildMode : Node3D
             ? CatalogueReader.Parse(Godot.FileAccess.GetFileAsString(catalogueRes))
             : [];
         _session = new BuildSession(_materials, catalogue, ProjectSettings.GlobalizePath("user://machines"));
+        if (_liveStart is not null)
+        {
+            _session.Open(_liveStart);
+            // written the way Redraw writes it, so merely opening doesn't count as a change
+            _lastApplied = MachineWriter.Write(EditorDocument.Load(_session.Document.ToMachineDef()).ToMachineDef());
+        }
 
         foreach (string kind in PartTemplates.PrimitiveKinds)
             _palette.Add((kind, PartInfo.GetValueOrDefault(kind).Label ?? kind, kind, null));
@@ -175,6 +198,8 @@ public partial class BuildMode : Node3D
             GD.Print($"[BuildMode] saved {autoSave}");
         }
         Redraw();
+
+        if (Live) FrameAll();
 
         string script = OS.GetEnvironment("HEROIC_EDITOR_INPUT");
         if (!string.IsNullOrEmpty(script)) _inputScript = new Queue<string>(script.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
@@ -487,7 +512,7 @@ public partial class BuildMode : Node3D
     /// </summary>
     private void Redraw()
     {
-        _preview?.QueueFree();
+        if (!Live) _preview?.QueueFree();   // a live machine belongs to the world, not the editor
         _preview = null;
         foreach (var nodes in _fallbackVisuals.Values) foreach (var n in nodes) n.QueueFree();
         _fallbackVisuals.Clear();
@@ -506,6 +531,15 @@ public partial class BuildMode : Node3D
             {
                 try
                 {
+                    if (Live)
+                    {
+                        // rebuild the running machine only if the design really changed
+                        var def = working.ToMachineDef();
+                        string text = MachineWriter.Write(def);
+                        _preview = text == _lastApplied ? _liveView!() : _applyLive!(def);
+                        _lastApplied = text;
+                        break;
+                    }
                     var view = new MachineView(new MachineRuntime(working.ToMachineDef(), _materials), _materials)
                     {
                         ProcessMode = ProcessModeEnum.Disabled, // out of physics: a frozen snapshot of what will run
@@ -517,7 +551,7 @@ public partial class BuildMode : Node3D
                 }
                 catch (Exception e)
                 {
-                    _preview?.QueueFree();
+                    if (!Live) _preview?.QueueFree();
                     _preview = null;
                     string? culprit = working.Parts.Keys
                         .Where(id => System.Text.RegularExpressions.Regex.IsMatch(e.Message, $@"(^|[\s(]){System.Text.RegularExpressions.Regex.Escape(id)}($|[\s:.,)])"))
