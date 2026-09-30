@@ -123,6 +123,7 @@ public partial class BuildMode : Node3D
         ["air-pump"] = ("Air pump", "Structure", "Pumps gas out of one zone into another, as an airlock's chamber is pumped down."),
         ["crucible"] = ("Crucible of sand", "Fire, water and steam", "Sand at a focal spot. Mirrors melt it to glass, if they concentrate enough light: flat ones can't."),
         ["burning-mirror"] = ("Burning mirror", "Fire, water and steam", "A curved mirror (or lens) gathering the sun into a small spot. Pick its target in the inspector."),
+        ["pane"] = ("Glass panes", "Structure", "Glass in an enclosure's wall or roof: the only way light gets in. Too thin for the pressure, it cracks."),
         ["enclosure"] = ("Enclosure", "Structure", "A room with its own air: set its pressure, gases (o2, n2 …) and walls. Parts inside read its air instead of the planet's."),
         ["hopper"] = ("Sand hopper", "Water", "Grain draining through a hole at a steady rate, however deep: a timer that works where water would freeze."),
         ["ratchet"] = ("Ratchet and pawl", "Wheels and power", "Lets a wheel turn one way only, a tooth at a time, and holds what tries to turn it back. Pick the wheel in the inspector."),

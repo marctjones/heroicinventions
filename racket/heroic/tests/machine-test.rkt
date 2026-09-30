@@ -299,3 +299,8 @@
     (air-pump p #:at (1 0 0) #:from hab #:to hab #:speed 0.05))
   (check-not-exn (λ () (expand-machine '(enclosure hab #:at (0 0 0) #:size (2 2 2))
                                        '(door d #:at (1 0 0) #:from hab #:to outside #:area 1.6)))))
+
+(test-case "a pane goes in an enclosure's wall"
+  (check-compile-error #rx"box is not an enclosure; a pane is glass in an enclosure's wall"
+    (tank box #:at (0 0 0) #:area 1 #:height 1)
+    (pane p #:at (0 1 0) #:on box #:side 0.3 #:thickness 0.0075)))

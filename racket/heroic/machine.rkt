@@ -39,7 +39,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger ratchet crucible burning-mirror hopper
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger ratchet crucible burning-mirror hopper pane
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -308,6 +308,17 @@
      (unless (< (abs (- total 1)) 0.001) (bad (format "#:air's fractions must add up to 1, got ~a" total)))
      (for/list ([g enclosure-gases]) (cons g (cond [(assq g air) => cadr] [else 0])))]))
 
+(define (check-panes parts)
+  (for ([p parts] #:when (eq? (part-kind p) 'pane))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what) (error 'define-machine "~a:~a:~a: pane ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (unless (and (real? (prop 'side)) (> (prop 'side) 0)) (bad (format "#:side must be above 0 m, got ~e" (prop 'side))))
+    (unless (and (real? (prop 'thickness)) (> (prop 'thickness) 0)) (bad (format "#:thickness must be above 0 m, got ~e" (prop 'thickness))))
+    (unless (exact-positive-integer? (prop 'count)) (bad (format "#:count must be a whole number, 1 or more, got ~e" (prop 'count))))
+    (unless (and (real? (prop 'strength)) (> (prop 'strength) 0)) (bad (format "#:strength must be above 0 Pa, got ~e" (prop 'strength)))))
+  parts)
+
 (define (check-zone-joins parts)
   (for ([p parts] #:when (memq (part-kind p) '(door air-pump)))
     (define (prop k) (cdr (assq k (part-props p))))
@@ -407,7 +418,7 @@
     (unless (and (real? time) (<= 0 time) (< time 24))
       (error 'define-machine "machine ~a: #:time must be solar hours in [0, 24), got ~e" name time)))
   (machine name source ambient sun planet-v weather-v
-           (check-zone-joins (check-enclosures (check-carried-wheels (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))))))
+           (check-panes (check-zone-joins (check-enclosures (check-carried-wheels (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)))))))))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -439,7 +450,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger ratchet crucible burning-mirror hopper
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger ratchet crucible burning-mirror hopper pane
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt joint)
 
@@ -495,7 +506,8 @@
   (struct jinfo (id kind a b))       ; a joint: its kind and the two parts (or world)
   (struct trinfo (id body))          ; a trigger: the part it watches, or #f
   (struct chinfo (id from to onto))
-  (struct zjinfo (id kind from to))  ; a door or air-pump: the zones it joins (enclosure ids or outside)  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
+  (struct zjinfo (id kind from to))
+  (struct pninfo (id on))            ; a pane: the enclosure whose wall it is in  ; a door or air-pump: the zones it joins (enclosure ids or outside)  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
 
   (define known-materials (material-ids))
 
@@ -537,8 +549,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, ratchet, crucible, burning-mirror, hopper) or link (pipe, connect, sealed-air)"
-    #:literals (hopper enclosure grip door air-pump cam digger ratchet crucible burning-mirror tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, ratchet, crucible, burning-mirror, hopper, pane) or link (pipe, connect, sealed-air)"
+    #:literals (hopper enclosure grip door air-pump cam digger ratchet crucible burning-mirror pane tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1128,6 +1140,32 @@
       #:with expr #`(part 'id 'burning-mirror '(~? mat bronze) (list at.x at.y at.z)
                           (list (cons 'onto 'target) (cons 'area area-v) (cons 'image image-v)
                                 (cons 'reflectivity (~? refl-v 0.85)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; Glass in an enclosure's wall (issue #57): #:count square panes of
+    ;; #:side m and #:thickness m, of #:glass silica (clear, 0.9 of the sun
+    ;; through, the default) or basalt (dark, 0.05), facing #:facing up (a
+    ;; roof, the default), north, south, east or west. They let in
+    ;; τ·DNI·cos·area of sunlight, the only light an enclosure gets, and crack
+    ;; once the pressure across them bends them past #:strength (a design
+    ;; stress, default 7 MPa: σ ≈ 0.29 q (a/t)², Roark); the room then leaks.
+    (pattern (pane id:id
+                   (~alt (~once (~seq #:at at:vec3))
+                         (~once (~seq #:on room:id))
+                         (~once (~seq #:side side-v:expr))
+                         (~once (~seq #:thickness thick-v:expr))
+                         (~optional (~seq #:count count-v:expr))
+                         (~optional (~seq #:glass glass-kind:id))
+                         (~optional (~seq #:facing facing-dir:id))
+                         (~optional (~seq #:strength strength-v:expr))) ...)
+      #:fail-unless (memq (syntax-e (or (attribute glass-kind) #'silica)) '(basalt silica)) "#:glass is silica or basalt"
+      #:fail-unless (memq (syntax-e (or (attribute facing-dir) #'up)) '(up down north south east west)) "#:facing is up, down, north, south, east or west"
+      #:attr info (pninfo #'id #'room)
+      #:with expr #`(part 'id 'pane 'glass (list at.x at.y at.z)
+                          (list (cons 'on 'room) (cons 'side side-v) (cons 'thickness thick-v) (cons 'count (~? count-v 1))
+                                (cons 'glass '(~? glass-kind silica)) (cons 'facing '(~? facing-dir up))
+                                (cons 'strength (~? strength-v 7e6)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1955,6 +1993,13 @@
           (fail (format "~a is not an enclosure; ~a ~a joins two enclosures, or one and outside" (syntax-e side) (if (eq? (zjinfo-kind z) 'door) "a" "an") (zjinfo-kind z)) side)))
       (when (eq? (syntax-e (zjinfo-from z)) (syntax-e (zjinfo-to z)))
         (fail (format "~a ~a joins two different zones" (if (eq? (zjinfo-kind z) 'door) "a" "an") (zjinfo-kind z)) (zjinfo-to z))))
+
+    (for ([pn infos] #:when (pninfo? pn))
+      (define id (syntax-e (pninfo-id pn)))
+      (when (hash-ref parts id #f) (fail (format "there is already a part named ~a" id) (pninfo-id pn)))
+      (define p (hash-ref parts (syntax-e (pninfo-on pn)) #f))
+      (unless (and p (eq? (pinfo-kind p) 'enclosure))
+        (fail (format "~a is not an enclosure; a pane is glass in an enclosure's wall" (syntax-e (pninfo-on pn))) (pninfo-on pn))))
 
     (define sealed (make-hasheq))
     (for ([a infos] #:when (ainfo? a))

@@ -48,6 +48,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Mirror> _mirrors = [];
     private readonly Dictionary<string, Enclosure> _enclosures = [];
     private readonly Dictionary<string, Crucible> _crucibles = [];
+    private readonly Dictionary<string, Pane> _panes = [];
     private readonly Dictionary<string, Door> _doors = [];
     private readonly Dictionary<string, GasPump> _gasPumps = [];
     // parts standing inside an enclosure, by id: the zone they read; everything else stands in Outside
@@ -111,6 +112,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Enclosure> Enclosures => _enclosures;
     /// <summary>Crucibles of sand at a focal spot, melting to glass (issue #56).</summary>
     public IReadOnlyDictionary<string, Crucible> Crucibles => _crucibles;
+    /// <summary>Glass panes in enclosures' walls (issue #57): the only way light gets in, and they crack past their pressure.</summary>
+    public IReadOnlyDictionary<string, Pane> Panes => _panes;
     /// <summary>Doors, hatches and valves between zones (issue #41).</summary>
     public IReadOnlyDictionary<string, Door> Doors => _doors;
     /// <summary>Pumps moving gas from one zone to another (issue #41).</summary>
@@ -294,7 +297,7 @@ public sealed class MachineRuntime
                             WearRate = part.Number("bearing-wear", 0),
                         });
                     break;
-                case "mirror" or "burning-mirror": break; // built once what it heats exists
+                case "mirror" or "burning-mirror" or "pane": break; // built once what it heats exists
                 case "crucible":
                 {
                     SandKind sand;
@@ -431,6 +434,26 @@ public sealed class MachineRuntime
             else AddHeatSource(target, () => mirror.Power);
         }
         foreach (var (_, h) in _hearths) AddHeatSource(h.Target, () => h.HeatOut);
+        foreach (var part in def.Parts.Where(p => p.Kind == "pane"))
+        {
+            var on = part.Symbol("on", "");
+            if (!_enclosures.TryGetValue(on, out var room))
+                throw new MachineFormatException($"pane {part.Id} is on {on}, which is not an enclosure", part.Location);
+            double side = part.Number("side"), thickness = part.Number("thickness");
+            int count = (int)part.Number("count", 1);
+            if (side <= 0 || thickness <= 0 || count < 1)
+                throw new MachineFormatException($"pane {part.Id}: #:side and #:thickness must be above 0, #:count 1 or more", part.Location);
+            SandKind glass;
+            Vec3 facing;
+            try { glass = SandKind.Named(part.Symbol("glass", "silica")); facing = Pane.FacingNamed(part.Symbol("facing", "up")); }
+            catch (ArgumentException e) { throw new MachineFormatException($"pane {part.Id}: {e.Message}", part.Location); }
+            var pane = new Pane(part.Id, room, Sun, side, thickness, count, glass.Transmittance, facing)
+            {
+                Strength = part.Number("strength", Pane.DefaultStrength),
+            };
+            _panes[part.Id] = pane;
+            AddHeatSource(room, () => pane.Gain);
+        }
 
         foreach (var part in def.Parts.Where(p => p.Kind == "smokejack"))
         {
@@ -1117,6 +1140,19 @@ public sealed class MachineRuntime
                 _getters[$"{id}.{GasMix.Names[i]}-pressure"] = () => e.PartialPressure(gas) / 1000;                     // kPa (Dalton)
             }
         }
+        foreach (var (id, p) in _panes)
+        {
+            _getters[$"{id}.gain"] = () => p.Gain;                        // W of sunlight into the room
+            _getters[$"{id}.incidence"] = () => p.Incidence;              // cos of the sun's angle to the glass
+            _getters[$"{id}.stress"] = () => p.Stress / 1e6;              // MPa, 0.29 q (a/t)²
+            _getters[$"{id}.crack-pressure"] = () => p.CrackPressure / 1000;   // kPa across it that cracks it
+            _getters[$"{id}.cracked"] = () => p.Cracked ? 1 : 0;
+            _getters[$"{id}.crack-time"] = () => double.IsNaN(p.CrackTime) ? -1 : p.CrackTime;
+            _getters[$"{id}.transmittance"] = () => p.Transmittance;
+            _getters[$"{id}.area"] = () => p.Area;                        // m² of glass
+            _getters[$"{id}.strength"] = () => p.Strength / 1e6;          // MPa: an advanced setting
+            _setters[$"{id}.strength"] = mpa => p.Strength = Math.Max(0, mpa * 1e6);
+        }
         foreach (var (id, c) in _crucibles)
         {
             _getters[$"{id}.temperature"] = () => c.Temperature;         // °C
@@ -1446,6 +1482,7 @@ public sealed class MachineRuntime
         foreach (var (target, sources) in _heatSources) target.HeatInput = _ownHeat[target] + sources.Sum(w => w());
         foreach (var e in _enclosures.Values) e.Step(dt);
         foreach (var c in _crucibles.Values) c.Step(dt);
+        foreach (var p in _panes.Values) p.Step(dt);
         foreach (var d in _doors.Values) d.Step(dt);
         foreach (var p in _gasPumps.Values) p.Step(dt);
         if (_zoneOfPart.Count > 0) SyncZones();

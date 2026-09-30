@@ -27,3 +27,5 @@
 (loam      (name "Loam")         (category soil)  (density 1400) (youngs-modulus 0.02)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.55) (restitution 0.10))
 (clay      (name "Clay")         (category soil)  (density 1800) (youngs-modulus 0.03)  (tension 0.05) (across-grain 0.05) (compression 0.2) (friction 0.35) (restitution 0.05))
 (regolith  (name "Mars regolith") (category soil) (density 1500) (youngs-modulus 0.05)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.70) (restitution 0.10))
+;; Glass (issue #57): soda-lime or fused silica, brittle. Tensile strength of a sound pane ~40 MPa (handbook); a pane is designed to ~7 MPa (see Pane.Strength).
+(glass     (name "Glass")        (category stone) (density 2500) (youngs-modulus 70.0)  (tension 40)  (across-grain 40)  (compression 1000) (friction 0.40) (restitution 0.60))

@@ -715,6 +715,35 @@ public class BuildSessionTests
         Assert.Equal(0.9, silica.Sand.Transmittance);
     }
 
+    /// <summary>
+    /// Issue #57. A 1 m pane at 13.5 kPa must be a·√(0.29·q/σ) = 2.365 cm thick
+    /// to hold; one of 2 cm cracks, and all the panes of its size with it,
+    /// opening their area in the room's wall. Panes round-trip by command.
+    /// </summary>
+    [Fact]
+    public void APaneCracksPastItsPressureAndTheRoomLeaks()
+    {
+        Assert.Equal(0.02365, Math.Sqrt(0.29 * 13_500 / 7e6), 5);
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "panes");
+        session.Execute("(enclosure hut #:at (0 0 0) #:pressure 13.5kPa #:insulation 0)");
+        session.Execute("(pane big #:at (0 2 0) #:side 1 #:thickness 0.02 #:count 2)");
+        session.Execute("(set big #:on hut)");
+        session.Execute("(pane stout #:at (0 2 0.5) #:side 1 #:thickness 0.025)");
+        session.Execute("(set stout #:on hut)");
+        session.Execute("(planet mars)");
+        session.Execute("(run 0.02)");
+        var run = session.LastRun!;
+        Assert.True(run.Panes["big"].Cracked);
+        Assert.False(run.Panes["stout"].Cracked);
+        Assert.Equal(2, run.Enclosures["hut"].LeakArea, 9);
+        Assert.Equal(7e6 * Math.Pow(0.025, 2) / 0.29, run.Panes["stout"].CrackPressure, 6);
+
+        var def = session.Document.ToMachineDef();
+        var rebuilt = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "panes");
+        foreach (var line in CommandScript.For(def)) rebuilt.Execute(line);
+        Assert.Equal(MachineWriter.Write(def), MachineWriter.Write(rebuilt.Document.ToMachineDef()));
+    }
+
     /// <summary>Every existing scene is unchanged: Earth's air is the game's 287.05 J/(kg·K) dry air, 1.204118 kg/m³ at 20 °C.</summary>
     [Fact]
     public void EarthIsTheDefaultPlanetAndItsNumbersAreTheOldConstants()

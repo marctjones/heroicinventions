@@ -235,6 +235,9 @@ public static class RktExporter
                        $"#:emissivity {F(N("emissivity", 0.9))}" + Opt("temperature", "temperature") + $" {Mat()})\n";
             case "burning-mirror":
                 return $"  (burning-mirror {p.Id} {At()} #:area {F(N("area"))} #:image {F(N("image"))} #:onto {Sym("onto", "?")} #:reflectivity {F(N("reflectivity", 0.85))} {Mat()})\n";
+            case "pane":
+                return $"  (pane {p.Id} {At()} #:on {Sym("on", "?")} #:side {F(N("side"))} #:thickness {F(N("thickness"))} #:count {F(N("count", 1))} " +
+                       $"#:glass {Sym("glass", "silica")} #:facing {Sym("facing", "up")} #:strength {F(N("strength", 7e6))})\n";
             case "counterpoise":
                 return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +
                        $"#:counterweight {F(N("counterweight"))} #:radius {F(N("radius"))} #:turn-deg {F(N("turn-deg"))} " +

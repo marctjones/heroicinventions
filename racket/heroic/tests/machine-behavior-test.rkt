@@ -1867,3 +1867,22 @@
   (check-= (at mars 300 'sand.empty) 0 0 "still running at 300 s")
   (check-= (at mars 320 'sand.empty) 1 0 "empty by 314 s: 1.63 times as long")
   (check-= (/ 313.9 193.0) (sqrt (/ 9.81 3.71)) 0.005 "sqrt(9.81 / 3.71) = 1.626"))
+
+
+;; ---------------------------------------------------------------------------
+;; Glass walls (issue #57). Working in racket/machines/glass-rooms.rkt.
+
+(test-case "Glass walls: a membrane lets in no sun, a glazed roof τ I A, settling at T_out + τ I A/UA; a thin pane cracks at 0.29 q (a/t)^2 = 7 MPa"
+  (define run (simulate 'glass-rooms #:seconds 3600 #:step 0.05 #:sample-dt 60 #:set '((scene clock-rate 0))))
+  (define roof (* (final-of run '(scene irradiance)) (sin (* (final-of run '(scene sun-elevation)) (/ pi 180)))))
+  (check-= roof 427.0 0.05 "432.7 W/m² of beam at 80.7° up")
+  (check-= (final-of run '(glazed-roof gain)) (* 0.9 roof 3.24) 1e-6)
+  (check-= (final-of run '(dark-roof gain)) (* 0.05 roof 3.24) 1e-6)
+  (check-= (final-of run '(membrane temperature)) -63 0.01 "no glass, no sun: it cools to the outside")
+  (check-= (final-of run '(glazed temperature)) (+ -63 (/ (* 0.9 roof 3.24) 20)) 0.01 "-0.74 °C")
+  (check-= (final-of run '(dark temperature)) (+ -63 (/ (* 0.05 roof 3.24) 20)) 0.01 "-59.5 °C")
+  (check-= (final-of run '(glazed-roof crack-pressure)) (/ (* 7e6 (expt (/ 0.0075 0.3) 2)) 0.29 1000) 1e-9 "15.09 kPa")
+  (check-= (final-of run '(glazed-roof cracked)) 0 0 "12.89 kPa across it at most: it holds")
+  (check-= (final-of run '(thin-roof crack-pressure)) 6.705 0.001)
+  (check-= (final-of run '(thin-roof crack-time)) 0.05 1e-9 "12.89 kPa across it from the first step")
+  (check-= (final-of run '(thin pressure)) 0.61 1e-6 "and the room's air is gone"))
