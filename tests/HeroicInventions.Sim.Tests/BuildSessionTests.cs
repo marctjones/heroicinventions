@@ -623,6 +623,39 @@ public class BuildSessionTests
         Assert.Equal(0, mars.LastRun!.Hearths["fire"].FuelBurned);
     }
 
+    /// <summary>
+    /// Issue #41. Two 8 m³ rooms, one at 200 kPa and one at 100 kPa, joined by a
+    /// door opened wide: they come level at 150 kPa (equal volumes, one
+    /// temperature, the moles shared) and nothing is lost. An air pump from the
+    /// low room to outside, joined by command and left stopped, moves nothing.
+    /// Doors and air pumps round-trip through the command script.
+    /// </summary>
+    [Fact]
+    public void ADoorBringsTwoRoomsLevelAndAValveLetsOneOut()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "rooms");
+        session.Execute("(enclosure a #:at (0 0 0) #:pressure 200kPa #:insulation 0)");
+        session.Execute("(enclosure b #:at (3 0 0) #:pressure 100kPa #:insulation 0)");
+        session.Execute("(door d #:at (1.5 0 0) #:open 1)");
+        session.Execute("(set d #:from a)");
+        session.Execute("(set d #:to b)");
+        session.Execute("(air-pump p #:at (3 0 1) #:speed 0)");
+        session.Execute("(set p #:from b)");
+        session.Execute("(set p #:to outside)");
+        session.Execute("(run 5)");
+        var run = session.LastRun!;
+        double before = (200_000 + 100_000) * 8 / (8.314 * 293.15);
+        Assert.Equal(150, run.Enclosures["a"].Pressure / 1000, 4);
+        Assert.Equal(150, run.Enclosures["b"].Pressure / 1000, 4);
+        Assert.Equal(before, run.Enclosures["a"].TotalMoles + run.Enclosures["b"].TotalMoles, 6);
+        Assert.True(run.Doors["d"].Passed > 0);
+
+        var def = session.Document.ToMachineDef();
+        var rebuilt = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "rooms");
+        foreach (var line in CommandScript.For(def)) rebuilt.Execute(line);
+        Assert.Equal(MachineWriter.Write(def), MachineWriter.Write(rebuilt.Document.ToMachineDef()));
+    }
+
     /// <summary>Every existing scene is unchanged: Earth's air is the game's 287.05 J/(kg·K) dry air, 1.204118 kg/m³ at 20 °C.</summary>
     [Fact]
     public void EarthIsTheDefaultPlanetAndItsNumbersAreTheOldConstants()

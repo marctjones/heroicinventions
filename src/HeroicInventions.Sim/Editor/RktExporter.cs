@@ -208,6 +208,11 @@ public static class RktExporter
                        $" #:insulation {F(N("insulation", 2))} #:heat-capacity {F(N("heat-capacity"))} #:heater {F(N("heater"))}" +
                        $" #:leak {F(N("leak"))} #:supply {F(N("supply"))} #:coefficient {F(N("coefficient", 0.6))} {Mat()})\n";
             }
+            case "door":
+                return $"  (door {p.Id} {At()} #:from {Sym("from", "?")} #:to {Sym("to", "?")} #:area {F(N("area"))} #:open {F(N("open"))} " +
+                       $"#:coefficient {F(N("coefficient", 0.6))} {Mat()})\n";
+            case "air-pump":
+                return $"  (air-pump {p.Id} {At()} #:from {Sym("from", "?")} #:to {Sym("to", "?")} #:speed {F(N("speed"))} #:until {F(N("until"))} {Mat()})\n";
             case "counterpoise":
                 return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +
                        $"#:counterweight {F(N("counterweight"))} #:radius {F(N("radius"))} #:turn-deg {F(N("turn-deg"))} " +

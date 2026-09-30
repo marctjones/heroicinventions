@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -136,6 +136,21 @@ public static class PartTemplates
                 ["insulation"] = new SNumber(2), ["heat-capacity"] = new SNumber(0), ["heater"] = new SNumber(0),
                 ["leak"] = new SNumber(0), ["supply"] = new SNumber(0), ["coefficient"] = new SNumber(0.6),
                 ["o2"] = new SBool(false), ["n2"] = new SBool(false), ["co2"] = new SBool(false), ["h2o"] = new SBool(false), ["ar"] = new SBool(false),
+            },
+            [], null),
+        // a door between two zones (enclosures, or outside), shut until set open
+        "door" => new PartSpec(id, "door", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["from"] = new SSymbol("?"), ["to"] = new SSymbol("outside"), ["area"] = new SNumber(1.6),
+                ["open"] = new SNumber(0), ["coefficient"] = new SNumber(0.6),
+            },
+            [], null),
+        // a pump drawing gas out of one zone into another, 50 L/s, never stopping until set
+        "air-pump" => new PartSpec(id, "air-pump", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["from"] = new SSymbol("?"), ["to"] = new SSymbol("?"), ["speed"] = new SNumber(0.05), ["until"] = new SNumber(0),
             },
             [], null),
         "mirror" => new PartSpec(id, "mirror", material, at,

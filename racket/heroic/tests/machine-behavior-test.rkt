@@ -1573,3 +1573,21 @@
     (check-true (< (min-of run '(bolt-plain y)) 0.3) (format "the plain bolt went through (lowest ~a m)" (min-of run '(bolt-plain y))))
     ;; the same bolt, the same fall, the same speed: only the sweep differs
     (check-= (- (min-of run '(bolt-plain vy))) fastest 0.5)))
+
+;; ---------------------------------------------------------------------------
+;; An airlock on Mars (issue #41). Working in racket/machines/airlock.rkt.
+
+(test-case "An airlock cycle: pumped down in 368 s for 288.7 kJ, bled to Mars as e^(-t/134 s), losing 0.4157 kg"
+  (define run (simulate 'airlock #:seconds 800 #:step 0.05 #:sample-dt 1
+                        #:set '((bleed open 1 400) (bleed open 0 600) (outer open 1 600) (outer open 0 700)
+                                (pump speed 0 700) (inner open 1 700))))
+  (define (at t k) (for/first ([f run] #:when (>= (car f) (- t 1e-6))) (cadr (assq k (cdr f)))))
+  (define stop (for/first ([f run] #:when (= 0 (cadr (assq 'pump.running (cdr f))))) (car f)))
+  (check-= stop 368.4 1 "8/0.05 x ln 10")
+  (check-= (at 399 'chamber.pressure) 5 1e-6 "its pressure switch")
+  (check-= (at 399 'habitat.pressure) 56 1e-6 "45 kPa x 8 m3 pushed into 60 m3")
+  (check-= (at 399 'pump.work) 288.68 0.3 "integral of V ln(P_hab/P) dP, kJ")
+  (check-= (at 500 'chamber.pressure) (* 5 (exp (/ -100 134.03))) 0.005 "choked through the 5 cm2 bleed")
+  (check-= (at 699 'chamber.pressure) 0.61 1e-4 "down to Mars's pressure")
+  (check-= (+ (at 699 'bleed.passed) (at 699 'outer.passed)) 0.41573 1e-4 "V x (5000 - 610) Pa of air, lost")
+  (check-= (at 800 'chamber.pressure) (at 800 'habitat.pressure) 1e-3 "the inner door open, they stand level"))

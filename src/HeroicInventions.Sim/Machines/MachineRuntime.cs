@@ -44,6 +44,8 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Capstan> _capstans = [];
     private readonly Dictionary<string, Mirror> _mirrors = [];
     private readonly Dictionary<string, Enclosure> _enclosures = [];
+    private readonly Dictionary<string, Door> _doors = [];
+    private readonly Dictionary<string, GasPump> _gasPumps = [];
     // parts standing inside an enclosure, by id: the zone they read; everything else stands in Outside
     private readonly Dictionary<string, Zone> _zoneOfPart = [];
     private readonly Dictionary<string, double> _boilerLossSeen = [];
@@ -96,6 +98,16 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Mirror> Mirrors => _mirrors;
     /// <summary>Enclosures (issue #39): boxes with their own air, which the parts inside read their conditions from.</summary>
     public IReadOnlyDictionary<string, Enclosure> Enclosures => _enclosures;
+    /// <summary>Doors, hatches and valves between zones (issue #41).</summary>
+    public IReadOnlyDictionary<string, Door> Doors => _doors;
+    /// <summary>Pumps moving gas from one zone to another (issue #41).</summary>
+    public IReadOnlyDictionary<string, GasPump> GasPumps => _gasPumps;
+
+    /// <summary>A zone by name: an enclosure's id, or outside for the planet's open air.</summary>
+    private Zone ZoneNamed(string name, PartSpec by) =>
+        name == "outside" ? Outside
+        : _enclosures.TryGetValue(name, out var e) ? e
+        : throw new MachineFormatException($"{by.Kind} {by.Id} joins {name}, which is not an enclosure (or outside)", by.Location);
     /// <summary>The zone a part stands in: the innermost enclosure round it, or the open air.</summary>
     public Zone ZoneOf(string partId) => _zoneOfPart.GetValueOrDefault(partId, Outside);
     public Sun Sun { get; }
@@ -265,6 +277,24 @@ public sealed class MachineRuntime
                     break;
                 case "mirror": break; // built once what it heats exists
                 case "enclosure": break; // built first: every other part reads its zone
+                case "door":
+                {
+                    Zone a = ZoneNamed(part.Symbol("from", ""), part), b = ZoneNamed(part.Symbol("to", ""), part);
+                    if (a == b) throw new MachineFormatException($"door {part.Id} joins {part.Symbol("from", "")} to itself", part.Location);
+                    _doors[part.Id] = new Door(part.Id, a, b, part.Number("area"))
+                    {
+                        Open = part.Number("open", 0),
+                        Cd = part.Number("coefficient", Enclosure.DefaultCoefficient),
+                    };
+                    break;
+                }
+                case "air-pump":
+                {
+                    Zone a = ZoneNamed(part.Symbol("from", ""), part), b = ZoneNamed(part.Symbol("to", ""), part);
+                    if (a == b) throw new MachineFormatException($"air-pump {part.Id} draws from and delivers to {part.Symbol("from", "")}", part.Location);
+                    _gasPumps[part.Id] = new GasPump(part.Id, a, b, part.Number("speed")) { Until = part.Number("until", 0) };
+                    break;
+                }
                 case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump" or "grip":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
@@ -954,6 +984,27 @@ public sealed class MachineRuntime
                 _getters[$"{id}.{GasMix.Names[i]}-pressure"] = () => e.PartialPressure(gas) / 1000;                     // kPa (Dalton)
             }
         }
+        foreach (var (id, d) in _doors)
+        {
+            _getters[$"{id}.open"] = () => d.Open;                            // 0 shut .. 1 wide
+            _setters[$"{id}.open"] = o => d.Open = o;
+            _getters[$"{id}.flow"] = () => d.Flow * 1000;                     // g/s from its #:from to its #:to
+            _getters[$"{id}.passed"] = () => d.Passed;                        // kg from to to, net
+            _getters[$"{id}.moved"] = () => d.Moved;                          // kg through it either way
+            _getters[$"{id}.choked"] = () => d.Choked ? 1 : 0;
+        }
+        foreach (var (id, p) in _gasPumps)
+        {
+            _getters[$"{id}.speed"] = () => p.Speed * 1000;                   // L/s swept
+            _setters[$"{id}.speed"] = ls => p.Speed = ls / 1000;
+            _getters[$"{id}.until"] = () => p.Until / 1000;                   // kPa it stops at
+            _setters[$"{id}.until"] = kPa => p.Until = Math.Max(0, kPa * 1000);
+            _getters[$"{id}.running"] = () => p.Running ? 1 : 0;
+            _getters[$"{id}.flow"] = () => p.Flow * 1000;                     // g/s
+            _getters[$"{id}.moved"] = () => p.Moved;                          // kg
+            _getters[$"{id}.power"] = () => p.Power;                          // W
+            _getters[$"{id}.work"] = () => p.Work / 1000;                     // kJ
+        }
         foreach (var (id, m) in _mirrors)
         {
             _getters[$"{id}.power"] = () => m.Power;                   // W onto the target
@@ -1229,6 +1280,8 @@ public sealed class MachineRuntime
         foreach (var m in _mirrors.Values) m.Step(dt);
         foreach (var (target, sources) in _heatSources) target.HeatInput = _ownHeat[target] + sources.Sum(w => w());
         foreach (var e in _enclosures.Values) e.Step(dt);
+        foreach (var d in _doors.Values) d.Step(dt);
+        foreach (var p in _gasPumps.Values) p.Step(dt);
         if (_zoneOfPart.Count > 0) SyncZones();
         foreach (var air in _air) air.Step(dt);
         Fluids.Step(dt);

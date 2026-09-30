@@ -673,7 +673,9 @@ public sealed class BuildSession
                 return $"set {id} #:{key} {SExprWriter.Print(value)}";
             case SSymbol name when !Units.LooksNumeric(name.Name):
                 // A prop that points at another part (a mirror's #:onto, a pump's #:from) must point at one; any other symbol (#:axis y, #:fuel-kind coal) is taken as written.
-                if ((current is SSymbol { Name: "?" } || PartReferenceKeys.Contains(key)) && name.Name != "world" && !Document.HasName(name.Name))
+                // world is a rope's or grip's fixed point; outside, the planet's open air, a zone a door or air pump can join
+                if ((current is SSymbol { Name: "?" } || PartReferenceKeys.Contains(key)) && name.Name != "world" && !Document.HasName(name.Name)
+                    && !(name.Name == "outside" && part?.Kind is "door" or "air-pump"))
                     throw new InvalidOperationException($"no part or link named {name.Name}");
                 Snapshot();
                 Document.SetName(id, key, name.Name);

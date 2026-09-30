@@ -274,3 +274,14 @@
   (check-compile-error #rx"#:cells is a whole number from 2 to 2000"
     (tank pond #:at (0 1 0) #:area 1 #:height 1 (port out #:height 0))
     (channel race #:from pond.out #:to off #:end (5 0 0) #:width 0.3 #:dynamic #t #:cells 1)))
+
+(test-case "a door joins enclosures or outside, and two different ones"
+  (check-compile-error #rx"shed is not an enclosure; a door joins two enclosures"
+    (tank shed #:at (0 0 0) #:area 1 #:height 1)
+    (enclosure hab #:at (0 0 0) #:size (2 2 2))
+    (door d #:at (1 0 0) #:from hab #:to shed #:area 1.6))
+  (check-compile-error #rx"an air-pump joins two different zones"
+    (enclosure hab #:at (0 0 0) #:size (2 2 2))
+    (air-pump p #:at (1 0 0) #:from hab #:to hab #:speed 0.05))
+  (check-not-exn (λ () (expand-machine '(enclosure hab #:at (0 0 0) #:size (2 2 2))
+                                       '(door d #:at (1 0 0) #:from hab #:to outside #:area 1.6)))))

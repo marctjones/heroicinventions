@@ -36,7 +36,7 @@
          "geometry/shape.rkt" "planets.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -280,6 +280,23 @@
      (unless (< (abs (- total 1)) 0.001) (bad (format "#:air's fractions must add up to 1, got ~a" total)))
      (for/list ([g enclosure-gases]) (cons g (cond [(assq g air) => cadr] [else 0])))]))
 
+(define (check-zone-joins parts)
+  (for ([p parts] #:when (memq (part-kind p) '(door air-pump)))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what)
+      (error 'define-machine "~a:~a:~a: ~a ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-kind p) (part-id p) what))
+    (case (part-kind p)
+      [(door)
+       (unless (and (real? (prop 'area)) (> (prop 'area) 0)) (bad (format "#:area must be above 0 m², got ~e" (prop 'area))))
+       (unless (and (real? (prop 'open)) (<= 0 (prop 'open) 1)) (bad (format "#:open must be in [0, 1], got ~e" (prop 'open))))
+       (unless (and (real? (prop 'coefficient)) (> (prop 'coefficient) 0) (<= (prop 'coefficient) 1))
+         (bad (format "#:coefficient must be in (0, 1], got ~e" (prop 'coefficient))))]
+      [(air-pump)
+       (unless (and (real? (prop 'speed)) (>= (prop 'speed) 0)) (bad (format "#:speed must be 0 m³/s or more, got ~e" (prop 'speed))))
+       (unless (and (real? (prop 'until)) (>= (prop 'until) 0)) (bad (format "#:until must be 0 Pa or more, got ~e" (prop 'until))))]))
+  parts)
+
 (define (check-enclosures parts)
   (for ([p parts] #:when (eq? (part-kind p) 'enclosure))
     (define (prop k) (cdr (assq k (part-props p))))
@@ -344,7 +361,7 @@
     (unless (and (real? time) (<= 0 time) (< time 24))
       (error 'define-machine "machine ~a: #:time must be solar hours in [0, 24), got ~e" name time)))
   (machine name source ambient sun planet-v
-           (check-enclosures (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))))
+           (check-zone-joins (check-enclosures (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)))))))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -376,7 +393,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt joint)
 
@@ -429,7 +446,8 @@
   (struct fwinfo (id lever rope))    ; a follow: the lever it follows, or the rope
   (struct jinfo (id kind a b))       ; a joint: its kind and the two parts (or world)
   (struct trinfo (id body))          ; a trigger: the part it watches, or #f
-  (struct chinfo (id from to onto))  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
+  (struct chinfo (id from to onto))
+  (struct zjinfo (id kind from to))  ; a door or air-pump: the zones it joins (enclosure ids or outside)  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
 
   (define known-materials (material-ids))
 
@@ -471,8 +489,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip) or link (pipe, connect, sealed-air)"
-    #:literals (enclosure grip tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump) or link (pipe, connect, sealed-air)"
+    #:literals (enclosure grip door air-pump tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -865,6 +883,45 @@
       #:with expr #`(part 'id 'grip '(~? mat bronze) (list at.x at.y at.z)
                           (list (cons 'on '(~? on-id world)) (cons 'kind '(~? kind tongs)) (cons 'reach (~? reach-v 0.15))
                                 (cons 'force (~? force-v 0)) (cons 'strength (~? strength-v 0)) (cons 'closed (~? closed-v 0)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A door, hatch or valve (issue #41) in the wall between two zones --
+    ;; #:from and #:to, each an enclosure or outside (the planet's open
+    ;; air) -- an opening #:area m² across, #:open 0 (shut, the default) to
+    ;; 1 (wide). Gas runs through it from the higher pressure to the lower as
+    ;; a compressible orifice (discharge coefficient #:coefficient, default
+    ;; 0.6). Set (door open 1) to work it.
+    (pattern (door id:id
+                   (~alt (~once (~seq #:at at:vec3))
+                         (~once (~seq #:from from-z:id))
+                         (~once (~seq #:to to-z:id))
+                         (~once (~seq #:area area-v:expr))
+                         (~optional (~seq #:open open-v:expr))
+                         (~optional (~seq #:coefficient cd-v:expr))
+                         (~optional (~seq #:material mat:id))) ...)
+      #:attr info (zjinfo #'id 'door #'from-z #'to-z)
+      #:with expr #`(part 'id 'door '(~? mat oak) (list at.x at.y at.z)
+                          (list (cons 'from 'from-z) (cons 'to 'to-z) (cons 'area area-v)
+                                (cons 'open (~? open-v 0)) (cons 'coefficient (~? cd-v 0.6)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A pump moving gas (issue #41) from zone #:from to zone #:to (an
+    ;; enclosure or outside), sweeping #:speed m³/s of the gas it draws
+    ;; from, until that zone is down to #:until Pa (default 0: never stops).
+    ;; It works as an ideal isothermal compressor, n R T ln(P_to/P_from).
+    ;; Set (pump speed L/s) to run it, 0 to stop it.
+    (pattern (air-pump id:id
+                       (~alt (~once (~seq #:at at:vec3))
+                             (~once (~seq #:from from-z:id))
+                             (~once (~seq #:to to-z:id))
+                             (~once (~seq #:speed speed-v:expr))
+                             (~optional (~seq #:until until-v:expr))
+                             (~optional (~seq #:material mat:id))) ...)
+      #:attr info (zjinfo #'id 'air-pump #'from-z #'to-z)
+      #:with expr #`(part 'id 'air-pump '(~? mat bronze) (list at.x at.y at.z)
+                          (list (cons 'from 'from-z) (cons 'to 'to-z) (cons 'speed speed-v) (cons 'until (~? until-v 0)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1672,6 +1729,16 @@
       (define v (hash-ref parts (syntax-e (cpinfo-vessel c)) #f))
       (unless (and v (eq? (pinfo-kind v) 'tank))
         (fail (format "~a is not a tank; a counterpoise hangs a tank" (syntax-e (cpinfo-vessel c))) (cpinfo-vessel c))))
+
+    (for ([z infos] #:when (zjinfo? z))
+      (define id (syntax-e (zjinfo-id z)))
+      (when (hash-ref parts id #f) (fail (format "there is already a part named ~a" id) (zjinfo-id z)))
+      (for ([side (list (zjinfo-from z) (zjinfo-to z))])
+        (define p (hash-ref parts (syntax-e side) #f))
+        (unless (or (eq? (syntax-e side) 'outside) (and p (eq? (pinfo-kind p) 'enclosure)))
+          (fail (format "~a is not an enclosure; ~a ~a joins two enclosures, or one and outside" (syntax-e side) (if (eq? (zjinfo-kind z) 'door) "a" "an") (zjinfo-kind z)) side)))
+      (when (eq? (syntax-e (zjinfo-from z)) (syntax-e (zjinfo-to z)))
+        (fail (format "~a ~a joins two different zones" (if (eq? (zjinfo-kind z) 'door) "a" "an") (zjinfo-kind z)) (zjinfo-to z))))
 
     (define sealed (make-hasheq))
     (for ([a infos] #:when (ainfo? a))

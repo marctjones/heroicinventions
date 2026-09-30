@@ -119,6 +119,8 @@ public partial class BuildMode : Node3D
         ["smokejack"] = ("Hot-air wheel (smoke jack)", "Fire, water and steam", "Vanes in a chimney turned by a fire's rising hot air. Pick the fire it sits over in the inspector."),
         ["rotor"] = ("Steam ball (aeolipile)", "Fire, water and steam", "Heron's ball, spun by its own steam jets. Connect a pot's steam to it."),
         ["mirror"] = ("Mirror", "Fire, water and steam", "Throws sunlight onto a pot. Pick the pot in the inspector."),
+        ["door"] = ("Door or valve", "Structure", "An opening between two enclosures (or one and outside). Gas rushes through when it is open."),
+        ["air-pump"] = ("Air pump", "Structure", "Pumps gas out of one zone into another, as an airlock's chamber is pumped down."),
         ["enclosure"] = ("Enclosure", "Structure", "A room with its own air: set its pressure, gases (o2, n2 …) and walls. Parts inside read its air instead of the planet's."),
         ["grip"] = ("Tongs or hook (grip)", "Weights and levers", "Takes hold of a loose block within reach while closed, and lets go when opened or overloaded. Hang it on a lever or the world."),
         ["bellows"] = ("Bellows", "Fire, water and steam", "Blows air into a fire so it burns hotter."),
