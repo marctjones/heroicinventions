@@ -1691,3 +1691,27 @@
   ;; the relay passes at 03:00 local, for ten minutes
   (check-= (at (+ 44387.5 (* 3.05 3698.958)) 'scene.relay) 1 0)
   (check-= (at (+ 44387.5 (* 3.25 3698.958)) 'scene.relay) 0 0))
+;; ---------------------------------------------------------------------------
+;; Terrain as a map (issue #37)
+
+(test-case "Ground (#37): a boulder dropped on the map's hillside rests on the height map, 0.2504 m above the ground under it"
+  (when (godot-available?)
+    ;; boulder.rkt: 0.25 / cos(atan 0.06); the ground is flood-plain.rkt's hill, 3 - 0.06 (x + 10) + 0.004 z^2 (no hollow there)
+    (define rock (hash-ref (godot-simulate-world 'ground-check #:seconds 6 #:sample-dt 1) 'rock))
+    (define-values (x y z) (values (final-of rock '(stone x)) (final-of rock '(stone y)) (final-of rock '(stone z))))
+    (check-= (final-of rock '(stone speed)) 0 0.01 "at rest")
+    (check-= (- y (+ 3 (* -0.06 (+ x 10)) (* 0.004 z z))) 0.2504 0.01)))
+
+(test-case "Ground (#37): the hillside pond floods the plain; every litre is on the ledger and the water reaches the valley's middle"
+  (when (godot-available?)
+    ;; hillside-pond.rkt: the clock trips at 10.5 s; 8 m3 all told
+    (define world (godot-simulate-world 'flood-plain #:seconds 90 #:sample-dt 5))
+    (define-values (pond ground) (values (hash-ref world 'pond) (hash-ref world 'links)))
+    (check-= (for/first ([f pond] #:when (= 1 (cadr (assq 'let-go.fired (cdr f))))) (car f)) 15 5.1 "the clock trips between 10 and 15 s (sampled every 5)")
+    (for ([p pond] [g ground])
+      (define (v f k) (cadr (assq k (cdr f))))
+      (check-= (+ (v p 'pond.water) (v p 'clock.water) (v p 'race.stored) (* 1000 (v g 'map.poured))) 8000 1e-3
+               (format "at ~a s pond + clock + race + ground = 8000 L" (car p)))
+      (check-= (v g 'map.poured) (+ (v g 'map.volume) (v g 'map.infiltrated) (v g 'map.leaked)) 1e-8
+               (format "at ~a s the ground's ledger closes" (car g))))
+    (check-true (> (value-at ground '(map depth-at) 90) 1) "water standing at the plain's middle, (20, 0), by 90 s")))

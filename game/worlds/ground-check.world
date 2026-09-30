@@ -1,0 +1,7 @@
+;; A boulder dropped onto the flood-plain map's hillside (issue #37): the
+;; check that Jolt's height-map collision is the ground that is drawn and
+;; that the water runs over. It should rest with its centre 0.2504 m above
+;; the ground under it (racket/machines/boulder.rkt).
+(world ground-check
+  (map flood-plain)
+  (place rock boulder (at 5 0 3)))

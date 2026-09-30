@@ -598,6 +598,7 @@ public partial class Main : Node3D
         if (_editButton is not null) _editButton.Visible = false;
         if (_joinButton is not null) _joinButton.Visible = false;
         ClearLinks();
+        ClearGround();
         foreach (var v in _views) v.QueueFree();
         if (_current is not null && _views.Contains(_current)) _current = null;
         _views.Clear();
@@ -617,11 +618,15 @@ public partial class Main : Node3D
         _current?.QueueFree();
         _current = null;
         _byName.Clear();
+        LoadGround(world);
         foreach (var p in world.Placements)
         {
             if (!_machineFiles.TryGetValue(p.Machine, out var path)) { GD.PushError($"world {world.Name}: no machine named {p.Machine}"); continue; }
-            var def = MachineDef.Parse(Godot.FileAccess.GetFileAsString(path)).Translated(p.At);
-            var view = new MachineView(new MachineRuntime(def, _materials), _materials) { Name = p.Label, Position = Vector3.Zero };
+            // on a map a machine stands on the ground (issue #37)
+            var def = WorldDef.Placed(MachineDef.Parse(Godot.FileAccess.GetFileAsString(path)), p, _groundSim?.Ground);
+            var runtime = new MachineRuntime(def, _materials);
+            _groundSim?.Attach(p.Label, runtime);
+            var view = new MachineView(runtime, _materials) { Name = p.Label, Position = Vector3.Zero };
             AddChild(view);
             _views.Add(view);
             _viewMachine[view] = p.Machine;
@@ -638,6 +643,11 @@ public partial class Main : Node3D
         {
             min = new Vector3(Mathf.Min(min.X, (float)p.At.X), 0, Mathf.Min(min.Z, (float)p.At.Z));
             max = new Vector3(Mathf.Max(max.X, (float)p.At.X), 0, Mathf.Max(max.Z, (float)p.At.Z));
+        }
+        if (_groundSim?.Ground is { } g)   // a map: frame the whole of the ground
+        {
+            min = new Vector3((float)g.X0, 0, (float)g.Z0);
+            max = new Vector3((float)(g.X0 + g.Width), 0, (float)(g.Z0 + g.Depth));
         }
         var centre = (min + max) / 2;
         float span = Mathf.Max(6, (max - min).Length());
@@ -666,6 +676,7 @@ public partial class Main : Node3D
     {
         var runtime = new MachineRuntime(def, _materials);
         runtime.TakeStateFrom(old.Runtime);
+        _groundSim?.Attach(old.Name, runtime);   // its channels pour onto the ground again
         string label = old.Name;
         old.Name = $"{label}-replaced";   // else Godot renames the new node, and the label no longer finds it (links, traces)
         var view = new MachineView(runtime, _materials) { Name = label, Position = Vector3.Zero };
@@ -697,6 +708,7 @@ public partial class Main : Node3D
         _leftPanel.Visible = false;
         _infoPanel.Visible = false;
         _buildMode = new BuildMode(_materials, target.Runtime.Def, def => target = ReplaceView(target, def), () => target);
+        if (_groundSim is { } ground) _buildMode.GroundHeight = ground.Ground.HeightAt;   // on a map, parts land on the ground (#37)
         _buildMode.ExitRequested += () => CallDeferred(MethodName.CloseLiveEdit);
         _buildMode.RunRequested += () => CallDeferred(MethodName.CloseLiveEdit);
         AddChild(_buildMode);
@@ -994,7 +1006,7 @@ public partial class Main : Node3D
         // 100 m across it used to slide off the edge and fall forever. 2 m
         // deep (top still at y = 0) so a fast body can't tunnel through it
         // between ticks even without its swept test.
-        var floor = new StaticBody3D { Position = new Vector3(0, -1f, 0) };
+        var floor = _floor = new StaticBody3D { Position = new Vector3(0, -1f, 0) };
         floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(2000, 2f, 2000) } });
         _floorMaterial = Shapes.Mat(Shapes.Stone);
         floor.AddChild(Shapes.Box(new Vector3(2000, 2f, 2000), _floorMaterial));
@@ -1007,6 +1019,7 @@ public partial class Main : Node3D
     private DirectionalLight3D _sun = null!;
     private ProceduralSkyMaterial _skyMaterial = null!;
     private StandardMaterial3D _floorMaterial = null!;
+    private StaticBody3D? _floor;   // sunk beneath a world's map (Main.Ground.cs)
     private Color _skyTop, _skyHorizon;
     private (double ambient, bool sunShown, int elevation, int azimuth, HeroicInventions.Sim.Planet? planet, double storm) _shownSky = (double.NaN, false, 0, 0, null, 0);
 

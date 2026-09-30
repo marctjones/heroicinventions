@@ -1116,10 +1116,31 @@ public partial class BuildMode : Node3D
             return true;
         }
         point = default;
+        if (GroundHeight is { } ground) return OnGround(from, dir, ground, out point);
         if (Mathf.Abs(dir.Y) < 1e-6f) return false;
         float tg = -from.Y / dir.Y;
         if (tg < 0) return false;
         point = from + dir * tg;
+        return true;
+    }
+
+    /// <summary>
+    /// The ground's height at a world point, when the machine stands on a
+    /// world's map (issue #37): a part placed on open ground then lands on the
+    /// terrain there, not on a flat floor at 0.
+    /// </summary>
+    public Func<double, double, double>? GroundHeight { get; set; }
+
+    /// <summary>Where the ray first meets the ground: stepped out half a metre at a time, then narrowed by halving.</summary>
+    private static bool OnGround(Vector3 from, Vector3 dir, Func<double, double, double> ground, out Vector3 point)
+    {
+        point = default;
+        float Above(float t) { var p = from + dir * t; return p.Y - (float)ground(p.X, p.Z); }
+        if (Above(0) <= 0) return false;
+        float lo = 0, hi = 0.5f;
+        while (Above(hi) > 0) { lo = hi; hi += 0.5f; if (hi > 2000) return false; }
+        for (int i = 0; i < 30; i++) { float mid = (lo + hi) / 2; if (Above(mid) > 0) lo = mid; else hi = mid; }
+        point = from + dir * hi;
         return true;
     }
 

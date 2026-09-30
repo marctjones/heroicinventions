@@ -154,6 +154,8 @@ public partial class WorldLinksView : Node3D
     }
 
     public bool Tracing => _trace is not null;
+    /// <summary>More world-level readings to trace with the links' (the ground's, issue #37).</summary>
+    public IReadOnlyDictionary<string, Func<double>> ExtraFields { get; set; } = new Dictionary<string, Func<double>>();
 
     public void StopTrace()
     {
@@ -175,7 +177,7 @@ public partial class WorldLinksView : Node3D
         var sb = new StringBuilder();
         sb.Append('(').Append(_time.ToString("R", CultureInfo.InvariantCulture));
         if (_links is not null)
-            foreach (var (key, get) in _links.FieldGetters)
+            foreach (var (key, get) in _links.FieldGetters.Concat(ExtraFields))
             {
                 double v = get();
                 if (double.IsFinite(v)) sb.Append(" (").Append(key).Append(' ').Append(v.ToString("R", CultureInfo.InvariantCulture)).Append(')');

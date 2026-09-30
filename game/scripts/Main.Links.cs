@@ -58,6 +58,8 @@ public partial class Main
         _links?.StepPipes(delta);
         foreach (var v in _views) v.SimulateUntraced(delta);
         _links?.StepShafts(delta);
+        _groundSim?.Step(delta);          // after the machines: what they poured is on the ground's ledger
+        _terrainView?.Refresh(delta);
         foreach (var v in _views) v.TraceStep(delta);
         _linksView?.Refresh(delta);
         if (_scriptedJoins.Count > 0) RunScriptedJoin();
@@ -74,7 +76,8 @@ public partial class Main
 
     private void StartLinksTraceIfLinked()
     {
-        if (_linksTrace is { } t && _linksView is not null && !_linksView.Tracing && _world is { Links.Count: > 0 })
+        if (_linksView is not null) _linksView.ExtraFields = GroundFields;
+        if (_linksTrace is { } t && _linksView is not null && !_linksView.Tracing && (_world is { Links.Count: > 0 } || _groundSim is not null))
             _linksView.StartTrace(t.Path, t.Every, _current?.Runtime.Time ?? 0);
     }
 
