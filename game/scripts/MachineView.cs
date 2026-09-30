@@ -1299,7 +1299,7 @@ public partial class MachineView : Node3D
         foreach (var (body, impulse, at) in impulses) body.ApplyImpulse(impulse, at);
     }
 
-    public void Simulate(double dt)
+    public void Simulate(double dt, bool trace = true)
     {
         ApplyPlanetGravity();
         DetectImpacts();
@@ -1313,7 +1313,7 @@ public partial class MachineView : Node3D
         TestTriggers();
         Runtime.Step(dt);
         Refresh();
-        TraceTick(dt);
+        if (trace) TraceTick(dt);
         KeepVelocitiesIntoStep();
     }
 

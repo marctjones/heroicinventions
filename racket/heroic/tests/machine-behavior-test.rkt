@@ -1321,3 +1321,57 @@
     (check-true (< 0.1 (final-of run '(spout lost)) 0.4) "a fraction of a litre a coin")
     (define lost (values-of run '(spout lost)))
     (check-= (list-ref lost (- (length lost) 1)) (list-ref lost (quotient (length lost) 2)) 1e-9 "and it has stopped")))
+;; ---------------------------------------------------------------------------
+;; Links between machines in a world (issue #78)
+
+(test-case "A pipe between two machines (#78): the cistern drains into the trough exactly as the same pipe inside one machine does"
+  (when (godot-available?)
+    ;; cistern-and-trough.rkt: 229.4 L left at 60 s, 122.9 L at 120 s
+    (define world (godot-simulate-world 'linked-pipe #:seconds 120 #:sample-dt 10))
+    (define-values (a b one) (values (hash-ref world 'tank-a) (hash-ref world 'tank-b) (hash-ref world 'reference)))
+    (check-equal? (length a) (length one))
+    (for ([fa a] [fb b] [f1 one])
+      (define (v frame key) (cadr (assq key (cdr frame))))
+      (check-= (v fa 'cistern.water) (v f1 'cistern.water) 1e-6 (format "cistern at ~a s" (car f1)))
+      (check-= (v fb 'trough.water) (v f1 'trough.water) 1e-6 (format "trough at ~a s" (car f1))))
+    (check-= (value-at a '(cistern water) 60) 229.4 0.5)
+    (check-= (value-at a '(cistern water) 120) 122.9 0.5)
+    (define links (hash-ref world 'links))
+    (check-= (value-at links '(feed flow) 60) (value-at one '(feed flow) 60) 1e-6 "the link's flow is the one pipe's")
+    (check-equal? (value-at links '(feed unfinished) 60) 0)))
+
+(test-case "A shaft between two machines (#78): the free sails drive the dry mill's stones at 14.32 rpm with 8171 N·m"
+  (when (godot-available?)
+    ;; dry-mill.rkt: lambda = 2.5 at the stones' load; settled with a 10 s time constant
+    (define world (godot-simulate-world 'linked-shaft #:seconds 120 #:sample-dt 10))
+    (define links (hash-ref world 'links))
+    (check-= (value-at (hash-ref world 'sails) '(sails rpm) 120) 14.32 0.01)
+    (check-= (value-at (hash-ref world 'mill) '(wheel rpm) 120) 14.32 0.01)
+    (check-= (value-at links '(drive torque) 120) 8171 5)
+    (check-= (value-at links '(drive power) 120) 12260 10)))
+
+(test-case "A shaft between two Jolt machines (#78): the treadwheel turns the separate hoist's drum and lifts the stone"
+  (when (godot-available?)
+    ;; crane-hoist.rkt: the shaft carries the stone's 583 x 9.81 x 0.25 = 1430 N·m; the
+    ;; walkers' 1545 N·m leaves 115 N·m against the bodies' damping (0.2/s set + 0.1/s
+    ;; Godot's default) on 1818 + 4.5 kg·m², so the pair settles at 115/(0.3 x 1822)
+    ;; = 0.206 rad/s, and the rope comes in at that times the drum's 25 cm.
+    (define world (godot-simulate-world 'split-crane #:seconds 20 #:sample-dt 1))
+    (define-values (links hoist) (values (hash-ref world 'links) (hash-ref world 'hoist)))
+    (check-= (value-at links '(axle torque) 20) 1430 15)
+    (define omega (* (value-at links '(axle rpm) 20) 2 pi 1/60))
+    (check-= omega 0.206 0.003)
+    (check-= (value-at links '(axle driven-rpm) 20) (value-at links '(axle rpm) 20) 1e-4 "one speed both sides")
+    (define rise-rate (/ (- (value-at hoist '(stone y) 20) (value-at hoist '(stone y) 10)) 10))
+    (check-= rise-rate (* omega 0.25) 0.001 "the stone rises at the drum's rim speed")))
+
+(test-case "A live edit of a linked machine (#78): the pipe takes hold of the rebuilt cistern and the flow runs on unbroken"
+  (when (godot-available?)
+    (define world (godot-simulate-world 'linked-pipe #:seconds 30 #:sample-dt 5
+                    #:env '(("HEROIC_LIVE_EDIT_AFTER" . "10")
+                            ("HEROIC_EDITOR_INPUT" . "wait 2; cmd (block extra #:at (1.5 0.05 1.5) #:size 0.1); wait 5"))))
+    (define-values (a one) (values (hash-ref world 'tank-a) (hash-ref world 'reference)))
+    (for ([fa a] [f1 one])
+      (check-= (cadr (assq 'cistern.water (cdr fa))) (cadr (assq 'cistern.water (cdr f1))) 1e-6
+               (format "at ~a s the edited cistern drains as the untouched pair" (car f1))))
+    (check-not-false (assq 'extra.y (cdr (last a))) "the edit happened")))

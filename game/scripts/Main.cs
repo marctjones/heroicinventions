@@ -326,7 +326,10 @@ public partial class Main : Node3D
             double traceEvery = double.TryParse(OS.GetEnvironment("HEROIC_TRACE_DT"), inv, out double traceDt) ? traceDt : 0.1;
             // a world writes one trace per placed machine, <path>.<label>
             if (!string.IsNullOrEmpty(tracePath) && _views.Count > 0)
+            {
                 foreach (var v in _views) v.StartTrace($"{tracePath}.{v.Name}", traceEvery);
+                StartLinksTrace(tracePath, traceEvery);
+            }
             else if (!string.IsNullOrEmpty(tracePath))
                 _current.StartTrace(tracePath, traceEvery);
         }
@@ -428,6 +431,7 @@ public partial class Main : Node3D
         _editButton.Visible = false;
         _editButton.Pressed += EditFocused;
         col.AddChild(_editButton);
+        BuildJoinButton(col);
 
         _menuButton = BigButton("Back to menu");
         _menuButton.Disabled = true;
@@ -561,6 +565,8 @@ public partial class Main : Node3D
     private void ClearWorld()
     {
         if (_editButton is not null) _editButton.Visible = false;
+        if (_joinButton is not null) _joinButton.Visible = false;
+        ClearLinks();
         foreach (var v in _views) v.QueueFree();
         if (_current is not null && _views.Contains(_current)) _current = null;
         _views.Clear();
@@ -614,6 +620,8 @@ public partial class Main : Node3D
         SetMenuCollapsed(true);
         _follow = null;
         _editButton.Visible = true;
+        _joinButton.Visible = true;
+        RebuildLinks();
     }
 
     /// <summary>
@@ -627,7 +635,9 @@ public partial class Main : Node3D
     {
         var runtime = new MachineRuntime(def, _materials);
         runtime.TakeStateFrom(old.Runtime);
-        var view = new MachineView(runtime, _materials) { Name = old.Name, Position = Vector3.Zero };
+        string label = old.Name;
+        old.Name = $"{label}-replaced";   // else Godot renames the new node, and the label no longer finds it (links, traces)
+        var view = new MachineView(runtime, _materials) { Name = label, Position = Vector3.Zero };
         AddChild(view);
         view.TakeBodiesFrom(old);
         view.TakeTraceFrom(old);
@@ -640,6 +650,7 @@ public partial class Main : Node3D
         _byName[view.Name] = view;
         if (_current == old) _current = view;
         old.QueueFree();
+        RebuildLinks();   // the links take hold of the new machine's parts
         return view;
     }
 
@@ -1053,7 +1064,11 @@ public partial class Main : Node3D
             case InputEventMouseButton { ButtonIndex: MouseButton.Left or MouseButton.Right } mb:
                 _dragging = mb.Pressed;
                 if (mb.ButtonIndex == MouseButton.Left && mb.Pressed) _pressAt = mb.Position;
-                else if (mb.ButtonIndex == MouseButton.Left && mb.Position.DistanceTo(_pressAt) < 4) FocusMachineAt(mb.Position);
+                else if (mb.ButtonIndex == MouseButton.Left && mb.Position.DistanceTo(_pressAt) < 4)
+                {
+                    if (_joining) JoinPickAt(mb.Position);
+                    else FocusMachineAt(mb.Position);
+                }
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.WheelUp }:
                 _orbitDistance = Mathf.Max(0.2f, _orbitDistance * 0.9f);
@@ -1083,6 +1098,12 @@ public partial class Main : Node3D
                 break;
             case Key.R when _current is not null:
                 RestartCurrent();
+                break;
+            case Key.Escape when _joining:
+                SetJoining(false);
+                break;
+            case Key.J when _world is not null:
+                SetJoining(!_joining);
                 break;
             case Key.Escape when _current is not null:
                 DeselectMachine();
@@ -1123,7 +1144,7 @@ public partial class Main : Node3D
     public override void _PhysicsProcess(double delta)
     {
         if (_running && _views.Count > 0)
-            foreach (var v in _views) v.Simulate(delta); // a world: every machine, stepped together
+            StepWorld(delta); // a world: every machine, stepped together, and the links between them
         else if (_running && _current is not null)
             _current.Simulate(delta); // already scaled: see SetSpeed
 
@@ -1135,6 +1156,7 @@ public partial class Main : Node3D
             if (_debugPhysics) GD.Print($"[final] {_current.Details}");
             _current.StopTrace();
             foreach (var v in _views) v.StopTrace();
+            _linksView?.StopTrace();
             GetTree().Quit();
         }
 

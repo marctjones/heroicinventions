@@ -200,3 +200,48 @@ public class WorldLinkTests
         Assert.Contains("post", shaft.Links.All[0].Unfinished);
     }
 }
+
+/// <summary>The world's "Join machines" tool: what two clicks make, and what it refuses.</summary>
+public class WorldLinkGestureTests
+{
+    private static MachineDef Load(string name) =>
+        MachineDef.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "machines", name + ".machine")));
+
+    private static readonly WorldDef World = WorldDef.Parse(
+        "(world w (place a cistern (at 0 0 0)) (place b trough (at 4 0 0)) (place s free-sails (at 0 0 9)) (place m dry-mill (at 8 0 9)))");
+    private static MachineDef? MachineOf(string label) => World.Placements.FirstOrDefault(p => p.Label == label) is { } p ? Load(p.Machine) : null;
+
+    [Fact]
+    public void TwoTankPortsMakeAPipeAndTwoTurningPartsAShaft()
+    {
+        var pipe = WorldLinkGestures.Link(World, MachineOf, new LinkEnd("a", "cistern", "outlet"), new LinkEnd("b", "trough", "inlet"));
+        Assert.Equal(("pipe-1", "pipe"), (pipe.Id, pipe.Kind));
+        var shaft = WorldLinkGestures.Link(World, MachineOf, new LinkEnd("s", "sails"), new LinkEnd("m", "wheel"));
+        Assert.Equal(("shaft-1", "shaft", 1.0), (shaft.Id, shaft.Kind, shaft.Ratio));
+
+        // and the world with them reads back the same
+        var joined = World.WithLink(pipe).WithLink(shaft);
+        Assert.Equal(joined.Write(), WorldDef.Parse(joined.Write()).Write());
+        Assert.Equal("pipe-2", joined.NextLinkId("pipe"));
+        Assert.Throws<InvalidOperationException>(() => WorldLinkGestures.Link(joined, MachineOf, new LinkEnd("b", "trough", "inlet"), new LinkEnd("a", "cistern", "outlet")));
+    }
+
+    [Theory]
+    [InlineData("a", "cistern", "outlet", "a", "cistern", "outlet", "both parts of a")]
+    [InlineData("a", "cistern", null, "b", "trough", "inlet", "port to port")]
+    [InlineData("a", "cistern", "outlet", "m", "wheel", null, "a pipe joins two tanks' ports")]
+    [InlineData("s", "trestle", null, "m", "wheel", null, "is a post")]
+    [InlineData("a", "cistern", "spout", "b", "trough", "inlet", "no port spout")]
+    public void RefusesPicksThatDoNotMakeALink(string la, string pa, string? qa, string lb, string pb, string? qb, string why)
+    {
+        var e = Assert.Throws<InvalidOperationException>(() => WorldLinkGestures.Link(World, MachineOf, new LinkEnd(la, pa, qa), new LinkEnd(lb, pb, qb)));
+        Assert.Contains(why, e.Message);
+    }
+
+    [Fact]
+    public void RefusesJoiningTheSamePairTwice()
+    {
+        var joined = World.WithLink(WorldLinkGestures.Link(World, MachineOf, new LinkEnd("s", "sails"), new LinkEnd("m", "wheel")));
+        Assert.Throws<InvalidOperationException>(() => WorldLinkGestures.Link(joined, MachineOf, new LinkEnd("m", "wheel"), new LinkEnd("s", "sails")));
+    }
+}

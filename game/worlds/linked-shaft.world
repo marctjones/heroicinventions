@@ -4,5 +4,5 @@
 ;; shaft carrying 8171 N·m and 12.26 kW (racket/machines/dry-mill.rkt).
 (world linked-shaft
   (place sails free-sails (at 0 0 0))
-  (place mill dry-mill (at 8 0 3))
+  (place mill dry-mill (at 16 0 6))
   (link drive shaft (from sails sails) (to mill wheel) (ratio 1)))

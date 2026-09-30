@@ -88,7 +88,10 @@
                  [current-output-port (open-output-nowhere)]
                  [current-error-port (open-output-nowhere)])
     (system* godot-binary "--headless" "--fixed-fps" (number->string physics-ticks-per-second) "."))
-  (for/hash ([label labels])
+  ;; a world with links (issue #78) also traces their fields, under 'links
+  (for/hash ([label (append labels '(links))]
+             #:unless (and (eq? label 'links)
+                           (not (file-exists? (format "~a.links" (path->string trace))))))
     (define file (format "~a.~a" (path->string trace) label))
     (values label
             (if (file-exists? file)

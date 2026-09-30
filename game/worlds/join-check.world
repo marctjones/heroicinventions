@@ -1,0 +1,7 @@
+;; The cistern and the trough standing apart, not yet joined: for checking
+;; the world's "Join machines" tool (issue #78) with scripted clicks in a
+;; real window (HEROIC_WORLD_JOIN="wait 1; tank-a.cistern.outlet
+;; tank-b.trough.inlet"), and for joining them by hand.
+(world join-check
+  (place tank-a cistern (at 0 0 0))
+  (place tank-b trough (at 4 0 0)))

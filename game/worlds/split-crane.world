@@ -1,0 +1,9 @@
+;; The Roman crane built as two machines, joined by a shaft (issue #78):
+;; the treadwheel turns the hoist's drum, which stands on the same axle
+;; line, and the stone should rise as it does in the one-machine crane
+;; (7.85 cm/s at 3 rpm; the shaft carrying ~1430 N·m). Two Jolt bodies on
+;; hinges, coupled by the shaft rather than locked on one arbor.
+(world split-crane
+  (place walkers walkers-wheel (at 0 0 0))
+  (place hoist crane-hoist (at 0 0 0))
+  (link axle shaft (from walkers tympanus) (to hoist drum) (ratio 1)))
