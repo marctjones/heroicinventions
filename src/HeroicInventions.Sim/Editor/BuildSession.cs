@@ -339,7 +339,8 @@ public sealed class BuildSession
         bool nocked = Kw(cmd, "nocked") is SBool { Value: true };
         string? bar = Kw(cmd, "bar") is SSymbol b ? b.Name : null;
         double? mu = Kw(cmd, "mu") is SNumber u ? u.Value : null;
-        var spec = new RopeSpec(id, from, to, length, over, windOn, release, material, diameter, null) { Nocked = nocked, Turns = turns, Bar = bar, Mu = mu };
+        int? links = Kw(cmd, "links") is SNumber ln ? (int)ln.Value : null;
+        var spec = new RopeSpec(id, from, to, length, over, windOn, release, material, diameter, null) { Nocked = nocked, Turns = turns, Bar = bar, Mu = mu, Links = links };
         CheckRopeFriction(spec);
         Snapshot();
         Document.AddRope(spec);
@@ -351,6 +352,8 @@ public sealed class BuildSession
     {
         if (r.Bar is not null && r.Turns is not null)
             throw new FormatException($"rope {r.Id}: a rope runs over turning pulleys (#:turns) or fixed bars (#:bar), not both");
+        if (r.Links is { } n && (n < 2 || n > 200 || r.WindOn is not null || r.Over.Count > 0 || r.Turns is not null || r.Bar is not null || r.ReleaseDeg is not null))
+            throw new FormatException($"rope {r.Id}: a chain of #:links (2 to 200) hangs free between its ends: no #:wind-on, #:over, #:turns, #:bar or #:release-deg");
         if (r.Mu is not null && r.Bar is null)
             throw new FormatException($"rope {r.Id}: #:mu is the friction over fixed bars; give #:bar too");
         if (r.Mu is < 0)

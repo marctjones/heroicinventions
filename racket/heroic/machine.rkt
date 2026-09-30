@@ -68,7 +68,7 @@
 ;; release-deg: see the rope clause; diameter in m; bar: the material of the
 ;; fixed bars at the over points, or #f for turning pulleys (no friction);
 ;; mu: a friction coefficient that overrides the materials', or #f.
-(struct rope-spec (id from to length over wind-on release-deg material diameter nocked turns bar mu loc) #:transparent)
+(struct rope-spec (id from to length over wind-on release-deg material diameter nocked turns bar mu loc [links #:auto #:mutable]) #:transparent)
 ;; parts: wheels fixed on one axle, first one first — they turn as one.
 (struct arbor-spec (parts loc) #:transparent)
 ;; a, b: two gears whose teeth engage.
@@ -1509,8 +1509,14 @@
                          (~optional (~seq #:nocked nocked-v:expr))
                          (~optional (~seq #:turns sheave:id))
                          (~optional (~seq #:bar bar-mat:id))
-                         (~optional (~seq #:mu mu-v:expr))) ...)
+                         (~optional (~seq #:mu mu-v:expr))
+                         (~optional (~seq #:links links-v:expr))) ...)
       #:fail-unless (or (attribute from) (attribute drum)) "a rope needs a #:from end or a #:wind-on drum"
+      #:fail-when (and (attribute links-v) (or (attribute drum) (attribute over) (attribute sheave) (attribute bar-mat) (attribute rel-v)) #'links-v)
+                  "a chain of #:links hangs free between its two ends: no #:wind-on, #:over, #:turns, #:bar or #:release-deg"
+      #:fail-when (let ([n (and (attribute links-v) (syntax-e #'links-v))])
+                    (and (number? n) (not (and (exact-integer? n) (<= 2 n 200))) #'links-v))
+                  "#:links is a whole number of links, 2 to 200"
       #:fail-when (and (attribute bar-mat) (attribute sheave) #'sheave) "a rope runs over turning pulleys (#:turns) or fixed bars (#:bar), not both"
       #:fail-when (and (attribute mu-v) (not (attribute bar-mat)) #'mu-v) "#:mu is the friction over fixed bars; give #:bar too"
       #:fail-when (and (attribute bar-mat) (not (memq (syntax-e (attribute bar-mat)) known-materials)) (attribute bar-mat))
@@ -1520,13 +1526,16 @@
       #:with from-expr (if (attribute drum)
                            #'(list 'drum 0 0 0)
                            #'(list 'from.part from.x from.y from.z))
-      #:with expr #`(rope-spec 'id from-expr (list 'to.part to.x to.y to.z) len-v
-                               (~? (list (list over.x over.y over.z) ...) '())
-                               '(~? drum #f) (~? rel-v #f) '(~? mat hemp) (~? dia-v 0.02)
-                               (and (~? nocked-v #f) #t)
-                               '(~? sheave #f)
-                               '(~? bar-mat #f) (~? mu-v #f)
-                               #,(loc-of this-syntax)))
+      #:with expr #`(let ([r (rope-spec 'id from-expr (list 'to.part to.x to.y to.z) len-v
+                                        (~? (list (list over.x over.y over.z) ...) '())
+                                        '(~? drum #f) (~? rel-v #f) '(~? mat hemp) (~? dia-v 0.02)
+                                        (and (~? nocked-v #f) #t)
+                                        '(~? sheave #f)
+                                        '(~? bar-mat #f) (~? mu-v #f)
+                                        #,(loc-of this-syntax))])
+                      ;; a chain of rigid links pinned end to end (issue #31)
+                      (set-rope-spec-links! r (~? links-v #f))
+                      r))
 
     ;; Wheels fixed on one axle (an arbor): a treadwheel and the drum its
     ;; rope winds on, two gears keyed to one shaft. They turn as one piece,

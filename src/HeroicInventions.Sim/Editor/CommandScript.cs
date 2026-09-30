@@ -53,7 +53,8 @@ public static class CommandScript
                 (r.Mu is { } mu ? $" #:mu {N(mu)}" : "") +
                 (r.ReleaseDeg is { } d ? $" #:release-deg {N(d)}" : "") +
                 $" #:material {r.Material} #:diameter {N(r.Diameter)}" +
-                (r.Nocked ? " #:nocked #t" : "") + ")");
+                (r.Nocked ? " #:nocked #t" : "") +
+                (r.Links is { } links ? $" #:links {links}" : "") + ")");
         }
         foreach (var s in m.Sources) Add($"(inflow {s.Id} #:into {s.Into} #:flow {N(s.Flow)})");
         foreach (var c in m.Channels)

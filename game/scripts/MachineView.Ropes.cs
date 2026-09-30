@@ -68,6 +68,7 @@ public partial class MachineView
 
     private void BuildRope(RopeSpec spec)
     {
+        if (spec.Links is not null) { BuildChain(spec); return; }   // a chain of pinned links (#31)
         var mat = _materials[spec.Material];
         var rope = new Rope
         {

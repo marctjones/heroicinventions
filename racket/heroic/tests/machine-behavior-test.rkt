@@ -7,7 +7,7 @@
 ;; AeolipileBlueprintSpinsOnceTheWaterBoils, which asserted the same
 ;; things from C# directly against MachineRuntime. See docs/design.html
 ;; §III "Machines as tests".
-(require rackunit heroic/simhost (only-in racket/math pi))
+(require rackunit heroic/simhost (only-in racket/math pi sinh cosh))
 
 (test-case "Heron's fountain lifts water above its basin, then empties the supply vessel"
   (define run (simulate 'herons-fountain #:seconds 60 #:step 0.05 #:sample-dt 0.5))
@@ -1910,3 +1910,27 @@
     (check-= (mean '(pine-block y)) 0.400 0.001)
     (check-= (mean '(oak-block y)) 0.356 0.001)
     (check-= (mean '(iron-block y)) 0.100 0.001)))
+
+;; ---------------------------------------------------------------------------
+;; Chains of pinned links (issue #31)
+
+(test-case "A chain of 40 pinned links (#31) hangs on the catenary for its length and span; the hooks carry w a cosh(S/2a)"
+  (when (godot-available?)
+    ;; hanging-chain.rkt: S 2 m, L 2.5 m, 2a sinh(S/2a) = L; w = 7700 g pi (0.005)^2
+    (define a (let loop ([lo 0.01] [hi 100.0] [i 0])
+                (define m (/ (+ lo hi) 2))
+                (cond [(> i 200) m]
+                      [(> (* 2 m (sinh (/ 1 m))) 2.5) (loop m hi (add1 i))]
+                      [else (loop lo m (add1 i))])))
+    (define w (* 7700 9.81 pi 0.005 0.005))
+    (define run (godot-simulate 'hanging-chain #:seconds 20 #:sample-dt 1))
+    (define f (cdr (last run)))
+    (define (v k i) (cadr (assq (string->symbol (format "chain-~a.~a" i k)) f)))
+    (for ([i 40])
+      (define x (v 'x i))
+      (check-= (v 'y i) (- 2 (* a (- (cosh (/ 1 a)) (cosh (/ x a))))) 0.002 (format "link ~a on the catenary" i)))
+    (check-= (min (v 'y 19) (v 'y 20)) (- 2 (* a (- (cosh (/ 1 a)) 1))) 0.002 "the lowest point: the sag a (cosh(S/2a) - 1)")
+    ;; the pull at the hook, from the first link's slope there: its vertical part is half the chain's weight
+    (define slope (/ (- 2 (v 'y 0)) (- (v 'x 0) -1)))
+    (define theta (atan slope))
+    (check-= (/ (* w 2.5 1/2) (sin theta)) (* w a (cosh (/ 1 a))) (* 0.02 (* w a (cosh (/ 1 a)))) "tension at the hook")))

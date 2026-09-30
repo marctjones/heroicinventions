@@ -133,6 +133,8 @@ public sealed record RopeSpec(
     public string? Bar { get; init; }
     /// <summary>Friction over the bars, overriding √(μ_rope·μ_bar); null to use the materials'.</summary>
     public double? Mu { get; init; }
+    /// <summary>A chain (issue #31): the rope built as this many rigid links pinned end to end, sagging and swinging as a real chain does; null, the lumped rope.</summary>
+    public int? Links { get; init; }
 }
 
 /// <summary>One thing a trigger does when it fires: sets a runtime field, as <c>(target field value)</c>.</summary>
@@ -425,6 +427,7 @@ public sealed class MachineDef
             Turns = c.Field("turns")?.Items.ElementAtOrDefault(1) is SSymbol t ? t.Name : null,
             Bar = c.Field("bar")?.Items.ElementAtOrDefault(1) is SSymbol b ? b.Name : null,
             Mu = c.Field("mu")?.Items.ElementAtOrDefault(1) is SNumber mu ? mu.Value : null,
+            Links = c.Field("links")?.Items.ElementAtOrDefault(1) is SNumber links ? (int)links.Value : null,
         };
     }
 

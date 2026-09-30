@@ -115,6 +115,7 @@ public static class RktExporter
         if (r.Turns is { } t) sb.Append($" #:turns {t}");
         if (r.Bar is { } bar) sb.Append($" #:bar {bar}");
         if (r.Mu is { } mu) sb.Append($" #:mu {F(mu)}");
+        if (r.Links is { } links) sb.Append($" #:links {links}");
         return sb.Append(")\n").ToString();
     }
 

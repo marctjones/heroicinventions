@@ -99,7 +99,7 @@ public static class MachineWriter
         Tagged(head, Sym(e.Part), Num(e.Local.X), Num(e.Local.Y), Num(e.Local.Z));
 
     private static SExpr RopeClause(RopeSpec r) =>
-        Tagged("rope", Sym(r.Id),
+        Tagged("rope", [Sym(r.Id),
             RopeEndClause("from", r.From), RopeEndClause("to", r.To),
             Tagged("length", Num(r.Length)),
             new SList([Sym("over"), .. r.Over.Select(o => (SExpr)Vec3(o))]),
@@ -111,7 +111,8 @@ public static class MachineWriter
             Tagged("turns", SymOrFalse(r.Turns)),
             Tagged("bar", SymOrFalse(r.Bar)),
             Tagged("mu", NumOrFalse(r.Mu)),
-            SrcLoc(r.Location));
+            .. r.Links is { } n ? [Tagged("links", Num(n))] : Array.Empty<SExpr>(),   // a chain (#31) only
+            SrcLoc(r.Location)]);
 
     private static SExpr InflowClause(SourceSpec s) =>
         Tagged("inflow", Sym(s.Id), Tagged("into", Sym(s.Into)), Tagged("flow", Num(s.Flow)), SrcLoc(s.Location));

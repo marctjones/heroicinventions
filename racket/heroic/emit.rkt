@@ -110,6 +110,8 @@
                        (turns ,(rope-spec-turns r))
                        (bar ,(rope-spec-bar r))
                        (mu ,(let ([u (rope-spec-mu r)]) (if u (num (format "rope ~a #:mu" id) u) #f)))
+                       ;; a chain of pinned links (issue #31) only: other ropes' clauses stay as they were
+                       ,@(if (rope-spec-links r) `((links ,(rope-spec-links r))) '())
                        ,(loc->sexp (rope-spec-loc r) root)))
             ,@(for/list ([i (machine-inflows m)])
                 `(inflow ,(inflow-spec-id i) (into ,(inflow-spec-into i))

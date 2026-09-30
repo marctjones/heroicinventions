@@ -1377,6 +1377,7 @@ public partial class MachineView : Node3D
         DriveRatchets(dt);
         TestTriggers();
         ApplyBuoyancy();
+        ConstrainChains();
         Runtime.Step(dt);
         Refresh();
         if (trace) TraceTick(dt);
