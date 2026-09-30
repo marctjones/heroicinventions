@@ -30,6 +30,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, AtmosphericCylinder> _cylinders = [];
     private readonly Dictionary<string, WaterSource> _sources = [];
     private readonly Dictionary<string, Trigger> _triggers = [];
+    private readonly Dictionary<string, Follow> _follows = [];
     private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, (FloatValve Valve, Func<double> Flow)> _floatValves = [];
@@ -64,6 +65,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, WaterSource> Sources => _sources;
     /// <summary>Triggers, by id. Body triggers are tested by the view that owns the bodies, through <see cref="TestBodyTrigger"/>.</summary>
     public IReadOnlyDictionary<string, Trigger> Triggers => _triggers;
+    /// <summary>Fields that follow a lever or rope, by id; the view that owns the mechanism feeds each one through <see cref="ApplyFollow"/>.</summary>
+    public IReadOnlyDictionary<string, Follow> Follows => _follows;
     public IReadOnlyDictionary<string, Channel> Channels => _channels;
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
     /// <summary>Float valves, each with the flow of the feed it throttles (m³/s).</summary>
@@ -440,6 +443,38 @@ public sealed class MachineRuntime
         Ambient = _ambient;   // hand it to every part now they all exist
         RegisterFields();
         BuildTriggers(def);
+        BuildFollows(def);
+    }
+
+    private void BuildFollows(MachineDef def)
+    {
+        foreach (var spec in def.Follows)
+        {
+            if ((spec.Lever is null) == (spec.Rope is null))
+                throw new MachineFormatException($"follow {spec.Id} must follow either a lever (#:lever) or a rope (#:rope), not both or neither", spec.Location);
+            if (spec.Lever is { } lever && def.Part(lever) is not { Kind: "lever" })
+                throw new MachineFormatException($"follow {spec.Id} follows {lever}, which is not a lever", spec.Location);
+            if (spec.Rope is { } rope && def.Ropes.All(r => r.Id != rope))
+                throw new MachineFormatException($"follow {spec.Id} follows {rope}, which is not a rope", spec.Location);
+            if (spec.From == spec.To)
+                throw new MachineFormatException($"follow {spec.Id}: #:from and #:to are the same, so nothing changes between them", spec.Location);
+            if (!_setters.ContainsKey($"{spec.Target}.{spec.Field}"))
+                throw new MachineFormatException($"follow {spec.Id} sets {spec.Target}.{spec.Field}, which is not a settable field", spec.Location);
+            if (_follows.ContainsKey(spec.Id))
+                throw new MachineFormatException($"two follows are called {spec.Id}", spec.Location);
+            var f = _follows[spec.Id] = new Follow(spec);
+            _getters[$"{spec.Id}.input"] = () => f.Input;
+            _getters[$"{spec.Id}.value"] = () => double.IsNaN(f.Value) ? spec.Low : f.Value;
+        }
+    }
+
+    /// <summary>Gives a follow its mechanism's reading (degrees turned by a lever, newtons of pull on a rope) and sets its field to match.</summary>
+    public void ApplyFollow(string id, double input)
+    {
+        var f = _follows[id];
+        f.Input = input;
+        f.Value = f.Map(input);
+        SetField(f.Spec.Target, f.Spec.Field, f.Value);
     }
 
     /// <summary>
@@ -592,7 +627,9 @@ public sealed class MachineRuntime
         {
             Cd = part.Number("coefficient", TankLeak.DischargeCoefficient),
             Evaporation = evaporation,
+            Bore = part.Number("bore", 0),
         });
+        if (part.Number("bore", 0) > 0) _leaks[part.Id].Lift = part.Number("lift", 0);
     }
 
     /// <summary>
@@ -887,6 +924,11 @@ public sealed class MachineRuntime
             _getters[$"{id}.evaporated"] = () => l.Evaporated * 1000;  // L taken from the surface so far
             _getters[$"{id}.area"] = () => l.Area * 10000;             // cm²
             _setters[$"{id}.area"] = cm2 => l.Area = cm2 / 10000;      // stop it with a thumb: 0
+            if (l.Bore > 0)
+            {
+                _getters[$"{id}.lift"] = () => l.Lift * 1000;          // mm the plug stands off its seat
+                _setters[$"{id}.lift"] = mm => l.Lift = mm / 1000;     // fully open from a quarter of the bore up
+            }
         }
         foreach (var (id, w) in _wheels)
         {

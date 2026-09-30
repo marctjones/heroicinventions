@@ -133,6 +133,17 @@ public sealed record TriggerSpec(string Id, Vec3? At, Vec3? Size, string? Body, 
                                  bool Rising, double Threshold, IReadOnlyList<TriggerAction> Actions, SourceLocation? Location);
 
 /// <summary>
+/// A field that follows a mechanism (issue #46): the value of Target.Field is
+/// set every tick from where a lever has turned (its angle in degrees from its
+/// start, when <see cref="Lever"/> is named) or how hard a rope pulls (its
+/// tension in N, when <see cref="Rope"/> is). The input runs from <see cref="From"/>
+/// to <see cref="To"/>, and the field from <see cref="Low"/> to <see cref="High"/>, linearly and
+/// held at the ends: a plug lifted part-way lets part of the flow through.
+/// </summary>
+public sealed record FollowSpec(string Id, string? Lever, string? Rope, double From, double To,
+                                string Target, string Field, double Low, double High, SourceLocation? Location);
+
+/// <summary>
 /// A machine as written by #lang heroic: parts with positions, materials
 /// and ports, plus the pipes, steam connections and sealed-air groups
 /// between them. Pure data; <see cref="MachineRuntime"/> makes it run.
@@ -159,6 +170,7 @@ public sealed class MachineDef
     public IReadOnlyList<ChannelSpec> Channels { get; init; } = [];
     public IReadOnlyList<CylinderSpec> Cylinders { get; init; } = [];
     public IReadOnlyList<TriggerSpec> Triggers { get; init; } = [];
+    public IReadOnlyList<FollowSpec> Follows { get; init; } = [];
 
     public PartSpec? Part(string id) => Parts.FirstOrDefault(p => p.Id == id);
 
@@ -197,6 +209,7 @@ public sealed class MachineDef
             }).ToList(),
             Cylinders = Cylinders,
             Triggers = Triggers.Select(t => t with { At = t.At is { } a ? Move(a) : null }).ToList(),
+            Follows = Follows,
         };
     }
 
@@ -262,6 +275,7 @@ public sealed class MachineDef
                                         c.Field("injection-temperature") is { } t && t.Items.ElementAtOrDefault(1) is SNumber ? Num(t, 1, loc) : null, loc);
             }).ToList(),
             Triggers = clauses.Where(c => c.Head == "trigger").Select(ParseTrigger).ToList(),
+            Follows = clauses.Where(c => c.Head == "follow").Select(ParseFollow).ToList(),
             Meshes = clauses.Where(c => c.Head == "mesh").Select(c =>
             {
                 var loc = ParseLoc(c);
@@ -345,6 +359,16 @@ public sealed class MachineDef
             Bar = c.Field("bar")?.Items.ElementAtOrDefault(1) is SSymbol b ? b.Name : null,
             Mu = c.Field("mu")?.Items.ElementAtOrDefault(1) is SNumber mu ? mu.Value : null,
         };
+    }
+
+    // (follow id (lever part|#f) (rope id|#f) (from a) (to b) (set target field) (low v) (high v) (srcloc …))
+    private static FollowSpec ParseFollow(SList c)
+    {
+        var loc = ParseLoc(c);
+        string? Name(string f) => c.Field(f)?.Items.ElementAtOrDefault(1) is SSymbol s ? s.Name : null;
+        var set = c.Field("set") ?? throw new MachineFormatException("follow has no (set target field)", loc);
+        double N(string f) => c.Field(f) is { } l ? Num(l, 1, loc) : throw new MachineFormatException($"follow has no ({f} …)", loc);
+        return new FollowSpec(Sym(c, 1, loc), Name("lever"), Name("rope"), N("from"), N("to"), Sym(set, 1, loc), Sym(set, 2, loc), N("low"), N("high"), loc);
     }
 
     // (trigger id (at x y z) (size w h d) (body part|#f) (when target field above|below value) (do (target field value) …) (srcloc …))

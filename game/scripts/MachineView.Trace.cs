@@ -89,14 +89,7 @@ public partial class MachineView
             var rot = b.GlobalRotationDegrees;
             Add($"{id}.rot-x", rot.X); Add($"{id}.rot-y", rot.Y); Add($"{id}.rot-z", rot.Z);
             Add($"{id}.omega", b.AngularVelocity.Length());
-            if (_hinges.TryGetValue(b, out var hinge) && _startBasis.TryGetValue(b, out var start))
-            {
-                // the turn from the start pose, signed about the hinge's axis
-                var q = (b.GlobalTransform.Basis * start.Inverse()).GetRotationQuaternion();
-                float angle = q.GetAngle();
-                var axis = angle > 1e-6f ? q.GetAxis() : hinge.Axis;
-                Add($"{id}.angle", Mathf.RadToDeg(angle) * Mathf.Sign(axis.Dot(hinge.Axis) == 0 ? 1 : axis.Dot(hinge.Axis)));
-            }
+            if (HingeAngleDegrees(b) is { } turned) Add($"{id}.angle", turned);
             if (b.ContactMonitor) Add($"{id}.contacts", b.GetContactCount());
             if (_hits.TryGetValue(b, out int hits)) Add($"{id}.hits", hits);
         }
@@ -117,6 +110,17 @@ public partial class MachineView
         Add("scene.kinetic", e.KineticJ); Add("scene.potential", e.PotentialJ); Add("scene.mechanical", e.KineticJ + e.PotentialJ);
         sb.Append(')');
         _trace!.WriteLine(sb.ToString());
+    }
+
+    /// <summary>How far a hinged body has turned from where it started, in degrees, signed about its hinge; null for a body with no hinge or no recorded start.</summary>
+    private double? HingeAngleDegrees(RigidBody3D b)
+    {
+        if (!_hinges.TryGetValue(b, out var hinge) || !_startBasis.TryGetValue(b, out var start)) return null;
+        // the turn from the start pose, signed about the hinge's axis
+        var q = (b.GlobalTransform.Basis * start.Inverse()).GetRotationQuaternion();
+        float angle = q.GetAngle();
+        var axis = angle > 1e-6f ? q.GetAxis() : hinge.Axis;
+        return Mathf.RadToDeg(angle) * Mathf.Sign(axis.Dot(hinge.Axis) == 0 ? 1 : axis.Dot(hinge.Axis));
     }
 
     private static string N(double v) => v.ToString("R", CultureInfo.InvariantCulture);

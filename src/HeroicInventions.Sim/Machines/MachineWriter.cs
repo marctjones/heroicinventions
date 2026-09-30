@@ -37,6 +37,7 @@ public static class MachineWriter
         foreach (var a in m.Arbors) clauses.Add(ArborClause(a));
         foreach (var a in m.SealedAir) clauses.Add(SealedAirClause(a));
         foreach (var t in m.Triggers) clauses.Add(TriggerClause(t));
+        foreach (var f in m.Follows) clauses.Add(FollowClause(f));
 
         var w = new System.Text.StringBuilder();
         w.Append(";; Saved by the in-game editor. Building from Racket will replace this file.\n");
@@ -128,6 +129,14 @@ public static class MachineWriter
             Tagged("current", NumOrFalse(l.Current)),
             Tagged("current-from", SymOrFalse(l.CurrentFrom)),
             SrcLoc(l.Location));
+
+    private static SExpr FollowClause(FollowSpec f) =>
+        Tagged("follow", Sym(f.Id),
+            Tagged("lever", SymOrFalse(f.Lever)), Tagged("rope", SymOrFalse(f.Rope)),
+            Tagged("from", Num(f.From)), Tagged("to", Num(f.To)),
+            Tagged("set", Sym(f.Target), Sym(f.Field)),
+            Tagged("low", Num(f.Low)), Tagged("high", Num(f.High)),
+            SrcLoc(f.Location));
 
     private static SExpr TriggerClause(TriggerSpec t) =>
         Tagged("trigger", Sym(t.Id),

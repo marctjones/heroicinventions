@@ -1241,3 +1241,37 @@
     ;; little more amplitude out of Mars's longer swing, so a little less
     ;; than 1.626 (measured 1.622)
     (check-= (/ (car mars) (car earth)) 1.6261 0.01)))
+
+(test-case "Holy water: a coin tips a lever, the plug follows it, the part-opened spout passes Torricelli's flow, and one coin buys a fixed dose"
+  ;; the spout is 12 mm across (pi d^2/4 = 1.131 cm2), 5 cm up an urn holding 20 L over 0.05 m2:
+  ;; head 0.35 m, wide open Q = 0.6 A sqrt(2 g h) = 0.1778 L/s; below a quarter of the bore
+  ;; (3 mm) of plug lift the area is the curtain pi d lift, so Q = 0.6 pi d lift sqrt(2 g h)
+  (when (godot-available?)
+    (define run (godot-simulate 'holy-water #:seconds 4 #:sample-dt 0.05))
+    (define d 0.012)
+    (define lifts (values-of run '(spout lift)))     ; mm
+    (define heads (values-of run '(spout head)))     ; cm over the hole
+    (define flows (values-of run '(spout flow)))     ; L/s
+    (define (predicted lift-mm head-cm)
+      (define lift (/ lift-mm 1000.0))
+      (define area (if (>= lift (/ d 4)) (/ (* pi d d) 4) (* pi d lift)))
+      (* 1000 0.6 area (sqrt (* 2 9.81 (/ head-cm 100.0)))))
+    ;; in every frame, whatever the plug's lift, the flow is the orifice formula for it
+    (for ([lift lifts] [head heads] [flow flows])
+      (check-= flow (predicted lift head) 0.003 (format "lift ~a mm, head ~a cm" lift head)))
+    ;; the plug was seen part open, not only open or shut, and passed the part-open flow
+    (check-true (for/or ([lift lifts]) (< 0.1 lift 2.9)) "some frame has the plug part-way")
+    (check-= (max-of run '(spout flow)) 0.1778 0.002 "wide open")
+    ;; the coin tipped the lever a long way; it ended up off the pan, the lever back, the plug seated
+    (check-true (> (max-of run '(beam angle)) 17) "past the coin's friction angle, atan 0.3 = 16.7 degrees")
+    (check-true (< (final-of run '(coin y)) 0.05) "the coin is on the ground")
+    (check-= (final-of run '(beam angle)) 0 0.5)
+    (check-= (final-of run '(spout lift)) 0 0)
+    (check-= (final-of run '(spout flow)) 0 0)
+    ;; a fixed dose: what ran out is the flow integrated over the time the plug was open, and it stops
+    (define times (times-of run))
+    (define dose (for/sum ([t0 times] [t1 (cdr times)] [f0 flows] [f1 (cdr flows)]) (* (- t1 t0) (/ (+ f0 f1) 2))))
+    (check-= (final-of run '(spout lost)) dose (* 0.05 dose) "the flow integrated over the open time")
+    (check-true (< 0.1 (final-of run '(spout lost)) 0.4) "a fraction of a litre a coin")
+    (define lost (values-of run '(spout lost)))
+    (check-= (list-ref lost (- (length lost) 1)) (list-ref lost (quotient (length lost) 2)) 1e-9 "and it has stopped")))

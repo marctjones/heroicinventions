@@ -94,6 +94,7 @@ public static class PartTemplates
             {
                 ["on"] = new SSymbol("?"), ["height"] = new SNumber(0.1), ["area"] = new SNumber(0.0005),
                 ["coefficient"] = new SNumber(0.6), ["into"] = new SBool(false), ["evaporation"] = new SNumber(0),
+                ["bore"] = new SNumber(0), ["lift"] = new SNumber(0),
             },
             [], null),
         // in the lid of the boiler #:on; lifts at #:lift gauge Pa, fully open #:accumulation over it

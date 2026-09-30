@@ -42,6 +42,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (inflow id #:into tank #:flow m3/s) (channel id from.port to.port|off ...) (lift id #:by part #:from tank #:to tank)
 ///   (trigger id #:at (x y z) #:size (w h d) #:body part #:do ((target field value) ...))   ; fires once when the part's centre enters the box
 ///   (trigger id #:when (target field above|below value) #:do ((target field value) ...)) ; fires once when a field crosses the value
+///   (follow id #:lever part|#:rope rope #:from a #:to b #:set (target field) [#:low v] [#:high v])   ; a field follows a lever's angle (deg) or a rope's tension (N)
 ///   (port part name kind height) (remove-port part name)   ; add or replace a port on a part
 ///   (set-rope id #:length L [#:diameter D] [#:material M] [#:release-deg d] [#:wind-on part] [#:turns part] [#:nocked #t] [#:bar M|#f] [#:mu μ|#f])   ; change a rope
 ///   (unmesh a b) (unarbor part) (remove-air tank)   ; take a link apart again
@@ -114,6 +115,7 @@ public sealed class BuildSession
         "sealed-air" => CreateSealedAir(cmd),
         "atmospheric-cylinder" => CreateCylinder(cmd),
         "trigger" => CreateTrigger(cmd),
+        "follow" => CreateFollow(cmd),
         "port" => SetPort(cmd),
         "remove-port" => RemovePortCmd(cmd),
         "set-rope" => SetRope(cmd),
@@ -432,6 +434,18 @@ public sealed class BuildSession
         Snapshot();
         Document.AddCylinder(id, piston, boiler, injection);
         return $"cylinder {id}: {piston} fed by {boiler}";
+    }
+
+    private string CreateFollow(SList cmd)
+    {
+        string id = Id(cmd, 1);
+        string? lever = Kw(cmd, "lever") is SSymbol l ? l.Name : null, rope = Kw(cmd, "rope") is SSymbol r ? r.Name : null;
+        double from = Num(RequireKw(cmd, "from"), $"follow {id} #:from"), to = Num(RequireKw(cmd, "to"), $"follow {id} #:to");
+        if (RequireKw(cmd, "set") is not SList { Items.Count: 2 } set) throw new FormatException($"follow {id} #:set: expected (target field)");
+        double low = Kw(cmd, "low") is { } lo ? Num(lo, $"follow {id} #:low") : 0, high = Kw(cmd, "high") is { } hi ? Num(hi, $"follow {id} #:high") : 1;
+        Snapshot();
+        Document.AddFollow(new FollowSpec(id, lever, rope, from, to, Name(set.Items[0], $"follow {id} #:set"), Name(set.Items[1], $"follow {id} #:set"), low, high, null));
+        return $"follow {id}: {lever ?? rope} sets {set.Items[0]}.{set.Items[1]}";
     }
 
     private string CreateTrigger(SList cmd)

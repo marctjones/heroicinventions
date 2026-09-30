@@ -38,18 +38,18 @@
 (provide define-machine
          tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
-         inflow channel off trigger
+         inflow channel off trigger follow
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
          (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec) (struct-out lift-spec) (struct-out cylinder-spec)
-         (struct-out inflow-spec) (struct-out channel-spec) (struct-out trigger-spec)
+         (struct-out inflow-spec) (struct-out channel-spec) (struct-out trigger-spec) (struct-out follow-spec)
          take-registered-machines
          planet make-planet planet? planet-field planet-name earth-planet?)
 
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source ambient sun planet parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers) #:transparent)
+(struct machine (name source ambient sun planet parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers follows) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -74,6 +74,10 @@
 ;; by: the screw or noria that lifts; from, to: tanks; current: a river's
 ;; speed (m/s) pushing a noria's paddles, or #f.
 (struct lift-spec (id by from to current current-from loc) #:transparent)
+;; A field that follows a mechanism: lever (a part id) or rope (a rope id), the other #f;
+;; the input (degrees turned, or newtons of tension) runs from `from` to `to`, and the field
+;; target.field from `low` to `high`, linearly and held at the ends.
+(struct follow-spec (id lever rope from to target field low high loc) #:transparent)
 ;; A sensor that acts when something arrives. Watches a body (body: a part id, with
 ;; at and size: the box, (list x y z) each, that fires it when the part's centre enters it)
 ;; or a field (when: (list target field mode value), mode 'above or 'below). actions: the
@@ -163,7 +167,9 @@
        (unless (and (real? (prop 'coefficient)) (> (prop 'coefficient) 0) (<= (prop 'coefficient) 1))
          (bad (format "#:coefficient must be in (0, 1], got ~e" (prop 'coefficient))))
        (unless (and (real? (prop 'evaporation)) (>= (prop 'evaporation) 0)) (bad (format "#:evaporation must be a flow, 0 or more, got ~e" (prop 'evaporation))))
-       (unless (> (+ (prop 'area) (prop 'evaporation)) 0) (bad "needs an #:area or an #:evaporation, or it leaks nothing"))
+       (unless (and (real? (prop 'bore)) (>= (prop 'bore) 0)) (bad (format "#:bore must be a length, 0 or more, got ~e" (prop 'bore))))
+       (unless (and (real? (prop 'lift)) (>= (prop 'lift) 0)) (bad (format "#:lift must be a length, 0 or more, got ~e" (prop 'lift))))
+       (unless (> (+ (prop 'area) (prop 'evaporation) (prop 'bore)) 0) (bad "needs an #:area, a #:bore or an #:evaporation, or it leaks nothing"))
        (unless (and (real? (prop 'height)) (<= 0 (prop 'height) (tank-prop 'height)))
          (bad (format "#:height ~e is not in ~a's wall, 0 to ~e" (prop 'height) (part-id tank) (tank-prop 'height))))
        (cond
@@ -304,7 +310,8 @@
            (filter cylinder-spec? items)
            (filter inflow-spec? items)
            (filter channel-spec? items)
-           (filter trigger-spec? items)))
+           (filter trigger-spec? items)
+           (filter follow-spec? items)))
 
 ;; Machines register themselves when their module runs, so the build
 ;; script can collect every machine in a file without knowing their names.
@@ -324,7 +331,7 @@
 
 (define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
-  inflow channel off trigger)
+  inflow channel off trigger follow)
 
 ;; A part built from a generated shape (see heroic/geometry). The shape is
 ;; an ordinary runtime value, so whether it suits the clause is checked
@@ -370,6 +377,7 @@
   (struct puinfo (id from to mat))   ; a lift pump: the tank it draws from, the tank it fills
   (struct cpinfo (id vessel))        ; a counterpoise: the tank that hangs from it
   (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
+  (struct fwinfo (id lever rope))    ; a follow: the lever it follows, or the rope
   (struct trinfo (id body))          ; a trigger: the part it watches, or #f
   (struct chinfo (id from to onto))  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
 
@@ -414,7 +422,7 @@
 
   (define-syntax-class clause
     #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger)
+    #:literals (tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -923,6 +931,10 @@
     ;; (L/s 0.0001)) is a seep off the surface, taken while any water is
     ;; left; a leak may have either or both. #:at defaults to the tank's +x
     ;; wall at that height. Set (hole area cm2) at run time to plug it (0).
+    ;; A hole given a #:bore (m across) instead has a plug in it, lifted
+    ;; #:lift (m, default 0: shut) off its seat: the water passes the curtain
+    ;; π·bore·lift, up to the bore's own area once the plug is a quarter of the
+    ;; bore clear. Set (hole lift mm) at run time, or let a #:follow work it.
     (pattern (leak id:id
                    (~alt (~once (~seq #:on tank-id:id))
                          (~once (~seq #:height height-v:expr))
@@ -930,13 +942,16 @@
                          (~optional (~seq #:coefficient cd-v:expr))
                          (~optional (~seq #:into catch:id))
                          (~optional (~seq #:evaporation evap-v:expr))
+                         (~optional (~seq #:bore bore-v:expr))
+                         (~optional (~seq #:lift lift-v:expr))
                          (~optional (~seq #:at at:vec3))
                          (~optional (~seq #:material mat:id))) ...)
       #:attr info (lkinfo #'id #'tank-id (attribute catch) (attribute mat))
       #:with expr #`(part 'id 'leak '(~? mat oak) (~? (list at.x at.y at.z) #f)
                           (list (cons 'on 'tank-id) (cons 'height height-v) (cons 'area (~? area-v 0))
                                 (cons 'coefficient (~? cd-v 0.6)) (cons 'into '(~? catch #f))
-                                (cons 'evaporation (~? evap-v 0)))
+                                (cons 'evaporation (~? evap-v 0))
+                                (cons 'bore (~? bore-v 0)) (cons 'lift (~? lift-v 0)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1137,6 +1152,26 @@
                                   (~? 'body #f) (~? (list 'wt 'wf 'mode wv) #f)
                                   (list (list 'dt 'df dv) ...) #,(loc-of this-syntax)))
 
+    ;; A field that follows a mechanism, continuously (a plug lifted part-way
+    ;; lets part of the flow through; #:trigger acts once, this tracks).
+    ;; #:lever names a lever, whose angle from its start in degrees is the
+    ;; input; #:rope names a rope, whose tension in N is. As the input runs
+    ;; #:from -> #:to, the field (target field) named by #:set runs #:low -> #:high
+    ;; (default 0 -> 1), held at the ends.
+    (pattern (follow id:id
+                     (~alt (~optional (~seq #:lever lever-id:id))
+                           (~optional (~seq #:rope rope-id:id))
+                           (~once (~seq #:from from-v:expr))
+                           (~once (~seq #:to to-v:expr))
+                           (~once (~seq #:set (st:id sf:id)))
+                           (~optional (~seq #:low low-v:expr))
+                           (~optional (~seq #:high high-v:expr))) ...)
+      #:fail-when (and (attribute lever-id) (attribute rope-id) #'id) "a follow follows either a lever (#:lever) or a rope (#:rope), not both"
+      #:fail-unless (or (attribute lever-id) (attribute rope-id)) "a follow needs a mechanism: #:lever part or #:rope rope"
+      #:attr info (fwinfo #'id (and (attribute lever-id) #'lever-id) (and (attribute rope-id) #'rope-id))
+      #:with expr #`(follow-spec 'id '(~? lever-id #f) '(~? rope-id #f) from-v to-v 'st 'sf (~? low-v 0) (~? high-v 1)
+                                 #,(loc-of this-syntax)))
+
     (pattern (mesh a:id b:id)
       #:attr info (minfo #'a #'b)
       #:with expr #`(mesh-spec 'a 'b #,(loc-of this-syntax)))
@@ -1321,6 +1356,11 @@
     (for ([t infos] #:when (and (trinfo? t) (trinfo-body t)))
       (unless (hash-ref parts (syntax-e (trinfo-body t)) #f)
         (fail (format "~a is not a part; a trigger watches a part's centre" (syntax-e (trinfo-body t))) (trinfo-body t))))
+
+    (for ([f infos] #:when (and (fwinfo? f) (fwinfo-lever f)))
+      (define p (hash-ref parts (syntax-e (fwinfo-lever f)) #f))
+      (unless (and p (eq? (pinfo-kind p) 'lever))
+        (fail (format "~a is not a lever" (syntax-e (fwinfo-lever f))) (fwinfo-lever f))))
 
     (for ([i infos] #:when (iinfo? i))
       (define p (hash-ref parts (syntax-e (iinfo-into i)) #f))

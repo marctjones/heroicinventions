@@ -1302,6 +1302,7 @@ public partial class MachineView : Node3D
         DriveLifts();
         DrivePistons();
         DriveSprings();
+        DriveFollows();
         TestTriggers();
         Runtime.Step(dt);
         Refresh();

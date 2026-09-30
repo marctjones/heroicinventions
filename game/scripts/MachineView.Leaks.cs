@@ -26,9 +26,9 @@ public partial class MachineView
             var part = Runtime.Def.Part(id)!;
             var at = V(part.At);
             AddLabel(id, at + new Vector3(0.12f, 0.08f, 0));
-            if (leak.Area > 0)
+            if (leak.Area > 0 || leak.Bore > 0)
             {
-                float r = Mathf.Max(0.008f, Mathf.Sqrt((float)leak.Area / Mathf.Pi));
+                float r = Mathf.Max(0.008f, Mathf.Sqrt((float)(leak.Bore > 0 ? Math.PI * leak.Bore * leak.Bore / 4 : leak.Area) / Mathf.Pi));
                 var hole = Shapes.Cylinder(r, 0.012f, Shapes.Mat(new Color(0.05f, 0.04f, 0.03f)));
                 hole.RotationDegrees = new Vector3(0, 0, 90);
                 hole.Position = at;

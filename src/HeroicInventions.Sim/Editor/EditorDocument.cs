@@ -42,6 +42,7 @@ public sealed class EditorDocument
     public IReadOnlyList<SealedAirSpec> SealedAir => _sealedAir;
     public IReadOnlyList<CylinderSpec> Cylinders => _cylinders;
     public IReadOnlyList<TriggerSpec> Triggers => _triggers;
+    public IReadOnlyList<FollowSpec> Follows => _follows;
     public IReadOnlyList<SourceSpec> Sources => _sources;
     public IReadOnlyList<ChannelSpec> Channels => _channels;
     public IReadOnlyList<LiftSpec> Lifts => _lifts;
@@ -57,6 +58,7 @@ public sealed class EditorDocument
     private IReadOnlyList<ArborSpec> _arbors = [];
     private IReadOnlyList<SealedAirSpec> _sealedAir = [];
     private IReadOnlyList<TriggerSpec> _triggers = [];
+    private IReadOnlyList<FollowSpec> _follows = [];
 
     /// <summary>Starts a fresh, empty document.</summary>
     public static EditorDocument New(string name) => new() { Name = name };
@@ -77,6 +79,7 @@ public sealed class EditorDocument
         doc._arbors = def.Arbors;
         doc._sealedAir = def.SealedAir;
         doc._triggers = def.Triggers;
+        doc._follows = def.Follows;
         int maxPipe = def.Pipes.Select(p => int.TryParse(p.Id.AsSpan(p.Id.LastIndexOf('-') + 1), out int n) ? n : 0).DefaultIfEmpty(0).Max();
         doc._nextPipeId = maxPipe + 1;
         return doc;
@@ -113,25 +116,30 @@ public sealed class EditorDocument
         _channels = _channels.Where(c => c.From.Part != id && c.To?.Part != id).ToList();
         // a trigger that watches this body, or watches or sets a field on this part, has nothing left to do
         _triggers = _triggers.Where(t => t.Body != id && t.WatchTarget != id && t.Actions.All(a => a.Target != id)).ToList();
+        // a follow with its lever gone, its rope gone or nothing left to set
+        _follows = _follows.Where(f => f.Lever != id && f.Target != id).ToList();
+        _follows = _follows.Where(f => f.Rope is null || _ropes.Any(r => r.Id == f.Rope)).ToList();
     }
 
     /// <summary>True if a part or a link (pipe, rope, inflow, channel, lift, cylinder) has this id — what a prop like a sluice's #:on or a wheel's #:race may name.</summary>
     public bool HasName(string id) =>
         _parts.ContainsKey(id) || _pipes.ContainsKey(id) || _ropes.Any(r => r.Id == id) || _sources.Any(s => s.Id == id) ||
-        _channels.Any(c => c.Id == id) || _lifts.Any(l => l.Id == id) || _cylinders.Any(c => c.Id == id) || _triggers.Any(t => t.Id == id);
+        _channels.Any(c => c.Id == id) || _lifts.Any(l => l.Id == id) || _cylinders.Any(c => c.Id == id) || _triggers.Any(t => t.Id == id) || _follows.Any(f => f.Id == id);
 
     /// <summary>Removes the pipe, rope, inflow, channel, lift or cylinder with this id; false if none has it.</summary>
     public bool RemoveLink(string id)
     {
         if (_pipes.Remove(id)) return true;
-        int before = _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count + _triggers.Count;
+        int before = _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count + _triggers.Count + _follows.Count;
         _ropes = _ropes.Where(r => r.Id != id).ToList();
         _sources = _sources.Where(s => s.Id != id).ToList();
         _channels = _channels.Where(c => c.Id != id).ToList();
         _lifts = _lifts.Where(l => l.Id != id).ToList();
         _cylinders = _cylinders.Where(c => c.Id != id).ToList();
         _triggers = _triggers.Where(t => t.Id != id).ToList();
-        return _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count + _triggers.Count != before;
+        _follows = _follows.Where(f => f.Id != id).ToList();
+        _follows = _follows.Where(f => f.Rope is null || _ropes.Any(r => r.Id == f.Rope)).ToList();   // a rope removed takes its follows
+        return _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count + _triggers.Count + _follows.Count != before;
     }
 
     /// <summary>Removes the mesh joining these two gears; false if they are not meshed.</summary>
@@ -357,6 +365,14 @@ public sealed class EditorDocument
         return trigger;
     }
 
+    /// <summary>Adds a follow clause unchecked — see <see cref="AddPipe"/>.</summary>
+    public FollowSpec AddFollow(FollowSpec follow)
+    {
+        if (_follows.Any(f => f.Id == follow.Id)) throw new InvalidOperationException($"a follow named {follow.Id} already exists");
+        _follows = [.. _follows, follow];
+        return follow;
+    }
+
     /// <summary>Joins a piston to the boiler that feeds its cylinder.</summary>
     public CylinderSpec AddCylinder(string id, string piston, string boiler, double? injectionTemperature)
     {
@@ -386,5 +402,6 @@ public sealed class EditorDocument
         Channels = _channels,
         Cylinders = _cylinders,
         Triggers = _triggers,
+        Follows = _follows,
     };
 }

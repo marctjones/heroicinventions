@@ -77,6 +77,8 @@ public static class LinkGestures
         foreach (var t in doc.Triggers.Where(t => t.Body == id || t.WatchTarget == id || t.Actions.Any(a => a.Target == id)))
             links.Add(($"trigger {t.Id}: " + (t.Body is { } b ? $"fires when {b} arrives" : $"fires when {t.WatchTarget}.{t.WatchField} goes {(t.Rising ? "above" : "below")} {t.Threshold:0.###}") +
                        $", sets {string.Join(", ", t.Actions.Select(a => $"{a.Target}.{a.Field} to {a.Value:0.###}"))}", $"(remove {t.Id})", null));
+        foreach (var f in doc.Follows.Where(f => f.Lever == id || f.Target == id))
+            links.Add(($"follow {f.Id}: {f.Target}.{f.Field} follows {(f.Lever is { } lv ? $"{lv}'s angle" : $"{f.Rope}'s pull")}", $"(remove {f.Id})", null));
         return links;
     }
 

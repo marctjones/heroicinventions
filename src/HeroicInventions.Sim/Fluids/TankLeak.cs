@@ -21,6 +21,26 @@ public sealed class TankLeak(Tank tank, double height, double area, Tank? catchT
     private double _area = Math.Max(0, area);
     public double Area { get => _area; set => _area = Math.Max(0, value); } // m² of the hole; 0 is plugged
     public double Cd { get; init; } = DischargeCoefficient;
+
+    /// <summary>
+    /// The bore (m across) of a plugged hole; 0 for a plain hole with a fixed <see cref="Area"/>. A bored hole is
+    /// closed by a plug that lifts by <see cref="Lift"/>; the water passes through the curtain the lifted plug
+    /// leaves, π·d·lift, until the lift reaches a quarter of the bore, where that equals the bore's own
+    /// area π·d²/4 and lifting further opens nothing more.
+    /// </summary>
+    public double Bore { get; init; }
+
+    private double _lift;
+    /// <summary>How far the plug is lifted off its seat, m. Setting it sets <see cref="Area"/> (bored holes only).</summary>
+    public double Lift
+    {
+        get => _lift;
+        set { _lift = Math.Max(0, value); if (Bore > 0) _area = PlugArea(Bore, _lift); }
+    }
+
+    /// <summary>Open area, m², of a hole of bore d with its plug lifted by lift: π·d·lift, up to the full π·d²/4.</summary>
+    public static double PlugArea(double bore, double lift) =>
+        lift >= bore / 4 ? Math.PI * bore * bore / 4 : Math.PI * bore * Math.Max(0, lift);
     public Tank? Catch { get; } = catchTank;
     public double Evaporation { get; init; }              // m³/s
 

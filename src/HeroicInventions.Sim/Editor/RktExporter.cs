@@ -65,6 +65,10 @@ public static class RktExporter
                       (t.WatchTarget is { } wt ? $" #:when ({wt} {t.WatchField} {(t.Rising ? "above" : "below")} {F(t.Threshold)})" : "") +
                       $" #:do ({string.Join(' ', t.Actions.Select(a => $"({a.Target} {a.Field} {F(a.Value)})"))}))\n");
 
+        foreach (var f in m.Follows)
+            sb.Append($"  (follow {f.Id} {(f.Lever is { } lv ? $"#:lever {lv}" : $"#:rope {f.Rope}")} #:from {F(f.From)} #:to {F(f.To)} " +
+                      $"#:set ({f.Target} {f.Field}) #:low {F(f.Low)} #:high {F(f.High)})\n");
+
         sb.Append(")\n");
         return sb.ToString();
     }
@@ -171,7 +175,8 @@ public static class RktExporter
             case "leak":
                 return $"  (leak {p.Id} {At()} #:on {Sym("on", "?")} #:height {F(N("height"))} #:area {F(N("area"))} #:coefficient {F(N("coefficient", 0.6))}" +
                        (p.Props.GetValueOrDefault("into") is SSymbol into ? $" #:into {into.Name}" : "") +
-                       (N("evaporation") > 0 ? $" #:evaporation {F(N("evaporation"))}" : "") + $" {Mat()})\n";
+                       (N("evaporation") > 0 ? $" #:evaporation {F(N("evaporation"))}" : "") +
+                       (N("bore") > 0 ? $" #:bore {F(N("bore"))} #:lift {F(N("lift"))}" : "") + $" {Mat()})\n";
             case "safety-valve":
                 return $"  (safety-valve {p.Id} {At()} #:on {Sym("on", "?")} #:lift {F(N("lift"))} #:bore {F(N("bore"))} " +
                        $"#:coefficient {F(N("coefficient", 0.8))} #:accumulation {F(N("accumulation", 0.1))} {Mat()})\n";
