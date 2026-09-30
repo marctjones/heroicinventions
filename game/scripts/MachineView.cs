@@ -656,6 +656,7 @@ public partial class MachineView : Node3D
         block.ContinuousCd = part.Props.GetValueOrDefault("fast") is not SBool { Value: false };
         Blocks.Add(block);
         _freezable.Add(block);
+        RegisterDrag(part, block, dims, false);
         _bodiesById[part.Id] = block;
     }
 
@@ -1382,6 +1383,7 @@ public partial class MachineView : Node3D
         DriveRatchets(dt);
         TestTriggers();
         ApplyBuoyancy();
+        ApplyDrag();
         ConstrainChains();
         CheckBurial();
         Runtime.Step(dt);

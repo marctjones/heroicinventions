@@ -59,7 +59,7 @@ public static class PartTemplates
             Props(("radius", 0.06), ("wall", 0.001), ("bore", 0.002), ("arm", 0.08), ("nozzles", 2)),
             [new PortSpec("steam-in", "steam", 0)],
             null),
-        "block" => new PartSpec(id, "block", material, at, Props(("size", 0.1), ("tilt-deg", 0), ("fast", true)), [], null),
+        "block" => new PartSpec(id, "block", material, at, Props(("size", 0.1), ("tilt-deg", 0), ("fast", true), ("drag-coefficient", false)), [], null),
         // no bearing (Jolt swings it) until given a #:bearing-radius; then the sim swings it against the bearing's friction
         "pendulum" => new PartSpec(id, "pendulum", material, at,
             Props(("length", 0.5), ("start-angle-deg", 30), ("bearing-radius", new SBool(false)),
@@ -239,7 +239,7 @@ public static class PartTemplates
             },
             [], null),
         // a solid ball of #:radius m: it rolls where a block slides, at (5/7) g sin(theta) down a slope
-        "ball" => new PartSpec(id, "ball", material, at, Props(("radius", 0.05)), [], null),
+        "ball" => new PartSpec(id, "ball", material, at, Props(("radius", 0.05), ("drag-coefficient", false)), [], null),
         // a hopper of sand: #:grain kg over #:area m2, through an #:orifice at its foot, of #:grain-size grains: it drains at Beverloo's steady rate
         "hopper" => new PartSpec(id, "hopper", material, at,
             new Dictionary<string, SExpr>

@@ -694,18 +694,23 @@
     ;; detection for it: by default a block is swept along its path each step,
     ;; so a bolt at 60 m/s (half a metre a tick) cannot tunnel through a thin
     ;; plank; a heap of slow blocks can save the cost of that.
+    ;; #:drag-coefficient Cd puts air drag on it, F = 1/2 rho Cd A v^2 against its
+    ;; velocity (A the face it presents to its motion, rho the air where it is); a
+    ;; cube is about 1.05, a sphere 0.47. Left out, the block moves through no air.
     (pattern (block id:id
                     (~alt (~once (~seq #:at at:vec3))
                           (~once (~seq #:size size-v:expr))
                           (~once (~seq #:material mat:id))
                           (~optional (~seq #:tilt-deg tilt-v:expr))
                           (~optional (~seq #:fast fast-v:expr))
+                          (~optional (~seq #:drag-coefficient drag-v:expr))
                           (~optional (~seq #:dimensions dims:vec3))) ...)
       #:attr info (pinfo #'id 'block (attribute mat) '())
       #:with expr #`(part 'id 'block 'mat (list at.x at.y at.z)
                           (list (cons 'size size-v)
                                 (cons 'tilt-deg (~? tilt-v 0))
                                 (cons 'fast (~? fast-v #t))
+                                (cons 'drag-coefficient (~? drag-v #f))
                                 (~@ . (~? ((cons 'dim-x dims.x) (cons 'dim-y dims.y) (cons 'dim-z dims.z)) ())))
                           '()
                           #,(loc-of this-syntax)))
@@ -1013,14 +1018,16 @@
     ;; inertia (2/5 m r^2), so down a slope of angle theta it gains speed at
     ;; g sin(theta) / (1 + 2/5) = (5/7) g sin(theta), and leaves a ramp of height
     ;; h at sqrt(10 g h / 7). Its engine damping is off; it is swept along its
-    ;; path so a fast one cannot pass through a thin target.
+    ;; path so a fast one cannot pass through a thin target. #:drag-coefficient Cd
+    ;; (a sphere is about 0.47) puts air drag on it, as on a block.
     (pattern (ball id:id
                    (~alt (~once (~seq #:at at:vec3))
                          (~once (~seq #:radius radius-v:expr))
+                         (~optional (~seq #:drag-coefficient drag-v:expr))
                          (~once (~seq #:material mat:id))) ...)
       #:attr info (pinfo #'id 'ball (attribute mat) '())
       #:with expr #`(part 'id 'ball 'mat (list at.x at.y at.z)
-                          (list (cons 'radius radius-v))
+                          (list (cons 'radius radius-v) (cons 'drag-coefficient (~? drag-v #f)))
                           '()
                           #,(loc-of this-syntax)))
 

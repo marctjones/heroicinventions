@@ -20,6 +20,7 @@ public partial class MachineView
         string materialName = char.ToUpper(part.Material[0]) + part.Material[1..];
         AddLabel($"{materialName}\n{ball.Mass:0.##} kg", new Vector3(0, radius + 0.05f, 0), ball);
         _freezable.Add(ball);
+        RegisterDrag(part, ball, Vector3.One * radius * 2, true);
         _bodiesById[part.Id] = ball;
     }
 }

@@ -156,7 +156,7 @@ public static class RktExporter
             case "block":
                 return $"  (block {p.Id} {At()} #:size {F(N("size"))} #:tilt-deg {F(N("tilt-deg"))}" +
                        (p.Props.ContainsKey("dim-x") ? $" #:dimensions ({F(N("dim-x"))} {F(N("dim-y"))} {F(N("dim-z"))})" : "") +
-                       (p.Props.GetValueOrDefault("fast") is SBool { Value: false } ? " #:fast #f" : "") + $" {Mat()})\n";
+                       (p.Props.GetValueOrDefault("fast") is SBool { Value: false } ? " #:fast #f" : "") + Opt("drag-coefficient", "drag-coefficient") + $" {Mat()})\n";
             case "pendulum":
                 return $"  (pendulum {p.Id} {At()} #:length {F(N("length"))} #:start-angle-deg {F(N("start-angle-deg"))} {Mat()}" +
                        (p.Props.GetValueOrDefault("bearing-radius") is SNumber pin
@@ -198,7 +198,7 @@ public static class RktExporter
                 return $"  (windmill {p.Id} {At()} #:radius {F(N("radius"))} #:mass {F(N("mass"))} #:wind {F(N("wind"))} #:load {F(N("load"))} " +
                        $"#:cp {F(N("cp", 0.3))} #:tip-speed-ratio {F(N("tip-speed-ratio", 2.5))} {Mat()})\n";
             case "ball":
-                return $"  (ball {p.Id} {At()} #:radius {F(N("radius", 0.05))} {Mat()})\n";
+                return $"  (ball {p.Id} {At()} #:radius {F(N("radius", 0.05))}" + Opt("drag-coefficient", "drag-coefficient") + $" {Mat()})\n";
             case "hopper":
                 return $"  (hopper {p.Id} {At()} #:area {F(N("area", 0.01))} #:grain {F(N("grain", 5))} #:orifice {F(N("orifice", 0.01))} " +
                        $"#:grain-size {F(N("grain-size", 0.0003))} #:density {F(N("density", 1600))} {Mat()})\n";
