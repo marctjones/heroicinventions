@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "hopper"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -185,6 +185,14 @@ public static class PartTemplates
             {
                 ["radius"] = new SNumber(10), ["mass"] = new SNumber(1500), ["wind"] = new SNumber(6), ["load"] = new SNumber(0),
                 ["cp"] = new SNumber(0.3), ["tip-speed-ratio"] = new SNumber(2.5),
+            },
+            [], null),
+        // a hopper of sand: #:grain kg over #:area m2, through an #:orifice at its foot, of #:grain-size grains: it drains at Beverloo's steady rate
+        "hopper" => new PartSpec(id, "hopper", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["area"] = new SNumber(0.01), ["grain"] = new SNumber(5), ["orifice"] = new SNumber(0.01),
+                ["grain-size"] = new SNumber(0.0003), ["density"] = new SNumber(1600),
             },
             [], null),
         // a pawl on the wheel #:on names: it turns one way only, a tooth of 360/#:teeth at a time; #:radius 0 puts the teeth half as far out again as the wheel

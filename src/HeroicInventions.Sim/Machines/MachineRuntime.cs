@@ -35,6 +35,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Grip> _grips = [];
     private readonly Dictionary<string, Cam> _cams = [];
     private readonly Dictionary<string, Ratchet> _ratchets = [];
+    private readonly Dictionary<string, Hopper> _hoppers = [];
     private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, (FloatValve Valve, Func<double> Flow)> _floatValves = [];
@@ -87,6 +88,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Cam> Cams => _cams;
     /// <summary>Ratchets (toothed wheels with a pawl), by id. The view feeds each its wheel's angle every tick and applies the impulse it gives back.</summary>
     public IReadOnlyDictionary<string, Ratchet> Ratchets => _ratchets;
+    /// <summary>Hoppers of grain draining at Beverloo's steady rate, by id (issue #50).</summary>
+    public IReadOnlyDictionary<string, Hopper> Hoppers => _hoppers;
     public IReadOnlyDictionary<string, Channel> Channels => _channels;
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
     /// <summary>Float valves, each with the flow of the feed it throttles (m³/s).</summary>
@@ -333,7 +336,7 @@ public sealed class MachineRuntime
                     _diggers[part.Id] = new Digger(part.Id, part.At.X, part.At.Z, len, w, d, power, spit, part.Number("spoil", 5));
                     break;
                 }
-                case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump" or "grip" or "cam" or "ratchet":
+                case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump" or "grip" or "cam" or "ratchet" or "hopper":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -534,8 +537,33 @@ public sealed class MachineRuntime
         BuildGrips(def);
         BuildCams(def);
         BuildRatchets(def);
+        BuildHoppers(def);
         BuildTriggers(def);
         BuildFollows(def);
+    }
+
+    private void BuildHoppers(MachineDef def)
+    {
+        foreach (var part in def.Parts.Where(p => p.Kind == "hopper"))
+        {
+            double area = part.Number("area"), grain = part.Number("grain"), orifice = part.Number("orifice");
+            double size = part.Number("grain-size"), density = part.Number("density", 1600);
+            if (area <= 0 || orifice <= 0 || size <= 0 || density <= 0)
+                throw new MachineFormatException($"hopper {part.Id}: #:area, #:orifice, #:grain-size and #:density must be more than 0", part.Location);
+            if (grain < 0) throw new MachineFormatException($"hopper {part.Id}: #:grain (kg) cannot be negative", part.Location);
+            var hopper = _hoppers[part.Id] = new Hopper(part.Id, area, grain, orifice, size, density, ZoneOf(part.Id) is { } z ? z.Gravity : Outside.Gravity);
+            string id = part.Id;
+            _getters[$"{id}.level"] = () => hopper.Level * 100;                 // cm of grain
+            _getters[$"{id}.mass"] = () => hopper.Mass;                         // kg left
+            _getters[$"{id}.drained"] = () => hopper.Drained;                   // kg run out
+            _getters[$"{id}.flow"] = () => hopper.Flow * 1000;                  // g/s, steady
+            _getters[$"{id}.speed"] = () => hopper.SurfaceSpeed * 1000;         // mm/s the surface (and a weight on it) sinks
+            _getters[$"{id}.empty"] = () => hopper.Empty ? 1 : 0;
+            _getters[$"{id}.arched"] = () => hopper.Arched ? 1 : 0;             // the orifice is under five grains across
+            _getters[$"{id}.gravity"] = () => hopper.Gravity;
+            _setters[$"{id}.orifice"] = mm => hopper.Orifice = Math.Max(0, mm / 1000);   // open or close the gate
+            _setters[$"{id}.grain"] = kg => hopper.Mass = Math.Max(0, kg);               // refill it
+        }
     }
 
     private void BuildRatchets(MachineDef def)
@@ -1453,6 +1481,7 @@ public sealed class MachineRuntime
                 _boilerLossSeen[id] = boiler.HeatLost;
             }
         foreach (var g in _grips.Values) if (g.Held) g.HeldFor += dt;
+        foreach (var h in _hoppers.Values) { h.Gravity = ZoneOf(h.Id) is { } hz ? hz.Gravity : Outside.Gravity; h.Step(dt); }
         Time += dt;
         StepFieldTriggers();
     }

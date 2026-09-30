@@ -1795,3 +1795,42 @@
     (check-= (final-of crew '(gang specific-work)) 48.74 0.05)
     (check-true (< 200 (for/first ([f crew] #:when (= 1 (cadr (assq 'gang.collapsed (cdr f))))) (car f)) 230)
                 "it fell in about 211 s in (3 kW into 634 kJ)")))
+
+
+(test-case "Sand timer: grain drains at Beverloo's steady rate, its level falls linearly, water's as a square root, and Mars runs 1.63 times slower"
+  ;; 5 kg of 1600 kg/m3 sand, 0.3 mm grains, 10 mm orifice: W = 0.58 x 1600 x sqrt(9.81) x (10 - 0.45 mm)^2.5 = 25.9 g/s,
+  ;; empty in 193.0 s, the level falling 1.619 mm/s from 31.25 cm; the water tank, sized to empty in the same time,
+  ;; has (sqrt h0 - k t)^2: a quarter left at half time where the sand has half; Mars: sqrt(3.71/9.81) = 0.615 of the flow
+  (define run (simulate 'sand-timer #:seconds 200 #:step 0.05 #:sample-dt 8))
+  (define (at r t k) (for/first ([f r] #:when (>= (car f) (- t 1e-6))) (cadr (assq k (cdr f)))))
+  (define w 0.58)
+  (define expected-flow (* 1000 w 1600 (sqrt 9.81) (expt (- 0.010 (* 1.5 0.0003)) 2.5)))    ; g/s
+  (check-= (at run 0 'sand.flow) expected-flow 1e-9)
+  (check-= (at run 0 'sand.flow) 25.9 0.05 "25.9 g/s")
+  ;; steady: the same flow when full, half full and nearly empty
+  (for ([t (in-list '(0 40 96 160 184))])
+    (check-= (at run t 'sand.flow) expected-flow 1e-9 (format "flow at ~a s" t)))
+  ;; the level falls linearly: equal steps in equal times
+  (define levels (for/list ([t (in-range 0 185 8)]) (at run t 'sand.level)))
+  (define drops (for/list ([a levels] [b (cdr levels)]) (- a b)))
+  (check-true (for/and ([d drops]) (< (abs (- d (car drops))) 1e-9)) "a fixed drop every 8 s")
+  (check-= (/ (car drops) 8) 0.1619 0.0005 "1.619 mm/s")
+  ;; empty in M / W = 193.0 s
+  (check-= (at run 0 'sand.mass) 5 0)
+  (check-= (at run 192 'sand.empty) 0 0 "not quite empty at 192 s")
+  (check-= (at run 200 'sand.empty) 1 0 "empty by 200 s")
+  (check-= (at run 200 'sand.drained) 5 1e-9)
+  ;; against the water clock: the same time to empty, but at half time 50% against 25%
+  (check-= (/ (at run 96 'sand.level) (at run 0 'sand.level)) 0.5 0.01 "sand: half left at half time")
+  (check-= (/ (at run 96 'water.level) (at run 0 'water.level)) 0.25 0.01 "water: a quarter left at half time")
+  ;; arching: 8 mm through 2 mm grains is 4 grains across, under 5: nothing comes out
+  (check-= (at run 96 'arch.arched) 1 0)
+  (check-= (at run 200 'arch.flow) 0 0)
+  (check-= (at run 200 'arch.mass) 5 0)
+  ;; Mars: the flow goes as sqrt(g)
+  (define mars (simulate 'sand-timer #:seconds 330 #:step 0.05 #:sample-dt 10 #:set '((scene gravity 3.71))))
+  (check-= (/ (at mars 10 'sand.flow) (at run 10 'sand.flow)) (sqrt (/ 3.71 9.81)) 1e-9 "0.615 of the flow")
+  (check-= (at mars 10 'sand.flow) 15.93 0.05 "15.9 g/s")
+  (check-= (at mars 300 'sand.empty) 0 0 "still running at 300 s")
+  (check-= (at mars 320 'sand.empty) 1 0 "empty by 314 s: 1.63 times as long")
+  (check-= (/ 313.9 193.0) (sqrt (/ 9.81 3.71)) 0.005 "sqrt(9.81 / 3.71) = 1.626"))

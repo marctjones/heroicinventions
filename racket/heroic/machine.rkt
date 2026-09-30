@@ -39,7 +39,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger ratchet crucible burning-mirror
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger ratchet crucible burning-mirror hopper
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -439,7 +439,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger ratchet crucible burning-mirror
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger ratchet crucible burning-mirror hopper
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt joint)
 
@@ -537,8 +537,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, ratchet, crucible, burning-mirror) or link (pipe, connect, sealed-air)"
-    #:literals (enclosure grip door air-pump cam digger ratchet crucible burning-mirror tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, ratchet, crucible, burning-mirror, hopper) or link (pipe, connect, sealed-air)"
+    #:literals (hopper enclosure grip door air-pump cam digger ratchet crucible burning-mirror tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -950,6 +950,28 @@
     ;; valley its pawl is in; #:reverse #t lets it turn the other way. The pawl
     ;; pushes at the teeth's circle, #:radius (default one and a half times the
     ;; wheel's): a load m on a drum r puts m g r on it, and the pawl m g r / R.
+    ;; A hopper of grain (sand, millet, regolith): #:grain kg over a cross-section
+    ;; of #:area m2, draining through a round #:orifice m across at its foot, of
+    ;; grains #:grain-size m across, #:density kg/m3 in bulk (default 1600, sand).
+    ;; Grain drains at a steady rate whatever its depth (Beverloo): W = 0.58 rho
+    ;; sqrt(g) (D - 1.5 d)^(5/2), so the level falls linearly, the flow goes as
+    ;; sqrt(g), and below D = 5 d it arches over and stops. Unlike water, whose flow
+    ;; slows as its head falls. Set (hopper grain kg) to refill, (hopper orifice mm) to work the gate.
+    (pattern (hopper id:id
+                     (~alt (~once (~seq #:at at:vec3))
+                           (~once (~seq #:area area-v:expr))
+                           (~once (~seq #:grain grain-v:expr))
+                           (~once (~seq #:orifice orifice-v:expr))
+                           (~once (~seq #:grain-size size-v:expr))
+                           (~optional (~seq #:density density-v:expr))
+                           (~optional (~seq #:material mat:id))) ...)
+      #:attr info (pinfo #'id 'hopper (attribute mat) '())
+      #:with expr #`(part 'id 'hopper '(~? mat oak) (list at.x at.y at.z)
+                          (list (cons 'area area-v) (cons 'grain grain-v) (cons 'orifice orifice-v)
+                                (cons 'grain-size size-v) (cons 'density (~? density-v 1600)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     (pattern (ratchet id:id
                       (~alt (~once (~seq #:at at:vec3))
                             (~once (~seq #:on wheel-id:id))
