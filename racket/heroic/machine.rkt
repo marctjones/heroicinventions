@@ -39,7 +39,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam ratchet
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -423,7 +423,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam ratchet
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt joint)
 
@@ -471,6 +471,7 @@
   (struct puinfo (id from to mat))   ; a lift pump: the tank it draws from, the tank it fills
   (struct cpinfo (id vessel))        ; a counterpoise: the tank that hangs from it
   (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
+  (struct rcinfo (id on))            ; a ratchet: the wheel its teeth are cut on
   (struct cminfo (id on))            ; a cam: the wheel it is pegged on
   (struct grinfo (id on mat))        ; a grip: the body it hangs on (or #f: the world)
   (struct beinfo (id a b))           ; a belt: the two drums it runs on
@@ -520,8 +521,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam) or link (pipe, connect, sealed-air)"
-    #:literals (enclosure grip door air-pump cam tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, ratchet) or link (pipe, connect, sealed-air)"
+    #:literals (enclosure grip door air-pump cam ratchet tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -927,6 +928,26 @@
     ;; weight through virtual work (torque = F dy/d theta), so it does n m g h
     ;; of work a turn; a wheel that gives less torque than m g pi h / (2 rise
     ;; pitch) stalls at the steepest part of a peg.
+    ;; A ratchet and pawl on the wheel #:on names (a wheel, pulley or drum):
+    ;; #:teeth (default 12) teeth, so it advances 360/teeth degrees a step,
+    ;; turning forward (positive about its axle) freely and never back past the
+    ;; valley its pawl is in; #:reverse #t lets it turn the other way. The pawl
+    ;; pushes at the teeth's circle, #:radius (default one and a half times the
+    ;; wheel's): a load m on a drum r puts m g r on it, and the pawl m g r / R.
+    (pattern (ratchet id:id
+                      (~alt (~once (~seq #:at at:vec3))
+                            (~once (~seq #:on wheel-id:id))
+                            (~optional (~seq #:teeth teeth-v:expr))
+                            (~optional (~seq #:radius radius-v:expr))
+                            (~optional (~seq #:reverse reverse-v:expr))
+                            (~optional (~seq #:material mat:id))) ...)
+      #:attr info (rcinfo #'id #'wheel-id)
+      #:with expr #`(part 'id 'ratchet '(~? mat iron) (list at.x at.y at.z)
+                          (list (cons 'on 'wheel-id) (cons 'teeth (~? teeth-v 12)) (cons 'radius (~? radius-v 0))
+                                (cons 'reverse (~? reverse-v #f)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     (pattern (cam id:id
                   (~alt (~once (~seq #:at at:vec3))
                         (~once (~seq #:on wheel-id:id))
@@ -1662,6 +1683,11 @@
     (for ([t infos] #:when (and (trinfo? t) (trinfo-body t)))
       (unless (hash-ref parts (syntax-e (trinfo-body t)) #f)
         (fail (format "~a is not a part; a trigger watches a part's centre" (syntax-e (trinfo-body t))) (trinfo-body t))))
+
+    (for ([c infos] #:when (rcinfo? c))
+      (define p (hash-ref parts (syntax-e (rcinfo-on c)) #f))
+      (unless (and p (eq? (pinfo-kind p) 'wheel))
+        (fail (format "~a is not a wheel, pulley or drum; a ratchet is cut on one" (syntax-e (rcinfo-on c))) (rcinfo-on c))))
 
     (for ([c infos] #:when (cminfo? c))
       (define p (hash-ref parts (syntax-e (cminfo-on c)) #f))

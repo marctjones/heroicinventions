@@ -108,6 +108,7 @@ public partial class MachineView : Node3D
         BuildBelts();
         BuildGrips();
         BuildCams();
+        BuildRatchets();
         BuildAxleSupports();
         foreach (var rope in Runtime.Def.Ropes) BuildRope(rope);
         BuildLifts();
@@ -1367,6 +1368,7 @@ public partial class MachineView : Node3D
         DriveBelts(dt);
         DriveGrips(dt);
         DriveCams(dt);
+        DriveRatchets(dt);
         TestTriggers();
         Runtime.Step(dt);
         Refresh();
@@ -1482,6 +1484,7 @@ public partial class MachineView : Node3D
         DrawMillstones();
         DrawGrips();
         DrawCams();
+        DrawRatchets();
         DrawSafetyValves();
         DrawBellows();
         DrawWarmth();

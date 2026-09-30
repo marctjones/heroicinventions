@@ -181,6 +181,10 @@ public static class RktExporter
             case "windmill":
                 return $"  (windmill {p.Id} {At()} #:radius {F(N("radius"))} #:mass {F(N("mass"))} #:wind {F(N("wind"))} #:load {F(N("load"))} " +
                        $"#:cp {F(N("cp", 0.3))} #:tip-speed-ratio {F(N("tip-speed-ratio", 2.5))} {Mat()})\n";
+            case "ratchet":
+                return $"  (ratchet {p.Id} {At()} #:on {Sym("on", "?")} #:teeth {F(N("teeth", 12))}" +
+                       (N("radius") > 0 ? $" #:radius {F(N("radius"))}" : "") +
+                       (p.Props.GetValueOrDefault("reverse") is SBool { Value: true } ? " #:reverse #t" : "") + $" {Mat()})\n";
             case "cam":
                 return $"  (cam {p.Id} {At()} #:on {Sym("on", "?")} #:pegs {F(N("pegs", 4))} #:lift {F(N("lift", 0.1))} #:rise {F(N("rise", 0.5))} #:mass {F(N("mass", 5))} {Mat()})\n";
             case "grip":

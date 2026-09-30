@@ -34,6 +34,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Belt> _belts = [];
     private readonly Dictionary<string, Grip> _grips = [];
     private readonly Dictionary<string, Cam> _cams = [];
+    private readonly Dictionary<string, Ratchet> _ratchets = [];
     private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, (FloatValve Valve, Func<double> Flow)> _floatValves = [];
@@ -82,6 +83,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Grip> Grips => _grips;
     /// <summary>Cams (peg wheels and their followers), by id. The view owns the wheel and feeds each cam its angle every tick; the cam works the follower and gives back the torque it puts on the wheel.</summary>
     public IReadOnlyDictionary<string, Cam> Cams => _cams;
+    /// <summary>Ratchets (toothed wheels with a pawl), by id. The view feeds each its wheel's angle every tick and applies the impulse it gives back.</summary>
+    public IReadOnlyDictionary<string, Ratchet> Ratchets => _ratchets;
     public IReadOnlyDictionary<string, Channel> Channels => _channels;
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
     /// <summary>Float valves, each with the flow of the feed it throttles (m³/s).</summary>
@@ -301,7 +304,7 @@ public sealed class MachineRuntime
                     _gasPumps[part.Id] = new GasPump(part.Id, a, b, part.Number("speed")) { Until = part.Number("until", 0) };
                     break;
                 }
-                case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump" or "grip" or "cam":
+                case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump" or "grip" or "cam" or "ratchet":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -494,8 +497,33 @@ public sealed class MachineRuntime
         BuildBelts(def);
         BuildGrips(def);
         BuildCams(def);
+        BuildRatchets(def);
         BuildTriggers(def);
         BuildFollows(def);
+    }
+
+    private void BuildRatchets(MachineDef def)
+    {
+        foreach (var part in def.Parts.Where(p => p.Kind == "ratchet"))
+        {
+            string on = part.Symbol("on", "?");
+            if (def.Part(on) is not { Kind: "wheel" } wheel)
+                throw new MachineFormatException($"ratchet {part.Id} is on {on}, which is not a wheel, pulley or drum for its teeth to be cut on", part.Location);
+            int teeth = (int)Math.Round(part.Number("teeth", 12));
+            if (teeth < 3) throw new MachineFormatException($"ratchet {part.Id} needs at least three teeth", part.Location);
+            double radius = part.Number("radius", 0);
+            if (radius <= 0) radius = DrumRadius(wheel) * 1.5;                       // teeth a half again the wheel's radius unless said
+            var ratchet = _ratchets[part.Id] = new Ratchet(part.Id, teeth, radius, part.Props.GetValueOrDefault("reverse") is SBool { Value: true });
+            string id = part.Id;
+            _getters[$"{id}.steps"] = () => ratchet.Steps;                            // teeth advanced
+            _getters[$"{id}.pitch"] = () => ratchet.Pitch * 180 / Math.PI;            // degrees a tooth
+            _getters[$"{id}.angle"] = () => ratchet.Angle * 180 / Math.PI;            // degrees the wheel has turned the allowed way
+            _getters[$"{id}.locked"] = () => ratchet.Locked * 180 / Math.PI;          // degrees to the valley the pawl is in
+            _getters[$"{id}.held"] = () => ratchet.Holding ? 1 : 0;
+            _getters[$"{id}.torque"] = () => ratchet.Torque;                          // N·m the pawl carries now
+            _getters[$"{id}.force"] = () => ratchet.Force;                            // N at the tooth circle
+            _getters[$"{id}.peak-force"] = () => ratchet.PeakForce;
+        }
     }
 
     private void BuildCams(MachineDef def)

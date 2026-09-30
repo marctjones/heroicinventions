@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -170,6 +170,13 @@ public static class PartTemplates
             {
                 ["radius"] = new SNumber(10), ["mass"] = new SNumber(1500), ["wind"] = new SNumber(6), ["load"] = new SNumber(0),
                 ["cp"] = new SNumber(0.3), ["tip-speed-ratio"] = new SNumber(2.5),
+            },
+            [], null),
+        // a pawl on the wheel #:on names: it turns one way only, a tooth of 360/#:teeth at a time; #:radius 0 puts the teeth half as far out again as the wheel
+        "ratchet" => new PartSpec(id, "ratchet", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["on"] = new SSymbol("?"), ["teeth"] = new SNumber(12), ["radius"] = new SNumber(0), ["reverse"] = new SBool(false),
             },
             [], null),
         // pegs on the wheel #:on names lift a follower of #:mass at #:at, over #:rise of each peg's pitch, by #:lift, then let it fall on its anvil

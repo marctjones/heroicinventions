@@ -1730,3 +1730,25 @@
       (check-= (v g 'map.poured) (+ (v g 'map.volume) (v g 'map.infiltrated) (v g 'map.leaked)) 1e-8
                (format "at ~a s the ground's ledger closes" (car g))))
     (check-true (> (value-at ground '(map depth-at) 90) 1) "water standing at the plain's middle, (20, 0), by 90 s")))
+
+(test-case "Ratchet windlass: a pawl holds 20 kg on a 10 cm drum with m g r / R, a crank steps it a tooth at a time, and without a pawl it runs away"
+  ;; 20.02 kg on a 10 cm drum: 19.64 N.m; the pawl on a 15 cm circle carries m g r / R = 130.9 N. A crank at
+  ;; 6 rpm winds 0.628 rad/s, 6.28 cm/s of rope, 30 degrees a tooth of 12 (a tooth every 0.83 s)
+  (when (godot-available?)
+    (define run (godot-simulate 'ratchet-windlass #:seconds 10 #:sample-dt 0.25))
+    ;; holds: the load stays put, within a centimetre, for the whole run
+    (check-true (for/and ([y (values-of run '(hold-load y))]) (< (abs (- y 1.0)) 0.012)) "the held load sags no more than a centimetre")
+    (define forces (for/list ([t (times-of run)] [f (values-of run '(hold-pawl force))] #:when (> t 1.0)) f))
+    (define mean-force (/ (apply + forces) (length forces)))
+    (check-= mean-force (/ (* 20.02 9.81 0.10) 0.15) 14.0 (format "the pawl carries m g r / R, 130.9 N: mean ~a" mean-force))
+    (check-= (final-of run '(hold-pawl steps)) 0 0 "a held wheel advances no tooth")
+    ;; without a pawl the load runs away: the floor, 90 cm down, in about half a second
+    (check-true (< (value-at run '(free-load y) 1.5) 0.3) "with no ratchet the load falls to the floor")
+    ;; cranked: winds at r w = 6.28 cm/s, a tooth every 30 degrees of the wheel
+    (check-= (value-at run '(wind-pawl angle) 5.0) 180 2.0 "6 rpm: 180 degrees in 5 s")
+    (check-= (value-at run '(wind-load y) 5.0) (+ 1.0 (* 0.1 pi)) 0.03 "the rope wound in r x theta = 0.314 m")
+    (for ([t (in-list '(1.0 2.0 3.0 4.0 5.0 7.0 10.0))])
+      (define angle (value-at run '(wind-pawl angle) t))
+      (check-= (value-at run '(wind-pawl steps) t) (floor (/ angle 30)) 0 (format "steps at ~a s: a tooth every 30 degrees (angle ~a)" t angle)))
+    (check-= (value-at run '(wind-pawl steps) 10.0) 11 1 "eleven or twelve teeth in 10 s (360 degrees)")
+    (check-= (final-of run '(wind-pawl pitch)) 30 1e-9 "360/12")))
