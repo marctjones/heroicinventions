@@ -233,4 +233,32 @@ public class EditorRebuildTests
         s.Execute(links.Single().Remove);
         Assert.Empty(s.Document.Ropes);
     }
+
+    [Fact]
+    public void ARopeOverAFixedBarKeepsItsBarAndFrictionThroughEveryWriter()
+    {
+        var s = Fresh("bench");
+        s.Execute("(block load #:at (-0.3 2 0) #:size 0.4 #:material granite)");
+        s.Execute("(block holder #:at (0.3 1 0) #:size 0.2 #:material granite)");
+        s.Execute("(rope over #:from (holder 0 0.1 0) #:to (load 0 0.2 0) #:length 5 #:over ((0.3 5 0) (0 5.3 0) (-0.3 5 0)) #:bar oak)");
+        var rope = Assert.Single(s.Document.Ropes);
+        Assert.Equal("oak", rope.Bar);
+        Assert.Null(rope.Mu);
+        s.Execute("(set-rope over #:mu 0.1)");                       // greased
+        Assert.Equal(0.1, s.Document.Ropes.Single().Mu);
+
+        var def = s.Document.ToMachineDef();
+        var reread = MachineDef.Parse(MachineWriter.Write(def)).Ropes.Single();
+        Assert.Equal("oak", reread.Bar);
+        Assert.Equal(0.1, reread.Mu);
+        Assert.Contains("#:bar oak #:mu 0.1", RktExporter.Write(def));
+        Assert.Contains("#:bar oak #:mu 0.1", string.Join("\n", CommandScript.For(def)));
+
+        // a rope runs over turning pulleys or fixed bars, not both; a bar is of something
+        Assert.Throws<FormatException>(() => s.Execute("(set-rope over #:turns load)"));
+        Assert.Throws<FormatException>(() => s.Execute("(set-rope over #:bar unobtainium)"));
+        s.Execute("(set-rope over #:bar #f #:mu #f)");                // back to plain pulleys
+        Assert.Null(s.Document.Ropes.Single().Bar);
+        Assert.Throws<FormatException>(() => s.Execute("(set-rope over #:mu 0.3)"));
+    }
 }

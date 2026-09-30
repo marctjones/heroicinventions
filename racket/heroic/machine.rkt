@@ -51,8 +51,10 @@
 ;; from/to: (list part-or-world x y z), the point in that part's own frame
 ;; (for world, in world coordinates); over: fixed points the rope runs
 ;; over (pulleys); wind-on: a wheel the from end winds onto, or #f;
-;; release-deg: see the rope clause; diameter in m.
-(struct rope-spec (id from to length over wind-on release-deg material diameter nocked turns loc) #:transparent)
+;; release-deg: see the rope clause; diameter in m; bar: the material of the
+;; fixed bars at the over points, or #f for turning pulleys (no friction);
+;; mu: a friction coefficient that overrides the materials', or #f.
+(struct rope-spec (id from to length over wind-on release-deg material diameter nocked turns bar mu loc) #:transparent)
 ;; parts: wheels fixed on one axle, first one first — they turn as one.
 (struct arbor-spec (parts loc) #:transparent)
 ;; a, b: two gears whose teeth engage.
@@ -1001,6 +1003,13 @@
     ;;             lets go the moment it would pull it back
     ;;   #:turns   the pulley wheel whose rim the rope runs over, at the
     ;;             first #:over point: turned so its rim moves with the rope
+    ;;   #:bar     the #:over points are fixed bars of this material, not
+    ;;             turning pulleys: the rope drags over them, and the tight
+    ;;             side can carry up to e^(mu theta) times the slack side
+    ;;             (the capstan equation), theta the angle it turns through
+    ;;             over all of them. mu is the rope's and the bar's
+    ;;             friction combined, sqrt(mu1 mu2), or #:mu to set it
+    ;;             (a greased bar, say)
     (pattern (rope id:id
                    (~alt (~optional (~seq #:from from:rope-end))
                          (~optional (~seq #:wind-on drum:id))
@@ -1011,8 +1020,14 @@
                          (~optional (~seq #:diameter dia-v:expr))
                          (~optional (~seq #:material mat:id))
                          (~optional (~seq #:nocked nocked-v:expr))
-                         (~optional (~seq #:turns sheave:id))) ...)
+                         (~optional (~seq #:turns sheave:id))
+                         (~optional (~seq #:bar bar-mat:id))
+                         (~optional (~seq #:mu mu-v:expr))) ...)
       #:fail-unless (or (attribute from) (attribute drum)) "a rope needs a #:from end or a #:wind-on drum"
+      #:fail-when (and (attribute bar-mat) (attribute sheave) #'sheave) "a rope runs over turning pulleys (#:turns) or fixed bars (#:bar), not both"
+      #:fail-when (and (attribute mu-v) (not (attribute bar-mat)) #'mu-v) "#:mu is the friction over fixed bars; give #:bar too"
+      #:fail-when (and (attribute bar-mat) (not (memq (syntax-e (attribute bar-mat)) known-materials)) (attribute bar-mat))
+                  (format "unknown bar material ~a" (and (attribute bar-mat) (syntax-e (attribute bar-mat))))
       #:fail-when (and (attribute from) (attribute drum) #'drum) "give a rope #:from or #:wind-on, not both (#:wind-on is its from end)"
       #:attr info (rinfo #'id (filter values (list (and (attribute from) #'from.part) #'to.part)) (attribute drum))
       #:with from-expr (if (attribute drum)
@@ -1023,6 +1038,7 @@
                                '(~? drum #f) (~? rel-v #f) '(~? mat hemp) (~? dia-v 0.02)
                                (and (~? nocked-v #f) #t)
                                '(~? sheave #f)
+                               '(~? bar-mat #f) (~? mu-v #f)
                                #,(loc-of this-syntax)))
 
     ;; Wheels fixed on one axle (an arbor): a treadwheel and the drum its

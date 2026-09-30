@@ -83,6 +83,8 @@ public static class RktExporter
         sb.Append($" #:diameter {F(r.Diameter)} #:material {r.Material}");
         if (r.Nocked) sb.Append(" #:nocked #t");
         if (r.Turns is { } t) sb.Append($" #:turns {t}");
+        if (r.Bar is { } bar) sb.Append($" #:bar {bar}");
+        if (r.Mu is { } mu) sb.Append($" #:mu {F(mu)}");
         return sb.Append(")\n").ToString();
     }
 

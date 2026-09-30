@@ -83,6 +83,8 @@
                        (diameter ,(num (format "rope ~a #:diameter" id) (rope-spec-diameter r)))
                        (nocked ,(rope-spec-nocked r))
                        (turns ,(rope-spec-turns r))
+                       (bar ,(rope-spec-bar r))
+                       (mu ,(let ([u (rope-spec-mu r)]) (if u (num (format "rope ~a #:mu" id) u) #f)))
                        ,(loc->sexp (rope-spec-loc r) root)))
             ,@(for/list ([i (machine-inflows m)])
                 `(inflow ,(inflow-spec-id i) (into ,(inflow-spec-into i))

@@ -970,6 +970,62 @@
     (define rise (- (final-of run '(stone y)) (value-at run '(stone y) 0)))
     (check-true (> rise 0.5) (format "the stone rose ~a m in 20 s" rise))))
 
+;; Issue #20: a rope over fixed bars, the capstan equation in the rope
+;; solver. Hemp on oak, mu = sqrt(0.5 x 0.45); the header of each machine
+;; works the numbers. Predicted before the first run: 4.438 and 87.40 for the
+;; ratios while sliding (the coil's helix makes its traced turn 539.49
+;; degrees, not 540, so 87.04), 2.810 and 3.551 m/s2 for the slides (3.569
+;; with the traced turn), 2.370 and 64.00 : 1 for the holds, and a lift of
+;; 7.85 cm/s by seven walkers with the drum side at 2.908 times the stone's.
+(define bar-mu (sqrt (* 0.5 0.45)))
+
+(test-case "Rope over a fixed bar: it slides at the capstan limit e^(mu theta), or holds below it"
+  (when (godot-available?)
+    (define run (godot-simulate 'rope-over-bars #:seconds 1 #:sample-dt 0.1))
+    (define g 9.81)
+    (define (mass cm) (* 2700 (expt (/ cm 100) 3)))
+    (define big (mass 40))
+    (for ([station '(half-slip coil-slip)] [holder-cm '(20 7)])
+      (define theta (* (/ pi 180) (value-at run (list station 'wrap-deg) 0.5)))
+      (define e (exp (* bar-mu theta)))
+      ;; sliding, the tight (load) side carries exactly e^(mu theta) the other
+      (check-= (/ (value-at run (list station 'tension-to) 0.5) (value-at run (list station 'tension-from) 0.5))
+               e (* 1e-3 e) (format "~a's tension ratio" station))
+      ;; and the pair accelerate at g (M - m E) / (M + m E); Godot's 0.1/s
+      ;; damping takes c v off that, so add it back at the mean speed
+      (define m (mass holder-cm))
+      (define a0 (/ (* g (- big (* m e))) (+ big (* m e))))
+      (define load (string->symbol (format "~a-load" station)))
+      (define v3 (value-at run (list load 'vy) 0.3))
+      (define v5 (value-at run (list load 'vy) 0.5))
+      (define measured (+ (/ (- v3 v5) 0.2) (* 0.1 (/ (- (+ v3 v5)) 2))))
+      (check-= measured a0 (* 0.01 a0) (format "~a accelerates at ~a m/s2, predicted ~a" station measured a0)))
+    (check-= (value-at run '(half-slip wrap-deg) 0.5) 180 0.01)
+    (check-= (value-at run '(coil-slip wrap-deg) 0.5) 539.49 0.05)
+    ;; the holds: nothing moves, and each side carries its own block's weight
+    (for ([station '(half-hold coil-hold)] [holder-cm '(30 10)])
+      (define load (string->symbol (format "~a-load" station)))
+      (check-true (< (abs (- (value-at run (list load 'y) 1.0) (value-at run (list load 'y) 0.1))) 1e-3)
+                  (format "~a's load stays put" station))
+      (check-= (/ (value-at run (list station 'tension-to) 1.0) (value-at run (list station 'tension-from) 1.0))
+               (/ big (mass holder-cm)) (* 2e-3 (/ big (mass holder-cm))) (format "~a's tension ratio" station))
+      (check-true (< (abs (value-at run (list station 'slip) 1.0)) 1e-4)))))
+
+(test-case "Roman crane over a fixed bar: two walkers can't lift the stone, seven lift it with the drum side at e^(mu theta) the stone's"
+  (when (godot-available?)
+    (define run (godot-simulate 'bar-crane #:seconds 10 #:sample-dt 1))
+    (define e (exp (* bar-mu (* (/ pi 180) (value-at run '(seven-hoist wrap-deg) 5)))))
+    (check-= e 2.908 0.002 "the rope turns 128.9 degrees over the bar")
+    ;; two: the stone stays down; the walkers' 6,180 N reaches it as 6,180 / E
+    (check-true (< (max-of run '(two-stone y)) 0.306) "the two-walker crane's stone never rises")
+    (check-= (value-at run '(two-hoist tension-from) 8) (/ (* 2 70 9.81 2.25 0.5) 0.25) 30)
+    (check-= (/ (value-at run '(two-hoist tension-from) 8) (value-at run '(two-hoist tension-to) 8)) e 0.01)
+    ;; seven: rising at 3 rpm on the 25 cm drum, the drum side e^(mu theta) the stone's
+    (define rise (- (value-at run '(seven-stone y) 9) (value-at run '(seven-stone y) 4)))
+    (check-= (/ rise 5) (* 3 (/ (* 2 pi) 60) 0.25) 0.002 (format "rose ~a m in 5 s" rise))
+    (check-= (/ (value-at run '(seven-hoist tension-from) 5) (value-at run '(seven-hoist tension-to) 5)) e 0.003)
+    (check-= (value-at run '(seven-hoist tension-to) 5) (* 583.2 9.81) 20 "the stone side carries the stone")))
+
 ;; ---------------------------------------------------------------------------
 ;; One real-game check for each remaining rigid-body machine, each against
 ;; the prediction in its .rkt header. Measured 2026-09-29 before writing;

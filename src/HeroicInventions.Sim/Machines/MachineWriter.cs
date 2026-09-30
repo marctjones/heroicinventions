@@ -97,6 +97,8 @@ public static class MachineWriter
             Tagged("diameter", Num(r.Diameter)),
             Tagged("nocked", new SBool(r.Nocked)),
             Tagged("turns", SymOrFalse(r.Turns)),
+            Tagged("bar", SymOrFalse(r.Bar)),
+            Tagged("mu", NumOrFalse(r.Mu)),
             SrcLoc(r.Location));
 
     private static SExpr InflowClause(SourceSpec s) =>

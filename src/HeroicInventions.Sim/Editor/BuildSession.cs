@@ -34,7 +34,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (pipe id from.port to.port #:conductance C)
 ///   (connect a.port b.port)
 ///   (rope id #:from (part x y z) #:to (part x y z) #:length L [#:over ((x y z) ...)] [#:wind-on drum] [#:turns pulley]
-///         [#:release-deg d] [#:material M] [#:diameter D] [#:nocked #t])   ; ends are points in each part's own frame; "world" is fixed
+///         [#:release-deg d] [#:material M] [#:diameter D] [#:nocked #t] [#:bar M] [#:mu μ])   ; ends are points in each part's own frame; "world" is fixed; #:bar: the #:over points are fixed bars (capstan friction)
 ///   (mesh gear-a gear-b)                          ; two gears in mesh
 ///   (arbor wheel wheel ...)                       ; wheels fixed on one axle; the first carries the bearing and drive
 ///   (sealed-air (tank tank ...) #:tube V [#:heat-loss W/K] [#:heat-capacity J/K])   ; tanks sharing one sealed air space
@@ -43,7 +43,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (trigger id #:at (x y z) #:size (w h d) #:body part #:do ((target field value) ...))   ; fires once when the part's centre enters the box
 ///   (trigger id #:when (target field above|below value) #:do ((target field value) ...)) ; fires once when a field crosses the value
 ///   (port part name kind height) (remove-port part name)   ; add or replace a port on a part
-///   (set-rope id #:length L [#:diameter D] [#:material M] [#:release-deg d] [#:wind-on part] [#:turns part] [#:nocked #t])   ; change a rope
+///   (set-rope id #:length L [#:diameter D] [#:material M] [#:release-deg d] [#:wind-on part] [#:turns part] [#:nocked #t] [#:bar M|#f] [#:mu μ|#f])   ; change a rope
 ///   (unmesh a b) (unarbor part) (remove-air tank)   ; take a link apart again
 ///   (source "text")                               ; where the machine comes from
 ///   (raw-part (part id kind ...))                 ; a part clause verbatim, for shaped parts no catalogue entry describes
@@ -321,10 +321,26 @@ public sealed class BuildSession
         string material = Kw(cmd, "material") is SSymbol m ? m.Name : "hemp";
         double diameter = Kw(cmd, "diameter") is { } d ? Num(d, $"rope {id} #:diameter") : 0.02;
         bool nocked = Kw(cmd, "nocked") is SBool { Value: true };
-        var spec = new RopeSpec(id, from, to, length, over, windOn, release, material, diameter, null) { Nocked = nocked, Turns = turns };
+        string? bar = Kw(cmd, "bar") is SSymbol b ? b.Name : null;
+        double? mu = Kw(cmd, "mu") is SNumber u ? u.Value : null;
+        var spec = new RopeSpec(id, from, to, length, over, windOn, release, material, diameter, null) { Nocked = nocked, Turns = turns, Bar = bar, Mu = mu };
+        CheckRopeFriction(spec);
         Snapshot();
         Document.AddRope(spec);
         return $"rope {id}: {from.Part} to {to.Part}, {length} m";
+    }
+
+    /// <summary>A rope runs over turning pulleys or fixed bars, not both; a bar is of a known material.</summary>
+    private void CheckRopeFriction(RopeSpec r)
+    {
+        if (r.Bar is not null && r.Turns is not null)
+            throw new FormatException($"rope {r.Id}: a rope runs over turning pulleys (#:turns) or fixed bars (#:bar), not both");
+        if (r.Mu is not null && r.Bar is null)
+            throw new FormatException($"rope {r.Id}: #:mu is the friction over fixed bars; give #:bar too");
+        if (r.Mu is < 0)
+            throw new FormatException($"rope {r.Id}: #:mu can't be negative");
+        if (r.Bar is { } bar && !_materials.TryGet(bar, out _))
+            throw new FormatException($"rope {r.Id}: unknown bar material {bar}");
     }
 
     /// <summary>(set-rope id #:key value …): changes the fields it names, keeps the rest.</summary>
@@ -340,7 +356,10 @@ public sealed class BuildSession
         if (Kw(cmd, "wind-on") is { } w) next = next with { WindOn = w is SSymbol ws ? ws.Name : null };
         if (Kw(cmd, "turns") is { } t) next = next with { Turns = t is SSymbol ts ? ts.Name : null };
         if (Kw(cmd, "nocked") is SBool nk) next = next with { Nocked = nk.Value };
+        if (Kw(cmd, "bar") is { } bar) next = next with { Bar = bar is SSymbol bs ? bs.Name : null };
+        if (Kw(cmd, "mu") is { } mu) next = next with { Mu = mu is SBool { Value: false } ? null : Num(mu, $"rope {id} #:mu") };
         if (next.Length <= 0) throw new FormatException($"rope {id}: #:length must be positive");
+        CheckRopeFriction(next);
         Snapshot();
         Document.ReplaceRope(next);
         return $"rope {id}: {next.Length} m";

@@ -42,6 +42,8 @@ public static class CommandScript
                 (r.Over.Count > 0 ? $" #:over ({string.Join(' ', r.Over.Select(V))})" : "") +
                 (r.WindOn is { } w ? $" #:wind-on {w}" : "") +
                 (r.Turns is { } t ? $" #:turns {t}" : "") +
+                (r.Bar is { } bar ? $" #:bar {bar}" : "") +
+                (r.Mu is { } mu ? $" #:mu {N(mu)}" : "") +
                 (r.ReleaseDeg is { } d ? $" #:release-deg {N(d)}" : "") +
                 $" #:material {r.Material} #:diameter {N(r.Diameter)}" +
                 (r.Nocked ? " #:nocked #t" : "") + ")");

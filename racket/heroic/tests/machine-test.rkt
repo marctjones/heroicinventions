@@ -150,6 +150,21 @@
   (check-exn #rx"#:wind must be a speed" (λ () (build '(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind -1))))
   (check-not-exn (λ () (build '(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind 6 #:cp 16/27)))))
 
+(test-case "a rope runs over turning pulleys or fixed bars, not both; a bar is of a known material"
+  (check-compile-error #rx"not both"
+    (block a #:at (0 0 0) #:size 0.1 #:material oak)
+    (block b #:at (1 0 0) #:size 0.1 #:material oak)
+    (wheel p #:shape (pulley #:radius 0.1 #:width 0.05) #:at (0.5 1 0) #:material oak)
+    (rope r #:from (a 0 0 0) #:to (b 0 0 0) #:length 2 #:over ((0.5 1.1 0)) #:turns p #:bar oak))
+  (check-compile-error #rx"unknown bar material silk"
+    (block a #:at (0 0 0) #:size 0.1 #:material oak)
+    (block b #:at (1 0 0) #:size 0.1 #:material oak)
+    (rope r #:from (a 0 0 0) #:to (b 0 0 0) #:length 2 #:over ((0.5 1 0)) #:bar silk))
+  (check-compile-error #rx"give #:bar too"
+    (block a #:at (0 0 0) #:size 0.1 #:material oak)
+    (block b #:at (1 0 0) #:size 0.1 #:material oak)
+    (rope r #:from (a 0 0 0) #:to (b 0 0 0) #:length 2 #:mu 0.1)))
+
 (test-case "a capstan's rope is a known material"
   (check-compile-error #rx"unknown rope material silk"
     (capstan post #:at (0 2 0) #:turns 1 #:load 100 #:rope silk)))

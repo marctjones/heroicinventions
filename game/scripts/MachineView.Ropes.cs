@@ -47,7 +47,15 @@ public partial class MachineView
         public Vector3 DrumAxis;
         public float Wound;             // rope wound onto the drum so far, m
         public float Strength;          // breaking load, N
-        public float Tension;           // last tick, N
+        public float Tension;           // last tick, N (the tight side's, over bars)
+        // Over fixed bars (#:bar): the capstan friction coefficient (0 for
+        // turning pulleys), the angle the rope turns through over the bars
+        // (rad), each side's tension, and how fast the rope slides over
+        // them toward its From end (m/s, negative toward its To end).
+        public float Mu, Wrap, TensionFrom, TensionTo, Slip;
+        public MeshInstance3D? BarMesh;
+        public StandardMaterial3D? BarLook;
+        public Label3D? BarLabel;
         public float ArmTurned;         // how far the From part has turned, rad (for release)
         public float MostLag;           // most the load has lagged the arm, degrees (negative)
         public bool Released, Broken;
@@ -68,6 +76,9 @@ public partial class MachineView
             // tensile strength (MPa) × cross-section
             Strength = (float)(mat.TensileStrength * 1e6 * Math.PI * spec.Diameter * spec.Diameter / 4),
         };
+        if (spec.Bar is { } bar)
+            // rope on bar as Jolt combines two surfaces' friction, √(μ₁μ₂), as the capstan part does
+            rope.Mu = (float)(spec.Mu ?? Math.Sqrt(mat.Friction * _materials[bar].Friction));
         (rope.A, rope.ALocal) = ResolveEnd(spec.From);
         (rope.B, rope.BLocal) = ResolveEnd(spec.To);
         if (spec.WindOn is { } drumId)
@@ -89,8 +100,74 @@ public partial class MachineView
             AddChild(seg);
             rope.Segments.Add(seg);
         }
+        if (spec.Bar is { } barMat && rope.Over.Count > 0) BuildBar(rope, barMat);
         _ropes.Add(rope);
         DrawRope(rope);
+    }
+
+    /// <summary>
+    /// The fixed bar a #:bar rope drags over: a round timber through the
+    /// middle of its #:over points, across the plane the rope turns in. It
+    /// glows with the heat friction makes there (tension difference × slip
+    /// speed), so a rope sliding over it shows, and one held by it doesn't.
+    /// </summary>
+    private void BuildBar(Rope rope, string material)
+    {
+        // the circle through its first three points, or their middle
+        var centre = rope.Over.Aggregate(Vector3.Zero, (acc, p) => acc + p) / rope.Over.Count;
+        if (rope.Over.Count >= 3)
+        {
+            var (p0, p1, p2) = (rope.Over[0], rope.Over[1], rope.Over[2]);
+            var (u, v) = (p1 - p0, p2 - p0);
+            var n = u.Cross(v);
+            if (n.LengthSquared() > 1e-10f)
+                centre = p0 + (v.LengthSquared() * n.Cross(u) + u.LengthSquared() * v.Cross(n)) / (2 * n.LengthSquared());
+        }
+        float radius = rope.Over.Count > 1 ? rope.Over.Average(p => p.DistanceTo(centre)) : (float)rope.Spec.Diameter;
+        var path = RopePath(rope);
+        rope.Wrap = WrapAngle(path);
+        var across = (path[1] - path[0]).Cross(path[2] - path[1]);
+        var axis = across.LengthSquared() > 1e-8f ? across.Normalized() : Vector3.Back;
+        float length = Mathf.Max(0.4f, Mathf.Max(3 * radius, 8 * (float)rope.Spec.Diameter));
+        var baseLook = Surface(material);
+        rope.BarLook = new StandardMaterial3D
+        {
+            AlbedoColor = baseLook.AlbedoColor,
+            Roughness = baseLook.Roughness,
+            EmissionEnabled = true,
+            Emission = new Color(1f, 0.35f, 0.05f),
+            EmissionEnergyMultiplier = 0,
+        };
+        rope.BarMesh = new MeshInstance3D
+        {
+            Mesh = new CylinderMesh { TopRadius = radius, BottomRadius = radius, Height = length, RadialSegments = 16 },
+            MaterialOverride = rope.BarLook,
+        };
+        AddChild(rope.BarMesh);
+        var tilt = Vector3.Up.Cross(axis);
+        rope.BarMesh.Transform = new Transform3D(
+            tilt.LengthSquared() > 1e-8f ? new Basis(tilt.Normalized(), Vector3.Up.AngleTo(axis)) : Basis.Identity, centre);
+        rope.BarLabel = new Label3D
+        {
+            Position = centre + new Vector3(0, radius + 0.25f, 0),
+            FontSize = 24, OutlineSize = 6, PixelSize = 0.006f,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
+        };
+        AddChild(rope.BarLabel);
+    }
+
+    /// <summary>The angle a rope turns through over its #:over points (rad): the sum of its bends there.</summary>
+    private static float WrapAngle(List<Vector3> path)
+    {
+        float wrap = 0;
+        for (int i = 1; i < path.Count - 1; i++)
+        {
+            var din = path[i] - path[i - 1];
+            var dout = path[i + 1] - path[i];
+            if (din.LengthSquared() < 1e-12f || dout.LengthSquared() < 1e-12f) continue;
+            wrap += din.AngleTo(dout);
+        }
+        return wrap;
     }
 
     /// <summary>A rope end's body (null if fixed) and its point, local to that body or in world space.</summary>
@@ -220,7 +297,7 @@ public partial class MachineView
         }
         _ropeBias.Clear();
 
-        var active = new List<(Rope Rope, List<Vector3> Path, Vector3 A, Vector3 B, Vector3 Ua, Vector3 Ub, float Stretch, float W)>();
+        var active = new List<(Rope Rope, List<Vector3> Path, Vector3 A, Vector3 B, Vector3 Ua, Vector3 Ub, float Stretch, float W, float WA, float WB)>();
         foreach (var r in _ropes)
         {
             if (!r.Active) continue;
@@ -235,23 +312,32 @@ public partial class MachineView
             var b = path[^1];
             var ua = (path[1] - a).Normalized();   // the rope pulls A this way
             var ub = (path[^2] - b).Normalized();  // and B this way
-            float w = InverseMassAlong(r.A, a, ua) + InverseMassAlong(r.B, b, ub);
-            active.Add((r, path, a, b, ua, ub, length - ((float)r.Spec.Length - r.Wound), w));
+            float wa = InverseMassAlong(r.A, a, ua), wb = InverseMassAlong(r.B, b, ub);
+            if (r.Mu > 0) r.Wrap = WrapAngle(path);
+            active.Add((r, path, a, b, ua, ub, length - ((float)r.Spec.Length - r.Wound), wa + wb, wa, wb));
         }
 
         var total = new float[active.Count];
+        // Over fixed bars the two sides can pull differently: From gets
+        // total + friction/2, To total - friction/2 (see OverBars).
+        var friction = new float[active.Count];
         for (int pass = 0; pass < 8; pass++)
             for (int i = 0; i < active.Count; i++)
             {
-                var (r, _, a, b, ua, ub, stretch, w) = active[i];
+                var (r, _, a, b, ua, ub, stretch, w, wa, wb) = active[i];
                 if (w <= 0) continue;
-                // how fast the ends are pulling apart along the rope, with every impulse so far
-                float separating = -ua.Dot(Velocity(r.A, a)) - ub.Dot(Velocity(r.B, b));
                 // slack: let the gap close within this step, no further; taut or
                 // stretched: no separation. The stretch itself is taken back
                 // separately below, so this impulse is never more than
                 // inelastic and can't put energy in.
                 float allowed = stretch < 0 ? -stretch / dt : 0;
+                if (r.Mu > 0 && wa > 0 && wb > 0)
+                {
+                    OverBars(i, r, a, b, ua, ub, wa, wb, allowed, total, friction);
+                    continue;
+                }
+                // how fast the ends are pulling apart along the rope, with every impulse so far
+                float separating = -ua.Dot(Velocity(r.A, a)) - ub.Dot(Velocity(r.B, b));
                 float delta = (separating - allowed) / w;
                 float before = total[i];
                 total[i] = Mathf.Max(0, before + delta);
@@ -260,14 +346,63 @@ public partial class MachineView
                 Push(r.B, b, ub * applied);
             }
 
+        // A rope over fixed bars: its two sides' impulses, pA and pB, solved
+        // together and exactly (the one-row-at-a-time way converges far too
+        // slowly when one end is much lighter than the other: a held load
+        // crept down at a steady 3 cm/s). Each side's length grows at
+        // rA = rA0 - wA pA (rA0: with this rope's own pull taken out), and so
+        // for B. The rope can't lengthen past what slack allows. Friction
+        // lets the sides differ up to the capstan equation, pA <= E pB and
+        // pB <= E pA with E = e^(mu theta); inside that the rope doesn't
+        // slide over the bars (rA = rB); at the limit it slides toward the
+        // tight side. One end fixed (w = 0): nothing can slide, and the rope
+        // is solved as a plain one above. The stretch correction below goes
+        // through here too: shared out by equal impulses, it closed a held
+        // rope's stretch mostly from its light end, and the rope crept over
+        // the bar toward the heavy one at 3 cm/s.
+        void OverBars(int i, Rope r, Vector3 a, Vector3 b, Vector3 ua, Vector3 ub, float wa, float wb, float allowed, float[] total, float[] friction)
+        {
+            float pa = total[i] + friction[i] / 2, pb = total[i] - friction[i] / 2;
+            float ra0 = -ua.Dot(Velocity(r.A, a)) + wa * pa;
+            float rb0 = -ub.Dot(Velocity(r.B, b)) + wb * pb;
+            float e = Mathf.Exp(r.Mu * r.Wrap);
+            float na, nb;
+            if (ra0 + rb0 <= allowed) na = nb = 0;                  // closing at least as fast as the slack allows: slack
+            else
+            {
+                na = (ra0 - allowed / 2) / wa;                        // held: neither side's length changes
+                nb = (rb0 - allowed / 2) / wb;
+                if (na > e * nb)                                      // From would need more than friction gives: slides toward From
+                {
+                    nb = (ra0 + rb0 - allowed) / (wa * e + wb);
+                    na = e * nb;
+                }
+                else if (nb > e * na)                                 // slides toward To
+                {
+                    na = (ra0 + rb0 - allowed) / (wa + wb * e);
+                    nb = e * na;
+                }
+            }
+            Push(r.A, a, ua * (na - pa));
+            Push(r.B, b, ub * (nb - pb));
+            total[i] = (na + nb) / 2;
+            friction[i] = na - nb;
+        }
+
         // Stretch correction: close a third of any stretch this step, solved
         // on top of the real impulses, applied now and taken back next tick.
         var bias = new float[active.Count];
+        var biasFriction = new float[active.Count];
         for (int pass = 0; pass < 4; pass++)
             for (int i = 0; i < active.Count; i++)
             {
-                var (r, _, a, b, ua, ub, stretch, w) = active[i];
+                var (r, _, a, b, ua, ub, stretch, w, wa, wb) = active[i];
                 if (w <= 0 || stretch <= 0) continue;
+                if (r.Mu > 0 && wa > 0 && wb > 0)
+                {
+                    OverBars(i, r, a, b, ua, ub, wa, wb, -0.3f * stretch / dt, bias, biasFriction);
+                    continue;
+                }
                 float separating = -ua.Dot(Velocity(r.A, a)) - ub.Dot(Velocity(r.B, b));
                 float delta = (separating + 0.3f * stretch / dt) / w;
                 float before = bias[i];
@@ -279,8 +414,12 @@ public partial class MachineView
 
         for (int i = 0; i < active.Count; i++)
         {
-            var (r, _, a, b, ua, ub, _, _) = active[i];
-            r.Tension = total[i] / dt;
+            var (r, _, a, b, ua, ub, _, _, _, _) = active[i];
+            float fromImpulse = total[i] + friction[i] / 2, toImpulse = total[i] - friction[i] / 2;
+            r.TensionFrom = fromImpulse / dt;
+            r.TensionTo = toImpulse / dt;
+            r.Tension = Mathf.Max(r.TensionFrom, r.TensionTo);
+            if (r.Mu > 0) r.Slip = 0.5f * (-ua.Dot(PointVelocity(r.A, a)) + ub.Dot(PointVelocity(r.B, b)));
             if (r.Tension > r.Strength)
             {
                 r.Broken = true;
@@ -301,20 +440,21 @@ public partial class MachineView
             }
             if (total[i] > 0)
             {
-                r.A?.ApplyImpulse(ua * total[i], a - r.A.GlobalPosition);
-                r.B?.ApplyImpulse(ub * total[i], b - r.B.GlobalPosition);
+                r.A?.ApplyImpulse(ua * fromImpulse, a - r.A.GlobalPosition);
+                r.B?.ApplyImpulse(ub * toImpulse, b - r.B.GlobalPosition);
             }
             if (bias[i] > 0)
             {
+                float biasA = bias[i] + biasFriction[i] / 2, biasB = bias[i] - biasFriction[i] / 2;
                 if (r.A is { Freeze: false } bodyA)
                 {
-                    bodyA.ApplyImpulse(ua * bias[i], a - bodyA.GlobalPosition);
-                    _ropeBias.Add((bodyA, ua * bias[i], a - bodyA.GlobalPosition));
+                    bodyA.ApplyImpulse(ua * biasA, a - bodyA.GlobalPosition);
+                    _ropeBias.Add((bodyA, ua * biasA, a - bodyA.GlobalPosition));
                 }
                 if (r.B is { Freeze: false } bodyB)
                 {
-                    bodyB.ApplyImpulse(ub * bias[i], b - bodyB.GlobalPosition);
-                    _ropeBias.Add((bodyB, ub * bias[i], b - bodyB.GlobalPosition));
+                    bodyB.ApplyImpulse(ub * biasB, b - bodyB.GlobalPosition);
+                    _ropeBias.Add((bodyB, ub * biasB, b - bodyB.GlobalPosition));
                 }
             }
             CheckRelease(r, a, b);
@@ -373,6 +513,16 @@ public partial class MachineView
 
     private void DrawRope(Rope r)
     {
+        if (r.BarLook is { } look)
+        {
+            // friction's heat at the bar, W: what the tight side loses to the slack one, times the sliding speed
+            float heat = r.Active ? Mathf.Abs((r.TensionFrom - r.TensionTo) * r.Slip) : 0;
+            look.EmissionEnergyMultiplier = Mathf.Clamp(heat / 500f, 0, 3);
+            r.BarLabel!.Text = !r.Active ? "" :
+                $"{Mathf.Max(r.TensionFrom, r.TensionTo):F0} N : {Mathf.Min(r.TensionFrom, r.TensionTo):F0} N" +
+                (Mathf.Abs(r.Slip) > 0.01f ? $"  sliding {Mathf.Abs(r.Slip):F2} m/s" : "  holding") +
+                $"\nmost e^(μθ) = {Mathf.Exp(r.Mu * r.Wrap):F1}";
+        }
         if (!r.Active) return;
         var path = RopePath(r);
         for (int i = 0; i < r.Segments.Count; i++)

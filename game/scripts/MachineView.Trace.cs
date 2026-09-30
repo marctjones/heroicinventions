@@ -105,6 +105,13 @@ public partial class MachineView
             Add($"{r.Spec.Id}.tension", r.Tension);
             Add($"{r.Spec.Id}.released", r.Released ? 1 : 0);
             Add($"{r.Spec.Id}.broken", r.Broken ? 1 : 0);
+            if (r.Mu > 0)
+            {
+                Add($"{r.Spec.Id}.tension-from", r.TensionFrom);
+                Add($"{r.Spec.Id}.tension-to", r.TensionTo);
+                Add($"{r.Spec.Id}.slip", r.Slip);
+                Add($"{r.Spec.Id}.wrap-deg", Mathf.RadToDeg(r.Wrap));
+            }
         }
         var e = Energy();
         Add("scene.kinetic", e.KineticJ); Add("scene.potential", e.PotentialJ); Add("scene.mechanical", e.KineticJ + e.PotentialJ);

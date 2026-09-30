@@ -107,6 +107,15 @@ public sealed record RopeSpec(
     public bool Nocked { get; init; }
     /// <summary>A pulley wheel the rope runs over (at its first Over point), turned to keep pace with the rope.</summary>
     public string? Turns { get; init; }
+    /// <summary>
+    /// The material of fixed bars at the Over points, or null for turning
+    /// pulleys: the rope drags over bars, and its tight side can carry up to
+    /// e^(μθ) times its slack side (the capstan equation), θ the angle it
+    /// turns through over all of them.
+    /// </summary>
+    public string? Bar { get; init; }
+    /// <summary>Friction over the bars, overriding √(μ_rope·μ_bar); null to use the materials'.</summary>
+    public double? Mu { get; init; }
 }
 
 /// <summary>One thing a trigger does when it fires: sets a runtime field, as <c>(target field value)</c>.</summary>
@@ -329,6 +338,8 @@ public sealed class MachineDef
         {
             Nocked = c.Field("nocked")?.Items.ElementAtOrDefault(1) is SBool { Value: true },
             Turns = c.Field("turns")?.Items.ElementAtOrDefault(1) is SSymbol t ? t.Name : null,
+            Bar = c.Field("bar")?.Items.ElementAtOrDefault(1) is SSymbol b ? b.Name : null,
+            Mu = c.Field("mu")?.Items.ElementAtOrDefault(1) is SNumber mu ? mu.Value : null,
         };
     }
 
