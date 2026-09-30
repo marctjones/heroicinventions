@@ -118,6 +118,7 @@ public partial class MachineView : Node3D
         BuildMirrors();
         BuildPumps();
         BuildPistonDrives();
+        BuildImpacts();
         Refresh();
 
         // Baseline for "energy retained": mechanical energy before anything
@@ -1287,6 +1288,11 @@ public partial class MachineView : Node3D
                 impulses.Add((a.Body, -n * impulse, contact - a.Body.GlobalPosition));
                 impulses.Add((b.Body, n * impulse, contact - b.Body.GlobalPosition));
                 struck = true;
+                // the strike, for the impact record: the energy it takes is
+                // the pair's closing energy, (1 - e²) of it
+                if (closing >= LeastImpactSpeed)
+                    RecordImpact(new Impact(Runtime.Time, a.Body, b.Body, contact, n, closing, impulse,
+                                            0.5f * (1 - e * e) * closing * closing / (ka * ka / a.Inertia + kb * kb / b.Inertia)));
             }
             if (!struck) break;
         }
@@ -1296,6 +1302,7 @@ public partial class MachineView : Node3D
     public void Simulate(double dt)
     {
         ApplyPlanetGravity();
+        DetectImpacts();
         ResolveBobImpacts();
         ResolveRopes();
         DriveGearTrains();
@@ -1307,6 +1314,7 @@ public partial class MachineView : Node3D
         Runtime.Step(dt);
         Refresh();
         TraceTick(dt);
+        KeepVelocitiesIntoStep();
     }
 
     private double _shownGravity = Physics.Gravity;
@@ -1411,6 +1419,7 @@ public partial class MachineView : Node3D
         DrawFloatValves();
         DrawLeaks();
         DrawTriggers();
+        DrawImpacts();
         DrawSafetyValves();
         DrawBellows();
         DrawWarmth();

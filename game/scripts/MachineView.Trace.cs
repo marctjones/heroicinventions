@@ -92,6 +92,15 @@ public partial class MachineView
             if (HingeAngleDegrees(b) is { } turned) Add($"{id}.angle", turned);
             if (b.ContactMonitor) Add($"{id}.contacts", b.GetContactCount());
             if (_hits.TryGetValue(b, out int hits)) Add($"{id}.hits", hits);
+            if (_impactRecords.TryGetValue(b, out var struck))
+            {
+                // strikes so far, and the last one's closing speed (m/s), impulse (N s) and the energy it took (J)
+                Add($"{id}.impacts", struck.Count);
+                Add($"{id}.impact-speed", struck.Last?.Speed ?? 0);
+                Add($"{id}.impact-impulse", struck.Last?.Impulse ?? 0);
+                Add($"{id}.impact-energy", struck.Last?.EnergyLost ?? 0);
+                Add($"{id}.impact-energy-total", struck.TotalEnergy);
+            }
         }
         foreach (var r in _ropes)
         {

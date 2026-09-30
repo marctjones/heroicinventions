@@ -1026,6 +1026,52 @@
     (check-= (/ (value-at run '(seven-hoist tension-from) 5) (value-at run '(seven-hoist tension-to) 5)) e 0.003)
     (check-= (value-at run '(seven-hoist tension-to) 5) (* 583.2 9.81) 20 "the stone side carries the stone")))
 
+;; Issue #27: impacts. Predicted before the first run (drop-test.rkt's
+;; header): the engine's own tick, v <- v (1 - c dt) - g dt, brings a block
+;; dropped 1.25 m to the floor on the 61st tick at 4.8641 m/s, and the
+;; strike meets it at that less one tick's damping, 4.8600; it leaves at
+;; e times that (the floor gives no restitution of its own and Jolt takes
+;; the larger), and the collision takes 1/2 m v^2 (1 - e^2): 72.4, 163.5,
+;; 51.1 and 103.1 J for steel, granite, oak and hemp.
+(test-case "Drop test: each block strikes the floor at the fallen speed, leaves at e times it, and the strike takes 1/2 m v^2 (1 - e^2)"
+  (when (godot-available?)
+    (define dt 1/120)
+    (define run (godot-simulate 'drop-test #:seconds 1.6 #:sample-dt dt))
+    (define (tick v) (- (* v (- 1 (* 0.1 dt))) (* 9.81 dt)))
+    (define v-in                       ; falling from 1.25 m, a tick at a time
+      (let loop ([v 0.0] [y 1.25])
+        (define v* (tick v))
+        (if (<= (+ y (* v* dt)) 0) (* (- v*) (- 1 (* 0.1 dt))) (loop v* (+ y (* v* dt))))))
+    (check-= v-in 4.8600 1e-3)
+    (define (rise v) (let loop ([v v] [y 0.0]) (define v* (tick v)) (if (<= v* 0) y (loop v* (+ y (* v* dt))))))
+    (for ([b '(steel-block granite-block oak-block hemp-bale)]
+          [e '(0.95 0.6 0.5 0.1)]
+          [m (map (λ (rho) (* rho 0.008)) '(7850 2700 720 1100))])
+      (define struck (for/first ([f run] #:when (>= (cadr (assq (string->symbol (format "~a.impacts" b)) (cdr f))) 1)) f))
+      (define (at key) (cadr (assq (string->symbol (format "~a.~a" b key)) (cdr struck))))
+      (define speed (at 'impact-speed))
+      (check-= speed v-in 2e-3 (format "~a strikes at ~a m/s" b speed))
+      (check-= (at 'vy) (* e speed) (* 2e-3 e speed) (format "~a leaves at e x its speed" b))
+      (check-= (at 'impact-energy) (* 1/2 m speed speed (- 1 (* e e))) (* 5e-3 m speed speed) (format "~a: energy taken" b))
+      ;; the impulse that turned it round, and the step's weight
+      (check-= (at 'impact-impulse) (* m (+ speed (* e speed) (* 9.81 dt))) (* 0.02 m speed) (format "~a: impulse" b))
+      ;; and, from where the bounce left it, it rises as the tick model says
+      (unless (< e 0.2)
+        (define top (apply max (for/list ([f run] #:when (> (car f) (car struck)) #:when (< (car f) (+ (car struck) 1.2)))
+                                 (cadr (assq (string->symbol (format "~a.y" b)) (cdr f))))))
+        (check-= top (+ (at 'y) (rise (at 'vy))) 0.003 (format "~a's bounce" b))))))
+
+(test-case "Newton's cradle: every strike down the row is recorded, the first at the swinging ball's speed"
+  (when (godot-available?)
+    (define run (godot-simulate 'newtons-cradle #:seconds 0.4 #:sample-dt 1/120))
+    (define struck (for/first ([f run] #:when (>= (cadr (assq 'ball-0.impacts (cdr f))) 1)) f))
+    (define before (for/last ([f run] #:when (< (car f) (car struck))) f))
+    (define (at f key) (cadr (assq key (cdr f))))
+    ;; the bob's centre is 0.5 m below its pivot: speed = omega x 0.5, a tick before
+    (check-= (at struck 'ball-0.impact-speed) (* 0.5 (at before 'ball-0.omega)) 0.02)
+    (check-equal? (map (λ (b) (at struck (string->symbol (format "~a.impacts" b)))) '(ball-0 ball-4)) '(1 1))
+    (check-true (> (at struck 'ball-4.impact-speed) (* 0.9 (at struck 'ball-0.impact-speed))) "the far ball is struck nearly as hard")))
+
 ;; ---------------------------------------------------------------------------
 ;; One real-game check for each remaining rigid-body machine, each against
 ;; the prediction in its .rkt header. Measured 2026-09-29 before writing;
