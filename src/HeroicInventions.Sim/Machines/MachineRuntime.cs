@@ -52,6 +52,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Pane> _panes = [];
     private readonly Dictionary<string, Pond> _ponds = [];
     private readonly Dictionary<string, Roof> _roofs = [];
+    private readonly Dictionary<string, StirlingEngine> _stirlings = [];
     private readonly Dictionary<string, Door> _doors = [];
     private readonly Dictionary<string, GasPump> _gasPumps = [];
     // parts standing inside an enclosure, by id: the zone they read; everything else stands in Outside
@@ -135,6 +136,7 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Pond> Ponds => _ponds;
     /// <summary>Cold roofs condensing their room's vapour into gutters (issue #58).</summary>
     public IReadOnlyDictionary<string, Roof> Roofs => _roofs;
+    public IReadOnlyDictionary<string, StirlingEngine> Stirlings => _stirlings;
     /// <summary>Doors, hatches and valves between zones (issue #41).</summary>
     public IReadOnlyDictionary<string, Door> Doors => _doors;
     /// <summary>Pumps moving gas from one zone to another (issue #41).</summary>
@@ -334,6 +336,20 @@ public sealed class MachineRuntime
                     };
                     break;
                 }
+                case "stirling":
+                {
+                    double aperture = part.Number("aperture"), k = part.Number("conductance");
+                    if (aperture <= 0 || k < 0) throw new MachineFormatException($"stirling {part.Id}: #:aperture must be above 0 and #:conductance 0 or more", part.Location);
+                    _stirlings[part.Id] = new StirlingEngine(part.Id, aperture, k, TemperatureOr(part, "temperature", freezing: false))
+                    {
+                        CarnotFraction = part.Number("carnot-fraction", 0.35),
+                        Emissivity = part.Number("emissivity", 0.9),
+                        HeatCapacity = part.Number("heat-capacity", 10_000),
+                        MomentOfInertia = part.Number("inertia", 0.5),
+                        Load = part.Number("load", 0),
+                    };
+                    break;
+                }
                 case "enclosure": break; // built first: every other part reads its zone
                 case "door":
                 {
@@ -475,6 +491,8 @@ public sealed class MachineRuntime
             _mirrors[part.Id] = mirror;
             // a crucible's spot takes only the share of the mirror's image that falls on it
             if (target is Crucible c) AddHeatSource(target, () => mirror.Power * Math.Min(1, c.Spot / mirror.Image));
+            // likewise a hot-air engine's aperture
+            else if (target is StirlingEngine se) AddHeatSource(target, () => mirror.Power * Math.Min(1, se.Aperture / mirror.Image));
             else AddHeatSource(target, () => mirror.Power);
         }
         foreach (var (_, h) in _hearths) AddHeatSource(h.Target, () => h.HeatOut);
@@ -920,6 +938,7 @@ public sealed class MachineRuntime
     {
         foreach (var (id, t) in _tanks) t.Zone = ZoneOf(id);
         foreach (var (id, c) in _crucibles) c.Zone = ZoneOf(id);
+        foreach (var (id, se) in _stirlings) se.Zone = ZoneOf(id);
         foreach (var (id, b) in _boilers) b.Zone = ZoneOf(id);
         foreach (var (id, h) in _hearths) h.Zone = ZoneOf(id);
         foreach (var (id, w) in _jetWheels) w.Zone = ZoneOf(id);
@@ -1251,6 +1270,22 @@ public sealed class MachineRuntime
             _getters[$"{id}.transmittance"] = () => c.Sand.Transmittance; // of its glass
             _getters[$"{id}.absorbed"] = () => c.Absorbed / 1e6;         // MJ
         }
+        foreach (var (id, se) in _stirlings)
+        {
+            _getters[$"{id}.hot-temperature"] = () => se.HotTemperature;   // °C at the hot end
+            _getters[$"{id}.cold-temperature"] = () => se.ColdTemperature; // °C, the air it rejects heat to
+            _getters[$"{id}.heat"] = () => se.HeatInput;                   // W landing on its aperture
+            _getters[$"{id}.radiation"] = () => se.Radiation;              // W its aperture gives back
+            _getters[$"{id}.heat-drawn"] = () => se.HeatDrawn;             // W through the heater into the engine
+            _getters[$"{id}.efficiency"] = () => se.Efficiency;            // f (1 - Tc/Th)
+            _getters[$"{id}.shaft-power"] = () => se.ShaftPower;           // W of work made
+            _getters[$"{id}.power"] = () => se.Power;                      // W into the load
+            _getters[$"{id}.rpm"] = () => se.Rpm;
+            _getters[$"{id}.work"] = () => se.Work;                        // J done on the load
+            _setters[$"{id}.load"] = v => se.Load = Math.Max(0, v);
+            _setters[$"{id}.conductance"] = v => se.Conductance = Math.Max(0, v);
+            _setters[$"{id}.carnot-fraction"] = v => se.CarnotFraction = Math.Clamp(v, 0, 1);
+        }
         foreach (var (id, d) in _doors)
         {
             _getters[$"{id}.open"] = () => d.Open;                            // 0 shut .. 1 wide
@@ -1551,6 +1586,7 @@ public sealed class MachineRuntime
         : _enclosures.TryGetValue(id, out var room) ? (room, Def.Part(id)!)
         : _crucibles.TryGetValue(id, out var pot) ? (pot, Def.Part(id)!)
         : _ponds.TryGetValue(id, out var pond) ? (pond, Def.Part(pond.Tank.Name)!)
+        : _stirlings.TryGetValue(id, out var engine) ? (engine, Def.Part(id)!)
         : throw new MachineFormatException($"{by.Kind} {by.Id} heats {id}, which is not a boiler, a sealed vessel or an enclosure", by.Location);
 
     private void AddHeatSource(IHeated target, Func<double> watts)
@@ -1579,6 +1615,7 @@ public sealed class MachineRuntime
         foreach (var p in _panes.Values) p.Step(dt);
         foreach (var p in _ponds.Values) p.Step(dt);
         foreach (var r in _roofs.Values) r.Step(dt);
+        foreach (var se in _stirlings.Values) se.Step(dt);
         foreach (var d in _doors.Values) d.Step(dt);
         foreach (var p in _gasPumps.Values) p.Step(dt);
         if (_zoneOfPart.Count > 0) SyncZones();

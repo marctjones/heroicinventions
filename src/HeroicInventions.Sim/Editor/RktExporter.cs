@@ -239,6 +239,11 @@ public static class RktExporter
                        $"#:coefficient {F(N("coefficient", 0.6))} {Mat()})\n";
             case "air-pump":
                 return $"  (air-pump {p.Id} {At()} #:from {Sym("from", "?")} #:to {Sym("to", "?")} #:speed {F(N("speed"))} #:until {F(N("until"))} {Mat()})\n";
+            case "stirling":
+                return $"  (stirling {p.Id} {At()} #:aperture {F(N("aperture"))} #:conductance {F(N("conductance"))} " +
+                       $"#:carnot-fraction {F(N("carnot-fraction", 0.35))} #:emissivity {F(N("emissivity", 0.9))} " +
+                       $"#:heat-capacity {F(N("heat-capacity", 10000))} #:inertia {F(N("inertia", 0.5))} #:load {F(N("load"))}" +
+                       Opt("temperature", "temperature") + $" {Mat()})\n";
             case "crucible":
                 return $"  (crucible {p.Id} {At()} #:sand {Sym("sand", "basalt")} #:charge {F(N("charge"))} #:spot {F(N("spot"))} " +
                        $"#:emissivity {F(N("emissivity", 0.9))}" + Opt("temperature", "temperature") + $" {Mat()})\n";

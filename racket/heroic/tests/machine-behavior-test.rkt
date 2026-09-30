@@ -1213,6 +1213,39 @@
     (check-= (final 'slim-oak.energy-taken) (taken 90e6 (/ (expt 0.08 4) 12) 0.04 k-slim) 0.5)
     (check-= (final 'column.energy-taken) (taken 5e6 (/ (* pi (expt 0.3 4)) 64) 0.15 k-col) 0.05)))
 
+;; Issue #65: hot-air engines on mirror heat on Mars. Predicted before the
+;; run (mars-stirling.rkt), from the traced Q = 1,508.8 W on each receiver:
+;; 98.5 / 40.2 / -27.7 C and 73.7 / 111.3 / 64.1 W; 55.8 W for the matched
+;; engine with a 20 C cold side.
+(test-case "Stirling engines on Mars: each hot end settles where eQ = radiation + K (T - Tc); the matched one gives the most; a warm cold side halves it"
+  (define sigma 5.670374e-8) (define e 0.9) (define f 0.35)
+  (define (steady Q K tc)                         ; bisection on eQ = e sigma (T^4 - Tc^4) + K (T - Tc), A = 1
+    (let loop ([lo tc] [hi 2000.0] [n 0])
+      (define mid (/ (+ lo hi) 2))
+      (cond [(> n 200) mid]
+            [(> (+ (* e sigma (- (expt mid 4) (expt tc 4))) (* K (- mid tc))) (* e Q)) (loop lo mid (add1 n))]
+            [else (loop mid hi (add1 n))])))
+  (define (power K T tc) (* f (- 1 (/ tc T)) K (- T tc)))
+  (for ([ambient '(-63 20)])
+    (define run (simulate 'mars-stirling #:seconds 8000 #:step 0.05 #:sample-dt 2000
+                          #:set (list '(scene clock-rate 0) (list 'scene 'ambient ambient))))
+    (define tc (+ ambient 273.15))
+    (define powers
+      (for/list ([engine '(small matched large)] [K '(3 9.36 36)])
+        (define (at field) (final-of run (list engine field)))
+        (define Q (at 'heat))
+        (check-= Q 1508.8 0.1 "six heliostats' light on the aperture")
+        (define T (steady Q K tc))
+        (check-= (at 'hot-temperature) (- T 273.15) 0.05 (format "~a's hot end at ~a C" engine ambient))
+        (check-= (at 'shaft-power) (power K T tc) 0.05 (format "~a's shaft power at ~a C" engine ambient))
+        (check-= (at 'rpm) (* (/ (power K T tc) 3) (/ 60 (* 2 pi))) 0.2 "turning its 3 N m load at P / 3 rad/s")
+        (at 'shaft-power)))
+    (when (= ambient -63)
+      (check-true (> (second powers) (max (first powers) (third powers))) "the matched engine gives the most")
+      (check-= (second powers) 111.29 0.05))
+    (when (= ambient 20)
+      (check-= (second powers) 55.97 0.1 "a room-warm cold side halves it"))))
+
 ;; ---------------------------------------------------------------------------
 ;; One real-game check for each remaining rigid-body machine, each against
 ;; the prediction in its .rkt header. Measured 2026-09-29 before writing;

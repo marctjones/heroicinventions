@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "hopper", "pane", "pond", "roof"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "hopper", "pane", "pond", "roof", "stirling"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -157,6 +157,15 @@ public static class PartTemplates
             new Dictionary<string, SExpr>
             {
                 ["from"] = new SSymbol("?"), ["to"] = new SSymbol("?"), ["speed"] = new SNumber(0.05), ["until"] = new SNumber(0),
+            },
+            [], null),
+        // a hot-air engine with a 1 m² receiver, sized for ten heliostats on Mars
+        "stirling" => new PartSpec(id, "stirling", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["aperture"] = new SNumber(1), ["conductance"] = new SNumber(14), ["carnot-fraction"] = new SNumber(0.35),
+                ["emissivity"] = new SNumber(0.9), ["heat-capacity"] = new SNumber(10000), ["inertia"] = new SNumber(0.5),
+                ["load"] = new SNumber(10), ["temperature"] = new SBool(false), ["height"] = new SNumber(0.5),
             },
             [], null),
         // 10 kg of basalt sand at a 50 cm² focal spot, waiting for a mirror

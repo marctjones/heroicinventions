@@ -121,6 +121,7 @@ public partial class BuildMode : Node3D
         ["mirror"] = ("Mirror", "Fire, water and steam", "Throws sunlight onto a pot. Pick the pot in the inspector."),
         ["door"] = ("Door or valve", "Structure", "An opening between two enclosures (or one and outside). Gas rushes through when it is open."),
         ["air-pump"] = ("Air pump", "Structure", "Pumps gas out of one zone into another, as an airlock's chamber is pumped down."),
+        ["stirling"] = ("Hot-air engine (Stirling)", "Wheels and power", "Driven by heat, not the air: aim mirrors or a fire at its receiver. Works on Mars."),
         ["crucible"] = ("Crucible of sand", "Fire, water and steam", "Sand at a focal spot. Mirrors melt it to glass, if they concentrate enough light: flat ones can't."),
         ["burning-mirror"] = ("Burning mirror", "Fire, water and steam", "A curved mirror (or lens) gathering the sun into a small spot. Pick its target in the inspector."),
         ["pane"] = ("Glass panes", "Structure", "Glass in an enclosure's wall or roof: the only way light gets in. Too thin for the pressure, it cracks."),

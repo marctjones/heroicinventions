@@ -39,7 +39,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane pond roof
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane pond roof stirling
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -388,6 +388,17 @@
     (unless (and (real? (prop 'image)) (> (prop 'image) 0)) (bad (format "#:image must be above 0, got ~e" (prop 'image))))
     (unless (and (real? (prop 'reflectivity)) (> (prop 'reflectivity) 0) (<= (prop 'reflectivity) 1))
       (bad (format "#:reflectivity must be in (0, 1], got ~e" (prop 'reflectivity)))))
+  (for ([p parts] #:when (eq? (part-kind p) 'stirling))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what) (error 'define-machine "~a:~a:~a: stirling ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (unless (and (real? (prop 'aperture)) (> (prop 'aperture) 0)) (bad (format "#:aperture must be above 0 m², got ~e" (prop 'aperture))))
+    (unless (and (real? (prop 'conductance)) (>= (prop 'conductance) 0)) (bad (format "#:conductance must be 0 W/K or more, got ~e" (prop 'conductance))))
+    (unless (and (real? (prop 'carnot-fraction)) (> (prop 'carnot-fraction) 0) (<= (prop 'carnot-fraction) 1))
+      (bad (format "#:carnot-fraction must be in (0, 1], got ~e" (prop 'carnot-fraction))))
+    (for ([k '(heat-capacity inertia)])
+      (unless (and (real? (prop k)) (> (prop k) 0)) (bad (format "#:~a must be above 0, got ~e" k (prop k)))))
+    (unless (and (real? (prop 'load)) (>= (prop 'load) 0)) (bad (format "#:load must be 0 N m or more, got ~e" (prop 'load)))))
   (for ([p parts] #:when (eq? (part-kind p) 'crucible))
     (define (prop k) (cdr (assq k (part-props p))))
     (define loc (part-loc p))
@@ -474,7 +485,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane pond roof
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane pond roof stirling
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt wake joint)
 
@@ -575,8 +586,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, ratchet, crucible, burning-mirror, hopper, pane, pond, roof) or link (pipe, connect, sealed-air)"
-    #:literals (hopper enclosure grip door air-pump cam digger float ratchet crucible burning-mirror pane pond roof tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt wake joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, ratchet, crucible, burning-mirror, hopper, pane, pond, roof, stirling) or link (pipe, connect, sealed-air)"
+    #:literals (stirling hopper enclosure grip door air-pump cam digger float ratchet crucible burning-mirror pane pond roof tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1124,6 +1135,38 @@
       #:attr info (zjinfo #'id 'air-pump #'from-z #'to-z)
       #:with expr #`(part 'id 'air-pump '(~? mat bronze) (list at.x at.y at.z)
                           (list (cons 'from 'from-z) (cons 'to 'to-z) (cons 'speed speed-v) (cons 'until (~? until-v 0)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+;; A hot-air (Stirling) engine (issue #65): driven by heat, not by the
+    ;; outside air, so it works on Mars. Its hot end is a receiver behind an
+    ;; #:aperture (m²) that mirrors and fires heat; it re-radiates through the
+    ;; aperture, ε σ A (T⁴ − T_air⁴), and passes Q = K (T_hot − T_cold) to the
+    ;; working gas through its heater, #:conductance K in W/K, the cold end at
+    ;; the air around it. Of Q it makes #:carnot-fraction (default 0.35) of
+    ;; Carnot's limit into work, f (1 − T_cold/T_hot) Q, on a flywheel of
+    ;; #:inertia (kg m², 0.5) against a #:load torque (N m); it settles where
+    ;; that work equals load × speed. #:heat-capacity is its hot end's (J/K,
+    ;; 10,000). Size K to the mirrors: too small and the receiver sits hot
+    ;; but passes little; too big and it runs barely warmer than the cold.
+    (pattern (stirling id:id
+                       (~alt (~once (~seq #:at at:vec3))
+                             (~once (~seq #:aperture aperture-v:expr))
+                             (~once (~seq #:conductance k-v:expr))
+                             (~optional (~seq #:carnot-fraction f-v:expr))
+                             (~optional (~seq #:emissivity eps-v:expr))
+                             (~optional (~seq #:heat-capacity c-v:expr))
+                             (~optional (~seq #:inertia i-v:expr))
+                             (~optional (~seq #:load load-v:expr))
+                             (~optional (~seq #:temperature temp-v:expr))
+                             (~optional (~seq #:material mat:id))) ...)
+      #:attr info (pinfo #'id 'stirling (attribute mat) '())
+      #:with expr #`(part 'id 'stirling '(~? mat iron) (list at.x at.y at.z)
+                          (list (cons 'aperture aperture-v) (cons 'conductance k-v)
+                                (cons 'carnot-fraction (~? f-v 0.35)) (cons 'emissivity (~? eps-v 0.9))
+                                (cons 'heat-capacity (~? c-v 10000)) (cons 'inertia (~? i-v 0.5))
+                                (cons 'load (~? load-v 0)) (cons 'temperature (~? temp-v #f))
+                                (cons 'height 0.5))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -2091,10 +2134,10 @@
     (for ([m infos] #:when (mrinfo? m))
       (define onto (syntax-e (mrinfo-onto m)))
       (define b (hash-ref parts onto #f))
-      (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure crucible)))
+      (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure crucible stirling)))
                   (for/or ([r infos]) (and (rfinfo? r) (eq? (rfinfo-kind r) 'pond) (eq? (syntax-e (rfinfo-id r)) onto)))
                   (for/or ([a infos]) (and (ainfo? a) (memq onto (map syntax-e (ainfo-tanks a))))))
-        (fail (format "~a is not a boiler, a tank in a sealed-air, an enclosure or a crucible; a mirror heats one of those" onto) (mrinfo-onto m))))
+        (fail (format "~a is not a boiler, a tank in a sealed-air, an enclosure, a crucible or a hot-air engine; a mirror heats one of those" onto) (mrinfo-onto m))))
     (for ([c infos] #:when (cpinfo? c))
       (define v (hash-ref parts (syntax-e (cpinfo-vessel c)) #f))
       (unless (and v (eq? (pinfo-kind v) 'tank))
