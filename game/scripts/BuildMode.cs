@@ -121,6 +121,8 @@ public partial class BuildMode : Node3D
         ["mirror"] = ("Mirror", "Fire, water and steam", "Throws sunlight onto a pot. Pick the pot in the inspector."),
         ["door"] = ("Door or valve", "Structure", "An opening between two enclosures (or one and outside). Gas rushes through when it is open."),
         ["air-pump"] = ("Air pump", "Structure", "Pumps gas out of one zone into another, as an airlock's chamber is pumped down."),
+        ["crucible"] = ("Crucible of sand", "Fire, water and steam", "Sand at a focal spot. Mirrors melt it to glass, if they concentrate enough light: flat ones can't."),
+        ["burning-mirror"] = ("Burning mirror", "Fire, water and steam", "A curved mirror (or lens) gathering the sun into a small spot. Pick its target in the inspector."),
         ["enclosure"] = ("Enclosure", "Structure", "A room with its own air: set its pressure, gases (o2, n2 …) and walls. Parts inside read its air instead of the planet's."),
         ["ratchet"] = ("Ratchet and pawl", "Wheels and power", "Lets a wheel turn one way only, a tooth at a time, and holds what tries to turn it back. Pick the wheel in the inspector."),
         ["cam"] = ("Peg wheel (cam)", "Wheels and power", "Pegs on a wheel lift a hammer as it turns, then let it fall. Pick the wheel in the inspector."),

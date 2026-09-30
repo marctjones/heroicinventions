@@ -46,6 +46,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Capstan> _capstans = [];
     private readonly Dictionary<string, Mirror> _mirrors = [];
     private readonly Dictionary<string, Enclosure> _enclosures = [];
+    private readonly Dictionary<string, Crucible> _crucibles = [];
     private readonly Dictionary<string, Door> _doors = [];
     private readonly Dictionary<string, GasPump> _gasPumps = [];
     // parts standing inside an enclosure, by id: the zone they read; everything else stands in Outside
@@ -104,6 +105,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Mirror> Mirrors => _mirrors;
     /// <summary>Enclosures (issue #39): boxes with their own air, which the parts inside read their conditions from.</summary>
     public IReadOnlyDictionary<string, Enclosure> Enclosures => _enclosures;
+    /// <summary>Crucibles of sand at a focal spot, melting to glass (issue #56).</summary>
+    public IReadOnlyDictionary<string, Crucible> Crucibles => _crucibles;
     /// <summary>Doors, hatches and valves between zones (issue #41).</summary>
     public IReadOnlyDictionary<string, Door> Doors => _doors;
     /// <summary>Pumps moving gas from one zone to another (issue #41).</summary>
@@ -213,8 +216,9 @@ public sealed class MachineRuntime
     private double _ambient = 20;
 
     /// <summary>A part's #:temperature if it gave one, else the ambient — water drawn from outside is at the air's temperature, or just above freezing in a frost.</summary>
-    private double TemperatureOr(PartSpec part, string key) =>
-        part.Props.GetValueOrDefault(key) is SNumber t ? t.Value : Math.Max(0, ZoneOf(part.Id).Temperature);
+    private double TemperatureOr(PartSpec part, string key, bool freezing = true) =>
+        part.Props.GetValueOrDefault(key) is SNumber t ? t.Value
+        : freezing ? Math.Max(0, ZoneOf(part.Id).Temperature) : ZoneOf(part.Id).Temperature;   // water is at least just thawed; sand is at the air's
 
     private readonly MaterialLibrary _materials;
 
@@ -284,7 +288,20 @@ public sealed class MachineRuntime
                             WearRate = part.Number("bearing-wear", 0),
                         });
                     break;
-                case "mirror": break; // built once what it heats exists
+                case "mirror" or "burning-mirror": break; // built once what it heats exists
+                case "crucible":
+                {
+                    SandKind sand;
+                    try { sand = SandKind.Named(part.Symbol("sand", "basalt")); }
+                    catch (ArgumentException e) { throw new MachineFormatException($"crucible {part.Id}: {e.Message}", part.Location); }
+                    double spot = part.Number("spot"), charge = part.Number("charge");
+                    if (spot <= 0 || charge < 0) throw new MachineFormatException($"crucible {part.Id}: #:spot must be above 0 and #:charge 0 or more", part.Location);
+                    _crucibles[part.Id] = new Crucible(part.Id, sand, charge, spot, TemperatureOr(part, "temperature", freezing: false))
+                    {
+                        Emissivity = part.Number("emissivity", 0.9),
+                    };
+                    break;
+                }
                 case "enclosure": break; // built first: every other part reads its zone
                 case "door":
                 {
@@ -382,14 +399,21 @@ public sealed class MachineRuntime
                                            part.Symbol("fuel-kind", "wood"), part.Number("efficiency", 0.5));
         }
 
-        foreach (var part in def.Parts.Where(p => p.Kind == "mirror"))
+        foreach (var part in def.Parts.Where(p => p.Kind is "mirror" or "burning-mirror"))
         {
             var onto = part.Symbol("onto", "");
             var (target, targetPart) = HeatedNamed(onto, part);
             var aim = new Vec3(targetPart.At.X, targetPart.At.Y + targetPart.Number("height", targetPart.Number("size-y", 0)) / 2, targetPart.At.Z);
-            var mirror = new Mirror(Sun, part.At, aim, part.Number("area"), part.Number("reflectivity", 0.85));
+            bool burning = part.Kind == "burning-mirror";
+            var mirror = new Mirror(Sun, part.At, aim, part.Number("area"), part.Number("reflectivity", 0.85))
+            {
+                Focusing = burning,
+                Image = burning ? part.Number("image") : part.Number("area"),
+            };
             _mirrors[part.Id] = mirror;
-            AddHeatSource(target, () => mirror.Power);
+            // a crucible's spot takes only the share of the mirror's image that falls on it
+            if (target is Crucible c) AddHeatSource(target, () => mirror.Power * Math.Min(1, c.Spot / mirror.Image));
+            else AddHeatSource(target, () => mirror.Power);
         }
         foreach (var (_, h) in _hearths) AddHeatSource(h.Target, () => h.HeatOut);
 
@@ -765,6 +789,7 @@ public sealed class MachineRuntime
     private void SetZones()
     {
         foreach (var (id, t) in _tanks) t.Zone = ZoneOf(id);
+        foreach (var (id, c) in _crucibles) c.Zone = ZoneOf(id);
         foreach (var (id, b) in _boilers) b.Zone = ZoneOf(id);
         foreach (var (id, h) in _hearths) h.Zone = ZoneOf(id);
         foreach (var (id, w) in _jetWheels) w.Zone = ZoneOf(id);
@@ -1052,6 +1077,18 @@ public sealed class MachineRuntime
                 _getters[$"{id}.{GasMix.Names[i]}-pressure"] = () => e.PartialPressure(gas) / 1000;                     // kPa (Dalton)
             }
         }
+        foreach (var (id, c) in _crucibles)
+        {
+            _getters[$"{id}.temperature"] = () => c.Temperature;         // °C
+            _getters[$"{id}.flux"] = () => c.Flux;                       // W/m² on the spot: C·I
+            _getters[$"{id}.power"] = () => c.HeatInput;                 // W landing on the spot
+            _getters[$"{id}.radiation"] = () => c.Radiation;             // W its hot face gives back
+            _getters[$"{id}.stagnation"] = () => c.Stagnation;           // °C it would stop at in this light
+            _getters[$"{id}.melted"] = () => c.Melted;                   // kg of glass
+            _getters[$"{id}.melt-time"] = () => double.IsNaN(c.MeltTime) ? -1 : c.MeltTime;   // s, when all of it had melted
+            _getters[$"{id}.transmittance"] = () => c.Sand.Transmittance; // of its glass
+            _getters[$"{id}.absorbed"] = () => c.Absorbed / 1e6;         // MJ
+        }
         foreach (var (id, d) in _doors)
         {
             _getters[$"{id}.open"] = () => d.Open;                            // 0 shut .. 1 wide
@@ -1331,6 +1368,7 @@ public sealed class MachineRuntime
         _boilers.TryGetValue(id, out var boiler) ? (boiler, Def.Part(id)!)
         : _tanks.TryGetValue(id, out var vessel) && vessel.Air is { } air ? (air, Def.Part(id)!)
         : _enclosures.TryGetValue(id, out var room) ? (room, Def.Part(id)!)
+        : _crucibles.TryGetValue(id, out var pot) ? (pot, Def.Part(id)!)
         : throw new MachineFormatException($"{by.Kind} {by.Id} heats {id}, which is not a boiler, a sealed vessel or an enclosure", by.Location);
 
     private void AddHeatSource(IHeated target, Func<double> watts)
@@ -1355,6 +1393,7 @@ public sealed class MachineRuntime
         foreach (var m in _mirrors.Values) m.Step(dt);
         foreach (var (target, sources) in _heatSources) target.HeatInput = _ownHeat[target] + sources.Sum(w => w());
         foreach (var e in _enclosures.Values) e.Step(dt);
+        foreach (var c in _crucibles.Values) c.Step(dt);
         foreach (var d in _doors.Values) d.Step(dt);
         foreach (var p in _gasPumps.Values) p.Step(dt);
         if (_zoneOfPart.Count > 0) SyncZones();

@@ -39,7 +39,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam ratchet
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam ratchet crucible burning-mirror
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -346,6 +346,22 @@
 
 ;; A mirror's numbers are checked when the machine is built.
 (define (check-mirrors parts)
+  (for ([p parts] #:when (eq? (part-kind p) 'burning-mirror))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what) (error 'define-machine "~a:~a:~a: burning-mirror ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (unless (and (real? (prop 'area)) (> (prop 'area) 0)) (bad (format "#:area must be above 0, got ~e" (prop 'area))))
+    (unless (and (real? (prop 'image)) (> (prop 'image) 0)) (bad (format "#:image must be above 0, got ~e" (prop 'image))))
+    (unless (and (real? (prop 'reflectivity)) (> (prop 'reflectivity) 0) (<= (prop 'reflectivity) 1))
+      (bad (format "#:reflectivity must be in (0, 1], got ~e" (prop 'reflectivity)))))
+  (for ([p parts] #:when (eq? (part-kind p) 'crucible))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what) (error 'define-machine "~a:~a:~a: crucible ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (unless (and (real? (prop 'spot)) (> (prop 'spot) 0)) (bad (format "#:spot must be above 0 m², got ~e" (prop 'spot))))
+    (unless (and (real? (prop 'charge)) (>= (prop 'charge) 0)) (bad (format "#:charge must be 0 kg or more, got ~e" (prop 'charge))))
+    (unless (and (real? (prop 'emissivity)) (> (prop 'emissivity) 0) (<= (prop 'emissivity) 1))
+      (bad (format "#:emissivity must be in (0, 1], got ~e" (prop 'emissivity)))))
   (for ([p parts] #:when (eq? (part-kind p) 'mirror))
     (define (prop k) (cdr (assq k (part-props p))))
     (define loc (part-loc p))
@@ -423,7 +439,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam ratchet
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam ratchet crucible burning-mirror
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt joint)
 
@@ -521,8 +537,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, ratchet) or link (pipe, connect, sealed-air)"
-    #:literals (enclosure grip door air-pump cam ratchet tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, ratchet, crucible, burning-mirror) or link (pipe, connect, sealed-air)"
+    #:literals (enclosure grip door air-pump cam ratchet crucible burning-mirror tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1016,6 +1032,48 @@
       #:attr info (zjinfo #'id 'air-pump #'from-z #'to-z)
       #:with expr #`(part 'id 'air-pump '(~? mat bronze) (list at.x at.y at.z)
                           (list (cons 'from 'from-z) (cons 'to 'to-z) (cons 'speed speed-v) (cons 'until (~? until-v 0)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A crucible of #:charge kg of #:sand (basalt, the default, or silica)
+    ;; at a focal spot #:spot m² across, for mirrors to melt into glass
+    ;; (issue #56). It absorbs what lands on its spot and its hot face
+    ;; re-radiates, ε σ A (T⁴ − T_air⁴) with #:emissivity ε (default 0.9),
+    ;; so it stops where σ (T⁴ − T_air⁴) = C·I, the flux on the spot:
+    ;; ten flat heliostats never melt basalt (1,200 °C); a burning mirror can.
+    ;; Basalt glass is dark (transmittance 0.05); silica's (1,700 °C) clear (0.9).
+    (pattern (crucible id:id
+                       (~alt (~once (~seq #:at at:vec3))
+                             (~once (~seq #:charge charge-v:expr))
+                             (~once (~seq #:spot spot-v:expr))
+                             (~optional (~seq #:sand sand-kind:id))
+                             (~optional (~seq #:emissivity eps-v:expr))
+                             (~optional (~seq #:temperature temp-v:expr))
+                             (~optional (~seq #:material mat:id))) ...)
+      #:fail-unless (memq (syntax-e (or (attribute sand-kind) #'basalt)) '(basalt silica)) "#:sand is basalt or silica"
+      #:attr info (pinfo #'id 'crucible (attribute mat) '())
+      #:with expr #`(part 'id 'crucible '(~? mat granite) (list at.x at.y at.z)
+                          (list (cons 'sand '(~? sand-kind basalt)) (cons 'charge charge-v) (cons 'spot spot-v)
+                                (cons 'emissivity (~? eps-v 0.9)) (cons 'temperature (~? temp-v #f)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A burning mirror (issue #56): curved, turned to face the sun square
+    ;; with #:onto at its focus, it gathers DNI x #:area x #:reflectivity
+    ;; (default 0.85) into a spot #:image m² across. A lens is the same, its
+    ;; #:reflectivity its glass's transmittance. A crucible whose spot is
+    ;; smaller than the image takes only its share of the light.
+    (pattern (burning-mirror id:id
+                             (~alt (~once (~seq #:at at:vec3))
+                                   (~once (~seq #:area area-v:expr))
+                                   (~once (~seq #:onto target:id))
+                                   (~once (~seq #:image image-v:expr))
+                                   (~optional (~seq #:reflectivity refl-v:expr))
+                                   (~optional (~seq #:material mat:id))) ...)
+      #:attr info (mrinfo #'id #'target)
+      #:with expr #`(part 'id 'burning-mirror '(~? mat bronze) (list at.x at.y at.z)
+                          (list (cons 'onto 'target) (cons 'area area-v) (cons 'image image-v)
+                                (cons 'reflectivity (~? refl-v 0.85)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1826,9 +1884,9 @@
     (for ([m infos] #:when (mrinfo? m))
       (define onto (syntax-e (mrinfo-onto m)))
       (define b (hash-ref parts onto #f))
-      (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure)))
+      (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure crucible)))
                   (for/or ([a infos]) (and (ainfo? a) (memq onto (map syntax-e (ainfo-tanks a))))))
-        (fail (format "~a is not a boiler, a tank in a sealed-air or an enclosure; a mirror heats one of those" onto) (mrinfo-onto m))))
+        (fail (format "~a is not a boiler, a tank in a sealed-air, an enclosure or a crucible; a mirror heats one of those" onto) (mrinfo-onto m))))
     (for ([c infos] #:when (cpinfo? c))
       (define v (hash-ref parts (syntax-e (cpinfo-vessel c)) #f))
       (unless (and v (eq? (pinfo-kind v) 'tank))

@@ -689,6 +689,32 @@ public class BuildSessionTests
         Assert.Equal(MachineWriter.Write(def), MachineWriter.Write(rebuilt.Document.ToMachineDef()));
     }
 
+    /// <summary>
+    /// Issue #56. A crucible under a steady flux settles at its stagnation
+    /// temperature, σ(T⁴ − T_air⁴) = C·I, whatever its emissivity: 100 kW/m²
+    /// in a 20 °C room gives (1e5/5.670374e-8 + 293.15⁴)^¼ = 1153.6 K,
+    /// 880.4 °C, below basalt's 1,200 °C, so nothing melts. And a charge
+    /// melts only once its latent heat is in: 1 kg of silica held at
+    /// 1,700 °C by a flux far past it melts as its surplus runs to 0.14 MJ.
+    /// </summary>
+    [Fact]
+    public void ACrucibleStopsWhereItReradiatesWhatItReceivesAndMeltsPastIt()
+    {
+        var pot = new Crucible("pot", SandKind.Named("basalt"), 1, 0.01, 20) { Emissivity = 0.6, HeatInput = 1000 };
+        for (int i = 0; i < 20_000; i++) pot.Step(1);
+        Assert.Equal(880.44, pot.Temperature, 2);
+        Assert.Equal(pot.Stagnation, pot.Temperature, 3);
+        Assert.Equal(0, pot.Melted);
+
+        var silica = new Crucible("s", SandKind.Named("silica"), 1, 0.001, 1700) { Emissivity = 1, HeatInput = 2000 };
+        double lossAtMelt = Crucible.StefanBoltzmann * 0.001 * (Math.Pow(1973.15, 4) - Math.Pow(293.15, 4));   // 859.1 W
+        double seconds = 140_000 / (2000 - lossAtMelt);
+        silica.Step(seconds * 0.5);
+        Assert.Equal(0.5, silica.Melted, 3);
+        Assert.Equal(1700, silica.Temperature, 9);
+        Assert.Equal(0.9, silica.Sand.Transmittance);
+    }
+
     /// <summary>Every existing scene is unchanged: Earth's air is the game's 287.05 J/(kg·K) dry air, 1.204118 kg/m³ at 20 °C.</summary>
     [Fact]
     public void EarthIsTheDefaultPlanetAndItsNumbersAreTheOldConstants()

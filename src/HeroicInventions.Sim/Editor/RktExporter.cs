@@ -223,6 +223,11 @@ public static class RktExporter
                        $"#:coefficient {F(N("coefficient", 0.6))} {Mat()})\n";
             case "air-pump":
                 return $"  (air-pump {p.Id} {At()} #:from {Sym("from", "?")} #:to {Sym("to", "?")} #:speed {F(N("speed"))} #:until {F(N("until"))} {Mat()})\n";
+            case "crucible":
+                return $"  (crucible {p.Id} {At()} #:sand {Sym("sand", "basalt")} #:charge {F(N("charge"))} #:spot {F(N("spot"))} " +
+                       $"#:emissivity {F(N("emissivity", 0.9))}" + Opt("temperature", "temperature") + $" {Mat()})\n";
+            case "burning-mirror":
+                return $"  (burning-mirror {p.Id} {At()} #:area {F(N("area"))} #:image {F(N("image"))} #:onto {Sym("onto", "?")} #:reflectivity {F(N("reflectivity", 0.85))} {Mat()})\n";
             case "counterpoise":
                 return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +
                        $"#:counterweight {F(N("counterweight"))} #:radius {F(N("radius"))} #:turn-deg {F(N("turn-deg"))} " +

@@ -35,7 +35,7 @@ public partial class MachineView
             beamMat.EmissionEnabled = true;
             beamMat.Emission = new Color(1f, 0.85f, 0.45f);
             beamMat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
-            var beam = Shapes.Rod(at, V(mirror.Target), side * 0.25f, beamMat);
+            var beam = Shapes.Rod(at, V(mirror.Target), mirror.Focusing ? 0.06f : side * 0.25f, beamMat);   // a burning mirror's light narrows to its focus
             beam.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
             AddChild(beam);
             _mirrorViews.Add((mirror, plate, beam, beamMat, faceMat));
@@ -55,7 +55,8 @@ public partial class MachineView
             faceMat.Roughness = 0.15f + 0.8f * dust;
             var toTarget = (V(mirror.Target) - plate.Position).Normalized();
             // the face turns to the bisector of sun and target; at night it rests facing its target
-            var normal = Runtime.Sun.Elevation > 0 ? (s + toTarget).Normalized() : toTarget;
+            // a burning mirror faces the sun square, its target at its focus
+            var normal = Runtime.Sun.Elevation <= 0 ? toTarget : mirror.Focusing ? s : (s + toTarget).Normalized();
             if (normal.LengthSquared() > 1e-6f)
             {
                 var up = Mathf.Abs(normal.Dot(Vector3.Up)) > 0.99f ? Vector3.Forward : Vector3.Up;

@@ -25,6 +25,15 @@ public sealed class Mirror(Sun sun, Vec3 at, Vec3 target, double area, double re
     public double Area { get; set; } = area;                   // m²
     public double Reflectivity { get; } = reflectivity;        // polished bronze ~0.6, silvered glass ~0.9
     public double Collected { get; private set; }              // J thrown onto the target so far
+    /// <summary>
+    /// A burning mirror (issue #56): curved, it faces the sun square with its
+    /// target at its focus (cos = 1) and gathers its light into a spot of
+    /// <see cref="Image"/> m². A flat heliostat's image is its own size.
+    /// </summary>
+    public bool Focusing { get; init; }
+    private double? _image;
+    /// <summary>m² of the patch its light lands on: a flat mirror's own area, a burning mirror's focal spot.</summary>
+    public double Image { get => _image ?? Area; init => _image = value; }
     private double _dust;
     /// <summary>The share of its light a coat of dust stops (issue #69): 0 clean. Settles in a storm; set it to 0 to clean it.</summary>
     public double Dust { get => _dust; set => _dust = Math.Clamp(value, 0, 1); }
@@ -34,6 +43,7 @@ public sealed class Mirror(Sun sun, Vec3 at, Vec3 target, double area, double re
     {
         get
         {
+            if (Focusing) return Sun.Elevation > 0 ? 1 : 0;
             var s = Sun.Direction;
             double tx = Target.X - At.X, ty = Target.Y - At.Y, tz = Target.Z - At.Z;
             double len = Math.Sqrt(tx * tx + ty * ty + tz * tz);

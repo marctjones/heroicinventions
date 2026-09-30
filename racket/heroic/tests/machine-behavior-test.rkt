@@ -1752,3 +1752,32 @@
       (check-= (value-at run '(wind-pawl steps) t) (floor (/ angle 30)) 0 (format "steps at ~a s: a tooth every 30 degrees (angle ~a)" t angle)))
     (check-= (value-at run '(wind-pawl steps) 10.0) 11 1 "eleven or twelve teeth in 10 s (360 degrees)")
     (check-= (final-of run '(wind-pawl pitch)) 30 1e-9 "360/12")))
+
+
+;; ---------------------------------------------------------------------------
+;; Glassmaking (issue #56). Working in racket/machines/solar-furnace.rkt.
+
+(test-case "A solar furnace: flat heliostats stop short of basalt's melting point; burning mirrors melt basalt in 4,895 s and silica in 930 s"
+  (define run (simulate 'solar-furnace #:seconds 6000 #:step 0.05 #:sample-dt 10 #:set '((scene clock-rate 0))))
+  (define σ 5.670374e-8)
+  (define air (+ 273.15 -63))
+  (define (stag flux) (- (expt (+ (/ flux σ) (expt air 4)) 1/4) 273.15))
+  ;; the sun at noon through Mars's clear sky
+  (define am (final-of run '(scene air-mass)))
+  (define dni (* 586.2 (expt 0.741 am)))
+  (check-= (final-of run '(scene irradiance)) dni 1e-9)
+  ;; flat: ten 1 m² heliostats on a 1 m² spot, C·I the sum of their DNI 0.85 cos(θ/2)
+  (define flat-flux (for/sum ([i (in-range 1 11)]) (* dni 0.85 (final-of run (list (string->symbol (format "h~a" i)) 'cosine)))))
+  (check-= (final-of run '(flat flux)) flat-flux 1e-6)
+  (check-= (final-of run '(flat temperature)) (stag flat-flux) 0.5 "it settles where it re-radiates all it gets")
+  (check-true (< (final-of run '(flat temperature)) 1200) "flat mirrors never melt basalt")
+  (check-= (final-of run '(flat melted)) 0 0)
+  ;; focused: 4,413 W on 50 cm² of 10 kg of basalt
+  (check-= (final-of run '(focused flux)) (/ (* dni 12 0.85) 0.005) 1e-3)
+  (check-= (final-of run '(focused stagnation)) 1713.2 0.2)
+  (check-= (final-of run '(focused melt-time)) 4895 10 "16.63 MJ in, less what the hot face radiates")
+  (check-= (final-of run '(focused melted)) 10 1e-9)
+  (check-= (final-of run '(focused transmittance)) 0.05 0 "dark basalt glass")
+  ;; clear: 2 kg of silica
+  (check-= (final-of run '(clear melt-time)) 930 5)
+  (check-= (final-of run '(clear transmittance)) 0.9 0 "clear silica glass"))
