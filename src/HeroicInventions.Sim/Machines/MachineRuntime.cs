@@ -93,6 +93,41 @@ public sealed class MachineRuntime
     /// "nozzle.jet-height" (cm). Every tank, boiler, rotor and pipe gets an
     /// entry; only a few fields (fire, water level) are settable.
     /// </summary>
+    /// <summary>
+    /// Takes over a previous build of (an edited version of) this machine's
+    /// running state, part by part (issue #75): every part that has the same
+    /// id and kind in both keeps its water, heat, speed and so on; new parts
+    /// start from their own initial state; the clock carries on. Settings the
+    /// edit changed stay changed (see <see cref="StateCopy"/>).
+    /// </summary>
+    public void TakeStateFrom(MachineRuntime previous)
+    {
+        // the original machine freshly built: what tells an edited setting from running state
+        var baseline = new MachineRuntime(previous.Def, _materials);
+        foreach (var field in typeof(MachineRuntime).GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic))
+        {
+            if (field.GetValue(previous) is not System.Collections.IDictionary running
+                || field.GetValue(baseline) is not System.Collections.IDictionary fresh
+                || field.GetValue(this) is not System.Collections.IDictionary edited) continue;
+            if (!field.FieldType.IsGenericType || field.FieldType.GetGenericArguments()[0] != typeof(string)) continue;
+            foreach (System.Collections.DictionaryEntry entry in edited)
+            {
+                if (!running.Contains(entry.Key) || !fresh.Contains(entry.Key)) continue;   // a new part: starts as built
+                object? r = running[entry.Key], b = fresh[entry.Key], e = entry.Value;
+                // (FloatValve, Func) and (SafetyValve, Boiler) pairs: carry the valve
+                if (r is System.Runtime.CompilerServices.ITuple rt && b is System.Runtime.CompilerServices.ITuple bt && e is System.Runtime.CompilerServices.ITuple et)
+                    (r, b, e) = (rt[0], bt[0], et[0]);
+                if (r is not null && b is not null && e is not null && e.GetType().IsClass) StateCopy.Carry(r, b, e);
+            }
+        }
+        StateCopy.Carry(previous.Sun, baseline.Sun, Sun);
+        StateCopy.Carry(previous.Fluids, baseline.Fluids, Fluids);
+        // sealed air belongs to its tanks, in the order they were declared
+        for (int i = 0; i < Math.Min(_air.Count, Math.Min(previous._air.Count, baseline._air.Count)); i++)
+            StateCopy.Carry(previous._air[i], baseline._air[i], _air[i]);
+        Time = previous.Time;
+    }
+
     public IReadOnlyDictionary<string, Func<double>> FieldGetters => _getters;
     public IReadOnlyDictionary<string, Action<double>> FieldSetters => _setters;
 
@@ -134,9 +169,12 @@ public sealed class MachineRuntime
     private double TemperatureOr(PartSpec part, string key) =>
         part.Props.GetValueOrDefault(key) is SNumber t ? t.Value : Math.Max(0, _ambient);
 
+    private readonly MaterialLibrary _materials;
+
     public MachineRuntime(MachineDef def, MaterialLibrary materials)
     {
         Def = def;
+        _materials = materials;
         _ambient = def.Ambient;
         Sun = def.Sun is { } sun ? new Sun(sun.Latitude, sun.Day, sun.Time) : new Sun(31.2, 172, 12);
 

@@ -40,6 +40,77 @@ public class MachineFileTests
     private static MachineDef Load(string name) =>
         MachineDef.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "machines", name + ".machine")));
 
+    /// <summary>
+    /// Editing a machine while it runs (issue #75): rebuilt mid-run with an
+    /// unrelated part added, it takes over the running state and carries on
+    /// exactly as if it had never been touched: every original field matches
+    /// an untouched run, step for step.
+    /// </summary>
+    [Theory]
+    [InlineData("water-mill-race")]
+    [InlineData("heron-temple-doors")]
+    [InlineData("branca-steam-wheel")]
+    [InlineData("kitchen-smoke-jack")]
+    [InlineData("solar-steam-wheel")]
+    [InlineData("tank-leaks")]
+    [InlineData("sluice-demo")]
+    [InlineData("windmills")]
+    [InlineData("water-wheels")]
+    [InlineData("boiler-safety")]
+    [InlineData("bellows-forge")]
+    [InlineData("fire-and-water")]
+    [InlineData("hama-noria")]
+    [InlineData("newcomen-hearth")]
+    public void EditingAMachineMidRunKeepsItsState(string name)
+    {
+        var def = Load(name);
+        var untouched = new MachineRuntime(def, Materials);
+        var before = new MachineRuntime(def, Materials);
+        for (int i = 0; i < 1500; i++) { untouched.Step(0.02); before.Step(0.02); }   // 30 s
+
+        var extra = new PartSpec("new-tank", "tank", "oak", new Vec3(50, 0, 50),
+            new Dictionary<string, SExpr> { ["area"] = new SNumber(1), ["height"] = new SNumber(1), ["water"] = new SNumber(0.2) },
+            [new PortSpec("inlet", "water", 0)], null);
+        var edited = new MachineDef
+        {
+            Name = def.Name, Source = def.Source, Ambient = def.Ambient, Sun = def.Sun,
+            Parts = [.. def.Parts, extra], Pipes = def.Pipes, Connects = def.Connects, SealedAir = def.SealedAir,
+            Ropes = def.Ropes, Arbors = def.Arbors, Meshes = def.Meshes, Lifts = def.Lifts,
+            Sources = def.Sources, Channels = def.Channels, Cylinders = def.Cylinders,
+        };
+        var after = new MachineRuntime(edited, Materials);
+        after.TakeStateFrom(before);
+        Assert.Equal(untouched.Time, after.Time, 9);
+        for (int i = 0; i < 1500; i++) { untouched.Step(0.02); after.Step(0.02); }   // 30 s more
+
+        foreach (var (field, get) in untouched.FieldGetters)
+            Assert.True(Math.Abs(get() - after.FieldGetters[field]()) <= 1e-9 * Math.Max(1, Math.Abs(get())),
+                        $"{name} {field}: {get()} untouched, {after.FieldGetters[field]()} after the edit");
+        Assert.Equal(200, after.Tanks["new-tank"].WaterVolume * 1000, 6);   // the new part starts as built
+    }
+
+    /// <summary>An edited setting stays as edited: the steam wheel's load raised mid-run, it keeps its speed and slows toward the new balance.</summary>
+    [Fact]
+    public void AnEditedSettingSurvivesTheStateCarryOver()
+    {
+        var def = Load("branca-steam-wheel");
+        var running = new MachineRuntime(def, Materials);
+        for (int i = 0; i < 30000; i++) running.Step(0.01);   // 300 s: up to speed
+        double rpm = running.JetWheels["wheel"].Rpm;
+        var heavier = new MachineDef
+        {
+            Name = def.Name, Source = def.Source, Ambient = def.Ambient, Sun = def.Sun,
+            Parts = def.Parts.Select(p => p.Id == "wheel" ? p with { Props = new Dictionary<string, SExpr>(p.Props) { ["load"] = new SNumber(0.01) } } : p).ToList(),
+            Pipes = def.Pipes, Connects = def.Connects, SealedAir = def.SealedAir,
+        };
+        var edited = new MachineRuntime(heavier, Materials);
+        edited.TakeStateFrom(running);
+        Assert.Equal(0.01, edited.JetWheels["wheel"].Load);
+        Assert.Equal(rpm, edited.JetWheels["wheel"].Rpm, 9);
+        for (int i = 0; i < 6000; i++) edited.Step(0.01);
+        Assert.True(edited.JetWheels["wheel"].Rpm < rpm, "a heavier load slows it");
+    }
+
     [Fact]
     public void WorldFilesPlaceMachinesByLabelAndRefuseHeadings()
     {
