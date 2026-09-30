@@ -29,15 +29,23 @@ public sealed class EditorDocument
     private int _nextPipeId = 1;
 
     public string Name { get; set; } = "untitled";
-    public string? Source { get; private set; }
+    public string? Source { get; set; }
     public double Ambient { get; set; } = 20;   // °C
     public SunSpec? Sun { get; set; }
     public IReadOnlyDictionary<string, PartSpec> Parts => _parts;
     public IReadOnlyDictionary<string, PipeSpec> Pipes => _pipes;
     public IReadOnlyList<ConnectSpec> Connects => _connects;
+    public IReadOnlyList<RopeSpec> Ropes => _ropes;
+    public IReadOnlyList<MeshSpec> Meshes => _meshes;
+    public IReadOnlyList<ArborSpec> Arbors => _arbors;
+    public IReadOnlyList<SealedAirSpec> SealedAir => _sealedAir;
+    public IReadOnlyList<CylinderSpec> Cylinders => _cylinders;
+    public IReadOnlyList<SourceSpec> Sources => _sources;
+    public IReadOnlyList<ChannelSpec> Channels => _channels;
+    public IReadOnlyList<LiftSpec> Lifts => _lifts;
 
-    // Everything this editor doesn't yet author (ropes, lifts, channels, ...)
-    // is preserved unedited on a load/save round trip rather than dropped.
+    // Links between parts: each has an Add method here and goes through
+    // RemoveLink / RemovePart, so an edit never leaves a rope or mesh naming a part that is gone.
     private IReadOnlyList<RopeSpec> _ropes = [];
     private IReadOnlyList<SourceSpec> _sources = [];
     private IReadOnlyList<ChannelSpec> _channels = [];
@@ -79,14 +87,71 @@ public sealed class EditorDocument
         return part;
     }
 
-    /// <summary>Removes a part and every pipe/connect touching it — dragging a part off the palette back out, or deleting one.</summary>
+    /// <summary>
+    /// Removes a part and every link naming it — pipes, connects, ropes (as an end,
+    /// drum or pulley), meshes, sealed-air groups, cylinders, lifts, inflows and
+    /// channels — so a deleted part leaves nothing dangling for (check) to trip on.
+    /// An arbor keeps its other wheels, unless fewer than two remain.
+    /// </summary>
     public void RemovePart(string id)
     {
         _parts.Remove(id);
         foreach (var pipeId in _pipes.Where(kv => kv.Value.From.Part == id || kv.Value.To.Part == id).Select(kv => kv.Key).ToList())
             _pipes.Remove(pipeId);
         _connects.RemoveAll(c => c.A.Part == id || c.B.Part == id);
+        _ropes = _ropes.Where(r => r.From.Part != id && r.To.Part != id && r.WindOn != id && r.Turns != id).ToList();
+        _meshes = _meshes.Where(m => m.A != id && m.B != id).ToList();
+        _arbors = _arbors.Select(a => a with { Parts = a.Parts.Where(p => p != id).ToList() }).Where(a => a.Parts.Count >= 2).ToList();
+        _sealedAir = _sealedAir.Select(a => a with { Tanks = a.Tanks.Where(t => t != id).ToList() }).Where(a => a.Tanks.Count >= 2).ToList();
+        _cylinders = _cylinders.Where(c => c.Piston != id && c.Boiler != id).ToList();
+        _lifts = _lifts.Where(l => l.By != id && l.From != id && l.To != id).ToList();
+        _sources = _sources.Where(s => s.Into != id).ToList();
+        _channels = _channels.Where(c => c.From.Part != id && c.To?.Part != id).ToList();
     }
+
+    /// <summary>True if a part or a link (pipe, rope, inflow, channel, lift, cylinder) has this id — what a prop like a sluice's #:on or a wheel's #:race may name.</summary>
+    public bool HasName(string id) =>
+        _parts.ContainsKey(id) || _pipes.ContainsKey(id) || _ropes.Any(r => r.Id == id) || _sources.Any(s => s.Id == id) ||
+        _channels.Any(c => c.Id == id) || _lifts.Any(l => l.Id == id) || _cylinders.Any(c => c.Id == id);
+
+    /// <summary>Removes the pipe, rope, inflow, channel, lift or cylinder with this id; false if none has it.</summary>
+    public bool RemoveLink(string id)
+    {
+        if (_pipes.Remove(id)) return true;
+        int before = _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count;
+        _ropes = _ropes.Where(r => r.Id != id).ToList();
+        _sources = _sources.Where(s => s.Id != id).ToList();
+        _channels = _channels.Where(c => c.Id != id).ToList();
+        _lifts = _lifts.Where(l => l.Id != id).ToList();
+        _cylinders = _cylinders.Where(c => c.Id != id).ToList();
+        return _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count != before;
+    }
+
+    /// <summary>Removes the mesh joining these two gears; false if they are not meshed.</summary>
+    public bool RemoveMesh(string a, string b)
+    {
+        int n = _meshes.Count;
+        _meshes = _meshes.Where(m => !(m.A == a && m.B == b || m.A == b && m.B == a)).ToList();
+        return _meshes.Count != n;
+    }
+
+    /// <summary>Takes a wheel off every arbor it is fixed on (an arbor left with one wheel goes).</summary>
+    public bool RemoveFromArbor(string part)
+    {
+        int n = _arbors.Sum(a => a.Parts.Count);
+        _arbors = _arbors.Select(a => a with { Parts = a.Parts.Where(p => p != part).ToList() }).Where(a => a.Parts.Count >= 2).ToList();
+        return _arbors.Sum(a => a.Parts.Count) != n;
+    }
+
+    /// <summary>Adds or replaces a port on a part (a second outlet on a tank); ports are keyed by name.</summary>
+    public PartSpec SetPort(string id, PortSpec port) =>
+        Replace(id, p => p with { Ports = [.. p.Ports.Where(x => x.Name != port.Name), port] });
+
+    public PartSpec RemovePort(string id, string name) =>
+        Replace(id, p => p with { Ports = p.Ports.Where(x => x.Name != name).ToList() });
+
+    /// <summary>Replaces a part outright — for a part whose shape came from a file, not from a template.</summary>
+    public PartSpec SetProps(string id, IReadOnlyDictionary<string, SExpr> props) => Replace(id, p => p with { Props = props });
 
     public PartSpec Move(string id, Vec3 to) => Replace(id, p => p with { At = to });
     public PartSpec SetMaterial(string id, string material) => Replace(id, p => p with { Material = material });
@@ -98,6 +163,10 @@ public sealed class EditorDocument
     /// <summary>Sets a prop that names another part (a mirror's #:onto, a float valve's #:on), keeping every other prop as is.</summary>
     public PartSpec SetName(string id, string key, string target) =>
         Replace(id, p => p with { Props = Merge(p.Props, key, new SSymbol(target)) });
+
+    /// <summary>Sets a prop to any value (a flag, a string, a list, a symbol that is not a part), keeping every other prop as is.</summary>
+    public PartSpec SetValue(string id, string key, SExpr value) =>
+        Replace(id, p => p with { Props = Merge(p.Props, key, value) });
 
     private static IReadOnlyDictionary<string, SExpr> Merge(IReadOnlyDictionary<string, SExpr> props, string key, SExpr value)
     {
@@ -227,6 +296,47 @@ public sealed class EditorDocument
     {
         var spec = new LiftSpec(id, by, from, to, current, null) { CurrentFrom = currentFrom };
         _lifts = [.. _lifts, spec];
+        return spec;
+    }
+
+    /// <summary>Adds a rope clause unchecked — see <see cref="AddPipe"/>. Ids are unique across ropes.</summary>
+    public RopeSpec AddRope(RopeSpec rope)
+    {
+        if (_ropes.Any(r => r.Id == rope.Id)) throw new InvalidOperationException($"a rope named {rope.Id} already exists");
+        _ropes = [.. _ropes, rope];
+        return rope;
+    }
+
+    /// <summary>Puts two gears in mesh (the same pair twice is a no-op).</summary>
+    public MeshSpec AddMesh(string a, string b)
+    {
+        var spec = new MeshSpec(a, b, null);
+        if (!_meshes.Any(m => m.A == a && m.B == b || m.A == b && m.B == a)) _meshes = [.. _meshes, spec];
+        return spec;
+    }
+
+    /// <summary>Fixes wheels on one axle; the first carries the bearing and any drive.</summary>
+    public ArborSpec AddArbor(IReadOnlyList<string> parts)
+    {
+        var spec = new ArborSpec(parts, null);
+        _arbors = [.. _arbors, spec];
+        return spec;
+    }
+
+    /// <summary>Joins tanks into one sealed air space.</summary>
+    public SealedAirSpec AddSealedAir(IReadOnlyList<string> tanks, double tubeVolume, double heatLoss = 0, double heatCapacity = 0)
+    {
+        var spec = new SealedAirSpec(tanks, tubeVolume, null, heatLoss, heatCapacity);
+        _sealedAir = [.. _sealedAir, spec];
+        return spec;
+    }
+
+    /// <summary>Joins a piston to the boiler that feeds its cylinder.</summary>
+    public CylinderSpec AddCylinder(string id, string piston, string boiler, double? injectionTemperature)
+    {
+        if (_cylinders.Any(c => c.Id == id)) throw new InvalidOperationException($"a cylinder named {id} already exists");
+        var spec = new CylinderSpec(id, piston, boiler, injectionTemperature, null);
+        _cylinders = [.. _cylinders, spec];
         return spec;
     }
 

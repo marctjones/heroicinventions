@@ -12,6 +12,11 @@ namespace HeroicInventions.Sim.Editor;
 /// </summary>
 public static class Units
 {
+    /// <summary>True when the token reads as a number (with or without a unit); a plain name such as <c>coal</c> or <c>y</c> is not.</summary>
+    public static bool LooksNumeric(string token) =>
+        token.Length > 0 && (char.IsAsciiDigit(token[0]) ||
+            token.Length > 1 && token[0] is '.' or '-' or '+' && (char.IsAsciiDigit(token[1]) || token[1] == '.'));
+
     public static double Parse(string token, string context)
     {
         int split = 0;

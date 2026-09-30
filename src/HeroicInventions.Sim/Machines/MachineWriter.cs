@@ -58,7 +58,7 @@ public static class MachineWriter
             ? Tagged("srcloc", new SString("<editor>"), Num(0), Num(0))
             : Tagged("srcloc", new SString(loc.File), Num(loc.Line), Num(loc.Column));
 
-    private static SExpr PartClause(PartSpec p) =>
+    public static SExpr PartClause(PartSpec p) =>
         Tagged("part", Sym(p.Id), Sym(p.Kind),
             Tagged("material", Sym(p.Material)),
             new SList([Sym("at"), .. ((SList)Vec3(p.At)).Items]),

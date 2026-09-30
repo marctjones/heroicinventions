@@ -33,11 +33,22 @@ namespace HeroicInventions.Sim.Editor;
 ///   (wheel|screw|fixture id #:catalogue entry-id #:at (x y z) [#:material M])
 ///   (pipe id from.port to.port #:conductance C)
 ///   (connect a.port b.port)
+///   (rope id #:from (part x y z) #:to (part x y z) #:length L [#:over ((x y z) ...)] [#:wind-on drum] [#:turns pulley]
+///         [#:release-deg d] [#:material M] [#:diameter D] [#:nocked #t])   ; ends are points in each part's own frame; "world" is fixed
+///   (mesh gear-a gear-b)                          ; two gears in mesh
+///   (arbor wheel wheel ...)                       ; wheels fixed on one axle; the first carries the bearing and drive
+///   (sealed-air (tank tank ...) #:tube V [#:heat-loss W/K] [#:heat-capacity J/K])   ; tanks sharing one sealed air space
+///   (atmospheric-cylinder id #:piston p #:steam-from boiler [#:injection-temperature C])
+///   (inflow id #:into tank #:flow m3/s) (channel id from.port to.port|off ...) (lift id #:by part #:from tank #:to tank)
+///   (port part name kind height) (remove-port part name)   ; add or replace a port on a part
+///   (unmesh a b) (unarbor part)                   ; take a link apart again
+///   (source "text")                               ; where the machine comes from
+///   (raw-part (part id kind ...))                 ; a part clause verbatim, for shaped parts no catalogue entry describes
 ///   (sun [#:latitude deg] [#:day n] [#:time hours])   ; the scene under the sun (default Alexandria, midsummer, noon)
 ///   (ambient °C)           ; the scene's air: boilers cool to it, water and air arrive at it, tanks freeze below 0
 ///   (move id (x y z))
-///   (set id #:prop value)
-///   (remove id)
+///   (set id #:prop value)   ; a number, a symbol (#:axis y), a flag (#:round #t) or the name of another part (#:onto boiler)
+///   (remove id)             ; a part, with every link on it; or a pipe, rope, inflow, channel, lift or cylinder by its own id
 ///   (snap a.port b.port)         ; picks pipe vs connect by port kind (PortRules)
 ///   (undo) (redo)
 ///   (check)                      ; builds MachineDef + MachineRuntime; reports MachineFormatException, with source location
@@ -93,6 +104,17 @@ public sealed class BuildSession
         "inflow" => CreateInflow(cmd),
         "channel" => CreateChannel(cmd),
         "lift" => CreateLift(cmd),
+        "rope" => CreateRope(cmd),
+        "mesh" => CreateMesh(cmd),
+        "arbor" => CreateArbor(cmd),
+        "sealed-air" => CreateSealedAir(cmd),
+        "atmospheric-cylinder" => CreateCylinder(cmd),
+        "port" => SetPort(cmd),
+        "remove-port" => RemovePortCmd(cmd),
+        "unmesh" => Unmesh(cmd),
+        "unarbor" => Unarbor(cmd),
+        "source" => SetSource(cmd),
+        "raw-part" => RawPart(cmd),
         "move" => Move(cmd),
         "ambient" => SetAmbient(cmd),
         "sun" => SetSun(cmd),
@@ -267,6 +289,134 @@ public sealed class BuildSession
         return $"lift {id}: {by} raises {from} -> {to}";
     }
 
+    /// <summary>A (part x y z) rope end: a point in the part's own frame.</summary>
+    private static RopeEnd RopeEndOf(SExpr e, string context)
+    {
+        if (e is not SList { Items.Count: 4 } l || l.Items[0] is not SSymbol part)
+            throw new FormatException($"{context}: expected (part x y z)");
+        return new RopeEnd(part.Name, new Vec3(Num(l.Items[1], context), Num(l.Items[2], context), Num(l.Items[3], context)));
+    }
+
+    private static string Name(SExpr e, string context) =>
+        e is SSymbol s ? s.Name : throw new FormatException($"{context}: expected a name");
+
+    private string CreateRope(SList cmd)
+    {
+        string id = Id(cmd, 1);
+        var from = RopeEndOf(RequireKw(cmd, "from"), $"rope {id} #:from");
+        var to = RopeEndOf(RequireKw(cmd, "to"), $"rope {id} #:to");
+        double length = Num(RequireKw(cmd, "length"), $"rope {id}");
+        var over = Kw(cmd, "over") is SList ol
+            ? ol.Items.Select(p => VecOf(p, $"rope {id} #:over")).ToList()
+            : new List<Vec3>();
+        string? windOn = Kw(cmd, "wind-on") is SSymbol w ? w.Name : null;
+        string? turns = Kw(cmd, "turns") is SSymbol t ? t.Name : null;
+        double? release = Kw(cmd, "release-deg") is SNumber r ? r.Value : null;
+        string material = Kw(cmd, "material") is SSymbol m ? m.Name : "hemp";
+        double diameter = Kw(cmd, "diameter") is { } d ? Num(d, $"rope {id} #:diameter") : 0.02;
+        bool nocked = Kw(cmd, "nocked") is SBool { Value: true };
+        var spec = new RopeSpec(id, from, to, length, over, windOn, release, material, diameter, null) { Nocked = nocked, Turns = turns };
+        Snapshot();
+        Document.AddRope(spec);
+        return $"rope {id}: {from.Part} to {to.Part}, {length} m";
+    }
+
+    private string CreateMesh(SList cmd)
+    {
+        string a = Id(cmd, 1), b = Id(cmd, 2);
+        Snapshot();
+        Document.AddMesh(a, b);
+        return $"meshed {a} with {b}";
+    }
+
+    private string Unmesh(SList cmd)
+    {
+        string a = Id(cmd, 1), b = Id(cmd, 2);
+        Snapshot();
+        if (!Document.RemoveMesh(a, b)) throw new InvalidOperationException($"{a} and {b} are not meshed");
+        return $"unmeshed {a} from {b}";
+    }
+
+    private string CreateArbor(SList cmd)
+    {
+        var parts = cmd.Items.Skip(1).Select(e => Name(e, "arbor")).ToList();
+        if (parts.Count < 2) throw new FormatException("(arbor a b …) needs at least two wheels");
+        Snapshot();
+        Document.AddArbor(parts);
+        return $"arbor: {string.Join(", ", parts)}";
+    }
+
+    private string Unarbor(SList cmd)
+    {
+        string part = Id(cmd, 1);
+        Snapshot();
+        if (!Document.RemoveFromArbor(part)) throw new InvalidOperationException($"{part} is not on an arbor");
+        return $"{part} taken off its arbor";
+    }
+
+    private string CreateSealedAir(SList cmd)
+    {
+        if (cmd.Items.ElementAtOrDefault(1) is not SList tl)
+            throw new FormatException("(sealed-air (tank tank …) #:tube V)");
+        var tanks = tl.Items.Select(e => Name(e, "sealed-air")).ToList();
+        if (tanks.Count < 2) throw new FormatException("(sealed-air …) needs at least two tanks to share air");
+        double tube = Kw(cmd, "tube") is { } tv ? Num(tv, "sealed-air #:tube") : 0;
+        double loss = Kw(cmd, "heat-loss") is { } hl ? Num(hl, "sealed-air #:heat-loss") : 0;
+        double capacity = Kw(cmd, "heat-capacity") is { } hc ? Num(hc, "sealed-air #:heat-capacity") : 0;
+        Snapshot();
+        Document.AddSealedAir(tanks, tube, loss, capacity);
+        return $"sealed air over {string.Join(", ", tanks)}";
+    }
+
+    private string CreateCylinder(SList cmd)
+    {
+        string id = Id(cmd, 1);
+        string piston = Name(RequireKw(cmd, "piston"), $"atmospheric-cylinder {id} #:piston");
+        string boiler = Name(RequireKw(cmd, "steam-from"), $"atmospheric-cylinder {id} #:steam-from");
+        double? injection = Kw(cmd, "injection-temperature") is { } t ? Num(t, $"atmospheric-cylinder {id}") : null;
+        Snapshot();
+        Document.AddCylinder(id, piston, boiler, injection);
+        return $"cylinder {id}: {piston} fed by {boiler}";
+    }
+
+    /// <summary>(port part name kind height): adds a port (or replaces the one with that name), height above the part's origin.</summary>
+    private string SetPort(SList cmd)
+    {
+        string part = Id(cmd, 1), name = Id(cmd, 2), kind = Id(cmd, 3);
+        double height = Num(cmd.Items.ElementAtOrDefault(4) ?? throw new FormatException("(port part name kind height)"), "port");
+        Snapshot();
+        Document.SetPort(part, new PortSpec(name, kind, height));
+        return $"{part}.{name} ({kind}) at {height} m";
+    }
+
+    private string RemovePortCmd(SList cmd)
+    {
+        string part = Id(cmd, 1), name = Id(cmd, 2);
+        Snapshot();
+        Document.RemovePort(part, name);
+        return $"removed {part}.{name}";
+    }
+
+    private string SetSource(SList cmd)
+    {
+        string text = cmd.Items.ElementAtOrDefault(1) is SString s ? s.Value : throw new FormatException("(source \"text\")");
+        Snapshot();
+        Document.Source = text;
+        return "source set";
+    }
+
+    /// <summary>(raw-part (part id kind …)): a part clause exactly as a .machine file writes it. For a shaped part (a gear the Racket generator made) that no catalogue entry describes.</summary>
+    private string RawPart(SList cmd)
+    {
+        if (cmd.Items.ElementAtOrDefault(1) is not SList { Head: "part" } clause)
+            throw new FormatException("(raw-part (part id kind …))");
+        var def = MachineDef.Parse($"(machine raw {SExprWriter.Print(clause)})");
+        var part = def.Parts.Single();
+        Snapshot();
+        Document.AddPart(part);
+        return $"placed {part.Id} ({part.Kind})";
+    }
+
     /// <summary>(sun #:latitude deg #:day n #:time hours): where and when the scene stands; unspecified fields keep their current (or default) values.</summary>
     private string SetSun(SList cmd)
     {
@@ -315,26 +465,37 @@ public sealed class BuildSession
             Document.SetMaterial(id, material);
             return $"set {id} #:material {material}";
         }
-        // A name, where the prop names another part: (set m1 #:onto boiler)
-        if (cmd.Items[3] is SSymbol name && !double.TryParse(name.Name, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _)
-            && Document.Parts.TryGetValue(id, out var named) && named.Props.GetValueOrDefault(key) is SSymbol or SBool)
+        var value = cmd.Items[3];
+        Document.Parts.TryGetValue(id, out var part);
+        var current = part?.Props.GetValueOrDefault(key);
+        switch (value)
         {
-            if (!Document.Parts.ContainsKey(name.Name))
-                throw new InvalidOperationException($"no part named {name.Name}");
-            Snapshot();
-            Document.SetName(id, key, name.Name);
-            return $"set {id} #:{key} {name.Name}";
+            case SBool or SString or SList:
+                Snapshot();
+                Document.SetValue(id, key, value);
+                return $"set {id} #:{key} {SExprWriter.Print(value)}";
+            case SSymbol name when !Units.LooksNumeric(name.Name):
+                // A prop that points at another part (a mirror's #:onto, a pump's #:from) must point at one; any other symbol (#:axis y, #:fuel-kind coal) is taken as written.
+                if ((current is SSymbol { Name: "?" } || PartReferenceKeys.Contains(key)) && !Document.HasName(name.Name))
+                    throw new InvalidOperationException($"no part or link named {name.Name}");
+                Snapshot();
+                Document.SetName(id, key, name.Name);
+                return $"set {id} #:{key} {name.Name}";
         }
-        double value = Num(cmd.Items[3], "set");
+        double number = Num(value, "set");
         Snapshot();
-        Document.SetProp(id, key, value);
-        return $"set {id} #:{key} {value}";
+        Document.SetProp(id, key, number);
+        return $"set {id} #:{key} {number}";
     }
+
+    /// <summary>Props whose value names another part, checked against the document when set.</summary>
+    private static readonly HashSet<string> PartReferenceKeys = ["on", "onto", "heats", "over", "from", "to", "vessel", "into", "tail", "race"];
 
     private string Remove(SList cmd)
     {
         string id = Id(cmd, 1);
         Snapshot();
+        if (!Document.Parts.ContainsKey(id) && Document.RemoveLink(id)) return $"removed {id}";
         Document.RemovePart(id);
         return $"removed {id}";
     }
