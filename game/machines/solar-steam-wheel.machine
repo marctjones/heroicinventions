@@ -2,7 +2,7 @@
 (machine solar-steam-wheel
   (source "Branca (1629) and Salomon de Caus (1615)")
   (sun (latitude 31.2) (day 172) (time 12.0))
-  (part stand post (material limestone) (at 0.0 0.0 0.0) (props (size-x 0.3) (size-y 1.0) (size-z 0.3) (round #f)) (ports) (srcloc "racket/machines/solar-steam-wheel.rkt" 15 2))
+  (part stand post (material limestone) (at 0.0 0.0 0.0) (props (size-x 0.3) (size-y 1.0) (size-z 0.3) (round #f) (breakable #f)) (ports) (srcloc "racket/machines/solar-steam-wheel.rkt" 15 2))
   (part pot boiler (material bronze) (at 0.0 1.0 0.0) (props (radius 0.12) (height 0.2) (water 1.0) (fire 0.0) (temperature 20.0)) (ports (steam steam 0.2)) (srcloc "racket/machines/solar-steam-wheel.rkt" 16 2))
   (part m1 mirror (material bronze) (at 2.0 0.3 0.0) (props (onto pot) (area 1.0) (reflectivity 0.85)) (ports) (srcloc "racket/machines/solar-steam-wheel.rkt" 18 2))
   (part m2 mirror (material bronze) (at -2.0 0.3 0.0) (props (onto pot) (area 1.0) (reflectivity 0.85)) (ports) (srcloc "racket/machines/solar-steam-wheel.rkt" 19 2))

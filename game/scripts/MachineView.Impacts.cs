@@ -90,7 +90,7 @@ public partial class MachineView
     private void DetectImpacts()
     {
         var seenPairs = new HashSet<(ulong, ulong)>();
-        foreach (var (body, touching) in _touching)
+        foreach (var (body, touching) in _touching.ToList())   // a strike can break a post into new bodies
         {
             if (!IsInstanceValid(body)) continue;
             var state = PhysicsServer3D.BodyGetDirectState(body.GetRid());
@@ -147,8 +147,14 @@ public partial class MachineView
     }
 
     /// <summary>Counts a strike against both bodies (if the other is monitored), raises Struck, and flashes it.</summary>
+    // set by a Struck handler to replace the strike's record (a break takes other energy than a bounce)
+    private Impact? _impactOverride;
+
     private void RecordImpact(Impact impact)
     {
+        _impactOverride = null;
+        Struck?.Invoke(impact);
+        if (_impactOverride is { } changed) impact = changed;
         void Count(RigidBody3D body)
         {
             if (!_impactRecords.TryGetValue(body, out var rec)) return;
@@ -159,7 +165,6 @@ public partial class MachineView
         }
         Count(impact.Body);
         if (impact.Other is RigidBody3D other) Count(other);
-        Struck?.Invoke(impact);
         if (impact.EnergyLost >= 0.5f) Flash(impact);
     }
 

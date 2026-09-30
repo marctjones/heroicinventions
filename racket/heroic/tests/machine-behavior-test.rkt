@@ -1180,6 +1180,39 @@
     (check-true (< (at 60 'weak.omega) 0.02) "the weak wheel can't turn its stones")
     (check-true (< (at 60 'weak.flour) 0.01) "and grinds next to nothing")))
 
+;; Issue #43: fracture. Predicted before the first run (battering-rams.rkt):
+;; a blow at about 2.2 m/s; 50.9, 29.1 and 33.7 MPa per m/s of blow for the
+;; slim oak post, the stout one and the limestone column (112, 64 and 74 MPa);
+;; the slim post and the column break, the stout one holds; the slim
+;; post's break takes 209 J, the column's 1.5 J.
+(test-case "Battering rams: a post snaps when F = v sqrt(k m) bends it past its strength, and the ram keeps what the break didn't take"
+  (when (godot-available?)
+    (define run (godot-simulate 'battering-rams #:seconds 1.5 #:sample-dt 1/120))
+    (define (final key) (cadr (assq key (cdr (last run)))))
+    ;; the ram: a 1 cm iron rod and a 16 cm ball on it, 2 m below the pivot
+    (define L 2.0) (define br (* 0.08 L)) (define rho 7700)
+    (define rod (* rho pi 0.0001 L)) (define bob (* rho 4/3 pi (expt br 3)))
+    (define m (/ (+ (* rod L L 1/3) (* bob (+ (* L L) (* 0.4 br br)))) (* L L)))   ; I / L^2 at the ball
+    (check-= m 134.05 0.05)
+    (define h 0.8)
+    (define (per-v E I c) (let ([k (/ (* 3 E I) (expt h 3))]) (values k (/ (* (sqrt (* k m)) h c) I))))
+    (define-values (k-slim slim) (per-v 11e9 (/ (expt 0.08 4) 12) 0.04))
+    (define-values (k-stout stout) (per-v 11e9 (/ (expt 0.14 4) 12) 0.07))
+    (define-values (k-col col) (per-v 40e9 (/ (* pi (expt 0.3 4)) 64) 0.15))
+    (check-= (/ slim 1e6) 50.9 0.1) (check-= (/ stout 1e6) 29.1 0.1) (check-= (/ col 1e6) 33.7 0.1)
+    (define v (final 'slim-oak.break-speed))
+    (check-true (< 2.1 v 2.3) (format "the ram strikes at ~a m/s" v))
+    (check-= (final 'slim-oak.broken) 1 0)
+    (check-= (final 'slim-oak.peak-stress) (* v slim 1e-6) (* 0.005 v slim 1e-6))
+    (check-= (final 'column.broken) 1 0)
+    (check-= (final 'column.peak-stress) (* (final 'column.break-speed) col 1e-6) (* 0.005 (final 'column.break-speed) col 1e-6))
+    (check-= (final 'stout-oak.broken) 0 0 "the stout post holds")
+    (check-true (< 60 (final 'stout-oak.peak-stress) 68) (format "at ~a MPa" (final 'stout-oak.peak-stress)))
+    ;; the break takes F_b^2 / 2k, F_b the force that reaches 90 MPa (5 for limestone)
+    (define (taken strength I c k) (let ([f (/ (* strength I) (* c h))]) (/ (* f f) (* 2 k))))
+    (check-= (final 'slim-oak.energy-taken) (taken 90e6 (/ (expt 0.08 4) 12) 0.04 k-slim) 0.5)
+    (check-= (final 'column.energy-taken) (taken 5e6 (/ (* pi (expt 0.3 4)) 64) 0.15 k-col) 0.05)))
+
 ;; ---------------------------------------------------------------------------
 ;; One real-game check for each remaining rigid-body machine, each against
 ;; the prediction in its .rkt header. Measured 2026-09-29 before writing;

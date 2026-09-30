@@ -102,6 +102,14 @@ public partial class MachineView
                 Add($"{id}.impact-energy-total", struck.TotalEnergy);
             }
         }
+        foreach (var post in _breakable.Values)
+        {
+            // a breakable post: broken yet, the hardest blow's bending stress (MPa), the speed that broke it and the energy the break took
+            Add($"{post.Part.Id}.broken", post.Broken ? 1 : 0);
+            Add($"{post.Part.Id}.peak-stress", post.PeakStress / 1e6);
+            Add($"{post.Part.Id}.break-speed", post.BreakSpeed);
+            Add($"{post.Part.Id}.energy-taken", post.EnergyTaken);
+        }
         foreach (var m in _millstones)
         {
             // flour ground so far (kg) and the power the grinding takes (W)

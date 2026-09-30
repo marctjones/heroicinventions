@@ -131,6 +131,7 @@ public partial class MachineView : Node3D
         BuildMillstones();
         BuildJoints();
         BuildImpacts();
+        BuildFracture();
         Refresh();
 
         // Baseline for "energy retained": mechanical energy before anything
@@ -1485,6 +1486,7 @@ public partial class MachineView : Node3D
         DrawBelts();
         DrawJoints();
         DrawMillstones();
+        DrawFracture();
         DrawGrips();
         DrawCams();
         DrawRatchets();

@@ -172,7 +172,8 @@ public static class RktExporter
                        $" #:power {F(N("power", 150))} #:spit {F(N("spit", 0.25))} #:spoil {F(N("spoil", 5))} {Mat()})\n";
             case "post":
                 return $"  (post {p.Id} {At()} #:size ({F(N("size-x"))} {F(N("size-y"))} {F(N("size-z"))}) {Mat()}" +
-                       (p.Props.TryGetValue("round", out var rd) && rd is SBool { Value: true } ? " #:round #t" : "") + ")\n";
+                       (p.Props.TryGetValue("round", out var rd) && rd is SBool { Value: true } ? " #:round #t" : "") +
+                       (p.Props.TryGetValue("breakable", out var bk) && bk is SBool { Value: true } ? " #:breakable #t" : "") + ")\n";
             case "hearth":
                 return $"  (hearth {p.Id} {At()} #:heats {Sym("heats", "?")} #:power {F(N("power"))} #:fuel {F(N("fuel"))} " +
                        $"#:fuel-kind {Sym("fuel-kind", "wood")} #:efficiency {F(N("efficiency", 0.5))})\n";

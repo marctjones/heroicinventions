@@ -27,6 +27,7 @@ public partial class MachineView
         body.AddChild(round ? Shapes.Cylinder(w / 2, h, Surface(part.Material)) : Shapes.Box(new Vector3(w, h, d), Surface(part.Material)));
         AddChild(body);
         _surfaceMaterials[body.GetInstanceId()] = part.Material;
+        RegisterBreakable(part, body);
         AddLabel(part.Id, V(part.At) + new Vector3(0, h + 0.08f, 0));
     }
 

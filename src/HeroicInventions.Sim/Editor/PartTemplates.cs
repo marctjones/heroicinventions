@@ -80,7 +80,7 @@ public static class PartTemplates
         "digger" => new PartSpec(id, "digger", material, at,
             Props(("length", 4), ("width", 1), ("depth", 1), ("power", 150), ("spit", 0.25), ("spoil", 5)), [], null),
         "post" => new PartSpec(id, "post", material, at,
-            new Dictionary<string, SExpr> { ["size-x"] = new SNumber(0.2), ["size-y"] = new SNumber(1.0), ["size-z"] = new SNumber(0.2), ["round"] = new SBool(false) },
+            new Dictionary<string, SExpr> { ["size-x"] = new SNumber(0.2), ["size-y"] = new SNumber(1.0), ["size-z"] = new SNumber(0.2), ["round"] = new SBool(false), ["breakable"] = new SBool(false) },
             [], null),
         // a gate across the head of a channel; #:on names it (the editor's
         // placeholder, until set), #:width is the channel's unless given

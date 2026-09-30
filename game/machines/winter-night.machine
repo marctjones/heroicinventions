@@ -2,7 +2,7 @@
 (machine winter-night
   (source "Newton's law of cooling (1701); Stefan's problem (1891)")
   (ambient -10.0)
-  (part hob post (material limestone) (at 0.0 0.0 0.0) (props (size-x 0.5) (size-y 0.4) (size-z 0.5) (round #f)) (ports) (srcloc "racket/machines/winter-night.rkt" 18 2))
+  (part hob post (material limestone) (at 0.0 0.0 0.0) (props (size-x 0.5) (size-y 0.4) (size-z 0.5) (round #f) (breakable #f)) (ports) (srcloc "racket/machines/winter-night.rkt" 18 2))
   (part copper boiler (material bronze) (at 0.0 0.4 0.0) (props (radius 0.15) (height 0.3) (water 5.0) (fire 0.0) (temperature 90.0)) (ports (steam steam 0.3)) (srcloc "racket/machines/winter-night.rkt" 19 2))
   (part cistern tank (material oak) (at 1.5 0.0 0.0) (props (area 1.0) (height 1.0) (water 0.5)) (ports) (srcloc "racket/machines/winter-night.rkt" 20 2))
   (part basin tank (material limestone) (at -1.5 0.0 0.0) (props (area 1.0) (height 0.2) (water 0.1)) (ports) (srcloc "racket/machines/winter-night.rkt" 21 2))

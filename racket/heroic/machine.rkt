@@ -830,16 +830,24 @@
     ;; A post, pier or wall: a fixed block of #:material standing on the
     ;; ground, #:at its base centre, #:size (width height depth). Other
     ;; parts can rest on it or be held up by it; it never moves. #:round #t
-    ;; makes it a column (its width the diameter).
+    ;; makes it a column (its width the diameter). #:breakable #t lets a
+    ;; blow snap it: struck from the side at height h by a mass m at speed
+    ;; v, it bends like a spring of stiffness k = 3 E I / h^3, stopping the
+    ;; blow with a force F = v sqrt(k m), a bending stress F h c / I at its
+    ;; foot. Past its material's tensile strength (along the grain, for a
+    ;; wooden post) it breaks there, and the striker goes on with the
+    ;; energy the bending didn't take, F^2 / 2k at the break.
     (pattern (post id:id
                    (~alt (~once (~seq #:at at:vec3))
                          (~once (~seq #:size size:vec3))
                          (~once (~seq #:material mat:id))
-                         (~optional (~seq #:round round-v:expr))) ...)
+                         (~optional (~seq #:round round-v:expr))
+                         (~optional (~seq #:breakable breakable-v:expr))) ...)
       #:attr info (pinfo #'id 'post (attribute mat) '())
       #:with expr #`(part 'id 'post 'mat (list at.x at.y at.z)
                           (list (cons 'size-x size.x) (cons 'size-y size.y) (cons 'size-z size.z)
-                                (cons 'round (and (~? round-v #f) #t)))
+                                (cons 'round (and (~? round-v #f) #t))
+                                (cons 'breakable (and (~? breakable-v #f) #t)))
                           '()
                           #,(loc-of this-syntax)))
 
