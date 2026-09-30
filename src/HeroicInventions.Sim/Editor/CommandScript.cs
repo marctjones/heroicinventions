@@ -26,7 +26,8 @@ public static class CommandScript
         string R(PortRef r) => $"{r.Part}.{r.Port}";
 
         if (m.Source is { } src) Add($"(source {SExprWriter.Print(new SString(src))})");
-        if (m.Ambient != 20) Add($"(ambient {N(m.Ambient)})");
+        if (!m.Planet.IsEarth) Add(PlanetCommand(m.Planet));
+        if (m.Ambient != m.Planet.Temperature) Add($"(ambient {N(m.Ambient)})");   // a planet command sets the air to the planet's
         if (m.Sun is { } sun) Add($"(sun #:latitude {N(sun.Latitude)} #:day {sun.Day} #:time {N(sun.Time)})");
 
         var afterLinks = new List<string>();
@@ -75,6 +76,18 @@ public static class CommandScript
                 $" #:do ({string.Join(' ', t.Actions.Select(a => $"({a.Target} {a.Field} {N(a.Value)})"))}))");
         lines.AddRange(afterLinks);
         return lines;
+    }
+
+    /// <summary>(planet id #:key value …): the preset and every number that differs from it.</summary>
+    public static string PlanetCommand(Planet p)
+    {
+        var preset = Planet.Named(p.Id);
+        var sb = new System.Text.StringBuilder($"(planet {p.Id}");
+        foreach (var key in Planet.NumberKeys)
+            if (p.Number(key) != preset.Number(key)) sb.Append($" #:{key} {SExprWriter.Number(p.Number(key))}");
+        if (p.Air != preset.Air)
+            sb.Append($" #:air ({string.Join(' ', GasMix.Names.Select(g => $"({g} {SExprWriter.Number(p.Air[g])})"))})");
+        return sb.Append(')').ToString();
     }
 
     /// <summary>The command that places <paramref name="p"/>; the sets and port changes that finish it go to <paramref name="afterLinks"/>, once every part and link exists.</summary>

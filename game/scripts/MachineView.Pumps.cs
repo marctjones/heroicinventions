@@ -128,7 +128,7 @@ public partial class MachineView
                 v.Stream.Scale = new Vector3(radius, Mathf.Max(spout - 0.04f - land, 0.01f), radius);
                 v.Stream.Position = new Vector3(x, (spout - 0.04f + land) / 2, v.Z);
             }
-            v.Label.Text = $"{p.Name}: lift {p.SuctionLift:F2} m, limit {p.Limit:F2} m\n" +
+            v.Label.Text = $"{p.Name}: lift {p.SuctionLift:F2} m, limit {(Math.Abs(p.Limit) < 0.1 ? $"{p.Limit * 1000:0.#} mm" : $"{p.Limit:F2} m")}\n" +
                            (p.Broken && p.Delivered < 1e-9 ? "column broken: nothing lifted"
                                : $"{p.Delivered * 1000:F0} L in {p.Strokes} strokes");
         }

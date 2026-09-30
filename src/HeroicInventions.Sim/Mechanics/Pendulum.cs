@@ -14,6 +14,8 @@ namespace HeroicInventions.Sim.Mechanics;
 /// </summary>
 public sealed class Pendulum
 {
+    /// <summary>The air and gravity it stands in: the planet's open air unless it is inside an enclosure.</summary>
+    public Zone Zone { get; set; } = new();
     public const double RodRadius = 0.01;                     // m
     public static double BobRadiusFor(double length) => Math.Max(0.03, length * 0.08);
 
@@ -50,7 +52,7 @@ public sealed class Pendulum
         Angle = TurnedAt = startAngle;
     }
 
-    public double Weight => Mass * Physics.Gravity;
+    public double Weight => Mass * Zone.Gravity;
     public double GravityTorque => -Weight * CentreOfMass * Math.Sin(Angle);
     /// <summary>At rest, and gravity can't turn it past the bearing's grip.</summary>
     public bool Stopped => AngularVelocity == 0 && Math.Abs(GravityTorque) <= Bearing.CoulombTorque(Weight);

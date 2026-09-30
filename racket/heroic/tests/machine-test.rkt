@@ -203,3 +203,37 @@
   (check-exn #rx"#:efficiency must be in \\(0, 1\\]" (λ () (build '(pump p #:at (0 11 0) #:from well #:to cistern #:bore 0.15 #:stroke 0.5 #:efficiency 1.2))))
   (check-exn #rx"#:force must be a force above 0" (λ () (build '(pump p #:at (0 11 0) #:from well #:to cistern #:bore 0.15 #:stroke 0.5 #:force 0))))
   (check-not-exn (λ () (build '(pump p #:at (0 11 0) #:from well #:to cistern #:bore 0.15 #:stroke 0.5 #:rpm 20)))))
+
+;; ---------------------------------------------------------------------------
+;; Planets (issue #38)
+
+(test-case "an unknown planet is a compile-time error naming the planets there are"
+  (check-exn (λ (e) (and (exn:fail:syntax? e) (regexp-match? #rx"unknown planet venus; the planets are: earth, mars" (exn-message e))))
+             (λ () (parameterize ([current-namespace (make-base-namespace)])
+                     (expand '(module m heroic (define-machine m #:planet venus (tank a #:at (0 0 0) #:area 1 #:height 1))))))))
+
+(test-case "a machine on Mars takes Mars's air unless it says otherwise, and writes every number of its planet"
+  ;; built and written in a namespace of its own, so its structs are that namespace's
+  (define (build . head)
+    (parameterize ([current-namespace (make-base-namespace)])
+      (eval `(module on-mars heroic (define-machine on-mars ,@head (tank a #:at (0 0 0) #:area 1 #:height 1))
+               (provide on-mars)))
+      (cddr ((dynamic-require 'heroic/emit 'machine->sexp) (dynamic-require ''on-mars 'on-mars)))))
+  (define mars (build '#:planet 'mars))
+  (check-equal? (assq 'ambient mars) '(ambient -63.0))
+  (define clause (assq 'planet mars))
+  (check-equal? (cadr clause) 'mars)
+  (check-equal? (assq 'gravity (cddr clause)) '(gravity 3.71))
+  (check-equal? (assq 'pressure (cddr clause)) '(pressure 610.0))
+  ;; Earth, said or unsaid, writes nothing: every existing scene is unchanged
+  (check-false (assq 'planet (build)))
+  (check-false (assq 'planet (build '#:planet 'earth)))
+  (check-false (assq 'ambient (build '#:planet 'earth)))
+  ;; a preset with a number changed, and a new air (which has its own molar mass)
+  (define heavy (build '#:planet '(planet mars #:gravity 9.81 #:air '((o2 0.21) (n2 0.79))) '#:ambient 5))
+  (define hc (assq 'planet heavy))
+  (check-equal? (assq 'gravity (cddr hc)) '(gravity 9.81))
+  (check-equal? (assq 'molar-mass (cddr hc)) '(molar-mass #f))
+  (check-equal? (assq 'air (cddr hc)) '(air (o2 0.21) (n2 0.79) (co2 0.0) (h2o 0.0) (ar 0.0)))
+  (check-equal? (assq 'ambient heavy) '(ambient 5.0))
+  (check-exn #rx"#:air's fractions must add up to 1" (λ () (build '#:planet '(planet mars #:air '((o2 0.5)))))))

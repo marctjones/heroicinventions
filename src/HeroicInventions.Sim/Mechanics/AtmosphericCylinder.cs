@@ -27,6 +27,8 @@ namespace HeroicInventions.Sim.Mechanics;
 /// </summary>
 public sealed class AtmosphericCylinder(string name, Boiler boiler, double bore, double stroke, double injectionTemperatureC)
 {
+    /// <summary>The air and gravity it stands in: the planet's open air unless it is inside an enclosure.</summary>
+    public Zone Zone { get; set; } = new();
     private const double SteamGasConstant = 461.5;   // J/(kg·K)
     private const double SteamTemperature = 373.15;  // K
     private const double CondensationTime = 0.15;    // s
@@ -53,10 +55,10 @@ public sealed class AtmosphericCylinder(string name, Boiler boiler, double bore,
     public double Pressure => SteamMass * SteamGasConstant * SteamTemperature / Volume;   // Pa, absolute
 
     /// <summary>Net downward force on the piston: the atmosphere on top against the pressure below. N.</summary>
-    public double Force => (Physics.AtmosphericPressure - Pressure) * Area;
+    public double Force => (Zone.Pressure - Pressure) * Area;
 
     /// <summary>Fill the space under the piston with steam at atmospheric pressure, as at the start of a steam stroke.</summary>
-    public void Prime() => SteamMass = Physics.AtmosphericPressure * Volume / (SteamGasConstant * SteamTemperature);
+    public void Prime() => SteamMass = Zone.Pressure * Volume / (SteamGasConstant * SteamTemperature);
 
     public void Step(double dt)
     {

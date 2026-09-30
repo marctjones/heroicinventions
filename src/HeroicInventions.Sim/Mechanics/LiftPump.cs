@@ -31,6 +31,8 @@ namespace HeroicInventions.Sim.Mechanics;
 /// </summary>
 public sealed class LiftPump(string name, Tank from, Tank to, double barrel, double bore, double stroke)
 {
+    /// <summary>The air and gravity it stands in: the planet's open air unless it is inside an enclosure.</summary>
+    public Zone Zone { get; set; } = new();
     public const double DefaultEfficiency = 0.8;
 
     public string Name { get; } = name;
@@ -62,10 +64,13 @@ public sealed class LiftPump(string name, Tank from, Tank to, double barrel, dou
     private double _pocket = double.PositiveInfinity; // m: bucket height the column broke at on the last upstroke
 
     /// <summary>How high the atmosphere can hold water up a pipe, over the surface: (P_atm − P_v(T)) / (ρ·g).</summary>
-    public static double SuctionLimit(double celsius) =>
-        (Physics.AtmosphericPressure - Boiler.SaturationPressure(celsius)) / (Physics.WaterDensity * Physics.Gravity);
+    public static double SuctionLimit(double celsius) => SuctionLimit(celsius, new Zone());
 
-    public double Limit => SuctionLimit(Temperature);
+    /// <summary>The same under <paramref name="zone"/>'s air and gravity: on Mars, 610 Pa over water whose vapour pressure is about the same holds up nothing.</summary>
+    public static double SuctionLimit(double celsius, Zone zone) =>
+        (zone.Pressure - Boiler.SaturationPressure(celsius)) / (Physics.WaterDensity * zone.Gravity);
+
+    public double Limit => SuctionLimit(Temperature, Zone);
     public double VapourPressure => Boiler.SaturationPressure(Temperature);
 
     /// <summary>From the source's surface up to the bucket's lowest point.</summary>
@@ -79,7 +84,7 @@ public sealed class LiftPump(string name, Tank from, Tank to, double barrel, dou
     private double Reach => From.SurfaceElevation + Limit - Barrel;
 
     private double Above(double x) =>
-        Physics.AtmosphericPressure + (Primed ? Physics.WaterDensity * Physics.Gravity * (Spout - (Barrel + x)) : 0);
+        Zone.Pressure + (Primed ? Physics.WaterDensity * Zone.Gravity * (Spout - (Barrel + x)) : 0);
 
     /// <summary>The pull the rod needs with the bucket at x, rising (or falling).</summary>
     private double PullAt(double x, bool rising)
@@ -87,7 +92,7 @@ public sealed class LiftPump(string name, Tank from, Tank to, double barrel, dou
         double below;
         if (rising)
             below = x < Reach
-                ? Physics.AtmosphericPressure - Physics.WaterDensity * Physics.Gravity * (Barrel + x - From.SurfaceElevation)
+                ? Zone.Pressure - Physics.WaterDensity * Zone.Gravity * (Barrel + x - From.SurfaceElevation)
                 : VapourPressure;
         else
             below = x > _pocket ? VapourPressure : Above(x);
@@ -121,13 +126,13 @@ public sealed class LiftPump(string name, Tank from, Tank to, double barrel, dou
     /// <summary>Moves the bucket from x0 to x1: the work on the rod and, rising, the water drawn. m³.</summary>
     private double Travel(double x0, double x1, bool rising)
     {
-        double rhoG = Physics.WaterDensity * Physics.Gravity;
+        double rhoG = Physics.WaterDensity * Zone.Gravity;
         if (!rising)
         {
             // over the vapour pocket the atmosphere drives the bucket back down, returning the work
             double top = Math.Max(x0, x1), bottom = Math.Max(Math.Min(x0, x1), Math.Min(_pocket, top));
             if (top > bottom)
-                Work -= Area * (Physics.AtmosphericPressure - VapourPressure) * (top - bottom)
+                Work -= Area * (Zone.Pressure - VapourPressure) * (top - bottom)
                         + (Primed ? Area * rhoG * ((Spout - Barrel) * (top - bottom) - (top * top - bottom * bottom) / 2) : 0);
             return 0;
         }
@@ -147,7 +152,7 @@ public sealed class LiftPump(string name, Tank from, Tank to, double barrel, dou
         {
             double a = x1 - dry;
             if (_pocket > a) _pocket = a;
-            Work += Area * (Physics.AtmosphericPressure - VapourPressure) * dry
+            Work += Area * (Zone.Pressure - VapourPressure) * dry
                     + (Primed ? Area * rhoG * ((Spout - Barrel) * dry - (x1 * x1 - a * a) / 2) : 0);
         }
         From.WaterVolume -= drawn;

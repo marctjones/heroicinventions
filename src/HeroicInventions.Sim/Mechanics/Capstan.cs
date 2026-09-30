@@ -18,6 +18,8 @@ namespace HeroicInventions.Sim.Mechanics;
 /// </summary>
 public sealed class Capstan(string name, double turns, double mu, double loadMass, double startHeight, double postHeight)
 {
+    /// <summary>The air and gravity it stands in: the planet's open air unless it is inside an enclosure.</summary>
+    public Zone Zone { get; set; } = new();
     public string Name { get; } = name;
     public double Turns { get; } = turns;
     public double Mu { get; } = mu;
@@ -36,7 +38,7 @@ public sealed class Capstan(string name, double turns, double mu, double loadMas
     public double WrapAngle => 2 * Math.PI * Turns;
     /// <summary>e^(μθ): how many times the pull the wrap can hold, or needs to haul.</summary>
     public double Ratio => Math.Exp(Mu * WrapAngle);
-    public double Weight => LoadMass * Physics.Gravity;
+    public double Weight => LoadMass * Zone.Gravity;
     /// <summary>The least pull that keeps the load from running out, m·g·e^(−μθ).</summary>
     public double LeastHold => Weight / Ratio;
     /// <summary>The pull it takes to haul the load in, m·g·e^(μθ).</summary>
@@ -59,7 +61,7 @@ public sealed class Capstan(string name, double turns, double mu, double loadMas
         // sliding: whichever end is being pulled round the post is the tight one
         bool rising = Velocity > 0 || (Velocity == 0 && hold / ratio > Weight);
         LoadTension = rising ? hold / ratio : hold * ratio;
-        double a = LoadTension / LoadMass - Physics.Gravity;
+        double a = LoadTension / LoadMass - Zone.Gravity;
         double v = Velocity + a * dt;
         if (rising ? v <= 0 : v >= 0)
         {

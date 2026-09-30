@@ -113,7 +113,7 @@ public static class PartTemplates
             new Dictionary<string, SExpr>
             {
                 ["from"] = new SSymbol("?"), ["to"] = new SSymbol("?"), ["bore"] = new SNumber(0.15), ["stroke"] = new SNumber(0.5),
-                ["rpm"] = new SNumber(20), ["efficiency"] = new SNumber(0.8), ["force"] = new SBool(false), ["temperature"] = new SNumber(20),
+                ["rpm"] = new SNumber(20), ["efficiency"] = new SNumber(0.8), ["force"] = new SBool(false), ["temperature"] = new SBool(false),   // #f: the water is at the air's temperature, as in the DSL
             },
             [], null),
         // an overshot wheel by default: 12 buckets; give it a #:race to drive it undershot

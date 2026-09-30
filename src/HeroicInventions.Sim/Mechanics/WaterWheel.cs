@@ -27,6 +27,8 @@ namespace HeroicInventions.Sim.Mechanics;
 /// </summary>
 public sealed class WaterWheel(string name, double radius, double width, double momentOfInertia)
 {
+    /// <summary>The air and gravity it stands in: the planet's open air unless it is inside an enclosure.</summary>
+    public Zone Zone { get; set; } = new();
     public string Name { get; } = name;
     public double Radius { get; } = radius;                   // m, to the buckets / paddles' middle
     public double Width { get; } = width;                     // m
@@ -74,7 +76,7 @@ public sealed class WaterWheel(string name, double radius, double width, double 
         Taken += caught;
         Overflow += spilt;
 
-        Torque = Water * Physics.Gravity * Radius * (1 - Math.Cos(SpillAngle)) / SpillAngle;
+        Torque = Water * Zone.Gravity * Radius * (1 - Math.Cos(SpillAngle)) / SpillAngle;
         if (Race is not null)
         {
             double slip = Race.Velocity - AngularVelocity * Radius;

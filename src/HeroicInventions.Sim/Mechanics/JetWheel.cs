@@ -37,6 +37,8 @@ public sealed class JetWheel(Boiler? boiler)
     public double ChimneyHeight { get; init; } = 2.0;         // m of warm air column
     public double ChimneyArea { get; init; } = 0.05;          // m² of flue
     public double AmbientTemperature { get; set; } = 20;      // °C of the air drawn in
+    /// <summary>The air and gravity it stands in: the planet's open air unless it is inside an enclosure.</summary>
+    public Zone Zone { get; set; } = new();
     public double SpoutArea { get; init; } = 2e-5;            // m² (≈5 mm bore)
     public double DischargeCoefficient { get; init; } = 0.7;
     public double Radius { get; init; } = 0.15;               // m, axle to where the jet strikes the paddles
@@ -57,6 +59,10 @@ public sealed class JetWheel(Boiler? boiler)
     /// each kilogram is warmed. Returns (v m/s, ṁ kg/s, ΔT K).
     /// </summary>
     public static (double Velocity, double MassFlow, double Warming) Draught(double heatW, double height, double area, double ambientC)
+        => Draught(heatW, height, area, ambientC, new Zone());
+
+    /// <summary>The same in <paramref name="zone"/>'s air and gravity: thinner air carries less heat per metre it rises.</summary>
+    public static (double Velocity, double MassFlow, double Warming) Draught(double heatW, double height, double area, double ambientC, Zone zone)
     {
         if (heatW <= 0) return (0, 0, 0);
         const double cp = 1005, cd = 0.7;
@@ -64,8 +70,8 @@ public sealed class JetWheel(Boiler? boiler)
         for (int i = 0; i < 60; i++)
         {
             double tHot = tAmb + dT;
-            v = cd * Math.Sqrt(2 * Physics.Gravity * height * dT / tHot);
-            mdot = Physics.AtmosphericPressure / (Physics.AirGasConstant * tHot) * area * v;
+            v = cd * Math.Sqrt(2 * zone.Gravity * height * dT / tHot);
+            mdot = zone.Pressure / (zone.AirGasConstant * tHot) * area * v;
             dT = 0.5 * dT + 0.5 * heatW / (mdot * cp);   // damped, so it settles rather than oscillates
         }
         return (v, mdot, dT);
@@ -104,7 +110,7 @@ public sealed class JetWheel(Boiler? boiler)
         }
         else
         {
-            (v, SteamFlow, DraughtWarming) = Draught(ChimneyHeat?.Invoke() ?? 0, ChimneyHeight, ChimneyArea, AmbientTemperature);
+            (v, SteamFlow, DraughtWarming) = Draught(ChimneyHeat?.Invoke() ?? 0, ChimneyHeight, ChimneyArea, AmbientTemperature, Zone);
         }
         JetVelocity = v;
 

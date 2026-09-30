@@ -33,18 +33,18 @@ public sealed class SafetyValve(double liftPressurePa, double boreDiameter)
     public double OpeningAt(double gaugePa) =>
         Math.Clamp((gaugePa - LiftPressure) / Math.Max(1, Accumulation * LiftPressure), 0, 1);
 
-    /// <summary>Steam through the fully open bore from P₀ (absolute Pa) at T₀ (°C) into the air, kg/s.</summary>
-    public double Capacity(double absolutePa, double celsius)
+    /// <summary>Steam through the fully open bore from P₀ (absolute Pa) at T₀ (°C) into air at Pₐ (absolute Pa; Earth's by default), kg/s.</summary>
+    public double Capacity(double absolutePa, double celsius, double outsidePa = Physics.AtmosphericPressure)
     {
-        if (absolutePa <= Physics.AtmosphericPressure) return 0;
+        if (absolutePa <= outsidePa) return 0;
         double k = SteamGamma;
         double critical = Math.Pow(2 / (k + 1), k / (k - 1));
-        double r = Math.Max(Physics.AtmosphericPressure / absolutePa, critical);
+        double r = Math.Max(outsidePa / absolutePa, critical);
         double psi = 2 * k / ((k - 1) * SteamGasConstant * Physics.ToKelvin(celsius))
                      * (Math.Pow(r, 2 / k) - Math.Pow(r, (k + 1) / k));
         return Cd * Area * absolutePa * Math.Sqrt(psi);
     }
 
-    public double Discharge(double gaugePa, double absolutePa, double celsius) =>
-        OpeningAt(gaugePa) * Capacity(absolutePa, celsius);
+    public double Discharge(double gaugePa, double absolutePa, double celsius, double outsidePa = Physics.AtmosphericPressure) =>
+        OpeningAt(gaugePa) * Capacity(absolutePa, celsius, outsidePa);
 }

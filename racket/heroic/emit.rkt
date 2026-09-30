@@ -2,7 +2,8 @@
 ;; Turns a machine value into the .machine format: plain S-expressions
 ;; with every number a finite flonum, so the C# reader never meets exact
 ;; rationals (3/100) or infinities.
-(require racket/path racket/match "machine.rkt" "geometry/shape.rkt")
+(require racket/path racket/match "machine.rkt" "geometry/shape.rkt"
+         (only-in "planets.rkt" planet-fields))
 (provide machine->sexp write-machine-file)
 
 (define (num who v)
@@ -12,6 +13,18 @@
 
 (define (value who v)
   (if (or (boolean? v) (symbol? v) (string? v)) v (num who v)))
+
+;; Every number a planet has, resolved, so the C# side needs no preset
+;; table: (planet mars (gravity 3.71) (pressure 610.0) (air (o2 0.0017) ...) ...)
+(define (planet->sexp p)
+  `(planet ,(planet-name p)
+           ,@(for/list ([f (planet-fields p)])
+               (define key (car f))
+               (case key
+                 [(name) `(name ,(cadr f))]
+                 [(air) `(air ,@(for/list ([g (cdr f)]) (list (car g) (num "planet air" (cadr g)))))]
+                 [(molar-mass) `(molar-mass ,(let ([v (cadr f)]) (if v (num "planet molar-mass" v) #f)))]
+                 [else `(,key ,@(for/list ([v (cdr f)]) (num (format "planet ~a" key) v)))]))))
 
 (define (loc->sexp loc root)
   (define file (vector-ref loc 0))
@@ -53,6 +66,8 @@
   `(machine ,(machine-name m)
             ,@(if (machine-source m) `((source ,(machine-source m))) '())
             ,@(if (= (machine-ambient m) 20) '() `((ambient ,(num "#:ambient" (machine-ambient m)))))
+            ,@(let ([p (machine-planet m)])
+                (if (earth-planet? p) '() (list (planet->sexp p))))
             ,@(match (machine-sun m)
                 [#f '()]
                 [(list lat day time) `((sun (latitude ,(num "#:latitude" lat)) (day ,day) (time ,(num "#:time" time))))])

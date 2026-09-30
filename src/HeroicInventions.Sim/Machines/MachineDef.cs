@@ -145,6 +145,8 @@ public sealed class MachineDef
     public double Ambient { get; init; } = 20;
     /// <summary>Null: the default sun, Alexandria at noon on midsummer's day, and the scene keeps its fixed studio light.</summary>
     public SunSpec? Sun { get; init; }
+    /// <summary>The planet it stands on (issue #38): gravity, the air's pressure and mix, sunlight, the day's length. Earth unless the file says otherwise.</summary>
+    public Planet Planet { get; init; } = Planet.Earth;
     public required IReadOnlyList<PartSpec> Parts { get; init; }
     public required IReadOnlyList<PipeSpec> Pipes { get; init; }
     public required IReadOnlyList<ConnectSpec> Connects { get; init; }
@@ -178,6 +180,7 @@ public sealed class MachineDef
             Source = Source,
             Ambient = Ambient,
             Sun = Sun,
+            Planet = Planet,
             Parts = Parts.Select(p => p with { At = Move(p.At) }).ToList(),
             Pipes = Pipes,
             Connects = Connects,
@@ -214,6 +217,7 @@ public sealed class MachineDef
                               sun.Field("day") is { } dy ? (int)Num(dy, 1, null) : 172,
                               sun.Field("time") is { } tm ? Num(tm, 1, null) : 12)
                 : null,
+            Planet = clauses.FirstOrDefault(c => c.Head == "planet") is { } planet ? Planet.Parse(planet, 1) : Planet.Earth,
             Parts = clauses.Where(c => c.Head == "part").Select(ParsePart).ToList(),
             Pipes = clauses.Where(c => c.Head == "pipe").Select(ParsePipe).ToList(),
             Connects = clauses.Where(c => c.Head == "connect").Select(ParseConnect).ToList(),

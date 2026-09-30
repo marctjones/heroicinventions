@@ -82,6 +82,15 @@ public sealed class MachineRuntime
     /// <summary>Heliostats throwing sunlight onto boilers and sealed vessels.</summary>
     public IReadOnlyDictionary<string, Mirror> Mirrors => _mirrors;
     public Sun Sun { get; }
+    /// <summary>The planet the scene stands on (issue #38).</summary>
+    public Planet Planet => Outside.Planet;
+    /// <summary>
+    /// The planet's open air round the machine: its gravity, pressure, gas mix
+    /// and temperature (the <see cref="Ambient"/>). Every part reads its
+    /// conditions from the zone it stands in, and outside an enclosure that is
+    /// this one.
+    /// </summary>
+    public Zone Outside { get; }
     /// <summary>Whether the scene sets its sun or has mirrors: then the view lights it by the sun, else by its fixed studio light.</summary>
     public bool SunShown => Def.Sun is not null || _mirrors.Count > 0;
     public IReadOnlyDictionary<string, Counterpoise> Counterpoises => _counterpoises;
@@ -159,11 +168,12 @@ public sealed class MachineRuntime
         set
         {
             _ambient = value;
+            Outside.Temperature = value;
             Fluids.Ambient = value;
             foreach (var b in _boilers.Values) b.AmbientTemperature = value;
             foreach (var h in _hearths.Values) h.AmbientTemperature = value;
             foreach (var a in _air) a.Ambient = value;
-            foreach (var m in _windmills.Values) m.AirDensity = Physics.AirDensityAt(value);
+            foreach (var m in _windmills.Values) m.AirDensity = Outside.AirDensityAt(value);
         }
     }
     private double _ambient = 20;
@@ -179,7 +189,8 @@ public sealed class MachineRuntime
         Def = def;
         _materials = materials;
         _ambient = def.Ambient;
-        Sun = def.Sun is { } sun ? new Sun(sun.Latitude, sun.Day, sun.Time) : new Sun(31.2, 172, 12);
+        Outside = new Zone(def.Planet, def.Ambient);
+        Sun = (def.Sun is { } sun ? new Sun(sun.Latitude, sun.Day, sun.Time) : new Sun(31.2, 172, 12)).On(def.Planet);
 
         foreach (var part in def.Parts)
         {
@@ -248,7 +259,7 @@ public sealed class MachineRuntime
         // Sealed air is created after the tanks are filled: its P·V constant
         // is fixed from the air volume at the moment it is sealed.
         foreach (var air in def.SealedAir)
-            _air.Add(new AirPocket(air.Tanks.Select(t => TankNamed(t, air.Location)), air.TubeVolume, sealedAtC: _ambient)
+            _air.Add(new AirPocket(air.Tanks.Select(t => TankNamed(t, air.Location)), air.TubeVolume, sealedAtC: _ambient, zone: Outside)
             {
                 HeatLoss = air.HeatLoss,
                 VesselHeatCapacity = air.HeatCapacity,
@@ -302,7 +313,7 @@ public sealed class MachineRuntime
                 MomentOfInertia = Math.Max(1e-5, part.Number("mass", 0.5) * radius * radius),
                 Load = part.Number("load", 0),
                 // square paddles #:width across, beating the scene's air
-                AirDrag = JetWheel.Windage(Physics.AirDensityAt(_ambient), (int)part.Number("paddles", 8),
+                AirDrag = JetWheel.Windage(Outside.AirDensityAt(_ambient), (int)part.Number("paddles", 8),
                                            part.Number("width", 0.03) * part.Number("width", 0.03), radius),
             };
         }
@@ -344,7 +355,7 @@ public sealed class MachineRuntime
                 Radius = radius,
                 MomentOfInertia = Math.Max(1e-5, part.Number("mass", 0.3) * radius * radius),
                 Load = part.Number("load", 0),
-                AirDrag = JetWheel.Windage(Physics.AirDensityAt(_ambient), (int)part.Number("vanes", 6),
+                AirDrag = JetWheel.Windage(Outside.AirDensityAt(_ambient), (int)part.Number("vanes", 6),
                                            part.Number("width", 0.06) * part.Number("width", 0.06), radius),
             };
         }
@@ -425,6 +436,7 @@ public sealed class MachineRuntime
             _cylinders[c.Id].Prime();
         }
 
+        SetZones(Outside);
         Ambient = _ambient;   // hand it to every part now they all exist
         RegisterFields();
         BuildTriggers(def);
@@ -491,6 +503,33 @@ public sealed class MachineRuntime
             double v = GetField(t.Spec.WatchTarget, t.Spec.WatchField!);
             if (t.Spec.Rising ? v >= t.Spec.Threshold : v <= t.Spec.Threshold) Fire(t);
         }
+    }
+
+    /// <summary>Stands every part in <paramref name="zone"/>: the gravity it falls under, the air it breathes and pushes against.</summary>
+    private void SetZones(Zone zone)
+    {
+        foreach (var t in _tanks.Values) t.Zone = zone;
+        foreach (var b in _boilers.Values) b.Zone = zone;
+        foreach (var h in _hearths.Values) h.Zone = zone;
+        foreach (var w in _jetWheels.Values) w.Zone = zone;
+        foreach (var l in _lifts.Values) l.Zone = zone;
+        foreach (var c in _cylinders.Values) c.Zone = zone;
+        foreach (var p in _pumps.Values) p.Zone = zone;
+        foreach (var w in _wheels.Values) w.Zone = zone;
+        foreach (var c in _capstans.Values) c.Zone = zone;
+        foreach (var c in _counterpoises.Values) c.Zone = zone;
+        foreach (var p in _pendulums.Values) p.Zone = zone;
+        foreach (var c in _channels.Values) c.Gravity = zone.Gravity;
+        foreach (var g in _gates.Values) g.Gravity = zone.Gravity;
+        foreach (var m in _windmills.Values) m.AirDensity = zone.AirDensity;
+    }
+
+    /// <summary>A different planet, live — "what if Mars had Earth's gravity?". Every part keeps standing where it stands; only the numbers change.</summary>
+    public void ChangePlanet(Planet planet)
+    {
+        Outside.Planet = planet;
+        Sun.On(planet);
+        SetZones(Outside);
     }
 
     private void BuildSafetyValve(PartSpec part)
@@ -682,7 +721,15 @@ public sealed class MachineRuntime
     {
         _getters["scene.ambient"] = () => Ambient;                     // °C
         _setters["scene.ambient"] = c => Ambient = Math.Max(-273.15, c);
-        _getters["scene.air-density"] = () => Physics.AirDensityAt(Ambient);   // kg/m³
+        _getters["scene.air-density"] = () => Outside.AirDensity;      // kg/m³
+        _getters["scene.gravity"] = () => Outside.Gravity;             // m/s²
+        _setters["scene.gravity"] = g => ChangePlanet(Planet with { Gravity = Math.Max(0, g) });
+        _getters["scene.pressure"] = () => Outside.Pressure / 1000;    // kPa, absolute
+        _setters["scene.pressure"] = kPa => ChangePlanet(Planet with { Pressure = Math.Max(0, kPa * 1000) });
+        _getters["scene.boiling-point"] = () => Outside.BoilingPoint;  // °C, where water's vapour pressure reaches the air's
+        _getters["scene.oxygen"] = () => Outside.OxygenFraction * 100; // % of the air by volume
+        _getters["scene.molar-mass"] = () => Outside.MolarMass * 1000; // g/mol of the air
+        _getters["scene.solar-constant"] = () => Sun.SolarConstant;    // W/m² above the air
         _getters["scene.time"] = () => Sun.Time;                        // solar hours
         _setters["scene.time"] = h => Sun.Time = ((h % 24) + 24) % 24;
         _getters["scene.day"] = () => Sun.Day;

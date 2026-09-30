@@ -1,6 +1,6 @@
 namespace HeroicInventions.Sim;
 
-/// <summary>Shared physical constants. Everything in the sim core is SI (m, kg, s, Pa, J, W) except temperatures, which are °C.</summary>
+/// <summary>Shared physical constants. Everything in the sim core is SI (m, kg, s, Pa, J, W) except temperatures, which are °C. Gravity, the air's pressure and its density are Earth's here, for reference and defaults: parts read theirs from the <see cref="Zone"/> they stand in, set by the scene's <see cref="Planet"/> (issue #38).</summary>
 public static class Physics
 {
     public const double Gravity = 9.81;               // m/s²

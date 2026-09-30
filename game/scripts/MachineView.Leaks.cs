@@ -57,7 +57,8 @@ public partial class MachineView
             double catchY = leak.Catch is { } c ? c.SurfaceElevation : 0;
             double drop = hole.Y - catchY;
             bool flowing = leak.Flow > 1e-9 && drop > 1e-3;
-            double v = Math.Sqrt(2 * 9.81 * head), fall = flowing ? Math.Sqrt(2 * drop / 9.81) : 0;
+            double g = Runtime.Outside.Gravity;
+            double v = Math.Sqrt(2 * g * head), fall = flowing ? Math.Sqrt(2 * drop / g) : 0;
             float r = flowing ? Mathf.Clamp(Mathf.Sqrt((float)(leak.Flow / (Math.PI * v))), 0.002f, 0.03f) : 0;
             for (int i = 0; i < JetSegments; i++)
             {

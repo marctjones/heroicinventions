@@ -48,6 +48,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (source "text")                               ; where the machine comes from
 ///   (raw-part (part id kind ...))                 ; a part clause verbatim, for shaped parts no catalogue entry describes
 ///   (sun [#:latitude deg] [#:day n] [#:time hours])   ; the scene under the sun (default Alexandria, midsummer, noon)
+///   (planet mars [#:gravity g] [#:pressure Pa] [#:temperature C] [#:air ((o2 x) ...)] ...)   ; the planet: a preset, some numbers changed; sets the ambient to its temperature
 ///   (ambient °C)           ; the scene's air: boilers cool to it, water and air arrive at it, tanks freeze below 0
 ///   (move id (x y z))
 ///   (set id #:prop value)   ; a number, a symbol (#:axis y), a flag (#:round #t) or the name of another part (#:onto boiler)
@@ -123,6 +124,7 @@ public sealed class BuildSession
         "raw-part" => RawPart(cmd),
         "move" => Move(cmd),
         "ambient" => SetAmbient(cmd),
+        "planet" => SetPlanet(cmd),
         "sun" => SetSun(cmd),
         "set" => Set(cmd),
         "remove" => Remove(cmd),
@@ -508,11 +510,42 @@ public sealed class BuildSession
         int day = Kw(cmd, "day") is { } d ? (int)Num(d, "sun #:day") : now.Day;
         double time = Kw(cmd, "time") is { } t ? Num(t, "sun #:time") : now.Time;
         if (lat is < -90 or > 90) throw new FormatException($"(sun #:latitude {lat}): must be in [-90, 90]");
-        if (day is < 1 or > 365) throw new FormatException($"(sun #:day {day}): must be 1 to 365");
+        if (day < 1 || day > Document.Planet.Year) throw new FormatException($"(sun #:day {day}): must be 1 to {Document.Planet.Year}");
         if (time is < 0 or >= 24) throw new FormatException($"(sun #:time {time}): must be solar hours in [0, 24)");
         Snapshot();
         Document.Sun = new SunSpec(lat, day, time);
         return $"sun at {lat}° N, day {day}, {time} h";
+    }
+
+    /// <summary>
+    /// (planet id #:key value …): stands the scene on a preset planet (earth,
+    /// mars), with any of its numbers changed; #:air takes the whole mixture,
+    /// ((o2 0.21) (n2 0.79)). The scene's air takes the planet's temperature,
+    /// as define-machine's does when it gives no #:ambient.
+    /// </summary>
+    private string SetPlanet(SList cmd)
+    {
+        var planet = Planet.Named(Id(cmd, 1));
+        foreach (var key in Planet.NumberKeys)
+            if (Kw(cmd, key) is { } v) planet = planet.With(key, Num(v, $"planet #:{key}"));
+        if (Kw(cmd, "air") is { } air)
+        {
+            if (air is not SList gases) throw new FormatException("planet #:air: expected ((gas fraction) ...)");
+            var f = new Dictionary<string, double>();
+            foreach (var g in gases.Items)
+            {
+                if (g is not SList { Items: [SSymbol name, var x] } || !GasMix.Names.Contains(name.Name))
+                    throw new FormatException($"planet #:air: expected (gas fraction) with a gas among {string.Join(", ", GasMix.Names)}");
+                f[name.Name] = Num(x, "planet #:air");
+            }
+            double G(string n) => f.GetValueOrDefault(n);
+            planet = planet.WithAir(new GasMix(G("o2"), G("n2"), G("co2"), G("h2o"), G("ar")));
+        }
+        Snapshot();
+        Document.Planet = planet;
+        Document.Ambient = planet.Temperature;
+        if (Document.Sun is { } sun && sun.Day > planet.Year) Document.Sun = sun with { Day = (int)planet.Year };
+        return $"on {planet.Name}: g {planet.Gravity} m/s², {planet.Pressure} Pa, air {planet.Temperature} °C";
     }
 
     /// <summary>(ambient °C): the scene's air temperature.</summary>

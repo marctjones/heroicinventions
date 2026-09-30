@@ -13,6 +13,8 @@ namespace HeroicInventions.Sim.Mechanics;
 public sealed class WaterLift(string name, Tank from, Tank to, double volumePerTurn,
                               double intakeElevation, double intakeDepth, double dischargeElevation)
 {
+    /// <summary>The air and gravity it stands in: the planet's open air unless it is inside an enclosure.</summary>
+    public Zone Zone { get; set; } = new();
     public string Name { get; } = name;
     public Tank From { get; } = from;
     public Tank To { get; } = to;
@@ -35,7 +37,7 @@ public sealed class WaterLift(string name, Tank from, Tank to, double volumePerT
     public void Stroke(double metresUp) => _strokeThisStep += Math.Max(0, metresUp);
 
     /// <summary>A pump's rod carries the weight of the water column it's raising: ρ·g·H·A. N.</summary>
-    public double LoadForce => IsPump ? Physics.WaterDensity * Physics.Gravity * Head * VolumePerMetre * Fill : 0;
+    public double LoadForce => IsPump ? Physics.WaterDensity * Zone.Gravity * Head * VolumePerMetre * Fill : 0;
     public double Flow { get; private set; }                   // m³/s, last step
 
     /// <summary>How full each scoop is: the intake's depth under the source's surface, over what a full scoop needs.</summary>
@@ -45,12 +47,12 @@ public sealed class WaterLift(string name, Tank from, Tank to, double volumePerT
     /// The torque it takes to lift the water: power ρ·g·Q·H over the speed
     /// ω, and since Q = V·ω/2π that is ρ·g·H·V/2π — the same at any speed.
     /// </summary>
-    public double LoadTorque => Rpm > 0 ? Physics.WaterDensity * Physics.Gravity * Head * VolumePerTurn * Fill / (2 * Math.PI) : 0;
+    public double LoadTorque => Rpm > 0 ? Physics.WaterDensity * Zone.Gravity * Head * VolumePerTurn * Fill / (2 * Math.PI) : 0;
 
     /// <summary>From the source's surface up to where the water leaves the machine.</summary>
     public double Head => Math.Max(0, DischargeElevation - From.SurfaceElevation);
 
-    public double Power => Physics.WaterDensity * Physics.Gravity * Flow * Head;
+    public double Power => Physics.WaterDensity * Zone.Gravity * Flow * Head;
 
     public void Step(double dt)
     {

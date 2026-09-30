@@ -30,12 +30,14 @@
          (define dll (build-path config-dir tfm "HeroicInventions.SimHost.dll"))
          (and (file-exists? dll) dll))))
 
-;; newest source file under the Sim and SimHost projects (not bin/obj)
+;; newest source file under the Sim and SimHost projects (not bin/obj), and
+;; the planet presets the sim embeds from racket/heroic (issue #38)
 (define (newest-source-time)
-  (for/fold ([t 0]) ([dir (list simhost-dir (build-path simhost-dir 'up "HeroicInventions.Sim"))])
-    (for/fold ([t t]) ([f (in-directory dir (λ (d) (not (member (path->string (file-name-from-path d)) '("bin" "obj")))))]
-                       #:when (member (path-get-extension f) '(#".cs" #".csproj" #".json")))
-      (max t (file-or-directory-modify-seconds f)))))
+  (max (file-or-directory-modify-seconds (build-path repo "racket" "heroic" "planets.rktd"))
+       (for/fold ([t 0]) ([dir (list simhost-dir (build-path simhost-dir 'up "HeroicInventions.Sim"))])
+         (for/fold ([t t]) ([f (in-directory dir (λ (d) (not (member (path->string (file-name-from-path d)) '("bin" "obj")))))]
+                            #:when (member (path-get-extension f) '(#".cs" #".csproj" #".json")))
+           (max t (file-or-directory-modify-seconds f))))))
 
 ;; a built host older than its sources would test yesterday's simulation
 (define (built-stale?)

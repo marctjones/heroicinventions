@@ -16,6 +16,8 @@ namespace HeroicInventions.Sim.Mechanics;
 /// </summary>
 public sealed class Counterpoise(string name, Tank vessel, double vesselMass, double counterweight, double radius, double maxTurn)
 {
+    /// <summary>The air and gravity it stands in: the planet's open air unless it is inside an enclosure.</summary>
+    public Zone Zone { get; set; } = new();
     public string Name { get; } = name;
     public Tank Vessel { get; } = vessel;
     public double VesselMass { get; } = vesselMass;           // kg, empty
@@ -30,7 +32,7 @@ public sealed class Counterpoise(string name, Tank vessel, double vesselMass, do
     public double Angle { get; private set; }                 // rad, 0 shut
     public double AngularVelocity { get; private set; }       // rad/s
     public double Hanging => VesselMass + Vessel.WaterVolume * Physics.WaterDensity;
-    public double Torque => (Hanging - Counterweight) * Physics.Gravity * Radius;
+    public double Torque => (Hanging - Counterweight) * Zone.Gravity * Radius;
 
     public void Step(double dt)
     {

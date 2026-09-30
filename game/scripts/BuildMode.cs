@@ -399,6 +399,15 @@ public partial class BuildMode : Node3D
         _materialBox.ItemSelected += index => _material = _materialIds[(int)index];
         leftCol.AddChild(_materialBox);
 
+        // The planet the scene stands on (issue #38): its gravity, air and sunlight.
+        leftCol.AddChild(new Label { Text = "On the planet" });
+        var planetBox = new OptionButton { TooltipText = "Gravity, air pressure and mix, sunlight: (planet mars) in the console, with #:gravity etc. to change a number" };
+        var planetIds = HeroicInventions.Sim.Planet.Presets.Keys.ToList();
+        foreach (var id in planetIds) planetBox.AddItem(HeroicInventions.Sim.Planet.Presets[id].Name);
+        planetBox.Select(Math.Max(0, planetIds.IndexOf(_session.Document.Planet.Id)));
+        planetBox.ItemSelected += index => RunCommand($"(planet {planetIds[(int)index]})");
+        leftCol.AddChild(planetBox);
+
         var fileRow = new HBoxContainer();
         var saveButton = new Button { Text = "Save…", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         saveButton.Pressed += () => _saveDialog.PopupCentered(new Vector2I(700, 500));

@@ -489,6 +489,62 @@ public class BuildSessionTests
     }
 
     /// <summary>
+    /// Issue #38. (planet mars) stands the scene on Mars: its air takes Mars's
+    /// −63 °C, a lift pump over a well 1 m down holds nothing (the limit is
+    /// (610 − 605.6 Pa)/(1000 × 3.71) = 1.19 mm, water's vapour pressure at 0 °C
+    /// by the sim's Antoine equation being 605.6 Pa), and a number changed on
+    /// the preset (#:gravity 9.81) survives export, the command script and undo.
+    /// </summary>
+    [Fact]
+    public void PlanetIsASceneSettingThatChangesTheNumbersAndRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "red");
+        session.Execute("(tank well #:at (0 0 0) #:area 0.5 #:height 1 #:water 0.4)");
+        session.Execute("(tank trough #:at (1 0 0) #:area 0.25 #:height 0.4)");
+        session.Execute("(pump p #:at (0.5 1.8 0) #:from well #:to trough #:bore 0.15 #:stroke 0.5 #:rpm 20)");
+        session.Execute("(planet mars)");
+        Assert.Equal(-63, session.Document.Ambient);
+        session.Execute("(run 10)");
+        var run = session.LastRun!;
+        Assert.Equal(3.71, run.Outside.Gravity);
+        Assert.Equal(0.0011917, run.Pumps["p"].Limit, 6);
+        Assert.Equal(0, run.Pumps["p"].Delivered);
+        Assert.Equal(0.0151833, run.Outside.AirDensity, 6);     // 610 × 0.043489 / (8.314 × 210.15)
+        Assert.Equal(0.0995, run.Outside.BoilingPoint, 4);
+
+        session.Execute("(planet mars #:gravity 9.81)");
+        session.Execute("(ambient 5)");
+        var def = session.Document.ToMachineDef();
+        Assert.Equal(["(planet mars #:gravity 9.81)", "(ambient 5.0)"], CommandScript.For(def).Take(2));
+        var reparsed = MachineDef.Parse(MachineWriter.Write(def));
+        Assert.Equal(def.Planet, reparsed.Planet);
+        Assert.Equal(5, reparsed.Ambient);
+        string rkt = Path.Combine(TempDir(), "red.rkt");
+        session.ExportRkt(rkt);
+        Assert.Contains("#:planet (planet mars #:gravity 9.81)\n  #:ambient 5\n", File.ReadAllText(rkt));
+
+        session.Execute("(undo)");
+        session.Execute("(undo)");
+        Assert.Equal(Planet.Mars, session.Document.Planet);
+        session.Execute("(undo)");
+        Assert.True(session.Document.Planet.IsEarth);
+        Assert.Equal(20, session.Document.Ambient);
+    }
+
+    /// <summary>Every existing scene is unchanged: Earth's air is the game's 287.05 J/(kg·K) dry air, 1.204118 kg/m³ at 20 °C.</summary>
+    [Fact]
+    public void EarthIsTheDefaultPlanetAndItsNumbersAreTheOldConstants()
+    {
+        var zone = new Zone();
+        Assert.True(zone.Planet.IsEarth);
+        Assert.Equal(Physics.Gravity, zone.Gravity);
+        Assert.Equal(Physics.AtmosphericPressure, zone.Pressure);
+        Assert.Equal(Physics.AirDensity, zone.AirDensity, 12);
+        Assert.Equal(43.49, Planet.Mars.MolarMass * 1000, 2);    // NASA's Mars fact sheet: mean molecular weight 43.49
+        Assert.True(MachineDef.Parse("(machine m)").Planet.IsEarth);
+    }
+
+    /// <summary>
     /// A bollard placed from the palette with nobody holding the rope lets the
     /// load fall; given one turn and a pull inside the capstan band it holds.
     /// </summary>

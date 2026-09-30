@@ -1199,3 +1199,45 @@
     (check-= (list-ref (values-of run '(reach water)) before) 0 0)
     ;; and the weight really had arrived: it is at or below the box's top face by then
     (check-true (< (final-of run '(weight y)) 0.95))))
+
+;; ---------------------------------------------------------------------------
+;; Earth's machines on Mars (issue #38): the same formulas under Mars's
+;; numbers. The working is in racket/machines/earth-machines-on-mars.rkt.
+
+(test-case "On Mars: 3.71 m/s², 610 Pa of 43.49 g/mol air at -63 °C, 0.01518 kg/m³, boiling at 0.0995 °C"
+  (define run (simulate 'earth-machines-on-mars #:seconds 12 #:step 0.01 #:sample-dt 0.01))
+  (check-= (final-of run '(scene gravity)) 3.71 1e-12)
+  (check-= (final-of run '(scene pressure)) 0.61 1e-12)
+  (check-= (final-of run '(scene molar-mass)) 43.4887 1e-4)
+  (check-= (final-of run '(scene air-density)) 0.0151833 1e-7 "610 x 0.0434887 / (8.314 x 210.15)")
+  (check-= (final-of run '(scene boiling-point)) 0.0995 1e-4 "Antoine: 1730.63 / (8.07131 - log10(610 / 133.322)) - 233.426")
+  ;; the windmill's wind carries 1/79.3 of Earth's power: 1/2 rho pi 5^2 10^3
+  (check-= (final-of run '(mill wind-power)) 596.25 0.01)
+  ;; the pump's reach, (610 - 605.58) / (1000 x 3.71): it lifts nothing
+  (check-= (final-of run '(pump limit)) 0.0011917 1e-6)
+  (check-true (> (final-of run '(pump strokes)) 2) "it is worked")
+  (check-= (final-of run '(pump delivered)) 0 1e-12)
+  ;; the kettle boils as soon as it passes 0.0995 °C: about 1.1 s at 0.089 K/s
+  (define boiling (for/first ([f run] #:when (> (cadr (assq 'kettle.pressure (cdr f))) 0)) f))
+  (check-= (car boiling) 1.11 0.03)
+  (check-= (cadr (assq 'kettle.temperature (cdr boiling))) 0.0995 0.001)
+  ;; the bearing pendulum's period, 2 pi sqrt(I / (m g d)) (1 + theta^2/16) = 3.245 s
+  (define angle (for/list ([f run]) (cons (car f) (cadr (assq 'pivot.angle (cdr f))))))
+  (define ups (for/list ([a angle] [b (cdr angle)] #:when (and (< (cdr a) 0) (>= (cdr b) 0)))
+                (+ (car a) (* (- (car b) (car a)) (/ (- (cdr a)) (- (cdr b) (cdr a)))))))
+  (check-true (>= (length ups) 3))
+  (for ([a ups] [b (cdr ups)]) (check-= (- b a) 3.245 0.01)))
+
+(test-case "On Mars a Jolt pendulum swings sqrt(9.81 / 3.71) = 1.626 times as slowly as the same one on Earth"
+  (when (godot-available?)
+    (define (periods run key)
+      (define tilt (for/list ([f run]) (cons (car f) (cadr (assq key (cdr f))))))
+      (define ups (for/list ([a tilt] [b (cdr tilt)] #:when (and (< (cdr a) 0) (>= (cdr b) 0)))
+                    (+ (car a) (* (- (car b) (car a)) (/ (- (cdr a)) (- (cdr b) (cdr a)))))))
+      (for/list ([a ups] [b (cdr ups)]) (- b a)))
+    (define earth (periods (godot-simulate 'pendulum-demo #:seconds 8 #:sample-dt 0.01) 'rod.rot-z))
+    (define mars (periods (godot-simulate 'earth-machines-on-mars #:seconds 8 #:sample-dt 0.01) 'clock.rot-z))
+    ;; first swings, from the same 40°; Jolt's per-second damping takes a
+    ;; little more amplitude out of Mars's longer swing, so a little less
+    ;; than 1.626 (measured 1.622)
+    (check-= (/ (car mars) (car earth)) 1.6261 0.01)))

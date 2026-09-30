@@ -91,6 +91,7 @@ public partial class Main : Node3D
         ["rope-over-bars"] = new(new Vector3(5.5f, 4.0f, 9.0f), new Vector3(0, 2.6f, 0), 50),
         ["bar-crane"] = new(new Vector3(7.0f, 5.5f, 19.0f), new Vector3(7.0f, 3.5f, 0), 55),
         ["winter-night"] = new(new Vector3(0, 2.2f, 5.5f), new Vector3(0, 0.4f, 0), 50),
+        ["earth-machines-on-mars"] = new(new Vector3(1.5f, 5f, 17f), new Vector3(1.5f, 3f, 0), 50),
         ["heliostats"] = new(new Vector3(7.5f, 3.2f, 5.5f), new Vector3(0, 0.6f, 0), 50),
     };
     private static readonly (double Scale, string Label)[] Speeds =
@@ -155,6 +156,7 @@ public partial class Main : Node3D
         ["rope-over-bars"] = "Rope over a Fixed Bar",
         ["bar-crane"] = "Roman Crane without a Pulley",
         ["winter-night"] = "A Winter Night (Ambient Temperature)",
+        ["earth-machines-on-mars"] = "Earth's Machines on Mars (Planet Settings)",
         ["heliostats"] = "Heliostats: Sunlight and Mirrors",
     };
 
@@ -195,6 +197,7 @@ public partial class Main : Node3D
         ["constant-head"] = "Ctesibius' float valve. Two identical cisterns, 40 cm full, each drain through a tap raised 1 cm into a receiver. The front one is fed by a 2 L/s aqueduct through a mouth that a bronze float closes with a conical plug: seated at 40 cm, wide open 2 cm below. It settles at 39.17 cm, where the valve lets in exactly the 0.83 L/s the tap draws, so its receiver rises a steady 1.65 mm/s, a clock. Open the tap to 2 cm (tap.opening 0.04) and the draw doubles, yet the head drops only 0.8 cm, to 38.38 cm. The back cistern, with no valve and no feed, sinks to 22.5 cm in a minute and 10 cm in two, and its receiver slows as it goes.",
         ["sluice-demo"] = "A sluice gate on a mill race. A 20 L/s spring fills a head pool; a wooden gate 1 m tall, raised 5 cm, lets the water out under its lower edge as a jet, Q = 0.6 x slot area x sqrt(2 g h). All the spring must pass the slot, so the pool rises until the water stands 25.2 cm over the slot's middle. Below, the race runs into a reach that drains over a floor-level outfall into a pond. Shut the gate (gate.opening 0) and the race runs dry at once, the reach drains away over two minutes, and the pool backs up and spills over its waste weir.",
         ["heliostats"] = "Two bronze boilers of a litre of water, each heated by a 0.5 m2 mirror turned through the day to keep throwing the sun onto it - a heliostat - at Alexandria on midsummer's day, from noon. The sun stands 82 degrees up in the south and its direct beam through clear air is 951 W/m2. A mirror sending that light to its boiler must face halfway between the two, so it shows only cos(theta/2) of itself to the sun: the mirror north of its boiler, looking back towards the sun, keeps 0.83 and throws 336 W; the one to the south, standing between boiler and sun, keeps 0.75 and throws 303 W. Watch the day go by at 20x: the beams weaken as the sun lowers, and die at sunset. Try scene.day 355: at midwinter noon the sun is only 35 degrees up, and the north mirror keeps 0.98 of its area while the south one keeps 0.42.",
+        ["earth-machines-on-mars"] = "The same parts and formulas, with Mars's numbers: g = 3.71 m/s2, 610 Pa of air that is 95% CO2, -63 C. The pendulums swing sqrt(9.81 / 3.71) = 1.63 times as slowly (the 1 m one on its bearing in 3.245 s). The lift pump holds no water: the air's 610 Pa is barely more than water's vapour pressure at 0 C (605.6 Pa), so its reach is (610 - 605.6) / (1000 x 3.71) = 1.2 mm. The windmill's wind carries 1/2 rho A v^3 = 596 W through 5 m sails at 10 m/s, 1/79 of Earth's 47 kW, because Mars's air is 0.0152 kg/m3. The kettle boils at 0.1 C, a second after the fire is lit. Try scene.gravity 9.81, or scene.pressure 50 (kPa).",
         ["winter-night"] = "A night at -10 C. A copper of 5 kg of water, taken off the fire at 90 C, cools towards the air by Newton's law: 2 W for every kelvin it is warmer, against 5 x 4186 J/K, so T = -10 + 100 exp(-t / 10465 s) - 60.9 C after an hour, 40.3 C after two. The cistern beside it ices over: each new layer's latent heat has to leave up through the ice already there, so the ice thickens as the square root of time (Stefan, 1891) - 22.8 mm in an hour, twice that in four. The shallow basin's seep evaporates nothing under ice. Try scene.ambient 20, or 30 for a summer's day. Best at 20x.",
         ["rope-over-bars"] = "Four fixed oak bars, each with a 173 kg granite block on one side of a hemp rope and a smaller one on the other. Where the rope drags over a bar, the tight side can carry up to e^(mu theta) times the slack side (the capstan equation): 4.44 over half a turn, 87 over a turn and a half. Left to right: half a turn with 21.6 kg (95.9 kg's worth, too little: the rope slides, the pair accelerate at 2.81 m/s2 and the bar glows), half a turn with 72.9 kg (holds), a turn and a half with 0.93 kg (81 kg's worth: slides at 3.57 m/s2), and with 2.7 kg (236 kg's worth: holds). The label over each bar gives its two tensions.",
         ["bar-crane"] = "The Roman crane with its pulley swapped for a fixed oak bar, as ropes ran over beam ends before sheaves. The rope turns 129 degrees over the bar, so lifting, the drum side must pull e^(mu theta) = 2.91 times the stone's 5.7 kN. Two walkers, who lift the stone over a pulley, now pull 6.2 kN at the drum and only 2.1 kN reaches the stone: it stays on the ground. Seven walkers lift it at the wheel's 3 rpm, the drum side carrying 16.7 kN, and the bar glows with the friction's heat.",
@@ -959,7 +962,7 @@ public partial class Main : Node3D
     private ProceduralSkyMaterial _skyMaterial = null!;
     private StandardMaterial3D _floorMaterial = null!;
     private Color _skyTop, _skyHorizon;
-    private (double ambient, bool sunShown, int elevation, int azimuth) _shownSky = (double.NaN, false, 0, 0);
+    private (double ambient, bool sunShown, int elevation, int azimuth, HeroicInventions.Sim.Planet? planet) _shownSky = (double.NaN, false, 0, 0, null);
 
     /// <summary>
     /// The sky, seen. At 20 °C under the studio light everything is as it
@@ -975,7 +978,8 @@ public partial class Main : Node3D
         double ambient = run?.Ambient ?? 20;
         bool sunShown = run?.SunShown ?? false;
         var sun = run?.Sun;
-        var key = (ambient, sunShown, sunShown ? (int)Math.Round(sun!.Elevation * 4) : 0, sunShown ? (int)Math.Round(sun!.Azimuth * 4) : 0);
+        var planet = run?.Planet ?? HeroicInventions.Sim.Planet.Earth;
+        var key = (ambient, sunShown, sunShown ? (int)Math.Round(sun!.Elevation * 4) : 0, sunShown ? (int)Math.Round(sun!.Azimuth * 4) : 0, planet);
         if (key == _shownSky) return;
         _shownSky = key;
 
@@ -985,6 +989,18 @@ public partial class Main : Node3D
         var top = _skyTop.Lerp(new Color(0.55f, 0.62f, 0.72f), cold * 0.7f).Lerp(new Color(0.42f, 0.6f, 0.85f), hot * 0.5f);
         var horizon = _skyHorizon.Lerp(new Color(0.82f, 0.85f, 0.9f), cold * 0.7f).Lerp(new Color(0.9f, 0.82f, 0.68f), hot * 0.5f);
         float energy = 1 - 0.2f * cold;
+        // Another planet's sky and ground (issue #38): Mars's butterscotch
+        // dust-lit sky over rust-red regolith, its sunlight weaker by the
+        // ratio of solar constants (586 W/m² against Earth's 1361).
+        bool earth = planet.IsEarth;
+        if (!earth)
+        {
+            Color C(HeroicInventions.Sim.Machines.Vec3 v) => new((float)v.X, (float)v.Y, (float)v.Z);
+            top = top.Lerp(C(planet.SkyColor), 0.85f);
+            horizon = horizon.Lerp(C(planet.SkyColor).Lightened(0.25f), 0.85f);
+            light = light.Lerp(new Color(1f, 0.88f, 0.75f), 0.5f);
+            energy *= Mathf.Clamp((float)(0.4 + 0.6 * planet.SolarConstant / HeroicInventions.Sim.Thermo.Sun.EarthSolarConstant), 0.2f, 1.2f);
+        }
 
         if (sunShown)
         {
@@ -1008,7 +1024,9 @@ public partial class Main : Node3D
         _skyMaterial.SkyTopColor = top;
         _skyMaterial.SkyHorizonColor = horizon;
         float frost = Mathf.Clamp(-(float)ambient / 5, 0, 1);         // none above 0 °C, white by −5 °C
-        _floorMaterial.AlbedoColor = Shapes.Stone.Lerp(new Color(0.93f, 0.95f, 0.98f), frost);
+        var ground = earth ? Shapes.Stone : new Color((float)planet.GroundColor.X, (float)planet.GroundColor.Y, (float)planet.GroundColor.Z);
+        // Mars's frost is thin CO2 and water rime: a pale dusting, not an Earth snowfield
+        _floorMaterial.AlbedoColor = ground.Lerp(new Color(0.93f, 0.95f, 0.98f), earth ? frost : frost * 0.25f);
         _floorMaterial.Roughness = 0.8f - 0.25f * frost;
     }
 

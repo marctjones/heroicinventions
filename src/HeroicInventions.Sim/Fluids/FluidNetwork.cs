@@ -18,6 +18,8 @@ public sealed class Tank(string name, double baseElevation, double area, double 
     public double Height { get; } = height;               // m
     public double WaterVolume { get; internal set; } = waterVolume; // m³
     public AirPocket? Air { get; internal set; }
+    /// <summary>The air and gravity it stands in: the planet's open air unless it is inside an enclosure.</summary>
+    public Zone Zone { get; set; } = new();
     public double Ice { get; private set; }               // m thick, grown down from the surface
     public bool FrozenSolid => Ice > 0 && WaterVolume <= 1e-12;
 
@@ -63,7 +65,7 @@ public sealed class Tank(string name, double baseElevation, double area, double 
     /// above the water line only sees the gas pressure plus its own height.
     /// </summary>
     public double HeadAt(double portElevation) =>
-        Physics.PressureToHead(SurfaceGaugePressure) + Math.Max(SurfaceElevation, portElevation);
+        Zone.PressureToHead(SurfaceGaugePressure) + Math.Max(SurfaceElevation, portElevation);
 }
 
 /// <summary>
@@ -87,17 +89,23 @@ public sealed class AirPocket : IHeated
     private readonly List<Tank> _tanks;
     private double _lastVolume;
 
-    public AirPocket(IEnumerable<Tank> tanks, double tubeVolume = 0, double sealedAtC = 20)
+    public AirPocket(IEnumerable<Tank> tanks, double tubeVolume = 0, double sealedAtC = 20, Zone? zone = null)
     {
+        Zone = zone ?? new Zone();
+        GasConstant = Zone.AirGasConstant;
         _tanks = tanks.ToList();
         TubeVolume = tubeVolume;
         foreach (var t in _tanks) t.Air = this;
         SealedAt = Temperature = Ambient = sealedAtC;
         _lastVolume = Volume;
-        Mass = Physics.AtmosphericPressure * Volume / (Physics.AirGasConstant * Physics.ToKelvin(sealedAtC));
+        Mass = Zone.Pressure * Volume / (GasConstant * Physics.ToKelvin(sealedAtC));   // sealed at the zone's pressure
     }
 
     public double TubeVolume { get; }
+    /// <summary>The air outside the vessel's walls: what it was sealed at, and what its gauge pressure is measured against.</summary>
+    public Zone Zone { get; set; }
+    /// <summary>J/(kg·K) of the air sealed in: the zone's air as it was when sealed.</summary>
+    public double GasConstant { get; }
     public double SealedAt { get; }                               // °C
     public double Ambient { get; set; }                           // °C of the air outside the walls; sealed at it
     public double Mass { get; }                                   // kg of air
@@ -114,8 +122,8 @@ public sealed class AirPocket : IHeated
     public bool Isothermal => HeatLoss == 0 && VesselHeatCapacity == 0 && HeatInput == 0 && Temperature == SealedAt;
 
     public double Volume => TubeVolume + _tanks.Sum(t => t.Capacity - t.WaterVolume);
-    public double AbsolutePressure => Mass * Physics.AirGasConstant * Physics.ToKelvin(Temperature) / Volume;
-    public double GaugePressure => AbsolutePressure - Physics.AtmosphericPressure;
+    public double AbsolutePressure => Mass * GasConstant * Physics.ToKelvin(Temperature) / Volume;
+    public double GaugePressure => AbsolutePressure - Zone.Pressure;
 
     /// <summary>
     /// Heat for dt seconds. The walls' loss pulls it toward where heat in

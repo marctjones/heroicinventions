@@ -29,7 +29,8 @@ public static class RktExporter
         sb.Append(";; overwrite this .machine file the next time it runs from this source).\n");
         sb.Append($"(define-machine {m.Name}\n");
         if (m.Source is { } src) sb.Append($"  #:source {Quote(src)}\n");
-        if (m.Ambient != 20) sb.Append($"  #:ambient {F(m.Ambient)}\n");
+        if (!m.Planet.IsEarth) sb.Append($"  #:planet {PlanetExpr(m.Planet)}\n");
+        if (m.Ambient != m.Planet.Temperature) sb.Append($"  #:ambient {F(m.Ambient)}\n");   // unsaid, a scene takes its planet's
         if (m.Sun is { } sun) sb.Append($"  #:latitude {F(sun.Latitude)} #:day {sun.Day} #:time {F(sun.Time)}\n");
 
         foreach (var p in m.Parts) sb.Append(PartClause(p));
@@ -66,6 +67,16 @@ public static class RktExporter
 
         sb.Append(")\n");
         return sb.ToString();
+    }
+
+    /// <summary>mars, or (planet mars #:gravity 9.81 …) for a preset with numbers changed.</summary>
+    private static string PlanetExpr(Planet p)
+    {
+        var preset = Planet.Named(p.Id);
+        var changes = Planet.NumberKeys.Where(k => p.Number(k) != preset.Number(k)).Select(k => $" #:{k} {F(p.Number(k))}").ToList();
+        if (p.Air != preset.Air)
+            changes.Add($" #:air '({string.Join(' ', GasMix.Names.Select(g => $"({g} {F(p.Air[g])})"))})");
+        return changes.Count == 0 ? p.Id : $"(planet {p.Id}{string.Concat(changes)})";
     }
 
     private static string F(double v) => v.ToString("R", CultureInfo.InvariantCulture);

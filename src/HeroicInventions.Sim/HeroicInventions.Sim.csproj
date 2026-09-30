@@ -14,6 +14,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Materials/materials.json" LogicalName="materials.json" />
+    <!-- The planet presets, read straight from the Racket source of truth (issue #38). -->
+    <EmbeddedResource Include="../../racket/heroic/planets.rktd" LogicalName="planets.rktd" />
   </ItemGroup>
 
 </Project>

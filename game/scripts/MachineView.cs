@@ -1295,6 +1295,7 @@ public partial class MachineView : Node3D
 
     public void Simulate(double dt)
     {
+        ApplyPlanetGravity();
         ResolveBobImpacts();
         ResolveRopes();
         DriveGearTrains();
@@ -1305,6 +1306,27 @@ public partial class MachineView : Node3D
         Runtime.Step(dt);
         Refresh();
         TraceTick(dt);
+    }
+
+    private double _shownGravity = Physics.Gravity;
+    private bool _gravityApplied;
+
+    /// <summary>
+    /// The world falls at Earth's 9.81 m/s² (Main sets it once); this
+    /// machine's bodies fall at its planet's gravity (issue #38), each scaled
+    /// by g / 9.81, so a Mars machine and an Earth one can stand in one world
+    /// and each swing at its own rate. Set again whenever the planet's
+    /// gravity changes (scene.gravity, live).
+    /// </summary>
+    private void ApplyPlanetGravity()
+    {
+        double g = Runtime.Outside.Gravity;
+        if (_gravityApplied && g == _shownGravity) return;
+        _gravityApplied = true;
+        _shownGravity = g;
+        float scale = (float)(g / Physics.Gravity);
+        foreach (var b in FindChildren("*", nameof(RigidBody3D), true, false).OfType<RigidBody3D>())
+            b.GravityScale = scale;
     }
 
     /// <summary>Rotation and height of every dynamic body — a quick way to confirm Jolt is actually moving them (see HEROIC_DEBUG_PHYSICS).</summary>
@@ -1474,6 +1496,9 @@ public partial class MachineView : Node3D
                          (p.Broken ? ", column broken" : "") + $", {p.MaxPull:F0} N on the rod at most" + (p.Stalled ? ", STALLED" : ""));
             foreach (var (id, r) in Runtime.Rotors) bits.Add($"{id} {r.Rpm:F0} rpm");
             foreach (var (id, w) in Runtime.WaterWheels) bits.Add($"{id} {w.Rpm:F1} rpm, {w.Power:F0} W, {w.Water:F1} kg aboard");
+            if (!Runtime.Planet.IsEarth)
+                bits.Add($"on {Runtime.Planet.Name}: g {Runtime.Outside.Gravity:0.##} m/s², air {Runtime.Outside.Pressure:0.#} Pa, " +
+                         $"{Runtime.Outside.AirDensity:0.####} kg/m³, {Runtime.Outside.OxygenFraction * 100:0.##}% O₂, water boils at {Runtime.Outside.BoilingPoint:0.#} °C");
             if (Runtime.Ambient != 20 || Runtime.Tanks.Values.Any(t => t.Ice > 0)) bits.Add($"air {Runtime.Ambient:0.#} °C");
             foreach (var (id, t) in Runtime.Tanks.Where(kv => kv.Value.Ice > 0))
                 bits.Add($"{id} iced {t.Ice * 1000:F1} mm" + (t.FrozenSolid ? ", frozen solid" : $", {t.WaterVolume * 1000:F0} L still water"));
@@ -1527,12 +1552,12 @@ public partial class MachineView : Node3D
         // Y never changes — using it directly would make PE constant and
         // silently ignore the entire swing.
         double pe = _freezable.Sum(b =>
-            b.Mass * (float)Physics.Gravity * (b.GlobalTransform * _comOffset.GetValueOrDefault(b, Vector3.Zero)).Y);
+            b.Mass * (float)Runtime.Outside.Gravity * (b.GlobalTransform * _comOffset.GetValueOrDefault(b, Vector3.Zero)).Y);
         // Water has real gravitational PE too — without this, a fluid
         // machine like Heron's fountain (no rigid bodies, no rotor) shows
         // zero energy and a blank speed the whole time it's running.
         pe += bearingPe;
-        pe += Runtime.Tanks.Values.Sum(t => t.WaterVolume * Physics.WaterDensity * Physics.Gravity * (t.BaseElevation + t.Level / 2));
+        pe += Runtime.Tanks.Values.Sum(t => t.WaterVolume * Physics.WaterDensity * Runtime.Outside.Gravity * (t.BaseElevation + t.Level / 2));
         // A twisted torsion spring stores ½·k·(θ − rest)²: counted, or a
         // catapult would seem to make energy from nothing when loosed.
         pe += _springs.Sum(sp => 0.5 * sp.Stiffness * Math.Pow(sp.Angle - sp.Rest, 2));

@@ -41,7 +41,7 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
                             double width, double length)
 {
     public const double Roughness = 0.015;         // Manning's n, dressed stone
-    private const double WeirCoefficient = 1.705;  // broad-crested weir, SI
+    private const double WeirCoefficient = 1.705;  // broad-crested weir, SI, under Earth's 9.81 m/s²: (2/3)^1.5·√g
 
     public string Name { get; } = name;
     public Tank From { get; } = from;
@@ -51,6 +51,8 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
     public double Width { get; } = width;
     public double Length { get; } = length;
     public double Slope => Math.Max(1e-4, (LipElevation - EndElevation) / Length);
+    /// <summary>m/s²: water falls over a lip and runs down a slope as √g.</summary>
+    public double Gravity { get; set; } = Physics.Gravity;
 
     /// <summary>A sluice gate across the head of the channel, if it has one.</summary>
     public SluiceGate? Gate { get; set; }
@@ -66,16 +68,19 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
     /// <summary>Water over the lip, less any the far end is backed up to.</summary>
     public double Head => Math.Max(0, From.SurfaceElevation - Math.Max(LipElevation, To?.SurfaceElevation ?? double.NegativeInfinity));
 
-    public static double WeirFlow(double width, double head) => WeirCoefficient * width * Math.Pow(Math.Max(0, head), 1.5);
+    public static double WeirFlow(double width, double head, double gravity = Physics.Gravity) =>
+        WeirCoefficient * Math.Sqrt(gravity / Physics.Gravity) * width * Math.Pow(Math.Max(0, head), 1.5);
 
     /// <summary>The depth at which a flow Q runs steadily down a channel of this width and slope (Manning), by bisection.</summary>
-    public static double NormalDepth(double flow, double width, double slope)
+    public static double NormalDepth(double flow, double width, double slope, double gravity = Physics.Gravity)
     {
+        // Manning's 1/n is fitted under Earth's gravity; the speed a slope gives goes as √g (Chézy's C = √(8g/f))
+        double g = Math.Sqrt(gravity / Physics.Gravity);
         if (flow <= 0) return 0;
         double Carries(double d)
         {
             double area = width * d, radius = area / (width + 2 * d);
-            return area * Math.Pow(radius, 2.0 / 3) * Math.Sqrt(slope) / Roughness;
+            return g * area * Math.Pow(radius, 2.0 / 3) * Math.Sqrt(slope) / Roughness;
         }
         double lo = 0, hi = 1;
         while (Carries(hi) < flow) hi *= 2;
@@ -91,8 +96,8 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
     {
         double downstream = To?.SurfaceElevation ?? double.NegativeInfinity;
         double q = Gate is { } gate
-            ? gate.Discharge(From.SurfaceElevation, LipElevation, downstream, WeirFlow(Width, Head))
-            : WeirFlow(Width, Head);
+            ? gate.Discharge(From.SurfaceElevation, LipElevation, downstream, WeirFlow(Width, Head, Gravity))
+            : WeirFlow(Width, Head, Gravity);
         q *= Valve?.Opening ?? 1;
         // can't take more than stands above the lip, nor put more than fits
         double available = Math.Max(0, (From.SurfaceElevation - LipElevation) * From.Area);
@@ -102,7 +107,7 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
         if (To is not null) To.WaterVolume += moved;
         else Pour?.Invoke(moved);
         Flow = moved / dt;
-        Depth = NormalDepth(Flow, Width, Slope);
+        Depth = NormalDepth(Flow, Width, Slope, Gravity);
         Velocity = Depth > 0 ? Flow / (Width * Depth) : 0;
     }
 }
@@ -126,7 +131,6 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
 public sealed class SluiceGate(double width, double height, double opening)
 {
     public const double DischargeCoefficient = 0.6;
-    private const double G = 9.81;
 
     public double Width { get; } = width;             // m, across the channel
     public double Height { get; } = height;           // m, the plate itself
@@ -139,8 +143,11 @@ public sealed class SluiceGate(double width, double height, double opening)
     public double OrificeHead { get; private set; }   // m of water above the slot's middle (or the tailwater)
 
     /// <summary>Q = Cd·w·a·√(2gh): an orifice a high and w wide under a head h.</summary>
-    public static double OrificeFlow(double width, double slot, double head) =>
-        DischargeCoefficient * width * slot * Math.Sqrt(2 * G * Math.Max(0, head));
+    public static double OrificeFlow(double width, double slot, double head, double gravity = Physics.Gravity) =>
+        DischargeCoefficient * width * slot * Math.Sqrt(2 * gravity * Math.Max(0, head));
+
+    /// <summary>m/s² the water falls through the slot under.</summary>
+    public double Gravity { get; set; } = Physics.Gravity;
 
     /// <summary>
     /// What leaves over the lip through this gate, given the water's surface
@@ -153,9 +160,9 @@ public sealed class SluiceGate(double width, double height, double opening)
         OrificeHead = Math.Max(0, upstream - Math.Max(lip + slot / 2, downstream));
         Flow = slot <= 0 ? 0
              : upstream <= lip + slot ? weirFlow                    // the plate hangs clear of the water
-             : Math.Min(weirFlow, OrificeFlow(Width, slot, OrificeHead));
+             : Math.Min(weirFlow, OrificeFlow(Width, slot, OrificeHead, Gravity));
         double crest = lip + slot + Height;
-        OverFlow = Channel.WeirFlow(Width, upstream - Math.Max(crest, downstream));
+        OverFlow = Channel.WeirFlow(Width, upstream - Math.Max(crest, downstream), Gravity);
         return Flow + OverFlow;
     }
 }

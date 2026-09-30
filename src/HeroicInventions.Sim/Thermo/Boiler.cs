@@ -15,6 +15,8 @@ namespace HeroicInventions.Sim.Thermo;
 /// </summary>
 public sealed class Boiler(double waterMassKg, double temperatureC = 20, double heatInputW = 2000) : IHeated
 {
+    /// <summary>The air and gravity it stands in: the planet's open air unless it is inside an enclosure.</summary>
+    public Zone Zone { get; set; } = new();
     public double WaterMass { get; private set; } = waterMassKg; // kg
     public double Temperature { get; private set; } = temperatureC; // °C
     public double HeatInput { get; set; } = heatInputW;             // W, from the fire
@@ -23,8 +25,8 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
     public double HeatDelivered { get; private set; }               // J, cumulative — the energy-dashboard's "input" term
     public double HeatLost { get; private set; }                    // J, cumulative, to the air
 
-    public double AbsolutePressure => Burst ? Physics.AtmosphericPressure : SaturationPressure(Temperature);
-    public double GaugePressure => Math.Max(0, AbsolutePressure - Physics.AtmosphericPressure);
+    public double AbsolutePressure => Burst ? Zone.Pressure : SaturationPressure(Temperature);
+    public double GaugePressure => Math.Max(0, AbsolutePressure - Zone.Pressure);
 
     public List<SafetyValve> Valves { get; } = [];
     public double BurstPressure { get; init; }                      // gauge Pa it is rated to; 0 never bursts
@@ -74,11 +76,11 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
         foreach (var v in Valves)
         {
             v.Opening = v.OpeningAt(gauge);
-            v.Flow = v.Discharge(gauge, absolute, Temperature);
+            v.Flow = v.Discharge(gauge, absolute, Temperature, Zone.Pressure);
             want += v.Flow * dt;
         }
         if (want <= 0) return 0;
-        double seat = SaturationTemperature(Physics.AtmosphericPressure + Valves.Min(v => v.LiftPressure));
+        double seat = SaturationTemperature(Zone.Pressure + Valves.Min(v => v.LiftPressure));
         double room = (netHeat + water * Physics.WaterSpecificHeat * (Temperature - seat)) / Physics.LatentHeatVaporization;
         double vent = Math.Clamp(Math.Min(want, room), 0, water);
         foreach (var v in Valves)
@@ -93,7 +95,7 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
     {
         Burst = true;
         BurstTime = Time;
-        BurstGauge = SaturationPressure(Temperature) - Physics.AtmosphericPressure;
+        BurstGauge = SaturationPressure(Temperature) - Zone.Pressure;
         Flashed = Math.Min(WaterMass, WaterMass * Physics.WaterSpecificHeat * Math.Max(0, Temperature - 100) / Physics.LatentHeatVaporization);
         WaterMass = 0;
         Temperature = 100;

@@ -49,7 +49,9 @@ public sealed class Hearth(IHeated target, double powerW, double fuelKg, string 
     public double AmbientTemperature { get; set; } = 20;
     public double WaterTemperature => Math.Max(0, AmbientTemperature);
     /// <summary>The air the fire draws, kg/m³: a bellows forcing cold dense air in feeds it more by mass.</summary>
-    public double AirDensity => Physics.AirDensityAt(AmbientTemperature);
+    public double AirDensity => Zone.AirDensityAt(AmbientTemperature);
+    /// <summary>The air it burns in: the planet's open air unless it is inside an enclosure.</summary>
+    public Zone Zone { get; set; } = new();
 
     /// <summary>Heat to take a kilogram of that water to steam, J/kg.</summary>
     public double QuenchHeat =>

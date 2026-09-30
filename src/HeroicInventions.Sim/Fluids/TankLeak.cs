@@ -33,5 +33,5 @@ public sealed class TankLeak(Tank tank, double height, double area, Tank? catchT
     /// <summary>Metres of water (plus any gas pressure) above the hole; none once the surface is down to it.</summary>
     public double Head => Tank.IsSubmerged(HoleElevation) ? Math.Max(0, Tank.HeadAt(HoleElevation) - HoleElevation) : 0;
 
-    public double Discharge() => Cd * Area * Math.Sqrt(2 * Physics.Gravity * Head);
+    public double Discharge() => Cd * Area * Math.Sqrt(2 * Tank.Zone.Gravity * Head);
 }
