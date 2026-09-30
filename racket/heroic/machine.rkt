@@ -39,7 +39,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane pond roof
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -474,7 +474,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane pond roof
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt wake joint)
 
@@ -532,7 +532,8 @@
   (struct trinfo (id body))          ; a trigger: the part it watches, or #f
   (struct chinfo (id from to onto))
   (struct zjinfo (id kind from to))
-  (struct pninfo (id on))            ; a pane: the enclosure whose wall it is in  ; a door or air-pump: the zones it joins (enclosure ids or outside)  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
+  (struct pninfo (id on))
+  (struct rfinfo (id kind on gutter)) ; a pond (on a tank) or a roof (on an enclosure, with a gutter tank or #f)            ; a pane: the enclosure whose wall it is in  ; a door or air-pump: the zones it joins (enclosure ids or outside)  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
 
   (define known-materials (material-ids))
 
@@ -574,8 +575,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, ratchet, crucible, burning-mirror, hopper, pane) or link (pipe, connect, sealed-air)"
-    #:literals (hopper enclosure grip door air-pump cam digger float ratchet crucible burning-mirror pane tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt wake joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, ratchet, crucible, burning-mirror, hopper, pane, pond, roof) or link (pipe, connect, sealed-air)"
+    #:literals (hopper enclosure grip door air-pump cam digger float ratchet crucible burning-mirror pane pond roof tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1191,6 +1192,40 @@
                           (list (cons 'on 'room) (cons 'side side-v) (cons 'thickness thick-v) (cons 'count (~? count-v 1))
                                 (cons 'glass '(~? glass-kind silica)) (cons 'facing '(~? facing-dir up))
                                 (cons 'strength (~? strength-v 7e6)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A warm pond (issue #58): the water in tank #:on given a temperature
+    ;; (#:temperature, default its air's, or just thawed), warmed by a
+    ;; #:heater (W) and by any mirror or hearth aimed at it, and cooled by
+    ;; evaporating into the air over it at k A (p_sat(T_w) - p_v), k
+    ;; #:coefficient (default 3.6e-8 kg/(s m² Pa), Carrier's still air).
+    (pattern (pond id:id
+                   (~alt (~once (~seq #:at at:vec3))
+                         (~once (~seq #:on tank-id:id))
+                         (~optional (~seq #:heater heater-v:expr))
+                         (~optional (~seq #:temperature temp-v:expr))
+                         (~optional (~seq #:coefficient k-v:expr))) ...)
+      #:attr info (rfinfo #'id 'pond #'tank-id #f)
+      #:with expr #`(part 'id 'pond 'limestone (list at.x at.y at.z)
+                          (list (cons 'on 'tank-id) (cons 'heater (~? heater-v 0)) (cons 'temperature (~? temp-v #f))
+                                (cons 'coefficient (~? k-v 3.6e-8)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A cold roof on enclosure #:on (issue #58), chilled by the outside
+    ;; through #:conductance W/K: below the air's dew point it condenses
+    ;; U (T_dew - T_out)/L of water, 1.6 kg an hour a kilowatt, into
+    ;; #:gutter (a tank at roof height), or back to the floor.
+    (pattern (roof id:id
+                   (~alt (~once (~seq #:at at:vec3))
+                         (~once (~seq #:on room:id))
+                         (~once (~seq #:conductance u-v:expr))
+                         (~optional (~seq #:gutter gutter-id:id))
+                         (~optional (~seq #:material mat:id))) ...)
+      #:attr info (rfinfo #'id 'roof #'room (attribute gutter-id))
+      #:with expr #`(part 'id 'roof '(~? mat glass) (list at.x at.y at.z)
+                          (list (cons 'on 'room) (cons 'conductance u-v) (cons 'gutter '(~? gutter-id #f)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -2050,12 +2085,14 @@
       (define heats (syntax-e (hinfo-heats h)))
       (define b (hash-ref parts heats #f))
       (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure)))
+                  (for/or ([r infos]) (and (rfinfo? r) (eq? (rfinfo-kind r) 'pond) (eq? (syntax-e (rfinfo-id r)) heats)))
                   (for/or ([a infos]) (and (ainfo? a) (memq heats (map syntax-e (ainfo-tanks a))))))
         (fail (format "~a is not a boiler, a tank in a sealed-air or an enclosure; a hearth heats one of those" heats) (hinfo-heats h))))
     (for ([m infos] #:when (mrinfo? m))
       (define onto (syntax-e (mrinfo-onto m)))
       (define b (hash-ref parts onto #f))
       (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure crucible)))
+                  (for/or ([r infos]) (and (rfinfo? r) (eq? (rfinfo-kind r) 'pond) (eq? (syntax-e (rfinfo-id r)) onto)))
                   (for/or ([a infos]) (and (ainfo? a) (memq onto (map syntax-e (ainfo-tanks a))))))
         (fail (format "~a is not a boiler, a tank in a sealed-air, an enclosure or a crucible; a mirror heats one of those" onto) (mrinfo-onto m))))
     (for ([c infos] #:when (cpinfo? c))
@@ -2072,6 +2109,18 @@
           (fail (format "~a is not an enclosure; ~a ~a joins two enclosures, or one and outside" (syntax-e side) (if (eq? (zjinfo-kind z) 'door) "a" "an") (zjinfo-kind z)) side)))
       (when (eq? (syntax-e (zjinfo-from z)) (syntax-e (zjinfo-to z)))
         (fail (format "~a ~a joins two different zones" (if (eq? (zjinfo-kind z) 'door) "a" "an") (zjinfo-kind z)) (zjinfo-to z))))
+
+    (for ([r infos] #:when (rfinfo? r))
+      (define id (syntax-e (rfinfo-id r)))
+      (when (hash-ref parts id #f) (fail (format "there is already a part named ~a" id) (rfinfo-id r)))
+      (define p (hash-ref parts (syntax-e (rfinfo-on r)) #f))
+      (define want (if (eq? (rfinfo-kind r) 'pond) 'tank 'enclosure))
+      (unless (and p (eq? (pinfo-kind p) want))
+        (fail (format "~a is not a~a ~a; a ~a stands on one" (syntax-e (rfinfo-on r)) (if (eq? want 'enclosure) "n" "") want (rfinfo-kind r)) (rfinfo-on r)))
+      (when (rfinfo-gutter r)
+        (define g (hash-ref parts (syntax-e (rfinfo-gutter r)) #f))
+        (unless (and g (eq? (pinfo-kind g) 'tank))
+          (fail (format "~a is not a tank; a roof's gutter is a tank" (syntax-e (rfinfo-gutter r))) (rfinfo-gutter r)))))
 
     (for ([pn infos] #:when (pninfo? pn))
       (define id (syntax-e (pninfo-id pn)))

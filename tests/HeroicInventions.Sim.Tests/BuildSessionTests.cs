@@ -744,6 +744,31 @@ public class BuildSessionTests
         Assert.Equal(MachineWriter.Write(def), MachineWriter.Write(rebuilt.Document.ToMachineDef()));
     }
 
+    /// <summary>
+    /// Issue #58. A room holding 1 kPa of water vapour (its dew point 7.07 °C by
+    /// the sim's Antoine equation) under a roof of 50 W/K to a −20 °C outside
+    /// condenses U·(T_dew − T_out)/L on it; a pond of 30 °C water in it
+    /// evaporates k·A·(p_sat(30 °C) − p_v).
+    /// </summary>
+    [Fact]
+    public void ARoofCondensesItsHeatsWorthAndAPondEvaporatesByTheVapourGap()
+    {
+        var outside = new Zone(Planet.Earth, -20);
+        var room = new Enclosure("room", 10, outside, 100_000, 20, new GasMix(0.21, 0.78, 0, 0.01, 0)) { Insulation = 0 };
+        double dew = Boiler.SaturationTemperature(room.PartialPressure(3));
+        Assert.Equal(1000, room.PartialPressure(3), 6);
+        var roof = new Roof("lid", room, 50);
+        roof.Step(0.01);
+        Assert.Equal(50 * (dew + 20) / Physics.LatentHeatVaporization, roof.Rain, 12);
+        Assert.Equal(7.07, dew, 2);
+
+        var tank = new Tank("basin", 0, 2, 0.5, 0.5) { Zone = room };
+        var pond = new Pond("warm", tank, 30);
+        double pv = room.PartialPressure(3);
+        pond.Step(0.001);
+        Assert.Equal(Pond.DefaultCoefficient * 2 * (Boiler.SaturationPressure(30) - pv), pond.Evaporation, 12);
+    }
+
     /// <summary>Every existing scene is unchanged: Earth's air is the game's 287.05 J/(kg·K) dry air, 1.204118 kg/m³ at 20 °C.</summary>
     [Fact]
     public void EarthIsTheDefaultPlanetAndItsNumbersAreTheOldConstants()

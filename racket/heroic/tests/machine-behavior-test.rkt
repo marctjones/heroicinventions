@@ -1971,3 +1971,24 @@
   (check-= (hash-ref adhoc 'elapsed) 50.0 0.02 "100 L at 2 L/s")
   ;; already met: wakes at once
   (check-= (hash-ref (sleep-until 'wake-clock '((cistern water below 1))) 'elapsed) 0.0 0 "it is already empty"))
+
+
+;; ---------------------------------------------------------------------------
+;; Evaporation and condensation (issue #58). Working in racket/machines/rain-house.rkt.
+
+(test-case "A rain-house: 1 kW through a 40 W/K roof rains 1.595 kg/h at a -38 °C dew point, 39.3 kg a sol into a gutter 4.6 m up"
+  (define run (simulate 'rain-house #:seconds 88800 #:step 0.1 #:sample-dt 600))
+  (define (at t k) (for/first ([f run] #:when (>= (car f) (- t 1e-6))) (cadr (assq k (cdr f)))))
+  (define rate (/ 1000 2.257e6))                     ; kg/s a kilowatt condenses
+  (check-= (final-of run '(lid rain)) (* rate 3600) 0.002 "1.595 kg an hour")
+  (check-= (final-of run '(lid heat)) 1000 1.5 "the heat leaving through the roof is the heater's")
+  (check-= (final-of run '(lid dew-point)) -38 0.05 "-63 + 1000/40")
+  (check-= (final-of run '(warm temperature)) 50.05 0.02 "p_sat(T_w) = 21.9 + 4.431e-4/3.6e-8 Pa")
+  ;; a sol's rain in the gutter, and the water's energy lifted 4.6 m under Mars's gravity
+  (define sol-rain (* rate 88800))
+  ;; water's getters are in litres: a litre of it a kilogram
+  (check-= (final-of run '(gutter water)) sol-rain 0.1 "39.3 kg")
+  (check-= (* (final-of run '(gutter water)) 3.71 4.6) (* sol-rain 3.71 4.6) 2 "m g h, 671 J")
+  ;; every gram: what the pond lost is in the gutter or the air
+  (define vapour-kg (* (/ (* (final-of run '(house h2o-pressure)) 1000 80) (* 8.314 293.15)) 0.018015))
+  (check-= (- 200 (final-of run '(basin water))) (+ (final-of run '(gutter water)) vapour-kg) 1e-6))

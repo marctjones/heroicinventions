@@ -126,6 +126,7 @@ public partial class MachineView : Node3D
         BuildDoors();
         BuildCrucibles();
         BuildPanes();
+        BuildRainHouse();
         BuildMirrors();
         BuildPumps();
         BuildPistonDrives();
@@ -1505,6 +1506,7 @@ public partial class MachineView : Node3D
         DrawDoors();
         DrawCrucibles();
         DrawPanes();
+        DrawRainHouse();
         DrawSprings();
         DrawMirrors();
         DrawPumps();

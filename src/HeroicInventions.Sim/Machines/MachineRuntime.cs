@@ -50,6 +50,8 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Enclosure> _enclosures = [];
     private readonly Dictionary<string, Crucible> _crucibles = [];
     private readonly Dictionary<string, Pane> _panes = [];
+    private readonly Dictionary<string, Pond> _ponds = [];
+    private readonly Dictionary<string, Roof> _roofs = [];
     private readonly Dictionary<string, Door> _doors = [];
     private readonly Dictionary<string, GasPump> _gasPumps = [];
     // parts standing inside an enclosure, by id: the zone they read; everything else stands in Outside
@@ -129,6 +131,10 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Crucible> Crucibles => _crucibles;
     /// <summary>Glass panes in enclosures' walls (issue #57): the only way light gets in, and they crack past their pressure.</summary>
     public IReadOnlyDictionary<string, Pane> Panes => _panes;
+    /// <summary>Warm ponds evaporating into their air (issue #58).</summary>
+    public IReadOnlyDictionary<string, Pond> Ponds => _ponds;
+    /// <summary>Cold roofs condensing their room's vapour into gutters (issue #58).</summary>
+    public IReadOnlyDictionary<string, Roof> Roofs => _roofs;
     /// <summary>Doors, hatches and valves between zones (issue #41).</summary>
     public IReadOnlyDictionary<string, Door> Doors => _doors;
     /// <summary>Pumps moving gas from one zone to another (issue #41).</summary>
@@ -314,7 +320,7 @@ public sealed class MachineRuntime
                             WearRate = part.Number("bearing-wear", 0),
                         });
                     break;
-                case "mirror" or "burning-mirror" or "pane": break; // built once what it heats exists
+                case "mirror" or "burning-mirror" or "pane" or "pond" or "roof": break; // built once what they join exists
                 case "crucible":
                 {
                     SandKind sand;
@@ -435,6 +441,26 @@ public sealed class MachineRuntime
                                            part.Symbol("fuel-kind", "wood"), part.Number("efficiency", 0.5));
         }
 
+        foreach (var part in def.Parts.Where(p => p.Kind == "pond"))
+        {
+            var tank = TankNamed(part.Symbol("on", ""), part.Location);
+            _ponds[part.Id] = new Pond(part.Id, tank, TemperatureOr(part, "temperature"))
+            {
+                Heater = part.Number("heater", 0),
+                Coefficient = part.Number("coefficient", Pond.DefaultCoefficient),
+            };
+        }
+        foreach (var part in def.Parts.Where(p => p.Kind == "roof"))
+        {
+            var on = part.Symbol("on", "");
+            if (!_enclosures.TryGetValue(on, out var room))
+                throw new MachineFormatException($"roof {part.Id} is on {on}, which is not an enclosure", part.Location);
+            var gutter = part.Symbol("gutter", "");
+            _roofs[part.Id] = new Roof(part.Id, room, part.Number("conductance"))
+            {
+                Gutter = gutter == "" ? null : TankNamed(gutter, part.Location),
+            };
+        }
         foreach (var part in def.Parts.Where(p => p.Kind is "mirror" or "burning-mirror"))
         {
             var onto = part.Symbol("onto", "");
@@ -1181,6 +1207,25 @@ public sealed class MachineRuntime
                 _getters[$"{id}.{GasMix.Names[i]}-pressure"] = () => e.PartialPressure(gas) / 1000;                     // kPa (Dalton)
             }
         }
+        foreach (var (id, p) in _ponds)
+        {
+            _getters[$"{id}.temperature"] = () => p.Temperature;          // °C of the water
+            _getters[$"{id}.evaporation"] = () => p.Evaporation * 3600;   // kg/h
+            _getters[$"{id}.evaporated"] = () => p.Evaporated;            // kg
+            _getters[$"{id}.vapour"] = () => p.AirVapour;                 // Pa of water vapour over it
+            _getters[$"{id}.heater"] = () => p.Heater;                    // W
+            _setters[$"{id}.heater"] = w => p.Heater = Math.Max(0, w);
+        }
+        foreach (var (id, r) in _roofs)
+        {
+            _getters[$"{id}.rain"] = () => r.Rain * 3600;                 // kg/h condensing on it
+            _getters[$"{id}.rained"] = () => r.Rained;                    // kg, all told
+            _getters[$"{id}.heat"] = () => r.Heat;                        // W leaving through it
+            _getters[$"{id}.dew-point"] = () => r.DewPoint;               // °C
+            _getters[$"{id}.fogged"] = () => r.Fogged ? 1 : 0;
+            _getters[$"{id}.conductance"] = () => r.Conductance;          // W/K
+            _setters[$"{id}.conductance"] = u => r.Conductance = Math.Max(0, u);
+        }
         foreach (var (id, p) in _panes)
         {
             _getters[$"{id}.gain"] = () => p.Gain;                        // W of sunlight into the room
@@ -1505,6 +1550,7 @@ public sealed class MachineRuntime
         : _tanks.TryGetValue(id, out var vessel) && vessel.Air is { } air ? (air, Def.Part(id)!)
         : _enclosures.TryGetValue(id, out var room) ? (room, Def.Part(id)!)
         : _crucibles.TryGetValue(id, out var pot) ? (pot, Def.Part(id)!)
+        : _ponds.TryGetValue(id, out var pond) ? (pond, Def.Part(pond.Tank.Name)!)
         : throw new MachineFormatException($"{by.Kind} {by.Id} heats {id}, which is not a boiler, a sealed vessel or an enclosure", by.Location);
 
     private void AddHeatSource(IHeated target, Func<double> watts)
@@ -1531,6 +1577,8 @@ public sealed class MachineRuntime
         foreach (var e in _enclosures.Values) e.Step(dt);
         foreach (var c in _crucibles.Values) c.Step(dt);
         foreach (var p in _panes.Values) p.Step(dt);
+        foreach (var p in _ponds.Values) p.Step(dt);
+        foreach (var r in _roofs.Values) r.Step(dt);
         foreach (var d in _doors.Values) d.Step(dt);
         foreach (var p in _gasPumps.Values) p.Step(dt);
         if (_zoneOfPart.Count > 0) SyncZones();

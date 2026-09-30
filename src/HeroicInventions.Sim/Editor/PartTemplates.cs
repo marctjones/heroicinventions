@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "hopper", "pane"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "hopper", "pane", "pond", "roof"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -178,6 +178,17 @@ public static class PartTemplates
                 ["on"] = new SSymbol("?"), ["side"] = new SNumber(0.3), ["thickness"] = new SNumber(0.0075), ["count"] = new SNumber(1),
                 ["glass"] = new SSymbol("silica"), ["facing"] = new SSymbol("up"), ["strength"] = new SNumber(7e6),
             },
+            [], null),
+        // a tank's water, warmed and evaporating: set #:on to the tank
+        "pond" => new PartSpec(id, "pond", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["on"] = new SSymbol("?"), ["heater"] = new SNumber(0), ["temperature"] = new SBool(false), ["coefficient"] = new SNumber(3.6e-8),
+            },
+            [], null),
+        // a cold roof on an enclosure, 40 W/K to the outside, raining into its #:gutter tank if it has one
+        "roof" => new PartSpec(id, "roof", material, at,
+            new Dictionary<string, SExpr> { ["on"] = new SSymbol("?"), ["conductance"] = new SNumber(40), ["gutter"] = new SBool(false) },
             [], null),
         "mirror" => new PartSpec(id, "mirror", material, at,
             new Dictionary<string, SExpr> { ["onto"] = new SSymbol("?"), ["area"] = new SNumber(0.5), ["reflectivity"] = new SNumber(0.85) },

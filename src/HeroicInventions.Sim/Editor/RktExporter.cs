@@ -247,6 +247,12 @@ public static class RktExporter
             case "pane":
                 return $"  (pane {p.Id} {At()} #:on {Sym("on", "?")} #:side {F(N("side"))} #:thickness {F(N("thickness"))} #:count {F(N("count", 1))} " +
                        $"#:glass {Sym("glass", "silica")} #:facing {Sym("facing", "up")} #:strength {F(N("strength", 7e6))})\n";
+            case "pond":
+                return $"  (pond {p.Id} {At()} #:on {Sym("on", "?")} #:heater {F(N("heater"))}" + Opt("temperature", "temperature") +
+                       $" #:coefficient {F(N("coefficient", 3.6e-8))})\n";
+            case "roof":
+                return $"  (roof {p.Id} {At()} #:on {Sym("on", "?")} #:conductance {F(N("conductance"))}" +
+                       (p.Props.GetValueOrDefault("gutter") is SSymbol gutter ? $" #:gutter {gutter.Name}" : "") + $" {Mat()})\n";
             case "counterpoise":
                 return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +
                        $"#:counterweight {F(N("counterweight"))} #:radius {F(N("radius"))} #:turn-deg {F(N("turn-deg"))} " +
