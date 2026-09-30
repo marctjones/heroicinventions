@@ -98,6 +98,7 @@ public partial class MachineView : Node3D
                 case "capstan": BuildCapstan(part); break;
                 case "counterpoise": BuildCounterpoise(part); break;
                 case "digger": BuildDigger(part); break;
+                case "float": BuildFloat(part); break;
             }
             _partNodes[part.Id] = Enumerable.Range(before, GetChildCount() - before)
                 .Select(i => GetChild(i)).OfType<Node3D>().ToList();
@@ -1375,6 +1376,7 @@ public partial class MachineView : Node3D
         DriveCams(dt);
         DriveRatchets(dt);
         TestTriggers();
+        ApplyBuoyancy();
         Runtime.Step(dt);
         Refresh();
         if (trace) TraceTick(dt);
@@ -1503,6 +1505,7 @@ public partial class MachineView : Node3D
         DrawMirrors();
         DrawPumps();
         DrawDiggers();
+        DrawFloats();
     }
 
     public void ToggleFire()

@@ -60,6 +60,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Counterpoise> _counterpoises = [];
     private readonly Dictionary<string, Pendulum> _pendulums = [];
     private readonly Dictionary<string, Digger> _diggers = [];
+    private readonly Dictionary<string, Float> _floats = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
     private readonly Dictionary<string, Action<double>> _setters = [];
 
@@ -145,6 +146,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Pendulum> Pendulums => _pendulums;
     /// <summary>Digging gangs (issue #44): they dig the map the world stands the machine on (WorldGround attaches it), and nothing without one.</summary>
     public IReadOnlyDictionary<string, Digger> Diggers => _diggers;
+    /// <summary>Floats riding tanks' water (issue #29).</summary>
+    public IReadOnlyDictionary<string, Float> Floats => _floats;
     public double Time { get; private set; }
 
     /// <summary>
@@ -330,6 +333,7 @@ public sealed class MachineRuntime
                     _gasPumps[part.Id] = new GasPump(part.Id, a, b, part.Number("speed")) { Until = part.Number("until", 0) };
                     break;
                 }
+                case "float": break;   // built once its tank exists
                 case "digger":
                 {
                     double len = part.Number("length"), w = part.Number("width"), d = part.Number("depth");
@@ -538,6 +542,14 @@ public sealed class MachineRuntime
         }
         foreach (var part in def.Parts.Where(p => p.Kind == "float-valve")) BuildFloatValve(part);
         foreach (var part in def.Parts.Where(p => p.Kind == "leak")) BuildLeak(part);
+        foreach (var part in def.Parts.Where(p => p.Kind == "float"))
+        {
+            var tank = TankNamed(part.Symbol("in", ""), part.Location);
+            double mass = part.Number("mass"), area = part.Number("area"), height = part.Number("height", 0.1);
+            if (!(mass > 0 && area > 0 && height > 0))
+                throw new MachineFormatException($"float {part.Id}: mass, area and height must be more than 0", part.Location);
+            _floats[part.Id] = new Float(part.Id, tank, mass, area, height);
+        }
         foreach (var part in def.Parts.Where(p => p.Kind == "safety-valve")) BuildSafetyValve(part);
         foreach (var part in def.Parts.Where(p => p.Kind == "pump")) BuildPump(part);
         foreach (var c in def.Cylinders)
@@ -1421,6 +1433,13 @@ public sealed class MachineRuntime
             _getters[$"{id}.angle"] = () => cp.Angle * 180 / Math.PI;               // deg, 0 shut
             _getters[$"{id}.hanging"] = () => cp.Hanging;                           // kg on the vessel's rope
             _getters[$"{id}.torque"] = () => cp.Torque;                             // N·m, + opening
+        }
+        foreach (var (id, f) in _floats)
+        {
+            _getters[$"{id}.height"] = () => f.Bottom;                 // m, the elevation of its bottom
+            _getters[$"{id}.draft"] = () => f.Draft * 100;             // cm it sinks to afloat
+            _getters[$"{id}.submerged"] = () => f.Submerged * 100;     // cm of it under water now
+            _getters[$"{id}.grounded"] = () => f.Grounded ? 1 : 0;
         }
         foreach (var (id, d) in _diggers)
         {

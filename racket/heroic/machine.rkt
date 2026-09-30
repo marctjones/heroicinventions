@@ -39,7 +39,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger ratchet crucible burning-mirror hopper pane
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -162,6 +162,26 @@
          [else
           (define-values (tx ty tz) (apply values (part-at tank)))
           (struct-copy part p [at (list tx (+ ty (prop 'shut)) tz)])])]
+      [else p])))
+
+;; A float (issue #29) must be light enough and fit its tank; with no #:at it
+;; sits in the middle of its tank, on the floor (where it rides is the sim's).
+(define (place-floats parts)
+  (for/list ([p parts])
+    (cond
+      [(eq? (part-kind p) 'float)
+       (define (prop k) (cdr (assq k (part-props p))))
+       (define loc (part-loc p))
+       (define (bad what)
+         (error 'define-machine "~a:~a:~a: float ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+       (define tank (for/first ([t parts] #:when (eq? (part-id t) (prop 'in))) t))
+       (for ([k '(mass area height)])
+         (unless (and (real? (prop k)) (> (prop k) 0)) (bad (format "#:~a must be more than 0, got ~e" k (prop k)))))
+       (when (and tank (> (prop 'area) (cdr (assq 'area (part-props tank)))))
+         (bad (format "an #:area of ~e m² won't go in ~a (~e m²)" (prop 'area) (part-id tank) (cdr (assq 'area (part-props tank))))))
+       (cond
+         [(or (part-at p) (not tank)) (if (part-at p) p (struct-copy part p [at (list 0 0 0)]))]
+         [else (struct-copy part p [at (part-at tank)])])]
       [else p])))
 
 ;; A leak with no #:at is drilled through the wall of its tank, on the
@@ -418,7 +438,7 @@
     (unless (and (real? time) (<= 0 time) (< time 24))
       (error 'define-machine "machine ~a: #:time must be solar hours in [0, 24), got ~e" name time)))
   (machine name source ambient sun planet-v weather-v
-           (check-panes (check-zone-joins (check-enclosures (check-carried-wheels (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)))))))))))
+           (check-panes (check-zone-joins (check-enclosures (check-carried-wheels (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-floats (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))))))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -450,7 +470,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger ratchet crucible burning-mirror hopper pane
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt joint)
 
@@ -494,6 +514,7 @@
   (struct sinfo (id on))             ; a sluice gate: the channel it stands across
   (struct fvinfo (id feed mat))      ; a float valve: the inflow, pipe or channel it throttles
   (struct lkinfo (id on into mat))   ; a leak: the tank it is in, the tank under it (or #f)
+  (struct flinfo (id in mat))        ; a float: the tank it rides in
   (struct svinfo (id on mat))        ; a safety valve: the boiler whose lid it sits in
   (struct puinfo (id from to mat))   ; a lift pump: the tank it draws from, the tank it fills
   (struct cpinfo (id vessel))        ; a counterpoise: the tank that hangs from it
@@ -549,8 +570,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, ratchet, crucible, burning-mirror, hopper, pane) or link (pipe, connect, sealed-air)"
-    #:literals (hopper enclosure grip door air-pump cam digger ratchet crucible burning-mirror pane tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, ratchet, crucible, burning-mirror, hopper, pane) or link (pipe, connect, sealed-air)"
+    #:literals (hopper enclosure grip door air-pump cam digger float ratchet crucible burning-mirror pane tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1355,6 +1376,24 @@
     ;; #:lift (m, default 0: shut) off its seat: the water passes the curtain
     ;; π·bore·lift, up to the bore's own area once the plug is a quarter of the
     ;; bore clear. Set (hole lift mm) at run time, or let a #:follow work it.
+    ;; A float riding a tank's water (issue #29): #:mass kg on a flat bottom
+    ;; #:area m², #:height m tall (default 0.1), in the tank #:in names. Afloat
+    ;; it draws m / (rho A) of water and rides that far below the surface; in
+    ;; water shallower than that it sits on the floor. Too heavy for its height
+    ;; and it never floats.
+    (pattern (float id:id
+                    (~alt (~once (~seq #:in tank-id:id))
+                          (~once (~seq #:mass mass-v:expr))
+                          (~once (~seq #:area area-v:expr))
+                          (~optional (~seq #:height height-v:expr))
+                          (~optional (~seq #:at at:vec3))
+                          (~optional (~seq #:material mat:id))) ...)
+      #:attr info (flinfo #'id #'tank-id (attribute mat))
+      #:with expr #`(part 'id 'float '(~? mat cedar) (~? (list at.x at.y at.z) #f)
+                          (list (cons 'in 'tank-id) (cons 'mass mass-v) (cons 'area area-v) (cons 'height (~? height-v 0.1)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     (pattern (leak id:id
                    (~alt (~once (~seq #:on tank-id:id))
                          (~once (~seq #:height height-v:expr))
@@ -1919,6 +1958,14 @@
         (fail (format "~a already has a float valve" feed) (fvinfo-feed v)))
       (hash-set! valved feed #t)
       (define mat (fvinfo-mat v))
+      (when (and mat (not (memq (syntax-e mat) known-materials)))
+        (fail (format "unknown material ~a" (syntax-e mat)) mat)))
+
+    (for ([f infos] #:when (flinfo? f))
+      (define p (hash-ref parts (syntax-e (flinfo-in f)) #f))
+      (unless (and p (eq? (pinfo-kind p) 'tank))
+        (fail (format "~a is not a tank; a float rides in a tank's water" (syntax-e (flinfo-in f))) (flinfo-in f)))
+      (define mat (flinfo-mat f))
       (when (and mat (not (memq (syntax-e mat) known-materials)))
         (fail (format "unknown material ~a" (syntax-e mat)) mat)))
 

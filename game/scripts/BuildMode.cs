@@ -146,6 +146,7 @@ public partial class BuildMode : Node3D
         ["pendulum"] = ("Pendulum", "Weights and levers", "A weight on a rod that swings."),
         ["counterpoise"] = ("Door with a counterweight", "Weights and levers", "A door that opens when a bucket outweighs its counterweight."),
         ["post"] = ("Stone post or plinth", "Structure", "Something solid to stand things on."),
+        ["float"] = ("Float", "Water", "A flat float riding a tank's water, as deep as its weight needs (Archimedes); it grounds when the water is shallower."),
         ["digger"] = ("Digging gang", "Structure", "Labourers cutting a trench into the ground a machine stands on; a wall too tall for its soil falls in."),
     };
     private static readonly string[] GroupOrder = ["Fire, water and steam", "Water", "Wheels and power", "Weights and levers", "Structure"];

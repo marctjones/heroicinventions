@@ -1886,3 +1886,27 @@
   (check-= (final-of run '(thin-roof crack-pressure)) 6.705 0.001)
   (check-= (final-of run '(thin-roof crack-time)) 0.05 1e-9 "12.89 kPa across it from the first step")
   (check-= (final-of run '(thin pressure)) 0.61 1e-6 "and the room's air is gone"))
+;; ---------------------------------------------------------------------------
+;; Buoyancy and water drag (issue #29)
+
+(test-case "Floats (#29): the cork float rides 5 cm under the draining cistern's surface and grounds at 307.7 s"
+  ;; floats.rkt: draft m / (rho A) = 5 cm; Torricelli to 5 cm deep at 307.7 s
+  (define run (simulate 'floats #:seconds 330 #:step 0.01 #:sample-dt 1))
+  (check-= (final-of run '(bob draft)) 5 1e-9)
+  (for ([f run] #:when (< (car f) 300))
+    (define (v k) (cadr (assq k (cdr f))))
+    (check-= (v 'bob.height) (- (/ (v 'cistern.level) 100) 0.05) 1e-9 (format "riding the surface at ~a s" (car f))))
+  (check-= (for/first ([f run] #:when (= 1 (cadr (assq 'bob.grounded (cdr f))))) (car f)) 308 1.01))
+
+(test-case "Floats (#29): blocks in the bath float with rho_block / rho_water of them under; iron sinks"
+  (when (godot-available?)
+    ;; floats.rkt: 20 cm blocks in 40 cm of water; centres at 0.4 - (rho/1000) 0.2 + 0.1
+    (define run (godot-simulate 'floats #:seconds 40 #:sample-dt 0.1))
+    (define (mean path)
+      (define key (string->symbol (format "~a.~a" (car path) (cadr path))))
+      (define vs (for/list ([f run] #:when (>= (car f) 20)) (cadr (assq key (cdr f)))))
+      (/ (apply + vs) (length vs)))
+    (check-= (mean '(cedar-block y)) 0.424 0.001)
+    (check-= (mean '(pine-block y)) 0.400 0.001)
+    (check-= (mean '(oak-block y)) 0.356 0.001)
+    (check-= (mean '(iron-block y)) 0.100 0.001)))

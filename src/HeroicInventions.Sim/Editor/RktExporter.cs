@@ -167,6 +167,8 @@ public static class RktExporter
             case "piston":
                 return $"  (piston {p.Id} {At()} #:bore {F(N("bore"))} #:stroke {F(N("stroke"))} {Mat()} " +
                        $"#:start {F(N("start"))} #:rod-mass {F(N("rod-mass"))})\n";
+            case "float":
+                return $"  (float {p.Id} {At()} #:in {Sym("in", "?")} #:mass {F(N("mass"))} #:area {F(N("area"))} #:height {F(N("height", 0.1))} {Mat()})\n";
             case "digger":
                 return $"  (digger {p.Id} {At()} #:length {F(N("length"))} #:width {F(N("width"))} #:depth {F(N("depth"))}" +
                        $" #:power {F(N("power", 150))} #:spit {F(N("spit", 0.25))} #:spoil {F(N("spoil", 5))} {Mat()})\n";

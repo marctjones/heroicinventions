@@ -304,3 +304,7 @@
   (check-compile-error #rx"box is not an enclosure; a pane is glass in an enclosure's wall"
     (tank box #:at (0 0 0) #:area 1 #:height 1)
     (pane p #:at (0 1 0) #:on box #:side 0.3 #:thickness 0.0075)))
+(test-case "a float (#29) rides in a tank, and fits it"
+  (check-compile-error #rx"not a tank; a float rides in a tank's water"
+    (post p #:at (0 0 0) #:size (1 1 1) #:material oak)
+    (float f #:in p #:mass 1 #:area 0.01)))
