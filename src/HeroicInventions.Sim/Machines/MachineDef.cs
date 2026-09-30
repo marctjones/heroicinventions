@@ -57,6 +57,17 @@ public sealed record PartSpec(
 /// <summary>Where and when the scene stands under the sun: latitude (degrees north), day of the year, solar time (hours).</summary>
 public sealed record SunSpec(double Latitude, int Day, double Time);
 
+/// <summary>A dust storm (issue #69): from Hour of the run's Sol (1 first), for Sols sols, the air's dust optical depth is Tau; mirrors lose Settle of what they reflect a sol.</summary>
+public sealed record StormSpec(int Sol, double Hour, double Tau, double Sols, double Settle);
+
+/// <summary>Time and weather (issue #69): the air on the planet's daily curve (Daily), relay passes at local hours, dust storms.</summary>
+public sealed record WeatherSpec(bool Daily, IReadOnlyList<double> Passes, double PassMinutes, IReadOnlyList<StormSpec> Storms)
+{
+    public bool Equals(WeatherSpec? o) => o is not null && Daily == o.Daily && PassMinutes == o.PassMinutes
+        && Passes.SequenceEqual(o.Passes) && Storms.SequenceEqual(o.Storms);
+    public override int GetHashCode() => HashCode.Combine(Daily, PassMinutes, Passes.Count, Storms.Count);
+}
+
 public sealed record PipeSpec(string Id, PortRef From, PortRef To, double Conductance, bool Jet, SourceLocation? Location);
 public sealed record ConnectSpec(PortRef A, PortRef B, SourceLocation? Location);
 public sealed record SealedAirSpec(IReadOnlyList<string> Tanks, double TubeVolume, SourceLocation? Location,
@@ -183,6 +194,8 @@ public sealed class MachineDef
     public SunSpec? Sun { get; init; }
     /// <summary>The planet it stands on (issue #38): gravity, the air's pressure and mix, sunlight, the day's length. Earth unless the file says otherwise.</summary>
     public Planet Planet { get; init; } = Planet.Earth;
+    /// <summary>Sols, the daily air, relay passes and dust storms (issue #69); null: none.</summary>
+    public WeatherSpec? Weather { get; init; }
     public required IReadOnlyList<PartSpec> Parts { get; init; }
     public required IReadOnlyList<PipeSpec> Pipes { get; init; }
     public required IReadOnlyList<ConnectSpec> Connects { get; init; }
@@ -220,6 +233,7 @@ public sealed class MachineDef
             Ambient = Ambient,
             Sun = Sun,
             Planet = Planet,
+            Weather = Weather,
             Parts = Parts.Select(p => p with { At = Move(p.At) }).ToList(),
             Pipes = Pipes,
             Connects = Connects,
@@ -260,6 +274,7 @@ public sealed class MachineDef
                               sun.Field("time") is { } tm ? Num(tm, 1, null) : 12)
                 : null,
             Planet = clauses.FirstOrDefault(c => c.Head == "planet") is { } planet ? Planet.Parse(planet, 1) : Planet.Earth,
+            Weather = clauses.FirstOrDefault(c => c.Head == "weather") is { } wx ? ParseWeather(wx) : null,
             Parts = clauses.Where(c => c.Head == "part").Select(ParsePart).ToList(),
             Pipes = clauses.Where(c => c.Head == "pipe").Select(ParsePipe).ToList(),
             Connects = clauses.Where(c => c.Head == "connect").Select(ParseConnect).ToList(),
@@ -329,6 +344,17 @@ public sealed class MachineDef
                 return new ArborSpec(parts.Items.Skip(1).Select((_, i) => Sym(parts, i + 1, loc)).ToList(), loc);
             }).ToList(),
         };
+    }
+
+    // (weather (daily #t) (passes 3.0 15.0) (pass-minutes 10.0) (storm (sol 2) (hour 0.0) (tau 10.8) (sols 1.0) (settle 0.5)) …)
+    private static WeatherSpec ParseWeather(SList w)
+    {
+        double N(SList l, string f, double d) => l.Field(f)?.Items.ElementAtOrDefault(1) is SNumber n ? n.Value : d;
+        return new WeatherSpec(
+            w.Field("daily")?.Items.ElementAtOrDefault(1) is not SBool { Value: false },
+            (w.Field("passes")?.Items.Skip(1) ?? []).OfType<SNumber>().Select(n => n.Value).ToList(),
+            N(w, "pass-minutes", 10),
+            w.Fields("storm").Select(s => new StormSpec((int)N(s, "sol", 1), N(s, "hour", 0), N(s, "tau", 0), N(s, "sols", 1), N(s, "settle", 0.5))).ToList());
     }
 
     // (part id kind (material m) (at x y z) (props (k v) …) (ports (name kind height) …) (srcloc file line col))

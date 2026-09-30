@@ -13,7 +13,7 @@ namespace HeroicInventions;
 /// </summary>
 public partial class MachineView
 {
-    private readonly List<(Mirror mirror, Node3D plate, MeshInstance3D beam, StandardMaterial3D beamMat)> _mirrorViews = [];
+    private readonly List<(Mirror mirror, Node3D plate, MeshInstance3D beam, StandardMaterial3D beamMat, StandardMaterial3D faceMat)> _mirrorViews = [];
 
     private void BuildMirrors()
     {
@@ -27,7 +27,8 @@ public partial class MachineView
 
             var plate = new Node3D { Position = at };
             AddChild(plate);
-            var face = Shapes.Box(new Vector3(side, side, 0.03f), Shapes.Mat(Shapes.Bronze, metallic: 0.9f, roughness: 0.15f));
+            var faceMat = Shapes.Mat(Shapes.Bronze, metallic: 0.9f, roughness: 0.15f);
+            var face = Shapes.Box(new Vector3(side, side, 0.03f), faceMat);
             plate.AddChild(face);
 
             var beamMat = Shapes.Mat(new Color(1f, 0.93f, 0.6f), roughness: 1f, alpha: 0.35f);
@@ -37,7 +38,7 @@ public partial class MachineView
             var beam = Shapes.Rod(at, V(mirror.Target), side * 0.25f, beamMat);
             beam.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
             AddChild(beam);
-            _mirrorViews.Add((mirror, plate, beam, beamMat));
+            _mirrorViews.Add((mirror, plate, beam, beamMat, faceMat));
             AddLabel(id, at + new Vector3(0, side / 2 + 0.25f, 0));
         }
     }
@@ -45,8 +46,13 @@ public partial class MachineView
     private void DrawMirrors()
     {
         var s = V(Runtime.Sun.Direction);
-        foreach (var (mirror, plate, beam, beamMat) in _mirrorViews)
+        foreach (var (mirror, plate, beam, beamMat, faceMat) in _mirrorViews)
         {
+            // dust dulls the plate (issue #69): matt and brown as it stops more of the light
+            float dust = (float)mirror.Dust;
+            faceMat.AlbedoColor = Shapes.Bronze.Lerp(new Color(0.55f, 0.38f, 0.25f), dust);
+            faceMat.Metallic = 0.9f * (1 - dust);
+            faceMat.Roughness = 0.15f + 0.8f * dust;
             var toTarget = (V(mirror.Target) - plate.Position).Normalized();
             // the face turns to the bisector of sun and target; at night it rests facing its target
             var normal = Runtime.Sun.Elevation > 0 ? (s + toTarget).Normalized() : toTarget;

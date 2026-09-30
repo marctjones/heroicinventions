@@ -28,6 +28,12 @@ public static class CommandScript
         if (m.Source is { } src) Add($"(source {SExprWriter.Print(new SString(src))})");
         if (!m.Planet.IsEarth) Add(PlanetCommand(m.Planet));
         if (m.Ambient != m.Planet.Temperature) Add($"(ambient {N(m.Ambient)})");   // a planet command sets the air to the planet's
+        if (m.Weather is { } wx)
+        {
+            Add($"(weather #:daily {(wx.Daily ? "#t" : "#f")} #:passes ({string.Join(' ', wx.Passes.Select(N))}) #:pass-minutes {N(wx.PassMinutes)})");
+            foreach (var s in wx.Storms)
+                Add($"(storm #:sol {s.Sol} #:hour {N(s.Hour)} #:tau {N(s.Tau)} #:sols {N(s.Sols)} #:settle {N(s.Settle)})");
+        }
         if (m.Sun is { } sun) Add($"(sun #:latitude {N(sun.Latitude)} #:day {sun.Day} #:time {N(sun.Time)})");
 
         var afterLinks = new List<string>();

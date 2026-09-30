@@ -23,6 +23,7 @@ public static class MachineWriter
         if (m.Source is { } src) clauses.Add(Tagged("source", new SString(src)));
         if (m.Ambient != 20) clauses.Add(Tagged("ambient", new SNumber(m.Ambient)));
         if (!m.Planet.IsEarth) clauses.Add(m.Planet.ToClause());
+        if (m.Weather is { } wx) clauses.Add(WeatherClause(wx));
         if (m.Sun is { } sun)
             clauses.Add(Tagged("sun", Tagged("latitude", Num(sun.Latitude)), Tagged("day", Num(sun.Day)), Tagged("time", Num(sun.Time))));
         foreach (var p in m.Parts) clauses.Add(PartClause(p));
@@ -48,6 +49,13 @@ public static class MachineWriter
         w.Append(")\n");
         return w.ToString();
     }
+
+    public static SExpr WeatherClause(WeatherSpec w) =>
+        Tagged("weather", [Tagged("daily", new SBool(w.Daily)),
+            Tagged("passes", [.. w.Passes.Select(h => (SExpr)Num(h))]),
+            Tagged("pass-minutes", Num(w.PassMinutes)),
+            .. w.Storms.Select(s => (SExpr)Tagged("storm", Tagged("sol", Num(s.Sol)), Tagged("hour", Num(s.Hour)),
+                Tagged("tau", Num(s.Tau)), Tagged("sols", Num(s.Sols)), Tagged("settle", Num(s.Settle))))]);
 
     private static SSymbol Sym(string s) => new(s);
     private static SNumber Num(double v) => new(v);

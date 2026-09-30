@@ -33,6 +33,7 @@ public sealed class EditorDocument
     public double Ambient { get; set; } = 20;   // °C
     public SunSpec? Sun { get; set; }
     public Planet Planet { get; set; } = Planet.Earth;
+    public WeatherSpec? Weather { get; set; }
     public IReadOnlyDictionary<string, PartSpec> Parts => _parts;
     public IReadOnlyDictionary<string, PipeSpec> Pipes => _pipes;
     public IReadOnlyList<ConnectSpec> Connects => _connects;
@@ -70,7 +71,7 @@ public sealed class EditorDocument
     /// <summary>Loads an existing .machine file's parts, pipes and connects for editing; carries everything else through unchanged.</summary>
     public static EditorDocument Load(MachineDef def)
     {
-        var doc = new EditorDocument { Name = def.Name, Source = def.Source, Ambient = def.Ambient, Sun = def.Sun, Planet = def.Planet };
+        var doc = new EditorDocument { Name = def.Name, Source = def.Source, Ambient = def.Ambient, Sun = def.Sun, Planet = def.Planet, Weather = def.Weather };
         foreach (var p in def.Parts) doc._parts[p.Id] = p;
         foreach (var p in def.Pipes) doc._pipes[p.Id] = p;
         doc._connects.AddRange(def.Connects);
@@ -420,6 +421,7 @@ public sealed class EditorDocument
         Ambient = Ambient,
         Sun = Sun,
         Planet = Planet,
+        Weather = Weather,
         Parts = _parts.Values.ToList(),
         Pipes = _pipes.Values.ToList(),
         Connects = _connects.ToList(),

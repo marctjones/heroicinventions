@@ -68,6 +68,16 @@
             ,@(if (= (machine-ambient m) 20) '() `((ambient ,(num "#:ambient" (machine-ambient m)))))
             ,@(let ([p (machine-planet m)])
                 (if (earth-planet? p) '() (list (planet->sexp p))))
+            ,@(let ([w (machine-weather m)])
+                (if w
+                    `((weather (daily ,(weather-daily w))
+                               (passes ,@(for/list ([h (weather-passes w)]) (num "weather #:passes" h)))
+                               (pass-minutes ,(num "weather #:pass-minutes" (weather-pass-minutes w)))
+                               ,@(for/list ([s (weather-storms w)])
+                                   `(storm (sol ,(storm-sol s)) (hour ,(num "storm #:hour" (storm-hour s)))
+                                           (tau ,(num "storm #:tau" (storm-tau s))) (sols ,(num "storm #:sols" (storm-sols s)))
+                                           (settle ,(num "storm #:settle" (storm-settle s)))))))
+                    '()))
             ,@(match (machine-sun m)
                 [#f '()]
                 [(list lat day time) `((sun (latitude ,(num "#:latitude" lat)) (day ,day) (time ,(num "#:time" time))))])

@@ -1573,6 +1573,10 @@ public partial class MachineView : Node3D
             if (Runtime.Ambient != 20 || Runtime.Tanks.Values.Any(t => t.Ice > 0)) bits.Add($"air {Runtime.Ambient:0.#} °C");
             foreach (var (id, t) in Runtime.Tanks.Where(kv => kv.Value.Ice > 0))
                 bits.Add($"{id} iced {t.Ice * 1000:F1} mm" + (t.FrozenSolid ? ", frozen solid" : $", {t.WaterVolume * 1000:F0} L still water"));
+            if (Runtime.Weather is { } wx)
+                bits.Add($"sol {Runtime.Sun.SolNumber}, {(int)Runtime.Sun.Time:00}:{(int)(Runtime.Sun.Time % 1 * 60):00} local, air {Runtime.Ambient:0} °C" +
+                         (wx.Storm is { } st ? $", dust storm (τ {st.Tau:0.#})" : $", clear (τ {wx.Dust:0.##})") +
+                         (wx.Relay ? ", RELAY PASS" : $", next pass in {wx.NextPass:0.#} h"));
             if (Runtime.SunShown)
             {
                 var sun = Runtime.Sun;

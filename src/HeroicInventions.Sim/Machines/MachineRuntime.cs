@@ -114,6 +114,8 @@ public sealed class MachineRuntime
     /// <summary>The zone a part stands in: the innermost enclosure round it, or the open air.</summary>
     public Zone ZoneOf(string partId) => _zoneOfPart.GetValueOrDefault(partId, Outside);
     public Sun Sun { get; }
+    /// <summary>Sols, the daily air, relay passes and dust storms (issue #69), if the scene has weather.</summary>
+    public Weather? Weather { get; }
     /// <summary>The planet the scene stands on (issue #38).</summary>
     public Planet Planet => Outside.Planet;
     /// <summary>
@@ -220,6 +222,7 @@ public sealed class MachineRuntime
         _ambient = def.Ambient;
         Outside = new Zone(def.Planet, def.Ambient);
         Sun = (def.Sun is { } sun ? new Sun(sun.Latitude, sun.Day, sun.Time) : new Sun(31.2, 172, 12)).On(def.Planet);
+        if (def.Weather is { } wx) Weather = new Weather(wx, Sun, () => Outside.Planet);
         BuildEnclosures(def);
 
         foreach (var part in def.Parts)
@@ -975,6 +978,13 @@ public sealed class MachineRuntime
         _getters["scene.oxygen"] = () => Outside.OxygenFraction * 100; // % of the air by volume
         _getters["scene.molar-mass"] = () => Outside.MolarMass * 1000; // g/mol of the air
         _getters["scene.solar-constant"] = () => Sun.SolarConstant;    // W/m² above the air
+        _getters["scene.sol"] = () => Sun.SolNumber;                   // the run's sol, 1 first
+        _getters["scene.sols"] = () => Sun.Sols;                       // sols since the midnight before the run
+        _getters["scene.air-mass"] = () => Sun.AirMass;                // thicknesses of air the beam crosses
+        _getters["scene.dust"] = () => Weather?.Dust ?? -Math.Log(Sun.SkyTransmittance);   // optical depth
+        _getters["scene.storm"] = () => Weather?.Storm is null ? 0 : 1;
+        _getters["scene.relay"] = () => Weather?.Relay == true ? 1 : 0; // the relay orbiter is overhead
+        _getters["scene.next-pass"] = () => Weather?.NextPass ?? -1;    // local hours to the next pass
         _getters["scene.time"] = () => Sun.Time;                        // solar hours
         _setters["scene.time"] = h => Sun.Time = ((h % 24) + 24) % 24;
         _getters["scene.day"] = () => Sun.Day;
@@ -1041,6 +1051,8 @@ public sealed class MachineRuntime
             _getters[$"{id}.cosine"] = () => m.Cosine;                 // cos(θ/2)
             _getters[$"{id}.collected"] = () => m.Collected / 1000;    // kJ so far
             _getters[$"{id}.area"] = () => m.Area;
+            _getters[$"{id}.dust"] = () => m.Dust;                     // share of its light dust stops; 0 clean
+            _setters[$"{id}.dust"] = d => m.Dust = d;                  // clean it: 0
             _setters[$"{id}.area"] = a => m.Area = Math.Max(0, a);     // cover it: 0
         }
         foreach (var (id, tank) in _tanks)
@@ -1306,6 +1318,11 @@ public sealed class MachineRuntime
     public void Step(double dt)
     {
         Sun.Step(dt);
+        if (Weather is { } wx)
+        {
+            wx.Step(dt, _mirrors.Values);
+            if (wx.Ambient is { } air) Ambient = air;   // the air on the planet's daily curve
+        }
         foreach (var h in _hearths.Values) h.Step(dt);
         foreach (var m in _mirrors.Values) m.Step(dt);
         foreach (var (target, sources) in _heatSources) target.HeatInput = _ownHeat[target] + sources.Sum(w => w());

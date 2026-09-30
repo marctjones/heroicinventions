@@ -15,6 +15,9 @@
 ;; of the year, solar hours (12 is noon; the clock then runs with the
 ;; simulation). Defaults, if any is given: Alexandria, 31.2 N, on
 ;; midsummer's day (172) at noon.
+;; #:weather (issue #69) runs the scene's sols: the air following the
+;; planet's daily curve, relay passes, and dust storms, from
+;; (weather #:storms (list (storm #:sol 2 #:tau 10.8) ...)); see weather.rkt.
 ;; #:ambient is the air round the machine, °C (default 20, or the
 ;; #:planet's temperature, -63 on Mars): boilers and
 ;; sealed air cool towards it, boilers and pumped water start at it, a
@@ -33,7 +36,7 @@
 ;; evaluated when the module runs.
 
 (require (for-syntax racket/base racket/list racket/string syntax/parse "materials.rkt" (only-in "planets.rkt" planet-ids))
-         "geometry/shape.rkt" "planets.rkt")
+         "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
          tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam
@@ -44,12 +47,13 @@
          (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec) (struct-out lift-spec) (struct-out cylinder-spec)
          (struct-out inflow-spec) (struct-out channel-spec) (struct-out trigger-spec) (struct-out follow-spec) (struct-out belt-spec) (struct-out joint-spec)
          take-registered-machines
-         planet make-planet planet? planet-field planet-name earth-planet?)
+         planet make-planet planet? planet-field planet-name earth-planet?
+         (all-from-out "weather.rkt"))
 
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source ambient sun planet parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers follows belts joints) #:transparent)
+(struct machine (name source ambient sun planet weather parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers follows belts joints) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -362,7 +366,9 @@
       (bad (format "#:tip-speed-ratio must be above 0, got ~e" (prop 'tip-speed-ratio)))))
   parts)
 
-(define (make-machine name source ambient sun planet-v items)
+(define (make-machine name source ambient sun planet-v weather-v items)
+  (unless (or (not weather-v) (weather? weather-v))
+    (error 'define-machine "machine ~a: #:weather must be (weather ...), got ~e" name weather-v))
   (unless (planet? planet-v)
     (error 'define-machine "machine ~a: #:planet must be a planet (earth, mars, or (planet mars #:gravity 9.81 ...)), got ~e" name planet-v))
   (unless (and (real? ambient) (> ambient -273.15))
@@ -376,7 +382,7 @@
       (error 'define-machine "machine ~a: #:day must be a day of the year, 1 to ~a, got ~e" name year day))
     (unless (and (real? time) (<= 0 time) (< time 24))
       (error 'define-machine "machine ~a: #:time must be solar hours in [0, 24), got ~e" name time)))
-  (machine name source ambient sun planet-v
+  (machine name source ambient sun planet-v weather-v
            (check-zone-joins (check-enclosures (check-carried-wheels (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
@@ -1810,11 +1816,15 @@
 (define-syntax (define-machine stx)
   (syntax-parse stx
     [(_ name:id (~alt (~optional (~seq #:source src:expr)) (~optional (~seq #:ambient amb:expr))
-                      (~optional (~seq #:planet pl:expr))
+                      (~optional (~seq #:planet pl:expr)) (~optional (~seq #:weather wx:expr))
                       (~optional (~seq #:latitude lat:expr)) (~optional (~seq #:day day:expr)) (~optional (~seq #:time time:expr))) ...
         c:clause ...)
      ;; a bare name is a preset, checked here; anything else is an
      ;; expression making a planet, such as (planet mars #:gravity 9.81)
+     ;; a machine that fixes its #:ambient keeps it, weather or no
+     #:with wx-expr (if (attribute amb)
+                        #'(let ([w (~? wx #f)]) (and w (weather-without-daily w)))
+                        #'(~? wx #f))
      #:with planet-expr (cond
                           [(not (attribute pl)) #'(planet-preset 'earth)]
                           [(identifier? #'pl)
@@ -1833,5 +1843,5 @@
          (define the-planet planet-expr)
          ;; a scene on a planet stands in its air unless it says otherwise
          (define name (make-machine 'name (~? src #f) (~? amb (if (planet? the-planet) (planet-field the-planet 'temperature) 20))
-                                    sun the-planet (list c.expr ...)))
+                                    sun the-planet wx-expr (list c.expr ...)))
          (register-machine! name))]))

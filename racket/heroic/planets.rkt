@@ -36,7 +36,7 @@
   (define f (assq key (planet-fields p)))
   (unless f (error 'planet-field "planet ~a has no field ~a" (planet-name p) key))
   (case key
-    [(air sky-color ground-color) (cdr f)]
+    [(air sky-color ground-color daily-temperature) (cdr f)]
     [else (cadr f)]))
 
 ;; Is this the default planet, number for number? Then a machine on it

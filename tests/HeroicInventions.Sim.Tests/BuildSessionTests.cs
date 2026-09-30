@@ -656,6 +656,39 @@ public class BuildSessionTests
         Assert.Equal(MachineWriter.Write(def), MachineWriter.Write(rebuilt.Document.ToMachineDef()));
     }
 
+    /// <summary>
+    /// Issue #69. Weather by command: on Mars, under the sun from 03:00, the
+    /// air is on the daily curve's coldest, −80 °C, and a relay pass is on;
+    /// a sol later it is back to 03:00 on sol 2, where a storm of τ 5 has the
+    /// sun's beam at e^(−(5 − 0.3)·AM) of a clear sky's. Round-trips.
+    /// </summary>
+    [Fact]
+    public void WeatherCommandsRunSolsAndStormsAndRoundTrip()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "sols");
+        session.Execute("(planet mars)");
+        session.Execute("(sun #:latitude -2 #:day 100 #:time 3)");
+        session.Execute("(weather #:passes (3 15))");
+        session.Execute("(storm #:sol 2 #:hour 0 #:tau 5 #:sols 1)");
+        session.Execute("(tank t #:at (0 0 0))");
+        session.Execute("(run 1)");
+        var run = session.LastRun!;
+        Assert.Equal(-80, run.Ambient, 3);
+        Assert.True(run.Weather!.Relay);
+        session.Execute("(run 88775)");
+        run = session.LastRun!;
+        Assert.Equal(2, run.Sun.SolNumber);
+        Assert.Equal(3, run.Sun.Time, 6);
+        Assert.NotNull(run.Weather!.Storm);
+        Assert.Equal(5 - 0.3, run.Sun.ExtraDust, 3);
+
+        var def = session.Document.ToMachineDef();
+        Assert.Equal(def.Weather, MachineDef.Parse(MachineWriter.Write(def)).Weather);
+        var rebuilt = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "sols");
+        foreach (var line in CommandScript.For(def)) rebuilt.Execute(line);
+        Assert.Equal(MachineWriter.Write(def), MachineWriter.Write(rebuilt.Document.ToMachineDef()));
+    }
+
     /// <summary>Every existing scene is unchanged: Earth's air is the game's 287.05 J/(kg·K) dry air, 1.204118 kg/m³ at 20 °C.</summary>
     [Fact]
     public void EarthIsTheDefaultPlanetAndItsNumbersAreTheOldConstants()

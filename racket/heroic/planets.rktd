@@ -19,6 +19,11 @@
 ;;   sol                s in a solar day
 ;;   year               sols in a year
 ;;   obliquity          degrees of axial tilt (sets the sun's declination)
+;;   daily-temperature  min max peak-hour: °C before dawn and in the
+;;                      afternoon, and the local solar hour of the warmest,
+;;                      the air following T = mid + half-range·cos(2π(h − peak)/24)
+;;                      in a scene with #:weather (issue #69). A scenario
+;;                      number: -80 to -20 °C at a mid-latitude Mars site.
 ;;   sky-color, ground-color   r g b, 0..1: how the view tints the scene
 ;;
 ;; Mars: NASA Mars fact sheet (nssdc.gsfc.nasa.gov/planetary/factsheet/
@@ -44,4 +49,5 @@
        (molar-mass #f)
        (solar-constant 586.2) (sky-transmittance 0.741) (air-mass-exponent 1)
        (sol 88775) (year 669) (obliquity 25.19)
+       (daily-temperature -80 -20 15)
        (sky-color 0.78 0.6 0.45) (ground-color 0.6 0.36 0.22))

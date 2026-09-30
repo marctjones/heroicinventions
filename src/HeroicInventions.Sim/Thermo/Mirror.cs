@@ -25,6 +25,9 @@ public sealed class Mirror(Sun sun, Vec3 at, Vec3 target, double area, double re
     public double Area { get; set; } = area;                   // m²
     public double Reflectivity { get; } = reflectivity;        // polished bronze ~0.6, silvered glass ~0.9
     public double Collected { get; private set; }              // J thrown onto the target so far
+    private double _dust;
+    /// <summary>The share of its light a coat of dust stops (issue #69): 0 clean. Settles in a storm; set it to 0 to clean it.</summary>
+    public double Dust { get => _dust; set => _dust = Math.Clamp(value, 0, 1); }
 
     /// <summary>cos(θ/2): the share of the mirror's area square to the sun while it aims at the target.</summary>
     public double Cosine
@@ -41,7 +44,7 @@ public sealed class Mirror(Sun sun, Vec3 at, Vec3 target, double area, double re
     }
 
     /// <summary>W landing on the target now.</summary>
-    public double Power => Sun.DirectNormal * Area * Reflectivity * Cosine;
+    public double Power => Sun.DirectNormal * Area * Reflectivity * (1 - Dust) * Cosine;
 
     public void Step(double dt) => Collected += Power * dt;
 }

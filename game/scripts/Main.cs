@@ -106,6 +106,7 @@ public partial class Main : Node3D
         ["two-modules"] = new(new Vector3(0, 6f, 15f), new Vector3(0, 1.5f, 0), 50),
         ["stove-rooms"] = new(new Vector3(0, 6f, 15f), new Vector3(0, 1.2f, 0), 50),
         ["airlock"] = new(new Vector3(-3f, 5f, 11f), new Vector3(-3f, 1.2f, 0), 50),
+        ["mars-sols"] = new(new Vector3(4f, 3f, 5f), new Vector3(0, 0.8f, -1.2f), 50),
         ["heliostats"] = new(new Vector3(7.5f, 3.2f, 5.5f), new Vector3(0, 0.6f, 0), 50),
     };
     private static readonly (double Scale, string Label)[] Speeds =
@@ -180,6 +181,7 @@ public partial class Main : Node3D
         ["two-modules"] = "Two Modules on Mars (Enclosures)",
         ["stove-rooms"] = "Stoves and Their Air (Oxygen-Limited Fire)",
         ["airlock"] = "An Airlock on Mars (Doors and Air Pumps)",
+        ["mars-sols"] = "Sols and a Dust Storm at Meridiani (Mars Time and Weather)",
         ["heliostats"] = "Heliostats: Sunlight and Mirrors",
     };
 
@@ -221,6 +223,7 @@ public partial class Main : Node3D
         ["dam-break"] = "A millpond held by a shut sluice while a 250 L/s stream fills it. At 55 cm deep (20 s) a trigger draws the gate right up and the pent water runs down a dry 40 m race into the low pond. The race holds water along its length, 80 cells solved by the shallow-water equations: watch the thin fast front go down and the reach fill behind it. It reaches the low pond at 40 s, between the fastest wave's 33.8 s and a kinematic shock's 52.5 s. Pond, race and low pond always add up to what there was plus the stream's.",
         ["sluice-demo"] = "A sluice gate on a mill race. A 20 L/s spring fills a head pool; a wooden gate 1 m tall, raised 5 cm, lets the water out under its lower edge as a jet, Q = 0.6 x slot area x sqrt(2 g h). All the spring must pass the slot, so the pool rises until the water stands 25.2 cm over the slot's middle. Below, the race runs into a reach that drains over a floor-level outfall into a pond. Shut the gate (gate.opening 0) and the race runs dry at once, the reach drains away over two minutes, and the pool backs up and spills over its waste weir.",
         ["heliostats"] = "Two bronze boilers of a litre of water, each heated by a 0.5 m2 mirror turned through the day to keep throwing the sun onto it - a heliostat - at Alexandria on midsummer's day, from noon. The sun stands 82 degrees up in the south and its direct beam through clear air is 951 W/m2. A mirror sending that light to its boiler must face halfway between the two, so it shows only cos(theta/2) of itself to the sun: the mirror north of its boiler, looking back towards the sun, keeps 0.83 and throws 336 W; the one to the south, standing between boiler and sun, keeps 0.75 and throws 303 W. Watch the day go by at 20x: the beams weaken as the sun lowers, and die at sunset. Try scene.day 355: at midwinter noon the sun is only 35 degrees up, and the north mirror keeps 0.98 of its area while the south one keeps 0.42.",
+        ["mars-sols"] = "Three sols on Opportunity's plain, from noon on sol 1. A sol is 88,775 s, 24 local hours of 3,699 s. The air follows the day, -80 C before dawn to -20 C at 15:00. All of sol 2 a dust storm blows, optical depth 10.8 as in Opportunity's last storm: the sun's beam through it falls a further e^(-10.5 x air mass), about 1/40,000 at noon, and the sky goes brown. Dust settles on the heliostat, which after the storm reflects e^(-0.5) = 61% of what it did; clean it with mirror.dust 0. The relay orbiter passes at 03:00 and 15:00. Try scene.clock-rate 100 to watch the sols go by.",
         ["airlock"] = "A 60 m3 habitat of 50 kPa air, an 8 m3 chamber and two doors onto Mars. Work it: the air pump draws the chamber back into the habitat (pump running), 50 L/s, down to 5 kPa in 8/0.05 x ln 10 = 368 s, spending 289 kJ as an ideal compressor; then open the 5 cm2 bleed valve (bleed.open 1) and the chamber falls to Mars's 610 Pa as e^(-t/134 s); open the outer door (outer.open 1). Each cycle loses only what was left in the chamber, 8 m3 x (5000 - 610) Pa of air = 0.42 kg, against 4.7 kg vented straight from 50 kPa.",
         ["stove-rooms"] = "One 2 kW charcoal stove, three times. A fire breathes its room's air: charcoal takes 2.67 kg of oxygen a kilogram (C + O2 -> CO2) and goes out below 15% oxygen. Left, a sealed 30 m3 room: 74.2 mol of oxygen above the limit at 5.74 mmol/s, so it goes out after 12,924 s (3.6 h) having burned 0.89 kg, the air 6% CO2; meanwhile it holds the room at 60 C and 115 kPa. Middle, the same room with 5 L/s of outside air blown in and a vent: its oxygen settles at 18.2% and it burns on. Right, outdoors: it burns to the end. Try sealed.supply 5, or stove.oxygen-limit 10. Best at 20x.",
         ["two-modules"] = "Two inflated modules on Mars, each holding 50 kPa of 21% oxygen at 20 C against 610 Pa of CO2 at -63 C outside. Left, sealed: walls losing 20 W/K and a 1.8 kW heater, so it settles at -63 + 1800/20 = 27 C (time constant C/UA = 1283 s); its lift pump works because the air inside holds a column (50000 - 2339)/(1000 x 3.71) = 12.85 m high; a nitrogen locker inside it leaks into it, not onto Mars. Right, punctured by a 1 cm2 hole: its air rushes out at the speed of sound and the pressure falls as e^(-t/2513 s), 24.4 kPa after half an hour, 11.9 after an hour, the dial sinking, until at about 1 kPa the membrane sags. Try punctured.leak 0 to patch it, or sealed.heater 0. Best at 20x.",
@@ -1005,7 +1008,7 @@ public partial class Main : Node3D
     private ProceduralSkyMaterial _skyMaterial = null!;
     private StandardMaterial3D _floorMaterial = null!;
     private Color _skyTop, _skyHorizon;
-    private (double ambient, bool sunShown, int elevation, int azimuth, HeroicInventions.Sim.Planet? planet) _shownSky = (double.NaN, false, 0, 0, null);
+    private (double ambient, bool sunShown, int elevation, int azimuth, HeroicInventions.Sim.Planet? planet, double storm) _shownSky = (double.NaN, false, 0, 0, null, 0);
 
     /// <summary>
     /// The sky, seen. At 20 °C under the studio light everything is as it
@@ -1022,7 +1025,8 @@ public partial class Main : Node3D
         bool sunShown = run?.SunShown ?? false;
         var sun = run?.Sun;
         var planet = run?.Planet ?? HeroicInventions.Sim.Planet.Earth;
-        var key = (ambient, sunShown, sunShown ? (int)Math.Round(sun!.Elevation * 4) : 0, sunShown ? (int)Math.Round(sun!.Azimuth * 4) : 0, planet);
+        double storm = sun?.ExtraDust ?? 0;
+        var key = (Math.Round(ambient * 2) / 2, sunShown, sunShown ? (int)Math.Round(sun!.Elevation * 4) : 0, sunShown ? (int)Math.Round(sun!.Azimuth * 4) : 0, planet, Math.Round(storm * 10));
         if (key == _shownSky) return;
         _shownSky = key;
 
@@ -1054,6 +1058,16 @@ public partial class Main : Node3D
             energy *= day;
             top = top.Lerp(new Color(0.02f, 0.03f, 0.08f), 1 - day);
             horizon = horizon.Lerp(new Color(0.95f, 0.55f, 0.35f), low * day * 0.6f).Lerp(new Color(0.07f, 0.08f, 0.13f), 1 - day);
+            // a dust storm (issue #69): the beam through the dust falls as e^(−Δτ·AM), and the sky thickens to a dim brown
+            if (storm > 0)
+            {
+                float murk = 1 - Mathf.Exp(-(float)storm);
+                energy *= Mathf.Max(0.08f, Mathf.Exp(-(float)storm * 0.35f));
+                var dust = new Color(0.45f, 0.3f, 0.2f);
+                top = top.Lerp(dust, murk * 0.8f);
+                horizon = horizon.Lerp(dust.Lightened(0.15f), murk * 0.8f);
+                light = light.Lerp(new Color(0.8f, 0.55f, 0.35f), murk * 0.6f);
+            }
             var d = sun.Direction;
             var toSun = new Vector3((float)d.X, (float)d.Y, (float)d.Z);
             var up = Mathf.Abs(toSun.Dot(Vector3.Up)) > 0.99f ? Vector3.Forward : Vector3.Up;

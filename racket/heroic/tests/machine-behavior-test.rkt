@@ -1661,3 +1661,33 @@
     (check-true (for/and ([h heights]) (< 0.4 h 1.0)) (format "hammer near 0.70 cm: ~a" heights))
     (define torques (for/list ([t (times-of run)] [q (values-of run '(weak-hammer torque))] #:when (> t 2.0)) q))
     (check-true (for/and ([q torques]) (< 4.4 q 5.4)) (format "the follower asks about what the wheel gives, 5 N.m: ~a" torques))))
+
+;; ---------------------------------------------------------------------------
+;; Mars time and weather (issue #69). Working in racket/machines/mars-sols.rkt.
+
+(test-case "Three sols at Meridiani: 88,775 s sols, air from -80 to -20 °C, a storm's e^(-10.5 AM), a mirror dusted to e^(-0.5)"
+  (define run (simulate 'mars-sols #:seconds 270000 #:step 1 #:sample-dt 60 #:set '((mirror dust 0 180000))))
+  (define (at t k) (for/first ([f run] #:when (>= (car f) (- t 1e-6))) (cadr (assq k (cdr f)))))
+  (define (first-when k v) (for/first ([f run] #:when (= v (cadr (assq k (cdr f))))) (car f)))
+  ;; a sol is 88,775 s: noon comes round again then (sampled 25 s later, 25/3699 of an hour on)
+  (check-= (at 88775 'scene.time) (+ 12 (/ 25 3698.958)) 1e-6)
+  (check-= (first-when 'scene.sol 2) 44387.5 60 "12 local hours after noon on sol 1")
+  (check-= (first-when 'scene.sol 3) 133162.5 60)
+  ;; the air on the daily curve
+  (check-= (min-of run '(scene ambient)) -80 0.01)
+  (check-= (max-of run '(scene ambient)) -20 0.01)
+  (check-= (at (* 3 3698.958) 'scene.ambient) -20 0.05 "15:00 on sol 1, the warmest")
+  ;; noon on sol 2, in the storm, and on sol 3, clear: S 0.741^AM e^(-(τ - 0.3) AM)
+  (define (clear am) (* 586.2 (expt 0.741 am)))
+  (define am2 (at 88800 'scene.air-mass))
+  (check-= (at 88800 'scene.storm) 1 0)
+  (check-= (at 88800 'scene.irradiance) (* (clear am2) (exp (* -10.5 am2))) 1e-4)
+  (check-= (at 177600 'scene.irradiance) (clear (at 177600 'scene.air-mass)) 1e-6)
+  ;; the mirror after the storm, then cleaned
+  (check-= (at 177600 'mirror.dust) (- 1 (exp -0.5)) 1e-9)
+  (define dusty (at 177600 'mirror.power))
+  (check-= (at 180060 'mirror.dust) 0 0)
+  (check-true (> (/ (at 180060 'mirror.power) dusty) 1.6) "cleaned, it throws 1/0.607 as much (less the sun's movement in 41 min)")
+  ;; the relay passes at 03:00 local, for ten minutes
+  (check-= (at (+ 44387.5 (* 3.05 3698.958)) 'scene.relay) 1 0)
+  (check-= (at (+ 44387.5 (* 3.25 3698.958)) 'scene.relay) 0 0))

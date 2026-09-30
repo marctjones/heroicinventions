@@ -52,6 +52,8 @@ namespace HeroicInventions.Sim.Editor;
 ///   (raw-part (part id kind ...))                 ; a part clause verbatim, for shaped parts no catalogue entry describes
 ///   (sun [#:latitude deg] [#:day n] [#:time hours])   ; the scene under the sun (default Alexandria, midsummer, noon)
 ///   (planet mars [#:gravity g] [#:pressure Pa] [#:temperature C] [#:air ((o2 x) ...)] ...)   ; the planet: a preset, some numbers changed; sets the ambient to its temperature
+///   (weather [#:daily #t] [#:passes (3 15)] [#:pass-minutes 10])   ; sols: the air on the planet's daily curve, relay passes
+///   (storm #:sol n [#:hour h] #:tau τ [#:sols d] [#:settle k])      ; a dust storm on the run's nth sol
 ///   (ambient °C)           ; the scene's air: boilers cool to it, water and air arrive at it, tanks freeze below 0
 ///   (move id (x y z))
 ///   (set id #:prop value)   ; a number, a symbol (#:axis y), a flag (#:round #t) or the name of another part (#:onto boiler)
@@ -132,6 +134,8 @@ public sealed class BuildSession
         "move" => Move(cmd),
         "ambient" => SetAmbient(cmd),
         "planet" => SetPlanet(cmd),
+        "weather" => SetWeather(cmd),
+        "storm" => AddStorm(cmd),
         "sun" => SetSun(cmd),
         "set" => Set(cmd),
         "remove" => Remove(cmd),
@@ -627,6 +631,36 @@ public sealed class BuildSession
         Document.Ambient = planet.Temperature;
         if (Document.Sun is { } sun && sun.Day > planet.Year) Document.Sun = sun with { Day = (int)planet.Year };
         return $"on {planet.Name}: g {planet.Gravity} m/s², {planet.Pressure} Pa, air {planet.Temperature} °C";
+    }
+
+    /// <summary>(weather #:daily b #:passes (h …) #:pass-minutes m): the scene's sols (issue #69); unsaid fields keep their values, and its storms stay.</summary>
+    private string SetWeather(SList cmd)
+    {
+        var now = Document.Weather ?? new WeatherSpec(true, [3, 15], 10, []);
+        bool daily = Kw(cmd, "daily") is SBool b ? b.Value : now.Daily;
+        var passes = Kw(cmd, "passes") is SList pl ? pl.Items.Select(h => Num(h, "weather #:passes")).ToList() : now.Passes;
+        if (passes.Any(h => h is < 0 or >= 24)) throw new FormatException("weather #:passes are local solar hours in [0, 24)");
+        double minutes = Kw(cmd, "pass-minutes") is { } m ? Num(m, "weather #:pass-minutes") : now.PassMinutes;
+        if (minutes <= 0) throw new FormatException("weather #:pass-minutes must be above 0");
+        Snapshot();
+        Document.Weather = new WeatherSpec(daily, passes, minutes, now.Storms);
+        return $"weather: the air {(daily ? "follows the day" : "holds still")}, relay passes at {string.Join(", ", passes)} h";
+    }
+
+    /// <summary>(storm #:sol n #:hour h #:tau τ #:sols d #:settle k): adds a dust storm to the scene's weather.</summary>
+    private string AddStorm(SList cmd)
+    {
+        var now = Document.Weather ?? new WeatherSpec(true, [3, 15], 10, []);
+        int sol = (int)Num(RequireKw(cmd, "sol"), "storm #:sol");
+        double hour = Kw(cmd, "hour") is { } h ? Num(h, "storm #:hour") : 0;
+        double tau = Num(RequireKw(cmd, "tau"), "storm #:tau");
+        double sols = Kw(cmd, "sols") is { } d ? Num(d, "storm #:sols") : 1;
+        double settle = Kw(cmd, "settle") is { } k ? Num(k, "storm #:settle") : 0.5;
+        if (sol < 1 || hour is < 0 or >= 24 || tau < 0 || sols <= 0 || settle < 0)
+            throw new FormatException("(storm #:sol n≥1 #:hour [0,24) #:tau ≥0 #:sols >0 #:settle ≥0)");
+        Snapshot();
+        Document.Weather = now with { Storms = [.. now.Storms, new StormSpec(sol, hour, tau, sols, settle)] };
+        return $"storm on sol {sol} from {hour} h, τ {tau}, {sols} sols";
     }
 
     /// <summary>(ambient °C): the scene's air temperature.</summary>

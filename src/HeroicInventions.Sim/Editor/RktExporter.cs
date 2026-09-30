@@ -30,7 +30,11 @@ public static class RktExporter
         sb.Append($"(define-machine {m.Name}\n");
         if (m.Source is { } src) sb.Append($"  #:source {Quote(src)}\n");
         if (!m.Planet.IsEarth) sb.Append($"  #:planet {PlanetExpr(m.Planet)}\n");
-        if (m.Ambient != m.Planet.Temperature) sb.Append($"  #:ambient {F(m.Ambient)}\n");   // unsaid, a scene takes its planet's
+        // unsaid, a scene takes its planet's air; a scene on the daily curve says none (saying one would hold it still)
+        if (m.Ambient != m.Planet.Temperature && m.Weather is not { Daily: true }) sb.Append($"  #:ambient {F(m.Ambient)}\n");
+        if (m.Weather is { } wx)
+            sb.Append($"  #:weather (weather #:daily {(wx.Daily ? "#t" : "#f")} #:passes '({string.Join(' ', wx.Passes.Select(F))}) #:pass-minutes {F(wx.PassMinutes)}" +
+                      (wx.Storms.Count > 0 ? $" #:storms (list {string.Join(' ', wx.Storms.Select(s => $"(storm #:sol {s.Sol} #:hour {F(s.Hour)} #:tau {F(s.Tau)} #:sols {F(s.Sols)} #:settle {F(s.Settle)})"))})" : "") + ")\n");
         if (m.Sun is { } sun) sb.Append($"  #:latitude {F(sun.Latitude)} #:day {sun.Day} #:time {F(sun.Time)}\n");
 
         foreach (var p in m.Parts) sb.Append(PartClause(p));

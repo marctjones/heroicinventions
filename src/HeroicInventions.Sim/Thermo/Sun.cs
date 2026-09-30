@@ -42,6 +42,12 @@ public sealed class Sun(double latitudeDeg, int day, double solarTimeHours)
     public double Obliquity { get; set; } = 23.45;                    // degrees of axial tilt
     public int Year { get; set; } = 365;                              // days (sols) in a year
     public double SolLength { get; set; } = 86400;                    // s in a day
+    /// <summary>Dust optical depth over the clear sky's, from a storm (issue #69): the beam loses a further e^(−τ·AM).</summary>
+    public double ExtraDust { get; set; }
+    /// <summary>Sols since midnight before the run began: the run's first sol is 1 while this is under 1.</summary>
+    public double Sols { get; private set; } = solarTimeHours / 24;
+    /// <summary>The run's sol now, 1 first.</summary>
+    public int SolNumber => (int)Math.Floor(Sols) + 1;
 
     /// <summary>Takes the planet's numbers; returns itself.</summary>
     public Sun On(Planet planet)
@@ -111,11 +117,13 @@ public sealed class Sun(double latitudeDeg, int day, double solarTimeHours)
     }
 
     /// <summary>Direct beam on a surface square to the sun, W/m² (Meinel's clear sky).</summary>
-    public double DirectNormal => Elevation <= 0 ? 0 : SolarConstant * Math.Pow(SkyTransmittance, Math.Pow(AirMass, AirMassExponent));
+    public double DirectNormal => Elevation <= 0 ? 0
+        : SolarConstant * Math.Pow(SkyTransmittance, Math.Pow(AirMass, AirMassExponent)) * Math.Exp(-ExtraDust * AirMass);
 
     public void Step(double dt)
     {
         Time += dt * ClockRate / (SolLength / 24);
+        Sols += dt * ClockRate / SolLength;
         while (Time >= 24) { Time -= 24; Day = Day % Year + 1; }
         while (Time < 0) { Time += 24; Day = (Day + Year - 2) % Year + 1; }
     }

@@ -54,6 +54,8 @@ public sealed record Planet
     public required double Sol { get; init; }                // s in a solar day
     public required double Year { get; init; }               // sols in a year
     public required double Obliquity { get; init; }          // degrees of axial tilt
+    /// <summary>The air's daily curve (issue #69), °C before dawn and in the afternoon and the local hour of the warmest; null: none.</summary>
+    public (double Min, double Max, double PeakHour)? DailyTemperature { get; init; }
     public Vec3 SkyColor { get; init; } = new(0.55, 0.7, 0.9);
     public Vec3 GroundColor { get; init; } = new(0.55, 0.53, 0.5);
 
@@ -115,6 +117,7 @@ public sealed record Planet
             Sol = Num("sol"),
             Year = Num("year"),
             Obliquity = Num("obliquity"),
+            DailyTemperature = form.Field("daily-temperature") is { Items: [_, SNumber lo, SNumber hi, SNumber peak] } ? (lo.Value, hi.Value, peak.Value) : null,
             SkyColor = Color("sky-color", new Vec3(0.55, 0.7, 0.9)),
             GroundColor = Color("ground-color", new Vec3(0.55, 0.53, 0.5)),
         };
@@ -125,7 +128,9 @@ public sealed record Planet
     {
         SList T(string head, params SExpr[] items) => new([new SSymbol(head), .. items]);
         SNumber N(double v) => new(v);
-        return T("planet", new SSymbol(Id),
+        var items = new List<SExpr>
+        {
+            new SSymbol("planet"), new SSymbol(Id),
             T("name", new SString(Name)),
             T("gravity", N(Gravity)), T("pressure", N(Pressure)), T("temperature", N(Temperature)),
             T("air", [.. GasMix.Names.Select(g => (SExpr)T(g, N(Air[g])))]),
@@ -133,8 +138,11 @@ public sealed record Planet
             T("solar-constant", N(SolarConstant)), T("sky-transmittance", N(SkyTransmittance)),
             T("air-mass-exponent", N(AirMassExponent)),
             T("sol", N(Sol)), T("year", N(Year)), T("obliquity", N(Obliquity)),
-            T("sky-color", N(SkyColor.X), N(SkyColor.Y), N(SkyColor.Z)),
-            T("ground-color", N(GroundColor.X), N(GroundColor.Y), N(GroundColor.Z)));
+        };
+        if (DailyTemperature is { } d) items.Add(T("daily-temperature", N(d.Min), N(d.Max), N(d.PeakHour)));
+        items.Add(T("sky-color", N(SkyColor.X), N(SkyColor.Y), N(SkyColor.Z)));
+        items.Add(T("ground-color", N(GroundColor.X), N(GroundColor.Y), N(GroundColor.Z)));
+        return new SList(items);
     }
 
     /// <summary>The numbers a planet's preset can be overridden by name: (planet mars #:gravity 9.81), in Racket and in the editor alike.</summary>
