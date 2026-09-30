@@ -263,6 +263,14 @@ public static class RktExporter
             case "roof":
                 return $"  (roof {p.Id} {At()} #:on {Sym("on", "?")} #:conductance {F(N("conductance"))}" +
                        (p.Props.GetValueOrDefault("gutter") is SSymbol gutter ? $" #:gutter {gutter.Name}" : "") + $" {Mat()})\n";
+            case "plants":
+                return $"  (plants {p.Id} {At()} #:area {F(N("area"))} #:water {Sym("water", "?")} #:efficiency {F(N("efficiency", 0.005))} " +
+                       $"#:respiration {F(N("respiration"))} #:wood {F(N("wood"))}" +
+                       (p.Props.GetValueOrDefault("store") is SSymbol store ? $" #:store {store.Name}" : "") + ")\n";
+            case "melter":
+                return $"  (melter {p.Id} {At()} #:into {Sym("into", "?")} #:power {F(N("power"))}" + Opt("ice-temperature", "ice-temperature") + $" {Mat()})\n";
+            case "electrolyser":
+                return $"  (electrolyser {p.Id} {At()} #:water {Sym("water", "?")} #:power {F(N("power"))} #:efficiency {F(N("efficiency", 0.7))} {Mat()})\n";
             case "counterpoise":
                 return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +
                        $"#:counterweight {F(N("counterweight"))} #:radius {F(N("radius"))} #:turn-deg {F(N("turn-deg"))} " +

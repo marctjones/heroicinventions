@@ -769,6 +769,43 @@ public class BuildSessionTests
         Assert.Equal(Pond.DefaultCoefficient * 2 * (Boiler.SaturationPressure(30) - pv), pond.Evaporation, 12);
     }
 
+    /// <summary>
+    /// Issue #42. Wood grown is wood burned backwards: plants given 1 kW of light
+    /// in a room grow 0.005 × 1000/18e6 kg/s less respiration, and the room gains
+    /// 1.1841 kg of O₂ and loses 1.6286 of CO₂ a kg; a hearth burning that wood
+    /// in the same room puts both back. An ice melter takes 466.3 kJ a kg from
+    /// −63 °C, an electrolyser 17.875 MJ a kg of O₂ over its efficiency.
+    /// </summary>
+    [Fact]
+    public void TreesGiveTheOxygenTheirWoodTakesBackAndTheMelterAndElectrolyserKeepTheirBooks()
+    {
+        var outside = new Zone(Planet.Mars, -63);
+        var room = new Enclosure("room", 30, outside, 13_500, 20, new GasMix(0.21, 0.49, 0.3, 0, 0)) { Insulation = 0 };
+        double o2 = room.Moles[0], co2 = room.Moles[2];
+        var water = new Tank("water", 0, 1, 1, 0.5) { Zone = room };
+        var trees = new Plants("trees", 10, water, () => 1000) { Zone = room };
+        for (int i = 0; i < 1000; i++) trees.Step(10);
+        double expect = (0.005 * 1000 / 18e6 - Plants.DefaultRespiration * 10) * 10_000;
+        Assert.Equal(expect, trees.Wood, 12);
+        Assert.Equal(trees.Wood * Wood.OxygenPerKg / GasMix.O2MolarMass, room.Moles[0] - o2, 9);
+        Assert.Equal(trees.Wood * Wood.CarbonDioxidePerKg / GasMix.CO2MolarMass, co2 - room.Moles[2], 9);
+        var stove = new Hearth(room, 1000, trees.Wood, "wood") { Zone = room };
+        trees.Harvest();
+        for (int i = 0; i < 100; i++) stove.Step(10);
+        Assert.Equal(0, stove.Fuel, 12);
+        Assert.Equal(o2, room.Moles[0], 9);
+        Assert.Equal(co2, room.Moles[2], 9);
+
+        var tank = new Tank("melt", 0, 1, 1);
+        var melter = new Melter("m", tank, -63) { Power = 1000 };
+        melter.Step(1);
+        Assert.Equal(1000 / 466_300.0, melter.Melted, 12);
+        var feed = new Tank("feed", 0, 1, 1, 0.1);
+        var cell = new Electrolyser("e", feed, 1000, 0.5);
+        cell.Step(1);
+        Assert.Equal(500 / (286e3 * 2 / 0.031998), cell.Oxygen, 12);
+    }
+
     /// <summary>Every existing scene is unchanged: Earth's air is the game's 287.05 J/(kg·K) dry air, 1.204118 kg/m³ at 20 °C.</summary>
     [Fact]
     public void EarthIsTheDefaultPlanetAndItsNumbersAreTheOldConstants()

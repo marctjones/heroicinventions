@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "roof", "stirling", "ball"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "roof", "stirling", "ball", "plants", "melter", "electrolyser"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -202,6 +202,22 @@ public static class PartTemplates
         // a cold roof on an enclosure, 40 W/K to the outside, raining into its #:gutter tank if it has one
         "roof" => new PartSpec(id, "roof", material, at,
             new Dictionary<string, SExpr> { ["on"] = new SSymbol("?"), ["conductance"] = new SNumber(40), ["gutter"] = new SBool(false) },
+            [], null),
+        // a 2 m² bed of fast trees: set #:water to their tank (and #:store to a hearth for the harvest)
+        "plants" => new PartSpec(id, "plants", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["area"] = new SNumber(2), ["water"] = new SSymbol("?"), ["efficiency"] = new SNumber(0.005),
+                ["respiration"] = new SNumber(0.01e-3 / 3600), ["wood"] = new SNumber(0), ["store"] = new SBool(false),
+            },
+            [], null),
+        // an ice drill and melter, 1 kW, into the tank it is set #:into
+        "melter" => new PartSpec(id, "melter", material, at,
+            new Dictionary<string, SExpr> { ["into"] = new SSymbol("?"), ["power"] = new SNumber(1000), ["ice-temperature"] = new SBool(false) },
+            [], null),
+        // an electrolyser, 500 W at 70%, splitting the water of the tank it is set #:water
+        "electrolyser" => new PartSpec(id, "electrolyser", material, at,
+            new Dictionary<string, SExpr> { ["water"] = new SSymbol("?"), ["power"] = new SNumber(500), ["efficiency"] = new SNumber(0.7) },
             [], null),
         "mirror" => new PartSpec(id, "mirror", material, at,
             new Dictionary<string, SExpr> { ["onto"] = new SSymbol("?"), ["area"] = new SNumber(0.5), ["reflectivity"] = new SNumber(0.85) },

@@ -39,7 +39,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling ball
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling ball plants melter electrolyser
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -485,7 +485,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling ball
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling ball plants melter electrolyser
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
   inflow channel off trigger follow belt wake joint)
 
@@ -544,6 +544,7 @@
   (struct chinfo (id from to onto))
   (struct zjinfo (id kind from to))
   (struct pninfo (id on))
+  (struct gninfo (id water store))    ; plants, a melter or an electrolyser: its water tank, the hearth its wood is stacked on (or #f)
   (struct rfinfo (id kind on gutter)) ; a pond (on a tank) or a roof (on an enclosure, with a gutter tank or #f)            ; a pane: the enclosure whose wall it is in  ; a door or air-pump: the zones it joins (enclosure ids or outside)  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
 
   (define known-materials (material-ids))
@@ -586,8 +587,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, roof, stirling, ball) or link (pipe, connect, sealed-air)"
-    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond roof tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, roof, stirling, ball, plants, melter, electrolyser) or link (pipe, connect, sealed-air)"
+    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond roof plants melter electrolyser tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1285,6 +1286,60 @@
       #:attr info (rfinfo #'id 'roof #'room (attribute gutter-id))
       #:with expr #`(part 'id 'roof '(~? mat glass) (list at.x at.y at.z)
                           (list (cons 'on 'room) (cons 'conductance u-v) (cons 'gutter '(~? gutter-id #f)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; Plants (issue #42): fast woody ones, willow, poplar, bamboo, in a bed
+    ;; #:area m², drinking from tank #:water. Under light they keep
+    ;; #:efficiency (default 0.005) of it as wood, 18 MJ/kg, taking CO2 from
+    ;; their room's air and giving it O2 (cellulose: 1.18 kg of O2 a kg of
+    ;; wood), and #:respiration (kg/(m² s), default 0.01 g an hour a m²) of
+    ;; their wood goes back to CO2 day and night. Their light is what comes
+    ;; through their room's glass (#57). #:wood kg are standing already; set
+    ;; (trees harvest kg) to cut wood onto the hearth #:store names.
+    (pattern (plants id:id
+                     (~alt (~once (~seq #:at at:vec3))
+                           (~once (~seq #:area area-v:expr))
+                           (~once (~seq #:water water-id:id))
+                           (~optional (~seq #:efficiency eff-v:expr))
+                           (~optional (~seq #:respiration resp-v:expr))
+                           (~optional (~seq #:wood wood-v:expr))
+                           (~optional (~seq #:store store-id:id))) ...)
+      #:attr info (gninfo #'id #'water-id (attribute store-id))
+      #:with expr #`(part 'id 'plants 'oak (list at.x at.y at.z)
+                          (list (cons 'area area-v) (cons 'water 'water-id)
+                                (cons 'efficiency (~? eff-v 0.005)) (cons 'respiration (~? resp-v (/ 0.01e-3 3600)))
+                                (cons 'wood (~? wood-v 0)) (cons 'store '(~? store-id #f)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; An ice drill and melter (issue #42): cuts ice at #:ice-temperature (°C,
+    ;; default its air's) and melts it into tank #:into with #:power W (and
+    ;; any mirror or hearth aimed at it): c_ice (0 - T) + 334 kJ a kilogram.
+    (pattern (melter id:id
+                     (~alt (~once (~seq #:at at:vec3))
+                           (~once (~seq #:into into-id:id))
+                           (~optional (~seq #:power power-v:expr))
+                           (~optional (~seq #:ice-temperature ice-v:expr))
+                           (~optional (~seq #:material mat:id))) ...)
+      #:attr info (gninfo #'id #'into-id #f)
+      #:with expr #`(part 'id 'melter '(~? mat iron) (list at.x at.y at.z)
+                          (list (cons 'into 'into-id) (cons 'power (~? power-v 0)) (cons 'ice-temperature (~? ice-v #f)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; An electrolyser (issue #42): splits water from tank #:water with
+    ;; #:power W of electricity at #:efficiency (default 0.7), giving its air
+    ;; O2 at 17.9 MJ/kg / efficiency and venting the hydrogen.
+    (pattern (electrolyser id:id
+                           (~alt (~once (~seq #:at at:vec3))
+                                 (~once (~seq #:water water-id:id))
+                                 (~optional (~seq #:power power-v:expr))
+                                 (~optional (~seq #:efficiency eff-v:expr))
+                                 (~optional (~seq #:material mat:id))) ...)
+      #:attr info (gninfo #'id #'water-id #f)
+      #:with expr #`(part 'id 'electrolyser '(~? mat iron) (list at.x at.y at.z)
+                          (list (cons 'water 'water-id) (cons 'power (~? power-v 0)) (cons 'efficiency (~? eff-v 0.7)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -2188,6 +2243,7 @@
       (define b (hash-ref parts heats #f))
       (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure)))
                   (for/or ([r infos]) (and (rfinfo? r) (eq? (rfinfo-kind r) 'pond) (eq? (syntax-e (rfinfo-id r)) heats)))
+                  (for/or ([g infos]) (and (gninfo? g) (eq? (syntax-e (gninfo-id g)) heats)))
                   (for/or ([a infos]) (and (ainfo? a) (memq heats (map syntax-e (ainfo-tanks a))))))
         (fail (format "~a is not a boiler, a tank in a sealed-air or an enclosure; a hearth heats one of those" heats) (hinfo-heats h))))
     (for ([m infos] #:when (mrinfo? m))
@@ -2195,6 +2251,7 @@
       (define b (hash-ref parts onto #f))
       (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure crucible stirling)))
                   (for/or ([r infos]) (and (rfinfo? r) (eq? (rfinfo-kind r) 'pond) (eq? (syntax-e (rfinfo-id r)) onto)))
+                  (for/or ([g infos]) (and (gninfo? g) (eq? (syntax-e (gninfo-id g)) onto)))
                   (for/or ([a infos]) (and (ainfo? a) (memq onto (map syntax-e (ainfo-tanks a))))))
         (fail (format "~a is not a boiler, a tank in a sealed-air, an enclosure, a crucible or a hot-air engine; a mirror heats one of those" onto) (mrinfo-onto m))))
     (for ([c infos] #:when (cpinfo? c))
@@ -2223,6 +2280,16 @@
         (define g (hash-ref parts (syntax-e (rfinfo-gutter r)) #f))
         (unless (and g (eq? (pinfo-kind g) 'tank))
           (fail (format "~a is not a tank; a roof's gutter is a tank" (syntax-e (rfinfo-gutter r))) (rfinfo-gutter r)))))
+
+    (for ([g infos] #:when (gninfo? g))
+      (define id (syntax-e (gninfo-id g)))
+      (when (hash-ref parts id #f) (fail (format "there is already a part named ~a" id) (gninfo-id g)))
+      (define w (hash-ref parts (syntax-e (gninfo-water g)) #f))
+      (unless (and w (eq? (pinfo-kind w) 'tank))
+        (fail (format "~a is not a tank" (syntax-e (gninfo-water g))) (gninfo-water g)))
+      (when (gninfo-store g)
+        (unless (for/or ([h infos]) (and (hinfo? h) (eq? (syntax-e (hinfo-id h)) (syntax-e (gninfo-store g)))))
+          (fail (format "~a is not a hearth; a harvest is stacked on a hearth" (syntax-e (gninfo-store g))) (gninfo-store g)))))
 
     (for ([pn infos] #:when (pninfo? pn))
       (define id (syntax-e (pninfo-id pn)))

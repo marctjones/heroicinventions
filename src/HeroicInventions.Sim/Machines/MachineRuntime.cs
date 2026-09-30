@@ -51,6 +51,9 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Crucible> _crucibles = [];
     private readonly Dictionary<string, Pane> _panes = [];
     private readonly Dictionary<string, Pond> _ponds = [];
+    private readonly Dictionary<string, Plants> _plants = [];
+    private readonly Dictionary<string, Melter> _melters = [];
+    private readonly Dictionary<string, Electrolyser> _electrolysers = [];
     private readonly Dictionary<string, Roof> _roofs = [];
     private readonly Dictionary<string, StirlingEngine> _stirlings = [];
     private readonly Dictionary<string, Door> _doors = [];
@@ -135,6 +138,12 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Pane> Panes => _panes;
     /// <summary>Warm ponds evaporating into their air (issue #58).</summary>
     public IReadOnlyDictionary<string, Pond> Ponds => _ponds;
+    /// <summary>Plants growing wood from light, CO₂ and water, giving O₂ (issue #42).</summary>
+    public IReadOnlyDictionary<string, Plants> Plants => _plants;
+    /// <summary>Ice drills and melters (issue #42).</summary>
+    public IReadOnlyDictionary<string, Melter> Melters => _melters;
+    /// <summary>Electrolysers splitting water into O₂ and H₂ (issue #42).</summary>
+    public IReadOnlyDictionary<string, Electrolyser> Electrolysers => _electrolysers;
     /// <summary>Cold roofs condensing their room's vapour into gutters (issue #58).</summary>
     public IReadOnlyDictionary<string, Roof> Roofs => _roofs;
     public IReadOnlyDictionary<string, StirlingEngine> Stirlings => _stirlings;
@@ -325,7 +334,17 @@ public sealed class MachineRuntime
                             WearRate = part.Number("bearing-wear", 0),
                         });
                     break;
-                case "mirror" or "burning-mirror" or "pane" or "pond" or "roof": break; // built once what they join exists
+                case "mirror" or "burning-mirror" or "pane" or "pond" or "roof" or "plants": break; // built once what they join exists
+                case "melter":
+                    _melters[part.Id] = new Melter(part.Id, TankNamed(part.Symbol("into", ""), part.Location), part.Number("ice-temperature", ZoneOf(part.Id).Temperature))
+                    {
+                        Power = part.Number("power", 0),
+                    };
+                    break;
+                case "electrolyser":
+                    _electrolysers[part.Id] = new Electrolyser(part.Id, TankNamed(part.Symbol("water", ""), part.Location),
+                                                               part.Number("power", 0), part.Number("efficiency", 0.7));
+                    break;
                 case "crucible":
                 {
                     SandKind sand;
@@ -500,6 +519,30 @@ public sealed class MachineRuntime
             else AddHeatSource(target, () => mirror.Power);
         }
         foreach (var (_, h) in _hearths) AddHeatSource(h.Target, () => h.HeatOut);
+        foreach (var part in def.Parts.Where(p => p.Kind == "plants"))
+        {
+            var zone = ZoneOf(part.Id);
+            double area = part.Number("area");
+            var panes = def.Parts.Where(p => p.Kind == "pane" && zone is Enclosure room && p.Symbol("on", "") == room.Name).Select(p => p.Id).ToList();
+            // what comes in through their room's glass, as much as their bed can catch; the sun itself in the open
+            Func<double> light = zone is Enclosure
+                ? () =>
+                {
+                    double glass = panes.Sum(id => _panes[id].Area);
+                    return glass > 0 ? panes.Sum(id => _panes[id].Gain) * Math.Min(1, area / glass) : 0;
+                }
+                : () => Sun.DirectNormal * Math.Max(0, Math.Sin(Sun.Elevation * Math.PI / 180)) * area;
+            var store = part.Symbol("store", "");
+            if (store != "" && !_hearths.ContainsKey(store))
+                throw new MachineFormatException($"plants {part.Id} store their wood on {store}, which is not a hearth", part.Location);
+            _plants[part.Id] = new Plants(part.Id, area, TankNamed(part.Symbol("water", ""), part.Location), light)
+            {
+                Efficiency = part.Number("efficiency", Thermo.Plants.DefaultEfficiency),
+                Respiration = part.Number("respiration", Thermo.Plants.DefaultRespiration),
+                Wood = part.Number("wood", 0),
+                Store = store == "" ? null : _hearths[store],
+            };
+        }
         foreach (var part in def.Parts.Where(p => p.Kind == "pane"))
         {
             var on = part.Symbol("on", "");
@@ -953,6 +996,8 @@ public sealed class MachineRuntime
     private void SetZones()
     {
         foreach (var (id, t) in _tanks) t.Zone = ZoneOf(id);
+        foreach (var (id, p) in _plants) p.Zone = ZoneOf(id);
+        foreach (var (id, e) in _electrolysers) e.Zone = ZoneOf(id);
         foreach (var (id, c) in _crucibles) c.Zone = ZoneOf(id);
         foreach (var (id, se) in _stirlings) se.Zone = ZoneOf(id);
         foreach (var (id, b) in _boilers) b.Zone = ZoneOf(id);
@@ -1241,6 +1286,35 @@ public sealed class MachineRuntime
                 _getters[$"{id}.{GasMix.Names[i]}"] = () => e.TotalMoles > 0 ? e.Moles[gas] / e.TotalMoles * 100 : 0;   // % by volume
                 _getters[$"{id}.{GasMix.Names[i]}-pressure"] = () => e.PartialPressure(gas) / 1000;                     // kPa (Dalton)
             }
+        }
+        foreach (var (id, p) in _plants)
+        {
+            _getters[$"{id}.wood"] = () => p.Wood;                         // kg standing
+            _setters[$"{id}.wood"] = kg => p.Wood = Math.Max(0, kg);       // plant (or clear) that much
+            _getters[$"{id}.grown"] = () => p.Grown;                       // kg grown, all told
+            _getters[$"{id}.respired"] = () => p.Respired;                 // kg respired away
+            _getters[$"{id}.oxygen"] = () => p.OxygenMade;                 // kg of O₂ made, net
+            _getters[$"{id}.light"] = () => p.Light;                       // W on the bed
+            _getters[$"{id}.growth"] = () => p.GrowthRate * 3600 * 1000;   // g/h
+            _getters[$"{id}.harvest"] = () => 0;
+            _setters[$"{id}.harvest"] = kg => p.Harvest(kg);               // cut that many kg onto its store's fire
+        }
+        foreach (var (id, m) in _melters)
+        {
+            _getters[$"{id}.rate"] = () => m.Rate * 3600;                  // kg/h
+            _getters[$"{id}.melted"] = () => m.Melted;                     // kg
+            _getters[$"{id}.power"] = () => m.Power;                       // W
+            _setters[$"{id}.power"] = w => m.Power = Math.Max(0, w);
+            _getters[$"{id}.heat-per-kg"] = () => m.HeatPerKg / 1000;      // kJ/kg
+        }
+        foreach (var (id, e) in _electrolysers)
+        {
+            _getters[$"{id}.oxygen"] = () => e.Oxygen;                     // kg
+            _getters[$"{id}.hydrogen"] = () => e.Hydrogen;                 // kg
+            _getters[$"{id}.rate"] = () => e.Rate * 3600 * 1000;           // g/h of O₂
+            _getters[$"{id}.energy"] = () => e.Energy / 1e6;               // MJ of electricity
+            _getters[$"{id}.power"] = () => e.Power;                       // W
+            _setters[$"{id}.power"] = w => e.Power = Math.Max(0, w);
         }
         foreach (var (id, p) in _ponds)
         {
@@ -1621,6 +1695,7 @@ public sealed class MachineRuntime
         : _crucibles.TryGetValue(id, out var pot) ? (pot, Def.Part(id)!)
         : _ponds.TryGetValue(id, out var pond) ? (pond, Def.Part(pond.Tank.Name)!)
         : _stirlings.TryGetValue(id, out var engine) ? (engine, Def.Part(id)!)
+        : _melters.TryGetValue(id, out var melter) ? (melter, Def.Part(id)!)
         : throw new MachineFormatException($"{by.Kind} {by.Id} heats {id}, which is not a boiler, a sealed vessel or an enclosure", by.Location);
 
     private void AddHeatSource(IHeated target, Func<double> watts)
@@ -1650,6 +1725,9 @@ public sealed class MachineRuntime
         foreach (var p in _ponds.Values) p.Step(dt);
         foreach (var r in _roofs.Values) r.Step(dt);
         foreach (var se in _stirlings.Values) se.Step(dt);
+        foreach (var p in _plants.Values) p.Step(dt);
+        foreach (var m in _melters.Values) m.Step(dt);
+        foreach (var e in _electrolysers.Values) e.Step(dt);
         foreach (var d in _doors.Values) d.Step(dt);
         foreach (var p in _gasPumps.Values) p.Step(dt);
         if (_zoneOfPart.Count > 0) SyncZones();

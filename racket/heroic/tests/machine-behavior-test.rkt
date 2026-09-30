@@ -2122,3 +2122,36 @@
     (check-true (and freed third-spit (> freed third-spit) (< freed 21))
                 (format "freed at ~a s, during the fourth spit (the third was done at ~a s; the fourth, at 1 m, by 20.9 s)" freed third-spit))
     (check-= (final-of site '(crate y)) -0.75 0.01 "out, resting on the trench's floor")))
+
+
+
+;; ---------------------------------------------------------------------------
+;; The greenhouse (issue #42). Working in racket/machines/greenhouse.rkt.
+
+(test-case "A greenhouse on Mars: trees grow 3.181e-7 kg/s of wood, the air's O2 rising 1.1841 kg a kg; burned, the harvest gives it all back"
+  (define T30 2663250)                                 ; 30 sols
+  (define E 2685600)                                   ; a frame after the burn, 746 h in
+  (define run (simulate 'greenhouse #:seconds E #:step 5 #:sample-dt 3600
+                        #:set `((scene clock-rate 0) (trees harvest 1000 ,T30))))
+  (define (at t k) (for/first ([f run] #:when (>= (car f) (- t 1e-6))) (cadr (assq k (cdr f)))))
+  (define (kg gas molar t) (* (/ (* (at t (string->symbol (format "house.~a-pressure" gas))) 1000 30) (* 8.314 (+ 273.15 (at t 'house.temperature)))) molar))
+  ;; the greenhouse holds about 1.1 kg of O2 to start with
+  (check-= (kg 'o2 0.031998 0) 1.117 0.001)
+  ;; the light through the glass, and the wood it grows
+  (check-= (at 36000 'trees.light) (* 0.9 3.24 (at 36000 'scene.irradiance) (sin (* (at 36000 'scene.sun-elevation) (/ pi 180)))) 1e-6)
+  (check-= (at 36000 'house.temperature) (+ -63 (/ (+ 3000 (at 36000 'trees.light)) 50)) 0.01 "held at 21.9 °C")
+  (define net (- (/ (* 0.005 (at 36000 'trees.light)) 18e6) (* 10 (/ 0.01e-3 3600))))
+  (check-= net 3.181e-7 1e-10)
+  (check-= (at (- T30 3600) 'trees.wood) (* net (- T30 3600)) 0.001 "0.846 kg after 30 sols, less an hour")
+  (check-= (at (- T30 3600) 'trees.oxygen) (* (/ (* 6 0.031998) 0.16214) (at (- T30 3600) 'trees.wood)) 1e-9 "cellulose: 1.1841 kg of O2 a kg")
+  (check-true (> (kg 'o2 0.031998 (- T30 3600)) (* 1.8 (kg 'o2 0.031998 0))) "the greenhouse's oxygen nearly doubles")
+  ;; the harvest burned: 15 MJ/kg at 1 kW, and the air as it was but for the wood grown since
+  (check-= (at E 'stove.fuel) 0 1e-9 "burned out")
+  (define standing (at E 'trees.wood))
+  (check-= (- (kg 'o2 0.031998 E) (kg 'o2 0.031998 0)) (* (/ (* 6 0.031998) 0.16214) standing) 1e-6)
+  (check-= (- (kg 'co2 0.04401 E) (kg 'co2 0.04401 0)) (* (- (/ (* 6 0.04401) 0.16214)) standing) 1e-6)
+  ;; the melter and the electrolyser
+  (check-= (at 3600 'drill.rate) (/ 3600000 466300) 1e-6 "7.72 kg/h")
+  (check-= (at 3600 'drill.heat-per-kg) 466.3 1e-9)
+  (check-= (at 3600 'splitter.rate) (/ (* 350 3600 1000) 17.875e6) 0.01 "70.5 g/h of O2")
+  (check-= (/ (at 3600 'splitter.energy) (at 3600 'splitter.oxygen)) (/ 17.875 0.7) 0.01 "25.5 MJ a kg of O2"))
