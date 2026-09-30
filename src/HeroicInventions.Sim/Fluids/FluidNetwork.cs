@@ -65,7 +65,13 @@ public sealed class Tank(string name, double baseElevation, double area, double 
     /// above the water line only sees the gas pressure plus its own height.
     /// </summary>
     public double HeadAt(double portElevation) =>
-        Zone.PressureToHead(SurfaceGaugePressure) + Math.Max(SurfaceElevation, portElevation);
+        Zone.PressureToHead(SurfaceGaugePressure + ZoneOverpressure) + Math.Max(SurfaceElevation, portElevation);
+
+    /// <summary>Pa its zone's air stands above the planet's open air: a tank inside a pressurised enclosure pushes that much harder down a pipe through the wall.</summary>
+    public double ZoneOverpressure => Zone.Pressure - Zone.Planet.Pressure;
+
+    /// <summary>°C of the air over it: its enclosure's, or the scene's (<paramref name="scene"/>) in the open.</summary>
+    public double AirTemperature(double scene) => Zone is Thermo.Enclosure room ? room.Temperature : scene;
 }
 
 /// <summary>
@@ -193,7 +199,7 @@ public sealed class FluidNetwork
     /// surface gives none.
     /// </summary>
     public double EvaporationFactor(Tank t) =>
-        t.Ice > 0 || Ambient <= 0 ? 0 : Thermo.Boiler.SaturationPressure(Ambient) / Thermo.Boiler.SaturationPressure(20);
+        t.Ice > 0 || t.AirTemperature(Ambient) <= 0 ? 0 : Thermo.Boiler.SaturationPressure(t.AirTemperature(Ambient)) / Thermo.Boiler.SaturationPressure(20);
 
     public void Step(double dt)
     {
@@ -204,7 +210,7 @@ public sealed class FluidNetwork
 
     private void Substep(double dt)
     {
-        foreach (var t in Tanks) t.Freeze(dt, Ambient);
+        foreach (var t in Tanks) t.Freeze(dt, t.AirTemperature(Ambient));
         // Compute every flow from the same snapshot before moving any water,
         // so the result doesn't depend on pipe order.
         foreach (var p in Pipes)

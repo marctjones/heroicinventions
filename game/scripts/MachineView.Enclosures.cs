@@ -1,0 +1,108 @@
+using Godot;
+using HeroicInventions.Sim.Thermo;
+
+namespace HeroicInventions;
+
+/// <summary>
+/// An enclosure (issue #39): a pale membrane room you can see into, with its
+/// state on it, not only in the panel.
+/// <list type="bullet">
+/// <item>A pressure dial on its front wall: the needle sweeps 270° from
+/// empty to 100 kPa, so a punctured module's needle visibly sinks.</item>
+/// <item>A membrane is only taut while the air inside pushes harder than the
+/// air outside: as the gauge pressure falls below about 1 kPa the room
+/// sags towards the floor, and empty it lies nearly flat.</item>
+/// <item>Gas leaving through a hole hisses out as a plume from the +x wall,
+/// as strong as the flow; gas drawn in shows none (it is going in).</item>
+/// <item>Below freezing its walls frost; a heater inside glows while on.</item>
+/// </list>
+/// The room has no collision shape: parts stand inside it untouched.
+/// </summary>
+public partial class MachineView
+{
+    private sealed record EnclosureView(Enclosure Room, Node3D Walls, StandardMaterial3D Skin, Node3D Needle,
+                                        GpuParticles3D Hiss, MeshInstance3D? Heater, Label3D Label, double FullFlow, float Height);
+    private readonly List<EnclosureView> _enclosureViews = [];
+    private static readonly Color Membrane = new(0.93f, 0.9f, 0.82f);
+
+    private void BuildEnclosures()
+    {
+        foreach (var (id, room) in Runtime.Enclosures)
+        {
+            var part = Runtime.Def.Part(id)!;
+            float w = (float)part.Number("size-x"), h = (float)part.Number("size-y"), d = (float)part.Number("size-z");
+            var at = V(part.At);
+
+            // the walls, scaled about the floor so a slack room sags down onto it
+            var walls = new Node3D { Position = at };
+            AddChild(walls);
+            var skin = Shapes.Mat(Membrane, roughness: 0.9f, alpha: 0.22f);
+            skin.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
+            var box = Shapes.Box(new Vector3(w, h, d), skin);
+            box.Position = new Vector3(0, h / 2, 0);
+            walls.AddChild(box);
+
+            // a dial on the front (+z) wall, a hand's breadth across
+            var face = Shapes.Cylinder(0.12f, 0.02f, Shapes.Mat(new Color(0.95f, 0.94f, 0.9f)));
+            face.RotationDegrees = new Vector3(90, 0, 0);
+            face.Position = at + new Vector3(0, Mathf.Min(1.5f, h * 0.6f), d / 2 + 0.02f);
+            AddChild(face);
+            var needle = new Node3D { Position = face.Position + new Vector3(0, 0, 0.02f) };
+            var bar = Shapes.Box(new Vector3(0.012f, 0.1f, 0.006f), Shapes.Mat(new Color(0.6f, 0.08f, 0.05f)));
+            bar.Position = new Vector3(0, 0.05f, 0);
+            needle.AddChild(bar);
+            AddChild(needle);
+
+            var hiss = SteamCloud(at + new Vector3(w / 2 + 0.02f, h / 2, 0), amount: 60, radius: 0.02f, lifetime: 0.8f);
+            hiss.RotationDegrees = new Vector3(0, 0, -90);   // out of the +x wall
+
+            MeshInstance3D? heater = null;
+            if (room.Heater > 0 || part.Number("heater", 0) > 0)
+            {
+                heater = Shapes.Box(new Vector3(0.3f, 0.08f, 0.3f), Shapes.Mat(new Color(0.3f, 0.25f, 0.22f), metallic: 0.5f));
+                heater.Position = at + new Vector3(-w / 2 + 0.3f, 0.04f, d / 2 - 0.3f);
+                AddChild(heater);
+            }
+
+            var label = new Label3D
+            {
+                Position = at + new Vector3(0, h + 0.25f, 0), FontSize = 28, OutlineSize = 8, PixelSize = 0.008f,
+                Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
+            };
+            AddChild(label);
+            // the flow a hole this size passes when the room is as full as it starts: what a full plume is
+            double full = room.LeakArea > 0
+                ? Enclosure.OrificeFlow(room.Cd, room.LeakArea, Math.Max(room.Pressure, room.Outside.Pressure),
+                                        HeroicInventions.Sim.Physics.ToKelvin(room.Temperature), Math.Min(room.Pressure, room.Outside.Pressure), 1.4, 287)
+                : 1;
+            _enclosureViews.Add(new EnclosureView(room, walls, skin, needle, hiss, heater, label, Math.Max(1e-9, full), h));
+        }
+    }
+
+    private void DrawEnclosures()
+    {
+        foreach (var v in _enclosureViews)
+        {
+            var room = v.Room;
+            double p = room.Pressure, gauge = room.GaugePressure;
+            v.Needle.RotationDegrees = new Vector3(0, 0, 135 - 270 * (float)Math.Clamp(p / 100_000, 0, 1));
+            // taut above ~1 kPa over the outside; slack below, nearly flat when it holds nothing more than outside
+            float taut = (float)Math.Clamp(gauge / 1000, 0, 1);
+            v.Walls.Scale = new Vector3(1, 0.12f + 0.88f * taut, 1);
+            float frost = (float)Math.Clamp(-room.Temperature / 5, 0, 1);
+            v.Skin.AlbedoColor = Membrane.Lerp(new Color(0.97f, 0.98f, 1f), frost) with { A = 0.22f + 0.2f * frost };
+            v.Hiss.Emitting = room.Flow > 0;
+            if (room.Flow > 0) v.Hiss.AmountRatio = (float)Math.Clamp(room.Flow / v.FullFlow, 0.1, 1);
+            if (v.Heater?.MaterialOverride is StandardMaterial3D hm)
+            {
+                bool on = room.Heater > 0;
+                hm.EmissionEnabled = on;
+                hm.Emission = new Color(1f, 0.35f, 0.1f);
+                hm.EmissionEnergyMultiplier = on ? 1.5f : 0;
+            }
+            string o2 = room.TotalMoles > 0 ? $"{room.Moles[0] / room.TotalMoles * 100:0.#}% O₂" : "empty";
+            v.Label.Text = $"{room.Name}: {p / 1000:0.##} kPa, {room.Temperature:0.#} °C, {o2}" +
+                           (room.Flow > 0 ? $"\nleaking {room.Flow * 1000:0.##} g/s{(room.Choked ? " (choked)" : "")}" : "");
+        }
+    }
+}

@@ -42,6 +42,10 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Windmill> _windmills = [];
     private readonly Dictionary<string, Capstan> _capstans = [];
     private readonly Dictionary<string, Mirror> _mirrors = [];
+    private readonly Dictionary<string, Enclosure> _enclosures = [];
+    // parts standing inside an enclosure, by id: the zone they read; everything else stands in Outside
+    private readonly Dictionary<string, Zone> _zoneOfPart = [];
+    private readonly Dictionary<string, double> _boilerLossSeen = [];
     // every target a hearth or mirror heats, with those sources: summed onto its own fire each step
     private readonly Dictionary<IHeated, List<Func<double>>> _heatSources = [];
     private readonly Dictionary<IHeated, double> _ownHeat = [];
@@ -87,6 +91,10 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Capstan> Capstans => _capstans;
     /// <summary>Heliostats throwing sunlight onto boilers and sealed vessels.</summary>
     public IReadOnlyDictionary<string, Mirror> Mirrors => _mirrors;
+    /// <summary>Enclosures (issue #39): boxes with their own air, which the parts inside read their conditions from.</summary>
+    public IReadOnlyDictionary<string, Enclosure> Enclosures => _enclosures;
+    /// <summary>The zone a part stands in: the innermost enclosure round it, or the open air.</summary>
+    public Zone ZoneOf(string partId) => _zoneOfPart.GetValueOrDefault(partId, Outside);
     public Sun Sun { get; }
     /// <summary>The planet the scene stands on (issue #38).</summary>
     public Planet Planet => Outside.Planet;
@@ -176,17 +184,14 @@ public sealed class MachineRuntime
             _ambient = value;
             Outside.Temperature = value;
             Fluids.Ambient = value;
-            foreach (var b in _boilers.Values) b.AmbientTemperature = value;
-            foreach (var h in _hearths.Values) h.AmbientTemperature = value;
-            foreach (var a in _air) a.Ambient = value;
-            foreach (var m in _windmills.Values) m.AirDensity = Outside.AirDensityAt(value);
+            SyncZones();
         }
     }
     private double _ambient = 20;
 
     /// <summary>A part's #:temperature if it gave one, else the ambient — water drawn from outside is at the air's temperature, or just above freezing in a frost.</summary>
     private double TemperatureOr(PartSpec part, string key) =>
-        part.Props.GetValueOrDefault(key) is SNumber t ? t.Value : Math.Max(0, _ambient);
+        part.Props.GetValueOrDefault(key) is SNumber t ? t.Value : Math.Max(0, ZoneOf(part.Id).Temperature);
 
     private readonly MaterialLibrary _materials;
 
@@ -197,6 +202,7 @@ public sealed class MachineRuntime
         _ambient = def.Ambient;
         Outside = new Zone(def.Planet, def.Ambient);
         Sun = (def.Sun is { } sun ? new Sun(sun.Latitude, sun.Day, sun.Time) : new Sun(31.2, 172, 12)).On(def.Planet);
+        BuildEnclosures(def);
 
         foreach (var part in def.Parts)
         {
@@ -255,6 +261,7 @@ public sealed class MachineRuntime
                         });
                     break;
                 case "mirror": break; // built once what it heats exists
+                case "enclosure": break; // built first: every other part reads its zone
                 case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
@@ -265,7 +272,8 @@ public sealed class MachineRuntime
         // Sealed air is created after the tanks are filled: its P·V constant
         // is fixed from the air volume at the moment it is sealed.
         foreach (var air in def.SealedAir)
-            _air.Add(new AirPocket(air.Tanks.Select(t => TankNamed(t, air.Location)), air.TubeVolume, sealedAtC: _ambient, zone: Outside)
+            _air.Add(new AirPocket(air.Tanks.Select(t => TankNamed(t, air.Location)), air.TubeVolume,
+                                   sealedAtC: ZoneOf(air.Tanks[0]).Temperature, zone: ZoneOf(air.Tanks[0]))
             {
                 HeatLoss = air.HeatLoss,
                 VesselHeatCapacity = air.HeatCapacity,
@@ -327,9 +335,7 @@ public sealed class MachineRuntime
         foreach (var part in def.Parts.Where(p => p.Kind == "hearth"))
         {
             var heats = part.Symbol("heats", "");
-            IHeated target = _boilers.TryGetValue(heats, out var boiler) ? boiler
-                : _tanks.TryGetValue(heats, out var vessel) && vessel.Air is { } air ? air
-                : throw new MachineFormatException($"hearth {part.Id} heats {heats}, which is neither a boiler nor a sealed vessel", part.Location);
+            var (target, _) = HeatedNamed(heats, part);
             _hearths[part.Id] = new Hearth(target, part.Number("power"), part.Number("fuel"),
                                            part.Symbol("fuel-kind", "wood"), part.Number("efficiency", 0.5));
         }
@@ -338,7 +344,7 @@ public sealed class MachineRuntime
         {
             var onto = part.Symbol("onto", "");
             var (target, targetPart) = HeatedNamed(onto, part);
-            var aim = new Vec3(targetPart.At.X, targetPart.At.Y + targetPart.Number("height") / 2, targetPart.At.Z);
+            var aim = new Vec3(targetPart.At.X, targetPart.At.Y + targetPart.Number("height", targetPart.Number("size-y", 0)) / 2, targetPart.At.Z);
             var mirror = new Mirror(Sun, part.At, aim, part.Number("area"), part.Number("reflectivity", 0.85));
             _mirrors[part.Id] = mirror;
             AddHeatSource(target, () => mirror.Power);
@@ -442,7 +448,7 @@ public sealed class MachineRuntime
             _cylinders[c.Id].Prime();
         }
 
-        SetZones(Outside);
+        SetZones();
         Ambient = _ambient;   // hand it to every part now they all exist
         RegisterFields();
         BuildTriggers(def);
@@ -578,23 +584,80 @@ public sealed class MachineRuntime
         }
     }
 
-    /// <summary>Stands every part in <paramref name="zone"/>: the gravity it falls under, the air it breathes and pushes against.</summary>
-    private void SetZones(Zone zone)
+    /// <summary>
+    /// Enclosures, largest first, so each finds the one it stands in (its
+    /// #:at, the middle of its floor) already built; then every other part
+    /// is stood in the innermost enclosure round its #:at, or the open air.
+    /// Unsaid, an enclosure's air is its surroundings': their pressure, mix
+    /// and temperature, as if it had been shut there.
+    /// </summary>
+    private void BuildEnclosures(MachineDef def)
     {
-        foreach (var t in _tanks.Values) t.Zone = zone;
-        foreach (var b in _boilers.Values) b.Zone = zone;
-        foreach (var h in _hearths.Values) h.Zone = zone;
-        foreach (var w in _jetWheels.Values) w.Zone = zone;
-        foreach (var l in _lifts.Values) l.Zone = zone;
-        foreach (var c in _cylinders.Values) c.Zone = zone;
-        foreach (var p in _pumps.Values) p.Zone = zone;
-        foreach (var w in _wheels.Values) w.Zone = zone;
-        foreach (var c in _capstans.Values) c.Zone = zone;
-        foreach (var c in _counterpoises.Values) c.Zone = zone;
-        foreach (var p in _pendulums.Values) p.Zone = zone;
-        foreach (var c in _channels.Values) c.Gravity = zone.Gravity;
-        foreach (var g in _gates.Values) g.Gravity = zone.Gravity;
-        foreach (var m in _windmills.Values) m.AirDensity = zone.AirDensity;
+        bool Inside(Vec3 p, PartSpec box) =>
+            Math.Abs(p.X - box.At.X) <= box.Number("size-x") / 2 && Math.Abs(p.Z - box.At.Z) <= box.Number("size-z") / 2
+            && p.Y >= box.At.Y - 1e-9 && p.Y <= box.At.Y + box.Number("size-y");
+        double VolumeOf(PartSpec box) => box.Number("size-x") * box.Number("size-y") * box.Number("size-z");
+        var boxes = def.Parts.Where(p => p.Kind == "enclosure").OrderByDescending(VolumeOf).ToList();
+        Zone Around(PartSpec part) =>
+            boxes.Where(b => b.Id != part.Id && _enclosures.ContainsKey(b.Id) && Inside(part.At, b))
+                 .OrderBy(VolumeOf).Select(b => (Zone)_enclosures[b.Id]).FirstOrDefault() ?? Outside;
+        foreach (var box in boxes)
+        {
+            double v = VolumeOf(box);
+            if (!(v > 0)) throw new MachineFormatException($"enclosure {box.Id} needs a size above 0 each way", box.Location);
+            var around = Around(box);
+            double Gas(string g) => box.Props.GetValueOrDefault(g) is SNumber n ? n.Value : 0;
+            bool mixGiven = GasMix.Names.Any(g => box.Props.GetValueOrDefault(g) is SNumber);
+            var air = mixGiven ? new GasMix(Gas("o2"), Gas("n2"), Gas("co2"), Gas("h2o"), Gas("ar")) : around.Air;
+            if (air.Total <= 0) throw new MachineFormatException($"enclosure {box.Id}'s air has no gas in it", box.Location);
+            var e = new Enclosure(box.Id, v, around,
+                box.Props.GetValueOrDefault("pressure") is SNumber p ? p.Value : around.Pressure,
+                box.Props.GetValueOrDefault("temperature") is SNumber t ? t.Value : around.Temperature, air)
+            {
+                Insulation = box.Number("insulation", 2),
+                WallHeatCapacity = box.Number("heat-capacity", 0),
+                Heater = box.Number("heater", 0),
+                LeakArea = box.Number("leak", 0),
+                Cd = box.Number("coefficient", Enclosure.DefaultCoefficient),
+            };
+            _enclosures[box.Id] = e;
+            if (around is Enclosure) _zoneOfPart[box.Id] = around;
+        }
+        foreach (var part in def.Parts.Where(p => p.Kind != "enclosure"))
+            if (Around(part) is Enclosure e) _zoneOfPart[part.Id] = e;
+    }
+
+    /// <summary>Stands every part in its zone: the gravity it falls under, the air it breathes and pushes against.</summary>
+    private void SetZones()
+    {
+        foreach (var (id, t) in _tanks) t.Zone = ZoneOf(id);
+        foreach (var (id, b) in _boilers) b.Zone = ZoneOf(id);
+        foreach (var (id, h) in _hearths) h.Zone = ZoneOf(id);
+        foreach (var (id, w) in _jetWheels) w.Zone = ZoneOf(id);
+        foreach (var l in _lifts.Values) l.Zone = l.From.Zone;
+        foreach (var c in _cylinders.Values) c.Zone = ZoneOf(Def.Cylinders.First(s => _cylinders[s.Id] == c).Piston);
+        foreach (var (id, p) in _pumps) p.Zone = ZoneOf(id);
+        foreach (var (id, w) in _wheels) w.Zone = ZoneOf(id);
+        foreach (var (id, c) in _capstans) c.Zone = ZoneOf(id);
+        foreach (var (id, c) in _counterpoises) c.Zone = ZoneOf(id);
+        foreach (var (id, p) in _pendulums) p.Zone = ZoneOf(id);
+        foreach (var c in _channels.Values) c.Gravity = c.From.Zone.Gravity;
+        foreach (var g in _gates.Values) g.Gravity = Outside.Gravity;
+        SyncZones();
+    }
+
+    /// <summary>
+    /// What changes with a zone's air, handed on to the parts in it: the
+    /// temperature boilers cool to and water arrives at, a windmill's air
+    /// density. Each step, since an enclosure's air warms and thins.
+    /// </summary>
+    private void SyncZones()
+    {
+        foreach (var (id, b) in _boilers) b.AmbientTemperature = ZoneOf(id).Temperature;
+        foreach (var (id, h) in _hearths) h.AmbientTemperature = ZoneOf(id).Temperature;
+        foreach (var (id, w) in _jetWheels) w.AmbientTemperature = ZoneOf(id).Temperature;
+        foreach (var (id, m) in _windmills) m.AirDensity = ZoneOf(id).AirDensity;
+        foreach (var a in _air) a.Ambient = a.Zone.Temperature;
     }
 
     /// <summary>A different planet, live — "what if Mars had Earth's gravity?". Every part keeps standing where it stands; only the numbers change.</summary>
@@ -602,7 +665,7 @@ public sealed class MachineRuntime
     {
         Outside.Planet = planet;
         Sun.On(planet);
-        SetZones(Outside);
+        SetZones();
     }
 
     private void BuildSafetyValve(PartSpec part)
@@ -816,6 +879,32 @@ public sealed class MachineRuntime
         _getters["scene.sun-elevation"] = () => Sun.Elevation;         // degrees
         _getters["scene.sun-azimuth"] = () => Sun.Azimuth;             // degrees from north towards east
         _getters["scene.irradiance"] = () => Sun.DirectNormal;         // W/m², direct beam
+        foreach (var (id, e) in _enclosures)
+        {
+            _getters[$"{id}.pressure"] = () => e.Pressure / 1000;             // kPa, absolute
+            _setters[$"{id}.pressure"] = kPa => e.Pressure = Math.Max(0, kPa * 1000);   // pumped up or bled down, same mix
+            _getters[$"{id}.gauge"] = () => e.GaugePressure / 1000;           // kPa over the air outside
+            _getters[$"{id}.temperature"] = () => e.Temperature;              // °C
+            _getters[$"{id}.air-density"] = () => e.AirDensity;               // kg/m³
+            _getters[$"{id}.boiling-point"] = () => e.BoilingPoint;           // °C
+            _getters[$"{id}.mass"] = () => e.Mass;                            // kg of gas
+            _getters[$"{id}.flow"] = () => e.Flow * 1000;                     // g/s out of the hole (negative: in)
+            _getters[$"{id}.lost"] = () => e.Lost;                            // kg out, net
+            _getters[$"{id}.choked"] = () => e.Choked ? 1 : 0;
+            _getters[$"{id}.leak"] = () => e.LeakArea * 10000;                // cm²
+            _setters[$"{id}.leak"] = cm2 => e.LeakArea = cm2 / 10000;         // patch it: 0
+            _getters[$"{id}.heater"] = () => e.Heater;                        // W
+            _setters[$"{id}.heater"] = w => e.Heater = Math.Max(0, w);
+            _getters[$"{id}.insulation"] = () => e.Insulation;                // W/K
+            _setters[$"{id}.insulation"] = ua => e.Insulation = Math.Max(0, ua);
+            _getters[$"{id}.heat"] = () => e.HeatInput;                       // W from fires and mirrors
+            for (int i = 0; i < GasMix.Names.Length; i++)
+            {
+                int gas = i;
+                _getters[$"{id}.{GasMix.Names[i]}"] = () => e.TotalMoles > 0 ? e.Moles[gas] / e.TotalMoles * 100 : 0;   // % by volume
+                _getters[$"{id}.{GasMix.Names[i]}-pressure"] = () => e.PartialPressure(gas) / 1000;                     // kPa (Dalton)
+            }
+        }
         foreach (var (id, m) in _mirrors)
         {
             _getters[$"{id}.power"] = () => m.Power;                   // W onto the target
@@ -1055,7 +1144,8 @@ public sealed class MachineRuntime
     private (IHeated target, PartSpec part) HeatedNamed(string id, PartSpec by) =>
         _boilers.TryGetValue(id, out var boiler) ? (boiler, Def.Part(id)!)
         : _tanks.TryGetValue(id, out var vessel) && vessel.Air is { } air ? (air, Def.Part(id)!)
-        : throw new MachineFormatException($"{by.Kind} {by.Id} heats {id}, which is neither a boiler nor a sealed vessel", by.Location);
+        : _enclosures.TryGetValue(id, out var room) ? (room, Def.Part(id)!)
+        : throw new MachineFormatException($"{by.Kind} {by.Id} heats {id}, which is not a boiler, a sealed vessel or an enclosure", by.Location);
 
     private void AddHeatSource(IHeated target, Func<double> watts)
     {
@@ -1073,6 +1163,8 @@ public sealed class MachineRuntime
         foreach (var h in _hearths.Values) h.Step(dt);
         foreach (var m in _mirrors.Values) m.Step(dt);
         foreach (var (target, sources) in _heatSources) target.HeatInput = _ownHeat[target] + sources.Sum(w => w());
+        foreach (var e in _enclosures.Values) e.Step(dt);
+        if (_zoneOfPart.Count > 0) SyncZones();
         foreach (var air in _air) air.Step(dt);
         Fluids.Step(dt);
         // Springs and open channels, in steps short enough that a weir can't
@@ -1096,6 +1188,13 @@ public sealed class MachineRuntime
         foreach (var (id, boiler) in _boilers)
             if (!_rotorBoiler.ContainsValue(id))
                 boiler.Step(dt, _cylinders.Values.Where(c => c.Boiler == boiler).Sum(c => c.SteamDraw));
+        // a boiler's lost warmth goes into the room it stands in
+        foreach (var (id, boiler) in _boilers)
+            if (ZoneOf(id) is Enclosure room)
+            {
+                room.AddHeat(boiler.HeatLost - _boilerLossSeen.GetValueOrDefault(id));
+                _boilerLossSeen[id] = boiler.HeatLost;
+            }
         Time += dt;
         StepFieldTriggers();
     }

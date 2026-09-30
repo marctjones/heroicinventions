@@ -531,6 +531,59 @@ public class BuildSessionTests
         Assert.Equal(20, session.Document.Ambient);
     }
 
+    /// <summary>
+    /// Issue #39. An enclosure placed and filled by commands: a
+    /// room (8 m³: the template's 2 m cube) of pure oxygen at 200 kPa in a 20 °C Earth scene, its walls
+    /// losing 10 W/K and a 100 W heater in it, settles at 20 + 100/10 = 30 °C;
+    /// its pressure follows, 200 × 303.15/293.15 = 206.82 kPa. A boiler inside
+    /// boils where water's vapour pressure reaches 206.82 kPa, 121.1 °C. It
+    /// round-trips through the command script and the Racket export.
+    /// </summary>
+    [Fact]
+    public void EnclosureScriptHoldsItsOwnAirAndRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "room");
+        session.Execute("(enclosure hab #:at (0 0 0) #:pressure 200kPa #:temperature 20 #:insulation 10 #:heater 100)");
+        session.Execute("(set hab #:size-y 2)");
+        session.Execute("(set hab #:o2 1)");
+        session.Execute("(boiler pot #:at (0.2 0.5 0.2))");
+        session.Execute("(run 20000)");
+        var run = session.LastRun!;
+        var hab = run.Enclosures["hab"];
+        Assert.Equal(8, hab.Volume);                                    // the template is 2 m a side: 2 × 2 × 2
+        Assert.True(Math.Abs(hab.Temperature - 30) < 0.01, $"{hab.Temperature} °C: the pot, still warming towards the room, takes a few hundredths of a watt");
+        Assert.Equal(200 * 303.15 / 293.15, hab.Pressure / 1000, 2);
+        Assert.Same(hab, run.ZoneOf("pot"));
+        Assert.Equal(Boiler.SaturationTemperature(hab.Pressure), hab.BoilingPoint, 9);
+        Assert.Equal(100, hab.OxygenFraction * 100, 9);
+
+        var def = session.Document.ToMachineDef();
+        var rebuilt = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "room");
+        foreach (var line in CommandScript.For(def)) rebuilt.Execute(line);
+        Assert.Equal(MachineWriter.Write(def), MachineWriter.Write(rebuilt.Document.ToMachineDef()));
+        string rkt = Path.Combine(TempDir(), "room.rkt");
+        session.ExportRkt(rkt);
+        Assert.Contains("(enclosure hab #:at (0 0 0) #:size (2 2 2) #:pressure 200000 #:temperature 20 #:air '((o2 1)) #:insulation 10", File.ReadAllText(rkt));
+    }
+
+    /// <summary>
+    /// A closed box blown down through a small hole into near-vacuum: while
+    /// choked the pressure falls as e^(−t/τ), τ = V/(Cd·A·√(γRT)·(2/(γ+1))^((γ+1)/(2(γ−1)))).
+    /// For 1 m³ of air (21/79) at 20 °C and a 1 cm² hole, Cd 0.6: τ = 83.77 s.
+    /// </summary>
+    [Fact]
+    public void AChokedLeakEmptiesAnEnclosureExponentially()
+    {
+        var outside = new Zone(Planet.Mars, 20);
+        var room = new Enclosure("box", 1, outside, 100_000, 20, new GasMix(0.21, 0.79, 0, 0, 0)) { LeakArea = 1e-4, Insulation = 0 };
+        double gamma = Enclosure.Gamma(room.Moles), rs = Physics.GasConstant / room.MolarMass;
+        double tau = 1 / (0.6 * 1e-4 * Math.Sqrt(gamma * rs * 293.15) * Math.Pow(2 / (gamma + 1), (gamma + 1) / (2 * (gamma - 1))));
+        Assert.Equal(83.77, tau, 2);
+        for (int i = 0; i < 10_000; i++) room.Step(0.01);
+        Assert.True(room.Choked);
+        Assert.Equal(100 * Math.Exp(-100 / tau), room.Pressure / 1000, 2);
+    }
+
     /// <summary>Every existing scene is unchanged: Earth's air is the game's 287.05 J/(kg·K) dry air, 1.204118 kg/m³ at 20 °C.</summary>
     [Fact]
     public void EarthIsTheDefaultPlanetAndItsNumbersAreTheOldConstants()
@@ -672,8 +725,8 @@ public class BuildSessionTests
         string rkt = Path.Combine(TempDir(), "wells.rkt");
         session.ExportRkt(rkt);
         string text = File.ReadAllText(rkt);
-        Assert.Contains("(pump low #:at (0 6.8 0) #:from well #:to low-cistern #:bore 0.15 #:stroke 0.5 #:rpm 20 #:efficiency 0.8 #:temperature 20 #:material bronze)", text);
-        Assert.Contains("#:rpm 20 #:efficiency 0.8 #:force 10000 #:temperature 20", text);
+        Assert.Contains("(pump low #:at (0 6.8 0) #:from well #:to low-cistern #:bore 0.15 #:stroke 0.5 #:rpm 20 #:efficiency 0.8 #:material bronze)", text);
+        Assert.Contains("#:rpm 20 #:efficiency 0.8 #:force 10000 #:material", text);
     }
 
     /// <summary>A channel run off the scene #:onto a boiler feeds it, and the clause round-trips.</summary>

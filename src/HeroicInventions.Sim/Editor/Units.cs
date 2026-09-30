@@ -47,8 +47,9 @@ public static class Units
             "g" => n / 1000,
             "W" => n,
             "kW" => n * 1000,
+            "kPa" => n * 1000,       // -> Pa
             _ => throw new FormatException(
-                $"{context}: unknown unit '{unit}' in '{token}' — allowed units are m, cm, mm, m2, cm2, L, L/s, kg, g, W, kW"),
+                $"{context}: unknown unit '{unit}' in '{token}' — allowed units are m, cm, mm, m2, cm2, L, L/s, kg, g, W, kW, kPa"),
         };
     }
 }

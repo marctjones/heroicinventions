@@ -36,7 +36,7 @@
          "geometry/shape.rkt" "planets.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -257,6 +257,41 @@
       (bad (format "#:drop must be above 0 and leave the load off the ground (the post is ~e m up), got ~e" (cadr (part-at p)) (prop 'drop)))))
   parts)
 
+;; An enclosure's numbers are checked when the machine is built. Its #:air
+;; becomes one prop per gas (o2 n2 co2 h2o ar), #f when it gives none: then
+;; it holds its surroundings' air.
+(define enclosure-gases '(o2 n2 co2 h2o ar))
+(define (enclosure-air-props who air loc)
+  (define (bad what) (error 'define-machine "~a:~a:~a: enclosure ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) who what))
+  (cond
+    [(not air) (for/list ([g enclosure-gases]) (cons g #f))]
+    [else
+     (for ([g air])
+       (unless (and (pair? g) (memq (car g) enclosure-gases) (pair? (cdr g)) (real? (cadr g)) (>= (cadr g) 0))
+         (bad (format "#:air lists (gas fraction) for gases among ~a, got ~e" enclosure-gases g))))
+     (define total (for/sum ([g air]) (cadr g)))
+     (unless (< (abs (- total 1)) 0.001) (bad (format "#:air's fractions must add up to 1, got ~a" total)))
+     (for/list ([g enclosure-gases]) (cons g (cond [(assq g air) => cadr] [else 0])))]))
+
+(define (check-enclosures parts)
+  (for ([p parts] #:when (eq? (part-kind p) 'enclosure))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what)
+      (error 'define-machine "~a:~a:~a: enclosure ~a: ~a"
+             (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (for ([k '(size-x size-y size-z)])
+      (unless (and (real? (prop k)) (> (prop k) 0)) (bad (format "#:size must be (w h d), each above 0 m, got ~e" (prop k)))))
+    (unless (or (not (prop 'pressure)) (and (real? (prop 'pressure)) (>= (prop 'pressure) 0)))
+      (bad (format "#:pressure must be an absolute pressure, 0 Pa or more, got ~e" (prop 'pressure))))
+    (unless (or (not (prop 'temperature)) (and (real? (prop 'temperature)) (> (prop 'temperature) -273.15)))
+      (bad (format "#:temperature must be above absolute zero, got ~e" (prop 'temperature))))
+    (for ([k '(insulation leak heater heat-capacity)])
+      (unless (and (real? (prop k)) (>= (prop k) 0)) (bad (format "#:~a must be 0 or more, got ~e" k (prop k)))))
+    (unless (and (real? (prop 'coefficient)) (> (prop 'coefficient) 0) (<= (prop 'coefficient) 1))
+      (bad (format "#:coefficient must be in (0, 1], got ~e" (prop 'coefficient)))))
+  parts)
+
 ;; A mirror's numbers are checked when the machine is built.
 (define (check-mirrors parts)
   (for ([p parts] #:when (eq? (part-kind p) 'mirror))
@@ -302,7 +337,7 @@
     (unless (and (real? time) (<= 0 time) (< time 24))
       (error 'define-machine "machine ~a: #:time must be solar hours in [0, 24), got ~e" name time)))
   (machine name source ambient sun planet-v
-           (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)))))))
+           (check-enclosures (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -333,7 +368,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt)
 
@@ -426,8 +461,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure) or link (pipe, connect, sealed-air)"
+    #:literals (enclosure tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -751,6 +786,39 @@
       #:attr info (mrinfo #'id #'target)
       #:with expr #`(part 'id 'mirror '(~? mat bronze) (list at.x at.y at.z)
                           (list (cons 'onto 'target) (cons 'area area-v) (cons 'reflectivity (~? refl-v 0.85)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; An enclosure (issue #39): a box #:size (w h d) across, #:at the middle
+    ;; of its floor, holding its own air -- #:pressure (absolute Pa), #:air
+    ;; '((o2 0.21) (n2 0.79)) and #:temperature (°C), each by default its
+    ;; surroundings' -- which every part standing inside it reads instead of
+    ;; the planet's. Its walls lose #:insulation W/K (default 2, a well
+    ;; insulated membrane) and hold #:heat-capacity J/K (default 0); a
+    ;; #:heater (W) warms it, and so can a hearth or mirror aimed at it. A
+    ;; hole of #:leak m² (default 0) lets gas out, or in, as a compressible
+    ;; orifice with discharge coefficient #:coefficient (default 0.6).
+    ;; Enclosures nest: one inside another leaks and loses heat into it.
+    (pattern (enclosure id:id
+                        (~alt (~once (~seq #:at at:vec3))
+                              (~once (~seq #:size size:vec3))
+                              (~optional (~seq #:pressure pressure-v:expr))
+                              (~optional (~seq #:air air-v:expr))
+                              (~optional (~seq #:temperature temp-v:expr))
+                              (~optional (~seq #:insulation ua-v:expr))
+                              (~optional (~seq #:heat-capacity cap-v:expr))
+                              (~optional (~seq #:heater heater-v:expr))
+                              (~optional (~seq #:leak leak-v:expr))
+                              (~optional (~seq #:coefficient cd-v:expr))
+                              (~optional (~seq #:material mat:id))) ...)
+      #:attr info (pinfo #'id 'enclosure (attribute mat) '())
+      #:with expr #`(part 'id 'enclosure '(~? mat hemp) (list at.x at.y at.z)
+                          (list* (cons 'size-x size.x) (cons 'size-y size.y) (cons 'size-z size.z)
+                                 (cons 'pressure (~? pressure-v #f)) (cons 'temperature (~? temp-v #f))
+                                 (cons 'insulation (~? ua-v 2)) (cons 'heat-capacity (~? cap-v 0))
+                                 (cons 'heater (~? heater-v 0)) (cons 'leak (~? leak-v 0))
+                                 (cons 'coefficient (~? cd-v 0.6))
+                                 (enclosure-air-props 'id (~? air-v #f) #,(loc-of this-syntax)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1486,15 +1554,15 @@
     (for ([h infos] #:when (hinfo? h))
       (define heats (syntax-e (hinfo-heats h)))
       (define b (hash-ref parts heats #f))
-      (unless (or (and b (eq? (pinfo-kind b) 'boiler))
+      (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure)))
                   (for/or ([a infos]) (and (ainfo? a) (memq heats (map syntax-e (ainfo-tanks a))))))
-        (fail (format "~a is neither a boiler nor a tank in a sealed-air; a hearth heats one of those" heats) (hinfo-heats h))))
+        (fail (format "~a is not a boiler, a tank in a sealed-air or an enclosure; a hearth heats one of those" heats) (hinfo-heats h))))
     (for ([m infos] #:when (mrinfo? m))
       (define onto (syntax-e (mrinfo-onto m)))
       (define b (hash-ref parts onto #f))
-      (unless (or (and b (eq? (pinfo-kind b) 'boiler))
+      (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure)))
                   (for/or ([a infos]) (and (ainfo? a) (memq onto (map syntax-e (ainfo-tanks a))))))
-        (fail (format "~a is neither a boiler nor a tank in a sealed-air; a mirror heats one of those" onto) (mrinfo-onto m))))
+        (fail (format "~a is not a boiler, a tank in a sealed-air or an enclosure; a mirror heats one of those" onto) (mrinfo-onto m))))
     (for ([c infos] #:when (cpinfo? c))
       (define v (hash-ref parts (syntax-e (cpinfo-vessel c)) #f))
       (unless (and v (eq? (pinfo-kind v) 'tank))

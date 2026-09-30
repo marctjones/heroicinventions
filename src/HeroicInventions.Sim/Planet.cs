@@ -203,7 +203,7 @@ public class Zone
 
     private Planet _planet;
     /// <summary>The planet this zone stands on. Changing it (live) keeps the zone's pressure only if it was the planet's own.</summary>
-    public Planet Planet
+    public virtual Planet Planet
     {
         get => _planet;
         set

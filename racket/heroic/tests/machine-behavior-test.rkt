@@ -1411,3 +1411,27 @@
     (check-= (/ (value-at run '(tight-driven omega) 3.0) (value-at run '(tight-driver omega) 3.0)) 0.5 0.03)
     ;; and they speed up together, near 24.1 rad/s2 less the bearings' drag: 22 rad/s at 1 s
     (check-= (value-at run '(tight-driver omega) 1.0) 22.3 1.5)))
+;; ---------------------------------------------------------------------------
+;; Two inflated modules on Mars (issue #39). Working in racket/machines/two-modules.rkt.
+
+(test-case "A punctured module's air falls as P0 e^(-t/2513 s) while choked, and keeps its 21% oxygen"
+  (define run (simulate 'two-modules #:seconds 3600 #:step 0.05 #:sample-dt 60))
+  (define (at t k) (for/first ([f run] #:when (>= (car f) (- t 1e-6))) (cadr (assq k (cdr f)))))
+  (check-= (at 1800 'punctured.pressure) (* 50 (exp (/ -1800 2513.0))) 0.02 "24.43 kPa")
+  (check-= (at 3600 'punctured.pressure) (* 50 (exp (/ -3600 2513.0))) 0.02 "11.94 kPa")
+  (check-= (at 3600 'punctured.choked) 1 0)
+  (check-= (at 3600 'punctured.o2) 21 1e-6 "what leaks out is its own mixture")
+  (check-= (at 3600 'punctured.temperature) 20 1e-9 "a slow leak: the air left keeps its walls' temperature"))
+
+(test-case "A heated, sealed module settles at T_out + Q/UA = 27 °C with time constant C/UA; its pump reaches 12.85 m"
+  (define run (simulate 'two-modules #:seconds 3600 #:step 0.05 #:sample-dt 60))
+  (define (at t k) (for/first ([f run] #:when (>= (car f) (- t 1e-6))) (cadr (assq k (cdr f)))))
+  ;; 27 - 7 e^(-3600/1283) = 26.58 °C for the module alone; the ~20 mol of
+  ;; nitrogen the locker leaks into it adds 1.6% to its heat capacity, 26.56
+  (check-= (at 3600 'sealed.temperature) 26.56 0.05)
+  ;; the pump inside draws with the module's 50 kPa at 20 °C water: (50000 - 2339) / (1000 x 3.71)
+  (check-= (at 0 'pump.limit) 12.849 0.001)
+  (check-= (final-of run '(pump delivered)) 125 1e-6 "it filled the 125 L trough, lifting 2.5 m on Mars")
+  ;; the locker's nitrogen went into the module round it, not onto Mars: not a gram lost
+  (check-= (+ (at 3600 'sealed.mass) (at 3600 'locker.mass)) (+ (at 0 'sealed.mass) (at 0 'locker.mass)) 1e-9)
+  (check-= (at 3600 'locker.pressure) (at 3600 'sealed.pressure) 0.01 "the pinhole has let the two come level"))

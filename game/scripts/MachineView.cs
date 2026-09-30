@@ -116,6 +116,7 @@ public partial class MachineView : Node3D
         BuildSafetyValves();
         BuildBellows();
         BuildWarmth();
+        BuildEnclosures();
         BuildMirrors();
         BuildPumps();
         BuildPistonDrives();
@@ -1426,6 +1427,7 @@ public partial class MachineView : Node3D
         DrawSafetyValves();
         DrawBellows();
         DrawWarmth();
+        DrawEnclosures();
         DrawSprings();
         DrawMirrors();
         DrawPumps();

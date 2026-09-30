@@ -184,7 +184,16 @@ public static class RktExporter
             case "pump":
                 return $"  (pump {p.Id} {At()} #:from {Sym("from", "?")} #:to {Sym("to", "?")} #:bore {F(N("bore"))} #:stroke {F(N("stroke"))} " +
                        $"#:rpm {F(N("rpm"))} #:efficiency {F(N("efficiency", 0.8))}" + Opt("force", "force") +
-                       $" #:temperature {F(N("temperature", 20))} {Mat()})\n";
+                       Opt("temperature", "temperature") + $" {Mat()})\n";
+            case "enclosure":
+            {
+                var gases = GasMix.Names.Where(g => p.Props.GetValueOrDefault(g) is SNumber).ToList();
+                return $"  (enclosure {p.Id} {At()} #:size ({F(N("size-x"))} {F(N("size-y"))} {F(N("size-z"))})" +
+                       Opt("pressure", "pressure") + Opt("temperature", "temperature") +
+                       (gases.Count > 0 ? $" #:air '({string.Join(' ', gases.Select(g => $"({g} {F(N(g))})"))})" : "") +
+                       $" #:insulation {F(N("insulation", 2))} #:heat-capacity {F(N("heat-capacity"))} #:heater {F(N("heater"))}" +
+                       $" #:leak {F(N("leak"))} #:coefficient {F(N("coefficient", 0.6))} {Mat()})\n";
+            }
             case "counterpoise":
                 return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +
                        $"#:counterweight {F(N("counterweight"))} #:radius {F(N("radius"))} #:turn-deg {F(N("turn-deg"))} " +

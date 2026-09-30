@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -127,6 +127,17 @@ public static class PartTemplates
             },
             [], null),
         // a 0.5 m2 heliostat of polished bronze, throwing the sun onto the boiler or sealed vessel #:onto names
+        // a 2 m room of its surroundings' air (#f: theirs), shut in; set #:pressure, #:o2 … to fill it, #:leak to hole it
+        "enclosure" => new PartSpec(id, "enclosure", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["size-x"] = new SNumber(2), ["size-y"] = new SNumber(2), ["size-z"] = new SNumber(2),
+                ["pressure"] = new SBool(false), ["temperature"] = new SBool(false),
+                ["insulation"] = new SNumber(2), ["heat-capacity"] = new SNumber(0), ["heater"] = new SNumber(0),
+                ["leak"] = new SNumber(0), ["coefficient"] = new SNumber(0.6),
+                ["o2"] = new SBool(false), ["n2"] = new SBool(false), ["co2"] = new SBool(false), ["h2o"] = new SBool(false), ["ar"] = new SBool(false),
+            },
+            [], null),
         "mirror" => new PartSpec(id, "mirror", material, at,
             new Dictionary<string, SExpr> { ["onto"] = new SSymbol("?"), ["area"] = new SNumber(0.5), ["reflectivity"] = new SNumber(0.85) },
             [], null),

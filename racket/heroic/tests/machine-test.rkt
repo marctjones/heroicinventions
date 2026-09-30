@@ -237,3 +237,17 @@
   (check-equal? (assq 'air (cddr hc)) '(air (o2 0.21) (n2 0.79) (co2 0.0) (h2o 0.0) (ar 0.0)))
   (check-equal? (assq 'ambient heavy) '(ambient 5.0))
   (check-exn #rx"#:air's fractions must add up to 1" (λ () (build '#:planet '(planet mars #:air '((o2 0.5)))))))
+
+;; ---------------------------------------------------------------------------
+;; Enclosures (issue #39)
+
+(test-case "an enclosure's numbers are checked, and a hearth may heat one"
+  (define (build . clauses)
+    (parameterize ([current-namespace (make-base-namespace)])
+      (eval `(module room heroic (define-machine room ,@clauses)))
+      (dynamic-require ''room #f)))
+  (check-exn #rx"enclosure hab: #:size must be" (λ () (build '(enclosure hab #:at (0 0 0) #:size (0 2 2)))))
+  (check-exn #rx"enclosure hab: #:air's fractions must add up to 1" (λ () (build '(enclosure hab #:at (0 0 0) #:size (2 2 2) #:air '((o2 0.5))))))
+  (check-exn #rx"#:coefficient must be in" (λ () (build '(enclosure hab #:at (0 0 0) #:size (2 2 2) #:leak 0.001 #:coefficient 2))))
+  (check-not-exn (λ () (build '(enclosure hab #:at (0 0 0) #:size (2 2 2) #:pressure 50000 #:air '((o2 0.21) (n2 0.79)))
+                              '(hearth stove #:at (0 0 0) #:heats hab #:power 1000 #:fuel 1)))))
