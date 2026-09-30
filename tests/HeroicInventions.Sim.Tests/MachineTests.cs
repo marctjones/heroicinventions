@@ -40,6 +40,35 @@ public class MachineFileTests
     private static MachineDef Load(string name) =>
         MachineDef.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "machines", name + ".machine")));
 
+    [Fact]
+    public void WorldFilesPlaceMachinesByLabelAndRefuseHeadings()
+    {
+        var world = WorldDef.Parse("(world bench (place a pendulum-demo (at 0 0 0)) (place b pendulum-demo (at 2 0 0.5)))");
+        Assert.Equal("bench", world.Name);
+        Assert.Equal(["a", "b"], world.Placements.Select(p => p.Label));
+        Assert.Equal(new Vec3(2, 0, 0.5), world.Placements[1].At);
+        Assert.Throws<MachineFormatException>(() => WorldDef.Parse("(world w (place a x (at 0 0 0)) (place a y (at 1 0 0)))"));
+        Assert.Throws<MachineFormatException>(() => WorldDef.Parse("(world w (place a x (at 0 0 0) (heading 90)))"));
+    }
+
+    /// <summary>A gallery of every shipped machine lays their footprints out without overlaps.</summary>
+    [Fact]
+    public void GalleryOfEveryMachineDoesNotOverlap()
+    {
+        var dir = Path.Combine(AppContext.BaseDirectory, "machines");
+        var machines = Directory.GetFiles(dir, "*.machine").Select(f => MachineDef.Parse(File.ReadAllText(f))).ToList();
+        var gallery = WorldDef.Gallery(machines);
+        Assert.Equal(machines.Count, gallery.Placements.Count);
+        var boxes = gallery.Placements.Select(p =>
+        {
+            var (min, max) = WorldDef.Extent(machines.First(m => m.Name == p.Machine));
+            return (MinX: min.X + p.At.X, MaxX: max.X + p.At.X, MinZ: min.Z + p.At.Z, MaxZ: max.Z + p.At.Z, p.Label);
+        }).ToList();
+        foreach (var a in boxes)
+            foreach (var b in boxes.Where(b => string.CompareOrdinal(b.Label, a.Label) > 0))
+                Assert.False(a.MinX < b.MaxX && b.MinX < a.MaxX && a.MinZ < b.MaxZ && b.MinZ < a.MaxZ, $"{a.Label} overlaps {b.Label}");
+    }
+
     /// <summary>
     /// A machine moved somewhere else in a shared world (issue #74) behaves
     /// exactly as it did where it was written: every traced number matches

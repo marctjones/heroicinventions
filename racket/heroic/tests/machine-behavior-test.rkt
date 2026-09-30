@@ -1095,3 +1095,14 @@
   (define a drag) (define b (* mdot r r)) (define c (- 0.005 (* mdot v r)))
   (define w (/ (+ (- b) (sqrt (- (* b b) (* 4 a c)))) (* 2 a)))
   (check-= (final-of run '(jack omega)) w (* 0.01 w)))
+
+(test-case "A world of 50 pendulums: each copy swings exactly as the pendulum does alone (#74)"
+  (when (godot-available?)
+    (define alone (godot-simulate 'pendulum-demo #:seconds 5 #:sample-dt 0.25))
+    (define world (godot-simulate-world 'pendulums-50 #:seconds 5 #:sample-dt 0.25))
+    (check-equal? (hash-count world) 50)
+    (define (tilts run) (for/list ([f run]) (cadr (assq 'rod.rot-z (cdr f)))))
+    (for ([(label run) world])
+      (check-equal? (length run) (length alone) (format "~a has a full trace" label))
+      (for ([a (tilts alone)] [b (tilts run)])
+        (check-= b a 0.01 (format "~a swings as the pendulum alone" label))))))

@@ -16,7 +16,7 @@
 ;; exactly as in play but as fast as the machine allows, not in real time.
 (require racket/system racket/port racket/runtime-path racket/file racket/string
          "simhost.rkt")
-(provide godot-simulate godot-available? godot-binary
+(provide godot-simulate godot-simulate-world godot-available? godot-binary
          max-of min-of final-of values-of times-of)
 
 (define-runtime-path game-dir "../../game")
@@ -62,3 +62,35 @@
 
 ;; The times of a run's frames, in order.
 (define (times-of run) (map car run))
+
+;; Runs a world (game/worlds/<name>.world, or 'gallery for every machine)
+;; headless and returns each placed machine's trace, by placement label:
+;; (hash label frames ...). Traces come from the game's own per-machine
+;; files, <trace>.<label>.
+(define (godot-simulate-world world-name #:seconds seconds #:sample-dt [sample-dt 0.1])
+  (unless (godot-available?)
+    (error 'godot-simulate-world "Godot not found at ~a (set HEROIC_GODOT)" godot-binary))
+  (define world-file (build-path game-dir "worlds" (format "~a.world" world-name)))
+  (define labels
+    (for/list ([form (cddr (call-with-input-file world-file read))]
+               #:when (and (pair? form) (eq? (car form) 'place)))
+      (cadr form)))
+  (define trace (make-temporary-file "heroic-world-~a.trace"))
+  (define env (environment-variables-copy (current-environment-variables)))
+  (define (env! k v) (environment-variables-set! env (string->bytes/utf-8 k) (string->bytes/utf-8 v)))
+  (env! "HEROIC_WORLD" (format "~a" world-name))
+  (env! "HEROIC_QUIT_AFTER_SIM_SECONDS" (number->string (exact->inexact seconds)))
+  (env! "HEROIC_TRACE" (path->string trace))
+  (env! "HEROIC_TRACE_DT" (number->string (exact->inexact sample-dt)))
+  (parameterize ([current-directory game-dir]
+                 [current-environment-variables env]
+                 [current-output-port (open-output-nowhere)]
+                 [current-error-port (open-output-nowhere)])
+    (system* godot-binary "--headless" "--fixed-fps" (number->string physics-ticks-per-second) "."))
+  (for/hash ([label labels])
+    (define file (format "~a.~a" (path->string trace) label))
+    (values label
+            (if (file-exists? file)
+                (begin0 (call-with-input-file file (λ (in) (for/list ([f (in-port read in)]) f)))
+                        (delete-file file))
+                '()))))

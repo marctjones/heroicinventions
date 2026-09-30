@@ -199,7 +199,16 @@ public partial class Main : Node3D
     private MaterialLibrary _materials = null!;
     private readonly SortedDictionary<string, string> _machineFiles = []; // name → res:// path
     private readonly Dictionary<string, MachineView> _byName = [];        // just the current one, for the live link
-    private MachineView? _current;
+    private MachineView? _current;           // the focused machine: what the HUD, camera and controls act on
+
+    // World mode (issue #74): many machines standing in one scene, all stepped
+    // together; _current is whichever one was last clicked.
+    private const string WorldsDir = "res://worlds";
+    private readonly List<MachineView> _views = [];
+    private readonly Dictionary<MachineView, string> _viewMachine = [];   // view → its machine's name, for the HUD
+    private readonly Dictionary<MachineView, Aabb> _viewBounds = [];
+    private WorldDef? _world;
+    private Vector2 _pressAt;
     private string? _currentName;
     private bool _running;
     private double _timeScale = 1;
@@ -277,6 +286,9 @@ public partial class Main : Node3D
         else if (OS.GetEnvironment("HEROIC_AUTORUN") == "1" && _machineFiles.Count > 0)
             SelectMachine(_machineFiles.Keys.First());
 
+        string worldName = OS.GetEnvironment("HEROIC_WORLD");
+        if (!string.IsNullOrEmpty(worldName)) LoadWorldNamed(worldName);
+
         if (OS.GetEnvironment("HEROIC_EDITOR") == "1") SelectBuildMode();
         if (double.TryParse(OS.GetEnvironment("HEROIC_EDITOR_QUIT_AFTER_SECONDS"), System.Globalization.CultureInfo.InvariantCulture, out double editorQuit))
             _editorQuitAfterSeconds = editorQuit;
@@ -295,8 +307,12 @@ public partial class Main : Node3D
                     _current.Runtime.SetField(target, field, double.Parse(value, inv));
                 else GD.PrintErr($"HEROIC_SET: expected 'target field value', got '{setting}'");
             string tracePath = OS.GetEnvironment("HEROIC_TRACE");
-            if (!string.IsNullOrEmpty(tracePath))
-                _current.StartTrace(tracePath, double.TryParse(OS.GetEnvironment("HEROIC_TRACE_DT"), inv, out double traceDt) ? traceDt : 0.1);
+            double traceEvery = double.TryParse(OS.GetEnvironment("HEROIC_TRACE_DT"), inv, out double traceDt) ? traceDt : 0.1;
+            // a world writes one trace per placed machine, <path>.<label>
+            if (!string.IsNullOrEmpty(tracePath) && _views.Count > 0)
+                foreach (var v in _views) v.StartTrace($"{tracePath}.{v.Name}", traceEvery);
+            else if (!string.IsNullOrEmpty(tracePath))
+                _current.StartTrace(tracePath, traceEvery);
         }
     }
 
@@ -361,6 +377,10 @@ public partial class Main : Node3D
         }
 
         _machineList.AddChild(new HSeparator());
+
+        var worldButton = BigButton("Every machine, together");
+        worldButton.Pressed += () => LoadWorldNamed("gallery");
+        _machineList.AddChild(worldButton);
 
         var buildModeButton = BigButton("Build Mode");
         buildModeButton.Pressed += SelectBuildMode;
@@ -516,8 +536,140 @@ public partial class Main : Node3D
 
     // --------------------------------------------------------------- state
 
+    /// <summary>Frees every machine a world placed (the focused one included) and leaves world mode.</summary>
+    private void ClearWorld()
+    {
+        foreach (var v in _views) v.QueueFree();
+        if (_current is not null && _views.Contains(_current)) _current = null;
+        _views.Clear();
+        _viewMachine.Clear();
+        _viewBounds.Clear();
+        _world = null;
+    }
+
+    /// <summary>
+    /// Loads a world: each placed machine parsed, moved to its place, and
+    /// added as its own view, all stepped together. The first is focused;
+    /// click another to focus it.
+    /// </summary>
+    private void LoadWorld(WorldDef world)
+    {
+        ClearWorld();
+        _current?.QueueFree();
+        _current = null;
+        _byName.Clear();
+        foreach (var p in world.Placements)
+        {
+            if (!_machineFiles.TryGetValue(p.Machine, out var path)) { GD.PushError($"world {world.Name}: no machine named {p.Machine}"); continue; }
+            var def = MachineDef.Parse(Godot.FileAccess.GetFileAsString(path)).Translated(p.At);
+            var view = new MachineView(new MachineRuntime(def, _materials), _materials) { Name = p.Label, Position = Vector3.Zero };
+            AddChild(view);
+            _views.Add(view);
+            _viewMachine[view] = p.Machine;
+            _byName[p.Label] = view;
+        }
+        if (_views.Count == 0) return;
+        _world = world;
+        _current = _views[0];
+        _currentName = _viewMachine[_current];
+
+        // frame the whole world
+        var (min, max) = (new Vector3(float.MaxValue, 0, float.MaxValue), new Vector3(float.MinValue, 0, float.MinValue));
+        foreach (var p in world.Placements.Where(p => _machineFiles.ContainsKey(p.Machine)))
+        {
+            min = new Vector3(Mathf.Min(min.X, (float)p.At.X), 0, Mathf.Min(min.Z, (float)p.At.Z));
+            max = new Vector3(Mathf.Max(max.X, (float)p.At.X), 0, Mathf.Max(max.Z, (float)p.At.Z));
+        }
+        var centre = (min + max) / 2;
+        float span = Mathf.Max(6, (max - min).Length());
+        ApplyCamera(new CameraProfile(centre + new Vector3(0, span * 0.55f, span * 0.75f), centre, 50));
+        SetRunning(true);
+        SetSpeed(1);
+        _restartButton.Disabled = false;
+        _menuButton.Disabled = false;
+        _runButton.Disabled = false;
+        _detailsButton.Disabled = false;
+        SetMenuCollapsed(true);
+        _follow = null;
+    }
+
+    private void LoadWorldNamed(string name)
+    {
+        if (name == "gallery")
+        {
+            LoadWorld(WorldDef.Gallery(_machineFiles.Values.Select(f => MachineDef.Parse(Godot.FileAccess.GetFileAsString(f)))));
+            return;
+        }
+        string path = $"{WorldsDir}/{name}.world";
+        if (!Godot.FileAccess.FileExists(path)) { GD.PushError($"no world file {path}"); return; }
+        LoadWorld(WorldDef.Parse(Godot.FileAccess.GetFileAsString(path), path));
+    }
+
+    /// <summary>
+    /// In a world, a click (not a drag) on a machine focuses it: the HUD shows
+    /// it and the camera swings round to it.
+    /// </summary>
+    private void FocusMachineAt(Vector2 screen)
+    {
+        if (_views.Count == 0) return;
+        var from = _camera.ProjectRayOrigin(screen);
+        var dir = _camera.ProjectRayNormal(screen);
+        MachineView? best = null;
+        float bestT = float.MaxValue;
+        foreach (var v in _views)
+        {
+            if (!_viewBounds.TryGetValue(v, out var box)) _viewBounds[v] = box = BoundsOf(v);
+            if (RayHits(from, dir, box, out float t) && t < bestT) { bestT = t; best = v; }
+        }
+        if (best is null || best == _current) return;
+        _current = best;
+        _currentName = _viewMachine[best];
+        var b = _viewBounds[best];
+        _orbitPivot = b.GetCenter();
+        _orbitDistance = Mathf.Clamp(b.Size.Length() * 1.3f + 1f, 2f, 60f);
+        UpdateOrbitCamera();
+        UpdateInfoPanel();
+    }
+
+    private static Aabb BoundsOf(Node node)
+    {
+        Aabb? box = null;
+        foreach (var vi in Descendants(node).OfType<VisualInstance3D>())
+        {
+            if (vi is GpuParticles3D or Label3D) continue;
+            var local = vi.GetAabb();
+            if (local.Size == Vector3.Zero) continue;
+            var world = vi.GlobalTransform * local;
+            box = box is { } b ? b.Merge(world) : world;
+        }
+        return box ?? new Aabb(Vector3.Zero, Vector3.Zero);
+    }
+
+    private static IEnumerable<Node> Descendants(Node n)
+    {
+        yield return n;
+        foreach (var c in n.GetChildren()) foreach (var d in Descendants(c)) yield return d;
+    }
+
+    private static bool RayHits(Vector3 from, Vector3 dir, Aabb box, out float t)
+    {
+        float tMin = 0, tMax = float.MaxValue;
+        for (int axis = 0; axis < 3; axis++)
+        {
+            float o = from[axis], d = dir[axis], lo = box.Position[axis], hi = box.End[axis];
+            if (Mathf.Abs(d) < 1e-9f) { if (o < lo || o > hi) { t = 0; return false; } continue; }
+            float t1 = (lo - o) / d, t2 = (hi - o) / d;
+            if (t1 > t2) (t1, t2) = (t2, t1);
+            tMin = Mathf.Max(tMin, t1); tMax = Mathf.Min(tMax, t2);
+            if (tMin > tMax) { t = 0; return false; }
+        }
+        t = tMin;
+        return true;
+    }
+
     private void SelectMachine(string name)
     {
+        ClearWorld();
         _current?.QueueFree();
         _byName.Clear();
 
@@ -547,6 +699,7 @@ public partial class Main : Node3D
 
     private void RestartCurrent()
     {
+        if (_world is { } world) { LoadWorld(world); return; }
         if (_currentName is { } name) SelectMachine(name);
     }
 
@@ -558,6 +711,7 @@ public partial class Main : Node3D
     /// </summary>
     private void SelectBuildMode()
     {
+        ClearWorld();
         _current?.QueueFree();
         _current = null;
         _currentName = null;
@@ -604,6 +758,7 @@ public partial class Main : Node3D
 
     private void DeselectMachine()
     {
+        ClearWorld();
         _current?.QueueFree();
         _current = null;
         _currentName = null;
@@ -624,6 +779,7 @@ public partial class Main : Node3D
     {
         _running = running;
         _current?.SetFrozen(!running);
+        foreach (var v in _views) v.SetFrozen(!running);
         _runButton.Text = running ? "Pause" : "Run";
     }
 
@@ -804,13 +960,15 @@ public partial class Main : Node3D
             // works too since the left often lands on a UI button instead.
             case InputEventMouseButton { ButtonIndex: MouseButton.Left or MouseButton.Right } mb:
                 _dragging = mb.Pressed;
+                if (mb.ButtonIndex == MouseButton.Left && mb.Pressed) _pressAt = mb.Position;
+                else if (mb.ButtonIndex == MouseButton.Left && mb.Position.DistanceTo(_pressAt) < 4) FocusMachineAt(mb.Position);
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.WheelUp }:
                 _orbitDistance = Mathf.Max(0.2f, _orbitDistance * 0.9f);
                 UpdateOrbitCamera();
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.WheelDown }:
-                _orbitDistance = Mathf.Min(80f, _orbitDistance / 0.9f);
+                _orbitDistance = Mathf.Min(200f, _orbitDistance / 0.9f);
                 UpdateOrbitCamera();
                 break;
             case InputEventMouseMotion motion when _dragging:
@@ -854,9 +1012,24 @@ public partial class Main : Node3D
         }
     }
 
+    // HEROIC_FPS_REPORT=1: every 2 s, print frames per second and where frame time goes (for #74's budgets)
+    private readonly bool _fpsReport = OS.GetEnvironment("HEROIC_FPS_REPORT") == "1";
+    private double _fpsTimer;
+
+    public override void _Process(double delta)
+    {
+        if (!_fpsReport || (_fpsTimer += delta) < 2) return;
+        _fpsTimer = 0;
+        GD.Print($"[fps] {Performance.GetMonitor(Performance.Monitor.TimeFps):F0} fps · frame {Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000:F1} ms process, " +
+                 $"{Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess) * 1000:F1} ms physics · {Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame):F0} draw calls · " +
+                 $"{Performance.GetMonitor(Performance.Monitor.RenderTotalObjectsInFrame):F0} objects · {_views.Count} machines");
+    }
+
     public override void _PhysicsProcess(double delta)
     {
-        if (_running && _current is not null)
+        if (_running && _views.Count > 0)
+            foreach (var v in _views) v.Simulate(delta); // a world: every machine, stepped together
+        else if (_running && _current is not null)
             _current.Simulate(delta); // already scaled: see SetSpeed
 
         if (_audit && _running && _current is not null) _current.AuditTick(delta);
@@ -866,6 +1039,7 @@ public partial class Main : Node3D
             if (_audit) GD.Print(_current.AuditReport());
             if (_debugPhysics) GD.Print($"[final] {_current.Details}");
             _current.StopTrace();
+            foreach (var v in _views) v.StopTrace();
             GetTree().Quit();
         }
 
