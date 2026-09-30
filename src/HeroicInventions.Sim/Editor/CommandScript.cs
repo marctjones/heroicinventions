@@ -71,8 +71,9 @@ public static class CommandScript
         foreach (var a in m.Arbors) Add($"(arbor {string.Join(' ', a.Parts)})");
         foreach (var g in m.Meshes) Add($"(mesh {g.A} {g.B})");
         foreach (var c in m.Cylinders)
-            Add($"(atmospheric-cylinder {c.Id} #:piston {c.Piston} #:steam-from {c.Boiler}" +
-                (c.InjectionTemperature is { } inj ? $" #:injection-temperature {N(inj)}" : "") + ")");
+            Add($"({(c.Kind == "steam" ? "steam-cylinder" : "atmospheric-cylinder")} {c.Id} #:piston {c.Piston} #:steam-from {c.Boiler}" +
+                (c.InjectionTemperature is { } inj ? $" #:injection-temperature {N(inj)}" : "") +
+                (c.Crank is { } crank ? $" #:crank {crank}" : "") + ")");
         foreach (var l in m.Lifts)
             Add($"(lift {l.Id} #:by {l.By} #:from {l.From} #:to {l.To}" +
                 (l.Current is { } cur ? $" #:current {N(cur)}" : "") +

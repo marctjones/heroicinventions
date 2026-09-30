@@ -25,7 +25,7 @@ namespace HeroicInventions.Sim.Mechanics;
 /// engine used several times the steam its cylinder held, and why Watt's
 /// separate condenser mattered) isn't modelled.
 /// </summary>
-public sealed class AtmosphericCylinder(string name, Boiler boiler, double bore, double stroke, double injectionTemperatureC)
+public sealed class AtmosphericCylinder(string name, Boiler boiler, double bore, double stroke, double injectionTemperatureC) : ICylinder
 {
     /// <summary>The air and gravity it stands in: the planet's open air unless it is inside an enclosure.</summary>
     public Zone Zone { get; set; } = new();

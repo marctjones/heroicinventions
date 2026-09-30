@@ -418,10 +418,10 @@ public sealed class EditorDocument
     public void ReplaceBelt(BeltSpec belt) => _belts = _belts.Select(b => b.Id == belt.Id ? belt : b).ToList();
 
     /// <summary>Joins a piston to the boiler that feeds its cylinder.</summary>
-    public CylinderSpec AddCylinder(string id, string piston, string boiler, double? injectionTemperature)
+    public CylinderSpec AddCylinder(string id, string piston, string boiler, double? injectionTemperature, string kind = "atmospheric", string? crank = null)
     {
         if (_cylinders.Any(c => c.Id == id)) throw new InvalidOperationException($"a cylinder named {id} already exists");
-        var spec = new CylinderSpec(id, piston, boiler, injectionTemperature, null);
+        var spec = new CylinderSpec(id, piston, boiler, injectionTemperature, null) { Kind = kind, Crank = crank };
         _cylinders = [.. _cylinders, spec];
         return spec;
     }

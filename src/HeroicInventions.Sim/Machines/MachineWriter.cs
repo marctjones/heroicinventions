@@ -132,9 +132,10 @@ public static class MachineWriter
             SrcLoc(c.Location)]);
 
     private static SExpr CylinderClause(CylinderSpec c) =>
-        Tagged("atmospheric-cylinder", [Sym(c.Id),
+        Tagged(c.Kind == "steam" ? "steam-cylinder" : "atmospheric-cylinder", [Sym(c.Id),
             Tagged("piston", Sym(c.Piston)), Tagged("steam-from", Sym(c.Boiler)),
             .. c.InjectionTemperature is { } inj ? [Tagged("injection-temperature", Num(inj))] : Array.Empty<SExpr>(),
+            .. c.Crank is { } crank ? [Tagged("crank", Sym(crank))] : Array.Empty<SExpr>(),
             SrcLoc(c.Location)]);
 
     private static SExpr LiftClause(LiftSpec l) =>

@@ -40,7 +40,7 @@
 
 (provide define-machine
          tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling ball
-         pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
+         pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
@@ -74,7 +74,7 @@
 ;; a, b: two gears whose teeth engage.
 (struct mesh-spec (a b loc) #:transparent)
 ;; piston: the piston part it drives; boiler: where its steam comes from.
-(struct cylinder-spec (id piston boiler injection-temperature loc) #:transparent)
+(struct cylinder-spec (id piston boiler injection-temperature loc [kind #:auto #:mutable] [crank #:auto #:mutable]) #:transparent #:auto-value #f)
 ;; by: the screw or noria that lifts; from, to: tanks; current: a river's
 ;; speed (m/s) pushing a noria's paddles, or #f.
 (struct lift-spec (id by from to current current-from loc) #:transparent)
@@ -486,7 +486,7 @@
     ...))
 
 (define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling ball
-  pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
+  pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
   inflow channel off trigger follow belt wake joint)
 
 ;; A part built from a generated shape (see heroic/geometry). The shape is
@@ -587,7 +587,7 @@
 
   (define-syntax-class clause
     #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, roof, stirling, ball) or link (pipe, connect, sealed-air)"
-    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond roof tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt wake joint)
+    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond roof tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1872,6 +1872,27 @@
                                          (~optional (~seq #:injection-temperature inj-v:expr))) ...)
       #:attr info (cinfo #'id #'p #'b)
       #:with expr #`(cylinder-spec 'id 'p 'b (~? inj-v #f) #,(loc-of this-syntax)))
+
+    ;; A high-pressure steam cylinder (issue #65; Trevithick): the boiler's
+    ;; steam pushes the #:piston directly, double-acting -- a valve moved with
+    ;; the crank admits it behind the piston whichever way it travels and
+    ;; opens the other side to the air -- so each stroke does
+    ;; (P_boiler - P_air) x area x stroke. Not pushed by the air, it works on
+    ;; Mars, and better there: 610 Pa behind the exhaust, not 101 kPa. Its
+    ;; piston's travel is whatever it drives (a crank) allows. #:crank names
+    ;; the wheel whose turn works the valve (an eccentric on its shaft): it
+    ;; admits steam under the piston while the wheel's forward turn raises it,
+    ;; so the engine starts from rest and always runs forward. Without one the
+    ;; valve follows the piston's own motion, and a stopped engine can't start.
+    (pattern (steam-cylinder id:id
+                             (~alt (~once (~seq #:piston p:id))
+                                   (~once (~seq #:steam-from b:id))
+                                   (~optional (~seq #:crank crank-id:id))) ...)
+      #:attr info (cinfo #'id #'p #'b)
+      #:with expr #`(let ([c (cylinder-spec 'id 'p 'b #f #,(loc-of this-syntax))])
+                      (set-cylinder-spec-kind! c 'steam)
+                      (set-cylinder-spec-crank! c '(~? crank-id #f))
+                      c))
 
     (pattern (pipe id:id from:ref to:ref
                    (~alt (~once (~seq #:conductance c:expr))

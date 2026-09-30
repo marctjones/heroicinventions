@@ -1246,6 +1246,27 @@
     (when (= ambient 20)
       (check-= (second powers) 55.97 0.1 "a room-warm cold side halves it"))))
 
+(test-case "High-pressure steam on Mars: each stroke does (P_boiler - P_air) A S; exhausting into 610 Pa it does 1.27 times what it does into 101 kPa"
+  ;; predicted before the first run (steam-engines-mars.rkt): 186.3 and 146.6 J a stroke
+  (when (godot-available?)
+    (define run (godot-simulate 'steam-engines-mars #:seconds 8 #:sample-dt 1))
+    (define (at t key) (cadr (assq key (cdr (for/first ([f run] #:when (>= (car f) (- t 1e-6))) f)))))
+    (define area (/ (* pi 0.05 0.05) 4))
+    (define S (- (sqrt (- (* 0.6 0.6) (* 0.05 0.05))) (sqrt (- (* 0.4 0.4) (* 0.05 0.05)))))
+    (check-= S 0.20105 0.00001)
+    (define works
+      (for/list ([e '(open hut)])
+        (define (g k) (at 8 (string->symbol (format "~a-cylinder.~a" e k))))
+        (define dp (* 1000 (- (g 'pressure) (g 'exhaust-pressure))))
+        (check-true (> (g 'strokes) 5) (format "the ~a engine runs" e))
+        ;; the traced stroke is the crank's plus the joints' give
+        (check-= (g 'stroke-length) S 0.004)
+        (check-= (g 'stroke-work) (* dp area (g 'stroke-length)) (* 0.005 dp area S) (format "~a: W = dp A x the stroke it made" e))
+        (check-= (g 'stroke-work) (* dp area S) (* 0.015 dp area S) (format "~a: W = dp A S" e))
+        (g 'stroke-work)))
+    (check-= (/ (first works) (second works)) (/ (- 472.6 0.61) (- 472.6 101.33)) 0.01 "the open engine does 1.271 times as much")
+    (check-true (> (at 8 'open-flywheel.omega) (at 8 'hut-flywheel.omega)) "and its flywheel runs faster")))
+
 ;; ---------------------------------------------------------------------------
 ;; One real-game check for each remaining rigid-body machine, each against
 ;; the prediction in its .rkt header. Measured 2026-09-29 before writing;

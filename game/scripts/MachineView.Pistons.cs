@@ -16,11 +16,13 @@ namespace HeroicInventions;
 public partial class MachineView
 {
     private readonly Dictionary<string, (RigidBody3D Body, float Bottom, PartSpec Part)> _pistons = [];
-    private readonly List<(AtmosphericCylinder Cylinder, RigidBody3D Piston, float Bottom, StandardMaterial3D Casing)> _cylinderDrives = [];
+    private readonly List<(ICylinder Cylinder, RigidBody3D Piston, float Bottom, StandardMaterial3D Casing)> _cylinderDrives = [];
     // What shows the steam and the cold water: puffs at the steam valve while
     // steam flows into the cylinder; spray inside it while the jet runs.
-    private readonly List<(AtmosphericCylinder Cylinder, GpuParticles3D Steam, GpuParticles3D Spray)> _cylinderPlumbing = [];
+    private readonly List<(ICylinder Cylinder, GpuParticles3D Steam, GpuParticles3D Spray)> _cylinderPlumbing = [];
     private readonly List<(WaterLift Lift, RigidBody3D Piston, float LastY)> _pumpDrives = [];
+    // steam cylinders whose valve an eccentric on a crank works: the crank, and its pin in the crank's own frame
+    private readonly List<(SteamCylinder Cylinder, RigidBody3D Crank, Vector3 Pin, RigidBody3D Piston)> _valveGear = [];
 
     private void BuildPiston(PartSpec part)
     {
@@ -78,7 +80,12 @@ public partial class MachineView
             var (body, bottom, piston) = _pistons[spec.Piston];
             var cylinder = Runtime.Cylinders[spec.Id];
             _cylinderDrives.Add((cylinder, body, bottom, _casings[spec.Piston]));
-            _cylinderPlumbing.Add((cylinder, BuildSteamMain(spec, piston), BuildInjection(piston)));
+            // a high-pressure cylinder has no injection cistern: its steam goes out to the air
+            _cylinderPlumbing.Add((cylinder, BuildSteamMain(spec, piston), cylinder is SteamCylinder ? new GpuParticles3D { Emitting = false } : BuildInjection(piston)));
+            // the valve's eccentric: the crank pin is where a joint holds something to the crank
+            if (cylinder is SteamCylinder steam && spec.Crank is { } crankId && _bodiesById.TryGetValue(crankId, out var crank)
+                && Runtime.Def.Joints.FirstOrDefault(j => j.A == crankId || j.B == crankId) is { } pinJoint)
+                _valveGear.Add((steam, crank, crank.GlobalTransform.AffineInverse() * V(pinJoint.At), body));
         }
         foreach (var spec in Runtime.Def.Lifts.Where(l => _pistons.ContainsKey(l.By)))
         {
@@ -89,6 +96,19 @@ public partial class MachineView
 
     private void DrivePistons()
     {
+        // an eccentric on the crankshaft: steam under the piston while the
+        // crank's forward turn raises it. The rod keeps its length, so the
+        // piston rises at (v_pin · u) / u_y, u along the rod from pin to piston:
+        // the valve turns at the piston's own dead centres, even with the
+        // cylinder set off the crank's line.
+        foreach (var (steam, crank, pin, piston) in _valveGear)
+        {
+            if (!_hinges.TryGetValue(crank, out var hinge)) continue;
+            var at = crank.GlobalTransform * pin;
+            var along = (piston.GlobalPosition - at).Normalized();
+            float rise = hinge.Axis.Cross(at - hinge.Pivot).Dot(along) / along.Y;
+            steam.Valve = rise >= 0 ? 1 : -1;
+        }
         foreach (var (cylinder, piston, bottom, _) in _cylinderDrives)
         {
             cylinder.PistonHeight = piston.GlobalPosition.Y - bottom;

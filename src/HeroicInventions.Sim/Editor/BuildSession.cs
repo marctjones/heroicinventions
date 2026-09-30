@@ -118,7 +118,7 @@ public sealed class BuildSession
         "mesh" => CreateMesh(cmd),
         "arbor" => CreateArbor(cmd),
         "sealed-air" => CreateSealedAir(cmd),
-        "atmospheric-cylinder" => CreateCylinder(cmd),
+        "atmospheric-cylinder" or "steam-cylinder" => CreateCylinder(cmd),
         "trigger" => CreateTrigger(cmd),
         "follow" => CreateFollow(cmd),
         "belt" => CreateBelt(cmd),
@@ -445,11 +445,13 @@ public sealed class BuildSession
     private string CreateCylinder(SList cmd)
     {
         string id = Id(cmd, 1);
-        string piston = Name(RequireKw(cmd, "piston"), $"atmospheric-cylinder {id} #:piston");
-        string boiler = Name(RequireKw(cmd, "steam-from"), $"atmospheric-cylinder {id} #:steam-from");
-        double? injection = Kw(cmd, "injection-temperature") is { } t ? Num(t, $"atmospheric-cylinder {id}") : null;
+        string head = ((SSymbol)cmd.Items[0]).Name;
+        string piston = Name(RequireKw(cmd, "piston"), $"{head} {id} #:piston");
+        string boiler = Name(RequireKw(cmd, "steam-from"), $"{head} {id} #:steam-from");
+        double? injection = Kw(cmd, "injection-temperature") is { } t ? Num(t, $"{head} {id}") : null;
         Snapshot();
-        Document.AddCylinder(id, piston, boiler, injection);
+        string? crank = Kw(cmd, "crank") is SSymbol cs ? cs.Name : null;
+        Document.AddCylinder(id, piston, boiler, injection, head == "steam-cylinder" ? "steam" : "atmospheric", crank);
         return $"cylinder {id}: {piston} fed by {boiler}";
     }
 

@@ -98,7 +98,13 @@ public sealed record ChannelSpec(string Id, PortRef From, PortRef? To, Vec3? End
 
 /// <summary>A Newcomen atmospheric cylinder driving Piston, with steam from Boiler.</summary>
 /// <summary>InjectionTemperature null: the jet water warms 40 K over the ambient it is drawn at.</summary>
-public sealed record CylinderSpec(string Id, string Piston, string Boiler, double? InjectionTemperature, SourceLocation? Location);
+public sealed record CylinderSpec(string Id, string Piston, string Boiler, double? InjectionTemperature, SourceLocation? Location)
+{
+    /// <summary>"atmospheric" (Newcomen: the air pushes, condensed steam pulls) or "steam" (high-pressure: the boiler's steam pushes).</summary>
+    public string Kind { get; init; } = "atmospheric";
+    /// <summary>A steam cylinder's crank: the wheel whose turn works its valve (an eccentric), or null.</summary>
+    public string? Crank { get; init; }
+}
 
 /// <summary>Two gears in mesh.</summary>
 public sealed record MeshSpec(string A, string B, SourceLocation? Location);
@@ -320,12 +326,16 @@ public sealed class MachineDef
                     Cells = c.Field("cells")?.Items.ElementAtOrDefault(1) is SNumber cells ? (int)cells.Value : null,
                 };
             }).ToList(),
-            Cylinders = clauses.Where(c => c.Head == "atmospheric-cylinder").Select(c =>
+            Cylinders = clauses.Where(c => c.Head is "atmospheric-cylinder" or "steam-cylinder").Select(c =>
             {
                 var loc = ParseLoc(c);
-                string Field(string f) => c.Field(f) is { } l ? Sym(l, 1, loc) : throw new MachineFormatException($"atmospheric-cylinder has no {f}", loc);
+                string Field(string f) => c.Field(f) is { } l ? Sym(l, 1, loc) : throw new MachineFormatException($"{c.Head} has no {f}", loc);
                 return new CylinderSpec(Sym(c, 1, loc), Field("piston"), Field("steam-from"),
-                                        c.Field("injection-temperature") is { } t && t.Items.ElementAtOrDefault(1) is SNumber ? Num(t, 1, loc) : null, loc);
+                                        c.Field("injection-temperature") is { } t && t.Items.ElementAtOrDefault(1) is SNumber ? Num(t, 1, loc) : null, loc)
+                {
+                    Kind = c.Head == "steam-cylinder" ? "steam" : "atmospheric",
+                    Crank = c.Field("crank")?.Items.ElementAtOrDefault(1) is SSymbol cr ? cr.Name : null,
+                };
             }).ToList(),
             Triggers = clauses.Where(c => c.Head == "trigger").Select(ParseTrigger).ToList(),
             Follows = clauses.Where(c => c.Head == "follow").Select(ParseFollow).ToList(),

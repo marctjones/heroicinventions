@@ -27,7 +27,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, JetWheel> _jetWheels = [];
     private readonly List<AirPocket> _air = [];
     private readonly Dictionary<string, WaterLift> _lifts = [];
-    private readonly Dictionary<string, AtmosphericCylinder> _cylinders = [];
+    private readonly Dictionary<string, ICylinder> _cylinders = [];
     private readonly Dictionary<string, WaterSource> _sources = [];
     private readonly Dictionary<string, Trigger> _triggers = [];
     private readonly Dictionary<string, Follow> _follows = [];
@@ -81,7 +81,7 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, JetWheel> JetWheels => _jetWheels;
     public IReadOnlyList<AirPocket> AirPockets => _air;
     public IReadOnlyDictionary<string, WaterLift> Lifts => _lifts;
-    public IReadOnlyDictionary<string, AtmosphericCylinder> Cylinders => _cylinders;
+    public IReadOnlyDictionary<string, ICylinder> Cylinders => _cylinders;
     public IReadOnlyDictionary<string, WaterSource> Sources => _sources;
     /// <summary>Triggers, by id. Body triggers are tested by the view that owns the bodies, through <see cref="TestBodyTrigger"/>.</summary>
     public IReadOnlyDictionary<string, Trigger> Triggers => _triggers;
@@ -629,10 +629,12 @@ public sealed class MachineRuntime
             var piston = def.Part(c.Piston) ?? throw new MachineFormatException($"cylinder {c.Id}: no piston {c.Piston}", c.Location);
             if (!_boilers.TryGetValue(c.Boiler, out var boiler))
                 throw new MachineFormatException($"cylinder {c.Id}: {c.Boiler} is not a boiler", c.Location);
-            _cylinders[c.Id] = new AtmosphericCylinder(c.Id, boiler, piston.Number("bore"), piston.Number("stroke"), c.InjectionTemperature ?? _ambient + 40) // jet water warms ~40 K condensing the steam
-            {
-                PistonHeight = piston.Number("start", 0) * piston.Number("stroke"),
-            };
+            _cylinders[c.Id] = c.Kind == "steam"
+                ? new SteamCylinder(c.Id, boiler, piston.Number("bore")) { PistonHeight = piston.Number("start", 0) * piston.Number("stroke") }
+                : new AtmosphericCylinder(c.Id, boiler, piston.Number("bore"), piston.Number("stroke"), c.InjectionTemperature ?? _ambient + 40) // jet water warms ~40 K condensing the steam
+                {
+                    PistonHeight = piston.Number("start", 0) * piston.Number("stroke"),
+                };
             _cylinders[c.Id].Prime();
         }
 
@@ -1543,6 +1545,13 @@ public sealed class MachineRuntime
             _getters[$"{id}.injecting"] = () => c.Injecting ? 1 : 0;
             _getters[$"{id}.steam-used"] = () => c.SteamUsed;          // kg
             _setters[$"{id}.piston-height"] = h => c.PistonHeight = h;
+            if (c is SteamCylinder sc)
+            {
+                _getters[$"{id}.work"] = () => sc.Work;                          // J the steam has done on the piston
+                _getters[$"{id}.stroke-work"] = () => sc.LastStrokeWork;         // J, the last full stroke
+                _getters[$"{id}.stroke-length"] = () => sc.LastStrokeLength;     // m it travelled
+                _getters[$"{id}.exhaust-pressure"] = () => sc.Zone.Pressure / 1000;   // kPa it exhausts into
+            }
         }
         foreach (var air in _air)
             foreach (var tank in _tanks.Values.Where(t => t.Air == air))
