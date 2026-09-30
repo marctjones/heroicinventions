@@ -17,10 +17,26 @@ namespace HeroicInventions.Sim.Mechanics;
 /// u = v/2 at ṁv²/4: half the jet's kinetic energy, the rest splashing off
 /// flat paddles. (Pelton's cupped buckets turn the jet round and get twice
 /// that; the difference is the reason they replaced flat paddles.)
+///
+/// The same wheel can be driven by hot air instead: a smoke jack, the vane
+/// wheel set in a kitchen chimney that turned the roasting spit. Then the
+/// driving flow is the chimney's draught: the heat going up the flue warms
+/// the air by ΔT = Q/(ṁ·cp), and a column of warm air H tall rises at
+/// v = Cd·√(2·g·H·ΔT/T_hot) (the stack effect), carrying ṁ = ρ_hot·A·v. Those
+/// two are solved together each step. The air is slow, a metre or two a
+/// second, so a smoke jack turns slowly and weakly, but for as long as the
+/// fire burns.
 /// </summary>
-public sealed class JetWheel(Boiler boiler)
+public sealed class JetWheel(Boiler? boiler)
 {
-    public Boiler Boiler { get; } = boiler;
+    /// <summary>The boiler whose spout drives it, or null for a smoke jack.</summary>
+    public Boiler? Boiler { get; } = boiler;
+
+    /// <summary>Smoke jack only: the heat going up the chimney, W (a hearth's share not taken by its pot).</summary>
+    public Func<double>? ChimneyHeat { get; init; }
+    public double ChimneyHeight { get; init; } = 2.0;         // m of warm air column
+    public double ChimneyArea { get; init; } = 0.05;          // m² of flue
+    public double AmbientTemperature { get; set; } = 20;      // °C of the air drawn in
     public double SpoutArea { get; init; } = 2e-5;            // m² (≈5 mm bore)
     public double DischargeCoefficient { get; init; } = 0.7;
     public double Radius { get; init; } = 0.15;               // m, axle to where the jet strikes the paddles
@@ -34,6 +50,26 @@ public sealed class JetWheel(Boiler boiler)
     /// wheel this, not the load, is what limits the speed.
     /// </summary>
     public double AirDrag { get; init; } = 1e-6;
+
+    /// <summary>
+    /// A chimney's draught for Q watts going up it: the warming ΔT and the
+    /// rising speed v found together, since the faster the air rises the less
+    /// each kilogram is warmed. Returns (v m/s, ṁ kg/s, ΔT K).
+    /// </summary>
+    public static (double Velocity, double MassFlow, double Warming) Draught(double heatW, double height, double area, double ambientC)
+    {
+        if (heatW <= 0) return (0, 0, 0);
+        const double cp = 1005, cd = 0.7;
+        double tAmb = Physics.ToKelvin(ambientC), dT = 100, v = 0, mdot = 0;
+        for (int i = 0; i < 60; i++)
+        {
+            double tHot = tAmb + dT;
+            v = cd * Math.Sqrt(2 * Physics.Gravity * height * dT / tHot);
+            mdot = Physics.AtmosphericPressure / (Physics.AirGasConstant * tHot) * area * v;
+            dT = 0.5 * dT + 0.5 * heatW / (mdot * cp);   // damped, so it settles rather than oscillates
+        }
+        return (v, mdot, dT);
+    }
 
     public static double Windage(double airDensity, int paddles, double paddleArea, double radius) =>
         0.5 * airDensity * 1.2 * paddles * paddleArea * radius * radius * radius;
@@ -52,14 +88,25 @@ public sealed class JetWheel(Boiler boiler)
     public double Power => Load * AngularVelocity;
     public double KineticEnergy => 0.5 * MomentOfInertia * AngularVelocity * AngularVelocity;
 
+    /// <summary>Smoke jack: how much the chimney air is warmed, K.</summary>
+    public double DraughtWarming { get; private set; }
+
     public void Step(double dt)
     {
-        double dp = Boiler.GaugePressure;
-        double rho = Boiler.SteamDensity;
-        double v = dp > 0 ? Math.Min(Math.Sqrt(2 * dp / rho), MaxJetVelocity) : 0;
+        double v;
+        if (Boiler is { } boiler)
+        {
+            double dp = boiler.GaugePressure;
+            double rho = boiler.SteamDensity;
+            v = dp > 0 ? Math.Min(Math.Sqrt(2 * dp / rho), MaxJetVelocity) : 0;
+            SteamFlow = DischargeCoefficient * SpoutArea * rho * v;
+            boiler.Step(dt, SteamFlow);
+        }
+        else
+        {
+            (v, SteamFlow, DraughtWarming) = Draught(ChimneyHeat?.Invoke() ?? 0, ChimneyHeight, ChimneyArea, AmbientTemperature);
+        }
         JetVelocity = v;
-        SteamFlow = DischargeCoefficient * SpoutArea * rho * v;
-        Boiler.Step(dt, SteamFlow);
 
         Push = SteamFlow * Math.Max(0, v - PaddleSpeed);
         double drive = Push * Radius;

@@ -82,6 +82,7 @@ public partial class MachineView : Node3D
                 case "boiler": BuildBoiler(part); break;
                 case "rotor": BuildRotor(part); break;
                 case "jetwheel": BuildJetWheel(part); break;
+                case "smokejack": BuildSmokeJack(part); break;
                 case "block": BuildBlock(part); break;
                 case "pendulum": BuildPendulum(part); break;
                 case "lever": BuildLever(part); break;
@@ -532,6 +533,61 @@ public partial class MachineView : Node3D
         AddChild(BuildSteamPuffs(() => wheel.SteamFlow, nozzle + new Vector3(0.07f + width, 0, 0)));
         _jetWheelViews.Add((wheel, node, jet));
         AddLabel(part.Id, axle + new Vector3(0, radius + 0.06f, 0));
+    }
+
+    private readonly List<(JetWheel jack, Node3D node)> _smokeJackViews = [];
+
+    /// <summary>
+    /// A smoke jack: an open-fronted brick chimney rising from its fire, and
+    /// inside it a wheel of angled vanes on an upright axle, turned by the
+    /// warm air going up (drawn as a faint shimmer while the fire burns).
+    /// </summary>
+    private void BuildSmokeJack(PartSpec part)
+    {
+        var jack = Runtime.JetWheels[part.Id];
+        float radius = (float)part.Number("radius");
+        float width = (float)part.Number("width", 0.06);
+        int vanes = (int)part.Number("vanes", 6);
+        float height = (float)part.Number("chimney-height", 2);
+        var at = V(part.At);
+        var fire = Runtime.Def.Part(part.Symbol("over", ""));
+        var fireAt = fire is null ? at with { Y = 0 } : V(fire.At);
+
+        // chimney: two brick walls round the flue (back and left), cut away on
+        // the two sides the camera looks from, so the vanes inside show
+        float half = radius + 0.06f;
+        var brick = Surface("limestone");
+        float bottom = fireAt.Y + 0.35f, top = fireAt.Y + height;
+        foreach (var (offset, size) in new[]
+        {
+            (new Vector3(0, 0, -half), new Vector3(half * 2, top - bottom, 0.04f)),
+            (new Vector3(-half, 0, 0), new Vector3(0.04f, top - bottom, half * 2)),
+        })
+        {
+            var wall = Shapes.Box(size, brick);
+            wall.Position = new Vector3(fireAt.X, (bottom + top) / 2, fireAt.Z) + offset;
+            AddChild(wall);
+        }
+
+        // the vane wheel on an upright axle
+        AddChild(Shapes.Rod(at + new Vector3(0, -0.1f, 0), at + new Vector3(0, 0.25f, 0), 0.006f, Surface("iron")));
+        var node = new Node3D { Position = at };
+        AddChild(node);
+        var surface = Surface(part.Material);
+        node.AddChild(Shapes.Cylinder(radius * 0.15f, 0.03f, surface));
+        for (int i = 0; i < vanes; i++)
+        {
+            float a = Mathf.Tau * i / vanes;
+            var dir = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+            var vane = Shapes.Box(new Vector3(radius * 0.85f, 0.004f, width), surface);
+            vane.Position = dir * (radius * 0.55f);
+            vane.Rotation = new Vector3(0, -a, 0);
+            vane.RotateObjectLocal(Vector3.Right, Mathf.DegToRad(35)); // pitched, so rising air turns it
+            node.AddChild(vane);
+        }
+        _smokeJackViews.Add((jack, node));
+        AddChild(BuildSteamPuffs(() => jack.JetVelocity > 0.05 ? 1 : 0, at + new Vector3(0, -0.25f, 0)));
+        AddLabel(part.Id, at + new Vector3(0, 0.3f, 0));
     }
 
     private void BuildBlock(PartSpec part)
@@ -1280,6 +1336,8 @@ public partial class MachineView : Node3D
         }
         foreach (var (steamFlow, puff) in _steamPuffs)
             puff.Emitting = steamFlow() > 1e-6;
+        foreach (var (jack, node) in _smokeJackViews)
+            node.Rotation = new Vector3(0, (float)jack.Angle, 0);
         foreach (var (wheel, node, jet) in _jetWheelViews)
         {
             node.Rotation = new Vector3(0, 0, (float)wheel.Angle);

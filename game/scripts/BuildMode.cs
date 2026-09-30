@@ -109,6 +109,7 @@ public partial class BuildMode : Node3D
         ["hearth"] = ("Fire (hearth)", "Fire, water and steam", "A wood fire. Pick the pot it heats in the inspector."),
         ["boiler"] = ("Pot with a lid (boiler)", "Fire, water and steam", "A litre of water with a steam spout on its lid. Heat it with a fire or mirrors."),
         ["jetwheel"] = ("Paddle wheel for a steam jet", "Fire, water and steam", "Branca's wheel: click the pot's steam point, then the wheel's, to aim the spout at its paddles."),
+        ["smokejack"] = ("Hot-air wheel (smoke jack)", "Fire, water and steam", "Vanes in a chimney turned by a fire's rising hot air. Pick the fire it sits over in the inspector."),
         ["rotor"] = ("Steam ball (aeolipile)", "Fire, water and steam", "Heron's ball, spun by its own steam jets. Connect a pot's steam to it."),
         ["mirror"] = ("Mirror", "Fire, water and steam", "Throws sunlight onto a pot. Pick the pot in the inspector."),
         ["bellows"] = ("Bellows", "Fire, water and steam", "Blows air into a fire so it burns hotter."),

@@ -104,6 +104,10 @@ public static class RktExporter
             case "jetwheel":
                 return $"  (jetwheel {p.Id} {At()} #:radius {F(N("radius"))} {Mat()} #:bore {F(N("bore"))} " +
                        $"#:paddles {F(N("paddles", 8))} #:width {F(N("width", 0.03))} #:mass {F(N("mass", 0.5))} #:load {F(N("load"))})\n";
+            case "smokejack":
+                return $"  (smokejack {p.Id} {At()} #:over {(p.Props.GetValueOrDefault("over") as SSymbol)?.Name ?? "?"} #:radius {F(N("radius"))} {Mat()} " +
+                       $"#:vanes {F(N("vanes", 6))} #:width {F(N("width", 0.06))} #:mass {F(N("mass", 0.3))} #:load {F(N("load"))} " +
+                       $"#:chimney-height {F(N("chimney-height", 2))} #:chimney-area {F(N("chimney-area", 0.05))})\n";
             case "block":
                 return $"  (block {p.Id} {At()} #:size {F(N("size"))} #:tilt-deg {F(N("tilt-deg"))}" +
                        (p.Props.ContainsKey("dim-x") ? $" #:dimensions ({F(N("dim-x"))} {F(N("dim-y"))} {F(N("dim-z"))})" : "") + $" {Mat()})\n";

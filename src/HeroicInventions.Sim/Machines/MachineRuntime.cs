@@ -197,7 +197,7 @@ public sealed class MachineRuntime
                         });
                     break;
                 case "mirror": break; // built once what it heats exists
-                case "rotor" or "jetwheel" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump":
+                case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -286,6 +286,27 @@ public sealed class MachineRuntime
             AddHeatSource(target, () => mirror.Power);
         }
         foreach (var (_, h) in _hearths) AddHeatSource(h.Target, () => h.HeatOut);
+
+        foreach (var part in def.Parts.Where(p => p.Kind == "smokejack"))
+        {
+            var over = part.Symbol("over", "");
+            if (!_hearths.TryGetValue(over, out var fire))
+                throw new MachineFormatException($"smokejack {part.Id} is over {over}, which is not a fire (hearth)", part.Location);
+            double radius = part.Number("radius");
+            _jetWheels[part.Id] = new JetWheel(null)
+            {
+                // what the pot doesn't take goes up the chimney
+                ChimneyHeat = () => fire.Efficiency > 0 ? fire.HeatOut * (1 - fire.Efficiency) / fire.Efficiency : 0,
+                ChimneyHeight = part.Number("chimney-height", 2),
+                ChimneyArea = part.Number("chimney-area", 0.05),
+                AmbientTemperature = _ambient,
+                Radius = radius,
+                MomentOfInertia = Math.Max(1e-5, part.Number("mass", 0.3) * radius * radius),
+                Load = part.Number("load", 0),
+                AirDrag = JetWheel.Windage(Physics.AirDensityAt(_ambient), (int)part.Number("vanes", 6),
+                                           part.Number("width", 0.06) * part.Number("width", 0.06), radius),
+            };
+        }
 
         foreach (var part in def.Parts.Where(p => p.Kind == "bellows"))
         {
@@ -646,6 +667,8 @@ public sealed class MachineRuntime
             _getters[$"{id}.push"] = () => w.Push;
             _getters[$"{id}.power"] = () => w.Power;
             _getters[$"{id}.load"] = () => w.Load;
+            _getters[$"{id}.air-flow"] = () => w.SteamFlow;               // kg/s, for a smoke jack
+            _getters[$"{id}.warming"] = () => w.DraughtWarming;             // K, for a smoke jack
             _setters[$"{id}.load"] = nm => w.Load = Math.Max(0, nm);
         }
         foreach (var (id, pipe) in _pipes)

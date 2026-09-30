@@ -1081,3 +1081,17 @@
   (define run (simulate 'solar-steam-wheel #:seconds 900 #:step 0.01 #:sample-dt 100))
   (check-true (> (final-of run '(pot temperature)) 100) "the pot boils")
   (check-true (> (final-of run '(wheel rpm)) 300) (format "the wheel turns at ~a rpm" (final-of run '(wheel rpm)))))
+
+(test-case "Kitchen smoke jack: the chimney's draught carries the fire's waste heat, and the vanes balance its push against the spit"
+  (define run (simulate 'kitchen-smoke-jack #:seconds 300 #:step 0.01 #:sample-dt 100))
+  (define v (final-of run '(jack jet-speed)))
+  (define mdot (final-of run '(jack air-flow)))
+  (define dT (final-of run '(jack warming)))
+  (check-= (* mdot 1005 dT) 1500 15 "half the 3 kW fire goes up the flue, warming the air")
+  (check-= v (* 0.7 (sqrt (/ (* 2 9.81 2 dT) (+ 293.15 dT)))) 0.01 "the stack effect of a 2 m flue")
+  ;; mdot (v - w r) r = load + bearing + windage w^2
+  (define r 0.12)
+  (define drag (* 0.5 1.2041 1.2 6 0.06 0.06 r r r))
+  (define a drag) (define b (* mdot r r)) (define c (- 0.005 (* mdot v r)))
+  (define w (/ (+ (- b) (sqrt (- (* b b) (* 4 a c)))) (* 2 a)))
+  (check-= (final-of run '(jack omega)) w (* 0.01 w)))

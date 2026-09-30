@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -45,6 +45,15 @@ public static class PartTemplates
             Props(("radius", 0.15), ("bore", 0.0025), ("paddles", 8), ("width", 0.03), ("mass", 0.5), ("load", 0)),
             [new PortSpec("steam-in", "steam", 0)],
             null),
+        // a smoke jack: vanes in a chimney, turned by a fire's rising hot air
+        "smokejack" => new PartSpec(id, "smokejack", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["over"] = new SSymbol("?"), ["radius"] = new SNumber(0.15), ["vanes"] = new SNumber(6),
+                ["width"] = new SNumber(0.06), ["mass"] = new SNumber(0.3), ["load"] = new SNumber(0),
+                ["chimney-height"] = new SNumber(2), ["chimney-area"] = new SNumber(0.05),
+            },
+            [], null),
         // Heron's aeolipile: a sphere spun by its own steam jets
         "rotor" => new PartSpec(id, "rotor", material, at,
             Props(("radius", 0.06), ("wall", 0.001), ("bore", 0.002), ("arm", 0.08), ("nozzles", 2)),
