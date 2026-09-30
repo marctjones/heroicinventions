@@ -56,6 +56,8 @@
            (λ () (drum #:radius r #:length (* 4 r)))))
    ;; Cart wheels: a solid plank wheel, and spoked wheels the size of a
    ;; handcart's (30 cm) and a farm cart's (60 cm)
+   ;; a pair of millstones for a water mill: 48 inches (1.22 m) across, 30 cm thick
+   (list (list 'millstone-48in "Millstone (the runner), 48 inches across" (λ () (disc-wheel #:radius 0.61 #:width 0.3 #:bore 0.08))))
    (list (list 'disc-wheel-30cm "Solid disc wheel, 30 cm across" (λ () (disc-wheel #:radius 0.15 #:width 0.05))))
    (for/list ([r '(0.3 0.6)])
      (list (string->symbol (format "cart-wheel-~acm" (inexact->exact (round (* 200 r)))))

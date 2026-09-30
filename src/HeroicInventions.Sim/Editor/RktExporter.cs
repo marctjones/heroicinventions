@@ -238,7 +238,7 @@ public static class RktExporter
                 {
                     "wheel" => $" #:axis {Sym("axis", "z")} #:angle-deg {F(N("angle-deg"))}" + Opt("tilt-deg", "tilt-deg") +
                                 (p.Props.TryGetValue("on", out var on) && on is SSymbol chassis ? $" #:on {chassis.Name}" : "") +
-                                Opt("rolling-resistance", "rolling-resistance") + $" #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque"),
+                                Opt("rolling-resistance", "rolling-resistance") + Opt("grind-torque", "grind-torque") + Opt("yield", "yield") + $" #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque"),
                     "screw" => $" #:tilt-deg {F(N("tilt-deg"))} #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque"),
                     _ => $" #:turn-deg {F(N("turn-deg"))}",
                 };

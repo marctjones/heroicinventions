@@ -124,6 +124,7 @@ public partial class MachineView : Node3D
         BuildPumps();
         BuildPistonDrives();
         BuildCarriedWheels();
+        BuildMillstones();
         BuildJoints();
         BuildImpacts();
         Refresh();
@@ -1057,7 +1058,7 @@ public partial class MachineView : Node3D
         // A round, evenly toothed wheel looks the same at every angle, so a
         // gear turning at 27 rpm read as frozen. A dark stripe from hub to
         // rim on each face shows it turning.
-        if (part.Symbol("shape", "") is "gear" or "pulley" or "drum")
+        if (part.Symbol("shape", "") is "gear" or "pulley" or "drum" or "disc-wheel")
         {
             float radius = Mathf.Min(extent.X, extent.Y) / 2;
             var stripe = Shapes.Mat(new Color(0.12f, 0.1f, 0.09f));
@@ -1361,6 +1362,7 @@ public partial class MachineView : Node3D
         DrivePistons();
         DriveSprings();
         RollCarriedWheels();
+        GrindMillstones(dt);
         DriveFollows();
         DriveBelts(dt);
         DriveGrips(dt);
@@ -1477,6 +1479,7 @@ public partial class MachineView : Node3D
         DrawImpacts();
         DrawBelts();
         DrawJoints();
+        DrawMillstones();
         DrawGrips();
         DrawCams();
         DrawSafetyValves();

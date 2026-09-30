@@ -1165,6 +1165,21 @@
     (check-= (at 8 'rail-wagon.x) (at 0 'rail-wagon.x) 0.01 "and stays on its rails")
     (check-true (< (abs (- (at 8 'road-wagon.z) (at 0 'road-wagon.z))) 0.005) "the road wagon holds")))
 
+(test-case "Gristmill: 267 N.m at 120 rpm is 3,356 W, which sharp stones turn into 181 kg of flour an hour and dull ones 80.5; a weaker wheel stalls"
+  ;; predicted before the first run (gristmill.rkt): 54 and 24 kg/kWh
+  (when (godot-available?)
+    (define run (godot-simulate 'gristmill #:seconds 60 #:sample-dt 10))
+    (define (at t key) (cadr (assq key (cdr (for/first ([f run] #:when (>= (car f) (- t 1e-6))) f)))))
+    (define w (* 120 (/ (* 2 pi) 60)))
+    (check-= (at 60 'sharp.omega) w 0.01 "up to 120 rpm")
+    (check-= (at 60 'sharp.grinding-power) (* 267 w) 5)
+    (for ([stone '(sharp dull)] [yield '(54 24)])
+      (define key (string->symbol (format "~a.flour" stone)))
+      (define rate (/ (- (at 60 key) (at 30 key)) 30))
+      (check-= rate (* yield (/ (* 267 w) 3.6e6)) (* 0.005 rate) (format "~a grinds ~a kg/h" stone (* 3600 rate))))
+    (check-true (< (at 60 'weak.omega) 0.02) "the weak wheel can't turn its stones")
+    (check-true (< (at 60 'weak.flour) 0.01) "and grinds next to nothing")))
+
 ;; ---------------------------------------------------------------------------
 ;; One real-game check for each remaining rigid-body machine, each against
 ;; the prediction in its .rkt header. Measured 2026-09-29 before writing;

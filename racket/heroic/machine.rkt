@@ -253,8 +253,16 @@
 ;; above all, which no rotor can take past the Betz limit.
 ;; A capstan's numbers are checked when the machine is built.
 ;; A wheel carried #:on a body (a cart's axle, not the world's): that body
-;; must be a block, the chassis.
+;; must be a block, the chassis. A millstone's torque and yield are numbers.
 (define (check-carried-wheels parts)
+  (for ([p parts] #:when (eq? (part-kind p) 'wheel))
+    (define loc (part-loc p))
+    (for ([key '(grind-torque yield)] #:when (assq key (part-props p)))
+      (define v (cdr (assq key (part-props p))))
+      (unless (and (real? v) (if (eq? key 'yield) (> v 0) (>= v 0)))
+        (error 'define-machine "~a:~a:~a: wheel ~a: #:~a must be ~a, got ~e"
+               (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) key
+               (if (eq? key 'yield) "above 0" "0 or more") v))))
   (for ([p parts] #:when (and (eq? (part-kind p) 'wheel) (assq 'on (part-props p))))
     (define on (cdr (assq 'on (part-props p))))
     (define loc (part-loc p))
@@ -738,7 +746,12 @@
     ;; resistance a torque C_rr N r against its turn (N the load on it):
     ;; #:rolling-resistance C_rr, else 0.002 for metal on metal (a railway
     ;; wheel on its rail) and 0.04 for anything else (a 19th-century stage
-    ;; coach on a dirt road; both from Wikipedia's table of coefficients). #:angle-deg sets where it starts turned to — how
+    ;; coach on a dirt road; both from Wikipedia's table of coefficients).
+    ;; #:grind-torque N·m makes it a millstone grinding grain: the miller's
+    ;; setting of the stones, which they resist the turn with, and every
+    ;; joule so spent grinds #:yield kg/kWh of flour (default 54: a pair of
+    ;; 48-inch French burr stones grinds 400 lb an hour on 4.5 hp, freshly
+    ;; dressed; nearer 24 on 10 hp when dull). #:angle-deg sets where it starts turned to — how
     ;; meshing gears are phased (see mate-angle). #:drive-rpm turns it at
     ;; that steady speed, as a man at a crank or a treadmill would; without
     ;; it the wheel turns only if something pushes it. #:drive-torque caps
@@ -755,6 +768,8 @@
                           (~optional (~seq #:tilt-deg tilt-v:expr))
                           (~optional (~seq #:on chassis:id))
                           (~optional (~seq #:rolling-resistance rr-v:expr))
+                          (~optional (~seq #:grind-torque grind-v:expr))
+                          (~optional (~seq #:yield yield-v:expr))
                           (~optional (~seq #:drive-rpm rpm-v:expr))
                           (~optional (~seq #:drive-torque torque-v:expr))) ...)
       #:attr info (pinfo #'id 'wheel (attribute mat) '())
@@ -763,6 +778,8 @@
                                        (~@ . (~? ((cons 'tilt-deg tilt-v)) ()))
                                        (~@ . (~? ((cons 'on 'chassis)) ()))
                                        (~@ . (~? ((cons 'rolling-resistance rr-v)) ()))
+                                       (~@ . (~? ((cons 'grind-torque grind-v)) ()))
+                                       (~@ . (~? ((cons 'yield yield-v)) ()))
                                        (cons 'drive-rpm (~? rpm-v 0)) (cons 'drive-torque (~? torque-v #f)))
                                  #,(loc-of this-syntax)))
 

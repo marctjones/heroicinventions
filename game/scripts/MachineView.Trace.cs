@@ -102,6 +102,12 @@ public partial class MachineView
                 Add($"{id}.impact-energy-total", struck.TotalEnergy);
             }
         }
+        foreach (var m in _millstones)
+        {
+            // flour ground so far (kg) and the power the grinding takes (W)
+            Add($"{m.Stone.Name}.flour", m.Flour);
+            Add($"{m.Stone.Name}.grinding-power", m.Power);
+        }
         foreach (var c in _carried)
         {
             // a cart wheel's load (N) and the rolling resistance against it (N·m)
