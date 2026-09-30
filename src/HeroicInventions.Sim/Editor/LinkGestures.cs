@@ -11,7 +11,7 @@ namespace HeroicInventions.Sim.Editor;
 /// </summary>
 public static class LinkGestures
 {
-    public enum Kind { Rope, Mesh, Arbor, SealedAir, Cylinder }
+    public enum Kind { Rope, Mesh, Arbor, SealedAir, Cylinder, Belt }
 
     /// <summary>How many parts a gesture takes: 2 for a rope, mesh or cylinder; any number from 2 for an arbor or shared air.</summary>
     public static (int Min, int? Max) Picks(Kind kind) => kind is Kind.Arbor or Kind.SealedAir ? (2, null) : (2, 2);
@@ -20,6 +20,7 @@ public static class LinkGestures
     {
         Kind.Rope => picked == 0 ? "Rope: click the part it starts on" : "Rope: click the part it ends on",
         Kind.Mesh => picked == 0 ? "Gear mesh: click the first gear" : "Gear mesh: click the gear it meshes with",
+        Kind.Belt => picked == 0 ? "Belt: click the driving drum" : "Belt: click the drum it drives",
         Kind.Cylinder => picked == 0 ? "Cylinder: click the piston (or the boiler)" : "Cylinder: click the boiler (or the piston)",
         Kind.Arbor => picked < 2 ? "Axle: click the wheels fixed on it (the first carries the bearing), then Enter" : $"Axle: {picked} wheels; click more, or press Enter",
         _ => picked < 2 ? "Shared air: click the tanks that share it, then Enter" : $"Shared air: {picked} tanks; click more, or press Enter",
@@ -46,6 +47,9 @@ public static class LinkGestures
                 if (doc.Meshes.Any(x => x.A == picks[0] && x.B == picks[1] || x.A == picks[1] && x.B == picks[0]))
                     throw new InvalidOperationException($"{picks[0]} and {picks[1]} are already meshed");
                 return $"(mesh {picks[0]} {picks[1]})";
+            case Kind.Belt:
+                Require(parts, "wheel", "a drum or wheel", "a belt runs on drums");
+                return $"(belt {NextId(doc, "belt")} {picks[0]} {picks[1]} #:tension 100)";
             case Kind.Arbor:
                 Require(parts, "wheel", "a wheel", "an axle carries wheels");
                 return $"(arbor {string.Join(' ', picks)})";
@@ -77,6 +81,8 @@ public static class LinkGestures
         foreach (var t in doc.Triggers.Where(t => t.Body == id || t.WatchTarget == id || t.Actions.Any(a => a.Target == id)))
             links.Add(($"trigger {t.Id}: " + (t.Body is { } b ? $"fires when {b} arrives" : $"fires when {t.WatchTarget}.{t.WatchField} goes {(t.Rising ? "above" : "below")} {t.Threshold:0.###}") +
                        $", sets {string.Join(", ", t.Actions.Select(a => $"{a.Target}.{a.Field} to {a.Value:0.###}"))}", $"(remove {t.Id})", null));
+        foreach (var b in doc.Belts.Where(b => b.A == id || b.B == id))
+            links.Add(($"belt {b.Id}: {b.A} drives {b.B}, {b.Tension:0.#} N", $"(remove {b.Id})", null));
         foreach (var f in doc.Follows.Where(f => f.Lever == id || f.Target == id))
             links.Add(($"follow {f.Id}: {f.Target}.{f.Field} follows {(f.Lever is { } lv ? $"{lv}'s angle" : $"{f.Rope}'s pull")}", $"(remove {f.Id})", null));
         return links;

@@ -1377,3 +1377,37 @@
       (check-= (cadr (assq 'cistern.water (cdr fa))) (cadr (assq 'cistern.water (cdr f1))) 1e-6
                (format "at ~a s the edited cistern drains as the untouched pair" (car f1))))
     (check-not-false (assq 'extra.y (cdr (last a))) "the edit happened")))
+
+
+(test-case "Belt drive: a tight belt grips at half speed, a loose one slips at exactly its limit"
+  ;; drums of 10 and 20 cm, 60 cm apart, hemp mu 0.5: wrap pi - 2 asin(1/6) = 160.8 degrees;
+  ;; the belt carries F = 2 T0 tanh(mu theta / 2) = 1.2109 T0 -- 6.054 N at 5 N, 12.109 N at 10 N --
+  ;; against a 1.0 N.m motor on a 10 cm pulley, which needs 10 N: the loose belt cannot carry it
+  (when (godot-available?)
+    (define run (godot-simulate 'belt-drive #:seconds 3 #:sample-dt 0.25))
+    (check-= (final-of run '(tight-belt wrap)) 160.8 0.1)
+    (check-= (final-of run '(tight-belt capacity)) 12.109 0.01)
+    (check-= (final-of run '(loose-belt capacity)) 6.054 0.01)
+    (check-= (/ (final-of run '(tight-belt capacity)) (final-of run '(loose-belt capacity))) 2.0 1e-9
+             "twice the tension, twice the force")
+    ;; loose: slipping the whole time, and the force it carries is its limit to the newton's hundredth
+    (for ([t (in-list '(0.25 0.5 1.0 2.0 3.0))])
+      (check-= (value-at run '(loose-belt force) t) 6.054 0.05 (format "loose belt force at ~a s" t))
+      (check-true (> (value-at run '(loose-belt slip) t) 1.0) (format "loose belt slipping at ~a s" t)))
+    ;; before the engine's 47.1 rad/s cap on any body: the small pulley at 85.6 rad/s2 (21.4 at 0.25 s), the
+    ;; big one at about 2 rad/s, a ratio of 0.09 and not the 0.5 of a belt that holds
+    (check-= (value-at run '(loose-driver omega) 0.25) 21.4 1.0)
+    (check-= (value-at run '(loose-driven omega) 0.25) 2.0 0.4)
+    (check-true (< (/ (value-at run '(loose-driven omega) 0.25) (value-at run '(loose-driver omega) 0.25)) 0.15))
+    ;; tight: never slips, carries less than its limit until the drums reach the engine's speed cap, and the
+    ;; big pulley turns at half the small one's speed, a little under while they are slow (the belt is a tick behind)
+    (for ([t (in-list '(0.5 1.0 1.5 2.0 2.5))])
+      (check-= (value-at run '(tight-belt slip) t) 0 1e-9 (format "tight belt slip at ~a s" t))
+      (check-true (< (value-at run '(tight-belt force) t) 12.109) (format "tight belt inside its limit at ~a s" t)))
+    (for ([t (in-list '(1.0 2.0 3.0))])
+      (define ratio (/ (value-at run '(tight-driven omega) t) (value-at run '(tight-driver omega) t)))
+      (check-= ratio 0.5 (* 0.5 0.12) (format "tight belt ratio at ~a s" t))
+      (check-true (<= ratio 0.5001)))
+    (check-= (/ (value-at run '(tight-driven omega) 3.0) (value-at run '(tight-driver omega) 3.0)) 0.5 0.03)
+    ;; and they speed up together, near 24.1 rad/s2 less the bearings' drag: 22 rad/s at 1 s
+    (check-= (value-at run '(tight-driver omega) 1.0) 22.3 1.5)))

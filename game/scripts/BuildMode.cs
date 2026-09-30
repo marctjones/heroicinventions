@@ -380,6 +380,7 @@ public partial class BuildMode : Node3D
         {
             (LinkGestures.Kind.Rope, "Rope", "A rope between two parts (click one, then the other); trim its length in the inspector"),
             (LinkGestures.Kind.Mesh, "Gear mesh", "Two gears in mesh (click both)"),
+            (LinkGestures.Kind.Belt, "Belt", "An open belt from a driving drum to a driven one (click both); set its tension in the console with (belt …)"),
             (LinkGestures.Kind.Arbor, "Axle", "Wheels fixed on one axle: click them, then Enter. The first carries the bearing"),
             (LinkGestures.Kind.SealedAir, "Shared air", "Tanks sharing one sealed air space: click them, then Enter"),
             (LinkGestures.Kind.Cylinder, "Cylinder", "A piston joined to the boiler that feeds it (click both)"),
@@ -844,6 +845,13 @@ public partial class BuildMode : Node3D
                 take.Pressed += () => RunCommand(remove);
                 row.AddChild(take);
                 _inspector.AddChild(row);
+                if (_session.Document.Belts.FirstOrDefault(b => remove == $"(remove {b.Id})") is { } belt)
+                {
+                    var tighten = new HBoxContainer();
+                    tighten.AddChild(new Label { Text = "  tension (N)" });
+                    tighten.AddChild(NumberField(belt.Tension, text => { if (TryNumber(text, out double v)) RunCommand($"(set-belt {belt.Id} #:tension {F(v)})"); }));
+                    _inspector.AddChild(tighten);
+                }
                 if (ropeId is not null && _session.Document.Ropes.FirstOrDefault(r => r.Id == ropeId) is { } rope)
                 {
                     var trim = new HBoxContainer();

@@ -43,6 +43,7 @@ public sealed class EditorDocument
     public IReadOnlyList<CylinderSpec> Cylinders => _cylinders;
     public IReadOnlyList<TriggerSpec> Triggers => _triggers;
     public IReadOnlyList<FollowSpec> Follows => _follows;
+    public IReadOnlyList<BeltSpec> Belts => _belts;
     public IReadOnlyList<SourceSpec> Sources => _sources;
     public IReadOnlyList<ChannelSpec> Channels => _channels;
     public IReadOnlyList<LiftSpec> Lifts => _lifts;
@@ -59,6 +60,7 @@ public sealed class EditorDocument
     private IReadOnlyList<SealedAirSpec> _sealedAir = [];
     private IReadOnlyList<TriggerSpec> _triggers = [];
     private IReadOnlyList<FollowSpec> _follows = [];
+    private IReadOnlyList<BeltSpec> _belts = [];
 
     /// <summary>Starts a fresh, empty document.</summary>
     public static EditorDocument New(string name) => new() { Name = name };
@@ -80,6 +82,7 @@ public sealed class EditorDocument
         doc._sealedAir = def.SealedAir;
         doc._triggers = def.Triggers;
         doc._follows = def.Follows;
+        doc._belts = def.Belts;
         int maxPipe = def.Pipes.Select(p => int.TryParse(p.Id.AsSpan(p.Id.LastIndexOf('-') + 1), out int n) ? n : 0).DefaultIfEmpty(0).Max();
         doc._nextPipeId = maxPipe + 1;
         return doc;
@@ -119,18 +122,19 @@ public sealed class EditorDocument
         // a follow with its lever gone, its rope gone or nothing left to set
         _follows = _follows.Where(f => f.Lever != id && f.Target != id).ToList();
         _follows = _follows.Where(f => f.Rope is null || _ropes.Any(r => r.Id == f.Rope)).ToList();
+        _belts = _belts.Where(b => b.A != id && b.B != id).ToList();
     }
 
     /// <summary>True if a part or a link (pipe, rope, inflow, channel, lift, cylinder) has this id — what a prop like a sluice's #:on or a wheel's #:race may name.</summary>
     public bool HasName(string id) =>
         _parts.ContainsKey(id) || _pipes.ContainsKey(id) || _ropes.Any(r => r.Id == id) || _sources.Any(s => s.Id == id) ||
-        _channels.Any(c => c.Id == id) || _lifts.Any(l => l.Id == id) || _cylinders.Any(c => c.Id == id) || _triggers.Any(t => t.Id == id) || _follows.Any(f => f.Id == id);
+        _channels.Any(c => c.Id == id) || _lifts.Any(l => l.Id == id) || _cylinders.Any(c => c.Id == id) || _triggers.Any(t => t.Id == id) || _follows.Any(f => f.Id == id) || _belts.Any(b => b.Id == id);
 
     /// <summary>Removes the pipe, rope, inflow, channel, lift or cylinder with this id; false if none has it.</summary>
     public bool RemoveLink(string id)
     {
         if (_pipes.Remove(id)) return true;
-        int before = _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count + _triggers.Count + _follows.Count;
+        int before = _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count + _triggers.Count + _follows.Count + _belts.Count;
         _ropes = _ropes.Where(r => r.Id != id).ToList();
         _sources = _sources.Where(s => s.Id != id).ToList();
         _channels = _channels.Where(c => c.Id != id).ToList();
@@ -139,7 +143,8 @@ public sealed class EditorDocument
         _triggers = _triggers.Where(t => t.Id != id).ToList();
         _follows = _follows.Where(f => f.Id != id).ToList();
         _follows = _follows.Where(f => f.Rope is null || _ropes.Any(r => r.Id == f.Rope)).ToList();   // a rope removed takes its follows
-        return _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count + _triggers.Count + _follows.Count != before;
+        _belts = _belts.Where(b => b.Id != id).ToList();
+        return _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count + _triggers.Count + _follows.Count + _belts.Count != before;
     }
 
     /// <summary>Removes the mesh joining these two gears; false if they are not meshed.</summary>
@@ -373,6 +378,16 @@ public sealed class EditorDocument
         return follow;
     }
 
+    /// <summary>Adds a belt clause unchecked — see <see cref="AddPipe"/>.</summary>
+    public BeltSpec AddBelt(BeltSpec belt)
+    {
+        if (_belts.Any(b => b.Id == belt.Id)) throw new InvalidOperationException($"a belt named {belt.Id} already exists");
+        _belts = [.. _belts, belt];
+        return belt;
+    }
+
+    public void ReplaceBelt(BeltSpec belt) => _belts = _belts.Select(b => b.Id == belt.Id ? belt : b).ToList();
+
     /// <summary>Joins a piston to the boiler that feeds its cylinder.</summary>
     public CylinderSpec AddCylinder(string id, string piston, string boiler, double? injectionTemperature)
     {
@@ -403,5 +418,6 @@ public sealed class EditorDocument
         Cylinders = _cylinders,
         Triggers = _triggers,
         Follows = _follows,
+        Belts = _belts,
     };
 }

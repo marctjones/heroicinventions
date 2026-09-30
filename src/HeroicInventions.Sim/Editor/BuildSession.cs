@@ -43,6 +43,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (trigger id #:at (x y z) #:size (w h d) #:body part #:do ((target field value) ...))   ; fires once when the part's centre enters the box
 ///   (trigger id #:when (target field above|below value) #:do ((target field value) ...)) ; fires once when a field crosses the value
 ///   (follow id #:lever part|#:rope rope #:from a #:to b #:set (target field) [#:low v] [#:high v])   ; a field follows a lever's angle (deg) or a rope's tension (N)
+///   (belt id drum drum #:tension N [#:material M])   ; an open belt between two drums; carries at most 2·T0·tanh(μθ/2) before it slips
 ///   (port part name kind height) (remove-port part name)   ; add or replace a port on a part
 ///   (set-rope id #:length L [#:diameter D] [#:material M] [#:release-deg d] [#:wind-on part] [#:turns part] [#:nocked #t] [#:bar M|#f] [#:mu μ|#f])   ; change a rope
 ///   (unmesh a b) (unarbor part) (remove-air tank)   ; take a link apart again
@@ -116,6 +117,8 @@ public sealed class BuildSession
         "atmospheric-cylinder" => CreateCylinder(cmd),
         "trigger" => CreateTrigger(cmd),
         "follow" => CreateFollow(cmd),
+        "belt" => CreateBelt(cmd),
+        "set-belt" => SetBelt(cmd),
         "port" => SetPort(cmd),
         "remove-port" => RemovePortCmd(cmd),
         "set-rope" => SetRope(cmd),
@@ -434,6 +437,30 @@ public sealed class BuildSession
         Snapshot();
         Document.AddCylinder(id, piston, boiler, injection);
         return $"cylinder {id}: {piston} fed by {boiler}";
+    }
+
+    /// <summary>(set-belt id #:tension N [#:material M]): tighten or slacken a belt.</summary>
+    private string SetBelt(SList cmd)
+    {
+        string id = Id(cmd, 1);
+        var belt = Document.Belts.FirstOrDefault(b => b.Id == id) ?? throw new InvalidOperationException($"no belt named {id}");
+        var next = belt;
+        if (Kw(cmd, "tension") is { } t) next = next with { Tension = Num(t, $"belt {id} #:tension") };
+        if (Kw(cmd, "material") is SSymbol m) next = next with { Material = m.Name };
+        if (next.Tension <= 0) throw new FormatException($"belt {id}: #:tension must be more than 0");
+        Snapshot();
+        Document.ReplaceBelt(next);
+        return $"belt {id}: {next.Tension} N";
+    }
+
+    private string CreateBelt(SList cmd)
+    {
+        string id = Id(cmd, 1), a = Id(cmd, 2), b = Id(cmd, 3);
+        double tension = Num(RequireKw(cmd, "tension"), $"belt {id} #:tension");
+        string material = Kw(cmd, "material") is SSymbol m ? m.Name : "hemp";
+        Snapshot();
+        Document.AddBelt(new BeltSpec(id, a, b, tension, material, null));
+        return $"belt {id}: {a} and {b}, {tension} N";
     }
 
     private string CreateFollow(SList cmd)

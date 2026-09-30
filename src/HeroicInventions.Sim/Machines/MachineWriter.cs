@@ -38,6 +38,7 @@ public static class MachineWriter
         foreach (var a in m.SealedAir) clauses.Add(SealedAirClause(a));
         foreach (var t in m.Triggers) clauses.Add(TriggerClause(t));
         foreach (var f in m.Follows) clauses.Add(FollowClause(f));
+        foreach (var b in m.Belts) clauses.Add(Tagged("belt", Sym(b.Id), Sym(b.A), Sym(b.B), Tagged("tension", Num(b.Tension)), Tagged("material", Sym(b.Material)), SrcLoc(b.Location)));
 
         var w = new System.Text.StringBuilder();
         w.Append(";; Saved by the in-game editor. Building from Racket will replace this file.\n");

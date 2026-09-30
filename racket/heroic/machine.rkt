@@ -38,18 +38,18 @@
 (provide define-machine
          tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
-         inflow channel off trigger follow
+         inflow channel off trigger follow belt
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
          (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec) (struct-out lift-spec) (struct-out cylinder-spec)
-         (struct-out inflow-spec) (struct-out channel-spec) (struct-out trigger-spec) (struct-out follow-spec)
+         (struct-out inflow-spec) (struct-out channel-spec) (struct-out trigger-spec) (struct-out follow-spec) (struct-out belt-spec)
          take-registered-machines
          planet make-planet planet? planet-field planet-name earth-planet?)
 
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source ambient sun planet parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers follows) #:transparent)
+(struct machine (name source ambient sun planet parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers follows belts) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -74,6 +74,9 @@
 ;; by: the screw or noria that lifts; from, to: tanks; current: a river's
 ;; speed (m/s) pushing a noria's paddles, or #f.
 (struct lift-spec (id by from to current current-from loc) #:transparent)
+;; An open belt between two drums a and b (wheel part ids), pretensioned to `tension` N,
+;; gripping as far as the friction of `material` allows.
+(struct belt-spec (id a b tension material loc) #:transparent)
 ;; A field that follows a mechanism: lever (a part id) or rope (a rope id), the other #f;
 ;; the input (degrees turned, or newtons of tension) runs from `from` to `to`, and the field
 ;; target.field from `low` to `high`, linearly and held at the ends.
@@ -311,7 +314,8 @@
            (filter inflow-spec? items)
            (filter channel-spec? items)
            (filter trigger-spec? items)
-           (filter follow-spec? items)))
+           (filter follow-spec? items)
+           (filter belt-spec? items)))
 
 ;; Machines register themselves when their module runs, so the build
 ;; script can collect every machine in a file without knowing their names.
@@ -331,7 +335,7 @@
 
 (define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
-  inflow channel off trigger follow)
+  inflow channel off trigger follow belt)
 
 ;; A part built from a generated shape (see heroic/geometry). The shape is
 ;; an ordinary runtime value, so whether it suits the clause is checked
@@ -377,6 +381,7 @@
   (struct puinfo (id from to mat))   ; a lift pump: the tank it draws from, the tank it fills
   (struct cpinfo (id vessel))        ; a counterpoise: the tank that hangs from it
   (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
+  (struct beinfo (id a b))           ; a belt: the two drums it runs on
   (struct fwinfo (id lever rope))    ; a follow: the lever it follows, or the rope
   (struct trinfo (id body))          ; a trigger: the part it watches, or #f
   (struct chinfo (id from to onto))  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
@@ -422,7 +427,7 @@
 
   (define-syntax-class clause
     #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow)
+    #:literals (tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1172,6 +1177,18 @@
       #:with expr #`(follow-spec 'id '(~? lever-id #f) '(~? rope-id #f) from-v to-v 'st 'sf (~? low-v 0) (~? high-v 1)
                                  #,(loc-of this-syntax)))
 
+    ;; An open belt between two drums, a and b (wheels, pulleys or drums on
+    ;; parallel axles), pretensioned to #:tension N. While it grips, their
+    ;; rims run at the same speed, so b turns at r_a/r_b of a; it carries at
+    ;; most 2 T0 tanh(mu theta / 2) before it slips, theta the wrap on the
+    ;; smaller drum and mu the friction of #:material (default hemp). Tighten
+    ;; it and it carries more: set (belt tension N) at run time.
+    (pattern (belt id:id a:id b:id
+                   (~alt (~once (~seq #:tension tension-v:expr))
+                         (~optional (~seq #:material mat:id))) ...)
+      #:attr info (beinfo #'id #'a #'b)
+      #:with expr #`(belt-spec 'id 'a 'b tension-v '(~? mat hemp) #,(loc-of this-syntax)))
+
     (pattern (mesh a:id b:id)
       #:attr info (minfo #'a #'b)
       #:with expr #`(mesh-spec 'a 'b #,(loc-of this-syntax)))
@@ -1356,6 +1373,12 @@
     (for ([t infos] #:when (and (trinfo? t) (trinfo-body t)))
       (unless (hash-ref parts (syntax-e (trinfo-body t)) #f)
         (fail (format "~a is not a part; a trigger watches a part's centre" (syntax-e (trinfo-body t))) (trinfo-body t))))
+
+    (for ([bt infos] #:when (beinfo? bt))
+      (for ([d (list (beinfo-a bt) (beinfo-b bt))])
+        (define p (hash-ref parts (syntax-e d) #f))
+        (unless (and p (eq? (pinfo-kind p) 'wheel))
+          (fail (format "~a is not a wheel, pulley or drum; a belt runs on two of them" (syntax-e d)) d))))
 
     (for ([f infos] #:when (and (fwinfo? f) (fwinfo-lever f)))
       (define p (hash-ref parts (syntax-e (fwinfo-lever f)) #f))

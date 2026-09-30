@@ -143,6 +143,9 @@ public sealed record TriggerSpec(string Id, Vec3? At, Vec3? Size, string? Body, 
 public sealed record FollowSpec(string Id, string? Lever, string? Rope, double From, double To,
                                 string Target, string Field, double Low, double High, SourceLocation? Location);
 
+/// <summary>An open belt between two drums, pretensioned to Tension N, of a Material whose friction grips them (issue #51).</summary>
+public sealed record BeltSpec(string Id, string A, string B, double Tension, string Material, SourceLocation? Location);
+
 /// <summary>
 /// A machine as written by #lang heroic: parts with positions, materials
 /// and ports, plus the pipes, steam connections and sealed-air groups
@@ -171,6 +174,7 @@ public sealed class MachineDef
     public IReadOnlyList<CylinderSpec> Cylinders { get; init; } = [];
     public IReadOnlyList<TriggerSpec> Triggers { get; init; } = [];
     public IReadOnlyList<FollowSpec> Follows { get; init; } = [];
+    public IReadOnlyList<BeltSpec> Belts { get; init; } = [];
 
     public PartSpec? Part(string id) => Parts.FirstOrDefault(p => p.Id == id);
 
@@ -210,6 +214,7 @@ public sealed class MachineDef
             Cylinders = Cylinders,
             Triggers = Triggers.Select(t => t with { At = t.At is { } a ? Move(a) : null }).ToList(),
             Follows = Follows,
+            Belts = Belts,
         };
     }
 
@@ -276,6 +281,13 @@ public sealed class MachineDef
             }).ToList(),
             Triggers = clauses.Where(c => c.Head == "trigger").Select(ParseTrigger).ToList(),
             Follows = clauses.Where(c => c.Head == "follow").Select(ParseFollow).ToList(),
+            Belts = clauses.Where(c => c.Head == "belt").Select(c =>
+            {
+                var loc = ParseLoc(c);
+                return new BeltSpec(Sym(c, 1, loc), Sym(c, 2, loc), Sym(c, 3, loc),
+                    c.Field("tension") is { } t ? Num(t, 1, loc) : throw new MachineFormatException("belt has no tension", loc),
+                    c.Field("material") is { } m ? Sym(m, 1, loc) : "hemp", loc);
+            }).ToList(),
             Meshes = clauses.Where(c => c.Head == "mesh").Select(c =>
             {
                 var loc = ParseLoc(c);

@@ -31,6 +31,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, WaterSource> _sources = [];
     private readonly Dictionary<string, Trigger> _triggers = [];
     private readonly Dictionary<string, Follow> _follows = [];
+    private readonly Dictionary<string, Belt> _belts = [];
     private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, (FloatValve Valve, Func<double> Flow)> _floatValves = [];
@@ -67,6 +68,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Trigger> Triggers => _triggers;
     /// <summary>Fields that follow a lever or rope, by id; the view that owns the mechanism feeds each one through <see cref="ApplyFollow"/>.</summary>
     public IReadOnlyDictionary<string, Follow> Follows => _follows;
+    /// <summary>Belts between drums, by id. Whoever owns the drums (the view) grips them each tick with <see cref="Belt.Grip"/>.</summary>
+    public IReadOnlyDictionary<string, Belt> Belts => _belts;
     public IReadOnlyDictionary<string, Channel> Channels => _channels;
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
     /// <summary>Float valves, each with the flow of the feed it throttles (m³/s).</summary>
@@ -444,6 +447,41 @@ public sealed class MachineRuntime
         RegisterFields();
         BuildTriggers(def);
         BuildFollows(def);
+        BuildBelts(def);
+    }
+
+    private static double DrumRadius(PartSpec p) =>
+        p.Props.ContainsKey("radius") ? p.Number("radius") : p.Number("pitch-radius");
+
+    private void BuildBelts(MachineDef def)
+    {
+        foreach (var spec in def.Belts)
+        {
+            PartSpec Drum(string id) => def.Part(id) is { Kind: "wheel" } p && (p.Props.ContainsKey("radius") || p.Props.ContainsKey("pitch-radius"))
+                ? p : throw new MachineFormatException($"belt {spec.Id}: {id} is not a drum, pulley or wheel with a radius for a belt to run on", spec.Location);
+            var a = Drum(spec.A);
+            var b = Drum(spec.B);
+            if (spec.A == spec.B) throw new MachineFormatException($"belt {spec.Id} needs two different drums", spec.Location);
+            string axis = a.Symbol("axis", "z");
+            if (axis != b.Symbol("axis", "z"))
+                throw new MachineFormatException($"belt {spec.Id}: {spec.A} and {spec.B} turn on different axes ({axis} and {b.Symbol("axis", "z")}); a belt needs parallel axles", spec.Location);
+            if (spec.Tension <= 0) throw new MachineFormatException($"belt {spec.Id}: a belt with no tension grips nothing (#:tension is in N)", spec.Location);
+            // the axles' distance apart, across the axis
+            double dx = a.At.X - b.At.X, dy = a.At.Y - b.At.Y, dz = a.At.Z - b.At.Z;
+            double along = axis == "x" ? dx : axis == "y" ? dy : dz;
+            double centres = Math.Sqrt(dx * dx + dy * dy + dz * dz - along * along);
+            double ra = DrumRadius(a), rb = DrumRadius(b);
+            if (centres <= Math.Abs(ra - rb))
+                throw new MachineFormatException($"belt {spec.Id}: {spec.A} and {spec.B} are {centres * 1000:F0} mm apart, too close for a belt to reach round drums of {ra * 1000:F0} and {rb * 1000:F0} mm", spec.Location);
+            var belt = _belts[spec.Id] = new Belt(spec.Id, ra, rb, centres, _materials[spec.Material].Friction, spec.Tension);
+            _getters[$"{spec.Id}.capacity"] = () => belt.MaxForce;             // N
+            _getters[$"{spec.Id}.force"] = () => belt.Force;                   // N carried, driver to driven
+            _getters[$"{spec.Id}.slip"] = () => belt.Slip;                     // m/s of rim speed lost
+            _getters[$"{spec.Id}.wrap"] = () => belt.Wrap * 180 / Math.PI;     // degrees round the smaller drum
+            _getters[$"{spec.Id}.length"] = () => belt.Length;
+            _getters[$"{spec.Id}.tension"] = () => belt.Tension;               // N pretension
+            _setters[$"{spec.Id}.tension"] = n => belt.Tension = Math.Max(1e-6, n);   // tighten or slacken it
+        }
     }
 
     private void BuildFollows(MachineDef def)
