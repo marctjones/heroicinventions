@@ -60,6 +60,11 @@ public partial class BuildMode : Node3D
     private readonly List<MeshInstance3D> _pipeVisuals = [];
     private readonly List<MeshInstance3D> _portMarkers = [];
 
+    // every part's connection points, drawn and clickable: click one, then another, to join them
+    private readonly List<(string Part, string Port, string Kind, Vector3 At, MeshInstance3D Node)> _ports = [];
+    private (string Part, string Port, Vector3 At)? _connectFrom;
+    private MeshInstance3D? _connectLine;
+
     // camera: spherical coordinates around a pivot
     private Camera3D _camera = null!;
     private Vector3 _pivot = new(0, 0.4f, 0);
@@ -88,10 +93,43 @@ public partial class BuildMode : Node3D
     private List<string> _materialIds = [];
     private VBoxContainer _inspector = null!;
     private Label _status = null!;
+    private Label _partHelp = null!;
     private FileDialog _saveDialog = null!, _loadDialog = null!;
 
     private static readonly StandardMaterial3D SelectedOverlay = Overlay(new Color(1f, 0.62f, 0.1f, 0.35f));
     private static readonly StandardMaterial3D HoverOverlay = Overlay(new Color(1f, 1f, 1f, 0.18f));
+
+    /// <summary>
+    /// Each part in plain words: what a person would call it, which group it
+    /// sits in, and one line on what it does and what it needs. The engine's
+    /// own names (boiler, hearth, jetwheel) follow in brackets.
+    /// </summary>
+    private static readonly Dictionary<string, (string Label, string Group, string Description)> PartInfo = new()
+    {
+        ["hearth"] = ("Fire (hearth)", "Fire, water and steam", "A wood fire. Pick the pot it heats in the inspector."),
+        ["boiler"] = ("Pot with a lid (boiler)", "Fire, water and steam", "A litre of water with a steam spout on its lid. Heat it with a fire or mirrors."),
+        ["jetwheel"] = ("Paddle wheel for a steam jet", "Fire, water and steam", "Branca's wheel: click the pot's steam point, then the wheel's, to aim the spout at its paddles."),
+        ["rotor"] = ("Steam ball (aeolipile)", "Fire, water and steam", "Heron's ball, spun by its own steam jets. Connect a pot's steam to it."),
+        ["mirror"] = ("Mirror", "Fire, water and steam", "Throws sunlight onto a pot. Pick the pot in the inspector."),
+        ["bellows"] = ("Bellows", "Fire, water and steam", "Blows air into a fire so it burns hotter."),
+        ["safety-valve"] = ("Safety valve", "Fire, water and steam", "Lets steam out of a pot before it bursts."),
+        ["tank"] = ("Tank of water", "Water", "Holds water. Join tanks with pipes at their water points."),
+        ["pump"] = ("Pump", "Water", "Lifts water from one tank to another."),
+        ["sluice"] = ("Sluice gate", "Water", "A gate that lets water out of a pool into a channel."),
+        ["float-valve"] = ("Float valve", "Water", "Shuts off the water when a tank is full."),
+        ["leak"] = ("Hole (leak)", "Water", "A hole in a tank's side that water runs out of."),
+        ["waterwheel"] = ("Water wheel", "Wheels and power", "Turned by water falling on it or flowing under it."),
+        ["windmill"] = ("Windmill", "Wheels and power", "Turned by the wind."),
+        ["capstan"] = ("Capstan", "Wheels and power", "A post that a rope is wound round to hold a load."),
+        ["piston"] = ("Piston", "Wheels and power", "Slides up and down in a cylinder."),
+        ["lever"] = ("Lever or see-saw", "Weights and levers", "A beam on a pivot. Put weights on its ends."),
+        ["block"] = ("Block", "Weights and levers", "A cube of material: a weight, a load, something to slide or drop."),
+        ["ramp"] = ("Ramp", "Weights and levers", "A slope for blocks to slide or rest on."),
+        ["pendulum"] = ("Pendulum", "Weights and levers", "A weight on a rod that swings."),
+        ["counterpoise"] = ("Door with a counterweight", "Weights and levers", "A door that opens when a bucket outweighs its counterweight."),
+        ["post"] = ("Stone post or plinth", "Structure", "Something solid to stand things on."),
+    };
+    private static readonly string[] GroupOrder = ["Fire, water and steam", "Water", "Wheels and power", "Weights and levers", "Structure"];
 
     public event Action? RunRequested;
     public event Action? ExitRequested;
@@ -108,7 +146,7 @@ public partial class BuildMode : Node3D
         _session = new BuildSession(_materials, catalogue, ProjectSettings.GlobalizePath("user://machines"));
 
         foreach (string kind in PartTemplates.PrimitiveKinds)
-            _palette.Add((kind, char.ToUpperInvariant(kind[0]) + kind[1..], kind, null));
+            _palette.Add((kind, PartInfo.GetValueOrDefault(kind).Label ?? kind, kind, null));
         foreach (var e in catalogue) _palette.Add((e.Id, e.Description, null, e));
 
         BuildUi();
@@ -169,8 +207,8 @@ public partial class BuildMode : Node3D
             switch (w[0])
             {
                 case "palette":
-                    int index = _palette.FindIndex(p => p.Id == w[1]);
-                    _paletteList.Select(index);
+                    for (int i = 0; i < _paletteList.ItemCount; i++)
+                        if (_paletteList.GetItemMetadata(i).AsString() == w[1]) _paletteList.Select(i);
                     StartPlacing(w[1]);
                     return;
                 case "move": Mouse(new Vector2(N(1), N(2))); return;
@@ -200,6 +238,22 @@ public partial class BuildMode : Node3D
                     return;
                 }
                 case "wait": _inputWait = (int)N(1); return;
+                case "cmd": RunCommand(string.Join(' ', w.Skip(1))); return;
+                case "save": _session.SaveFile(w[1]); GD.Print($"[BuildMode] saved {w[1]}"); return;
+                case "click-port":
+                {
+                    // click a named connection point wherever it is on screen: "click-port pot_2.steam"
+                    var parts = w[1].Split('.');
+                    var port = _ports.FirstOrDefault(p => p.Part == parts[0] && p.Port == parts[1]);
+                    if (port.Node is null) { GD.Print($"[BuildMode] no port {w[1]}"); return; }
+                    // injected events are in window pixels; the camera projects to the
+                    // 3D viewport's, which the window's content scale stretches
+                    var at = GetViewport().GetScreenTransform() * _camera.UnprojectPosition(port.At);
+                    Mouse(at);
+                    Mouse(at, MouseButton.Left, true);
+                    Mouse(at, MouseButton.Left, false);
+                    return;
+                }
                 case "log":
                     GD.Print($"[BuildMode] state: selected={_selectedId ?? "none"} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})"))}");
                     continue;
@@ -236,11 +290,43 @@ public partial class BuildMode : Node3D
         left.AddChild(leftCol);
 
         leftCol.AddChild(new Label { Text = "Build Mode" });
+
+        // Start from something that works, and change it.
+        var examples = new OptionButton { TooltipText = "Load a working machine to change" };
+        examples.AddItem("Start from an example…");
+        var exampleFiles = ExampleMachines();
+        foreach (var (name, _) in exampleFiles) examples.AddItem(name);
+        examples.ItemSelected += index =>
+        {
+            if (index <= 0) return;
+            var (_, path) = exampleFiles[(int)index - 1];
+            RunCommand($"(load {System.IO.Path.GetFileNameWithoutExtension(path)})", ProjectSettings.GlobalizePath(path));
+            Select(null);
+            FrameAll();
+            examples.Select(0);
+        };
+        leftCol.AddChild(examples);
+
         leftCol.AddChild(new Label { Text = "Parts: pick one, then click in the scene", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         _paletteList = new ItemList { CustomMinimumSize = new Vector2(230, 260), SizeFlagsVertical = Control.SizeFlags.ExpandFill };
-        foreach (var item in _palette) _paletteList.AddItem(item.Label);
-        _paletteList.ItemSelected += index => StartPlacing(_palette[(int)index].Id);
+        var groups = _palette.GroupBy(p => p.PrimitiveKind is { } k ? PartInfo.GetValueOrDefault(k).Group ?? "Other" : "Gears, pulleys and drums")
+            .OrderBy(g => Array.IndexOf(GroupOrder, g.Key) is var i and >= 0 ? i : 99);
+        foreach (var group in groups)
+        {
+            int header = _paletteList.AddItem(group.Key);
+            _paletteList.SetItemSelectable(header, false);
+            _paletteList.SetItemCustomFgColor(header, new Color(1f, 0.8f, 0.45f));
+            foreach (var item in group)
+            {
+                int i = _paletteList.AddItem("   " + item.Label);
+                _paletteList.SetItemMetadata(i, item.Id);
+                _paletteList.SetItemTooltip(i, item.PrimitiveKind is { } k && PartInfo.TryGetValue(k, out var info) ? info.Description : item.Label);
+            }
+        }
+        _paletteList.ItemSelected += index => StartPlacing(_paletteList.GetItemMetadata((int)index).AsString());
         leftCol.AddChild(_paletteList);
+        _partHelp = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(230, 0), Modulate = new Color(1, 1, 1, 0.75f) };
+        leftCol.AddChild(_partHelp);
 
         leftCol.AddChild(new Label { Text = "New parts are made of" });
         _materialBox = new OptionButton();
@@ -374,6 +460,22 @@ public partial class BuildMode : Node3D
     private static string F(double v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
     private static string Xyz(Vector3 v) => $"({F(v.X)} {F(v.Y)} {F(v.Z)})";
 
+    /// <summary>The shipped machines, steam wheels first, with readable names.</summary>
+    private static List<(string Name, string Path)> ExampleMachines()
+    {
+        var files = new List<string>();
+        using var dir = DirAccess.Open("res://machines");
+        if (dir is not null)
+            foreach (var f in dir.GetFiles()) if (f.EndsWith(".machine")) files.Add($"res://machines/{f}");
+        string Pretty(string path)
+        {
+            string n = System.IO.Path.GetFileNameWithoutExtension(path).Replace('-', ' ');
+            return char.ToUpperInvariant(n[0]) + n[1..];
+        }
+        int Rank(string path) => path.Contains("branca") ? 0 : path.Contains("solar-steam") ? 1 : 2;
+        return files.OrderBy(Rank).ThenBy(f => f).Select(f => (Pretty(f), f)).ToList();
+    }
+
     // -------------------------------------------------------------- drawing
 
     /// <summary>
@@ -444,8 +546,68 @@ public partial class BuildMode : Node3D
         _status.Text = problem is null
             ? (_placingPaletteId is { } p ? $"Placing {p}: click to place, Shift keeps placing, Esc cancels" : _selectedId is { } s ? $"Selected {s}" : "")
             : problem;
+        DrawPorts();
         RefreshHighlights();
         RebuildInspector();
+    }
+
+    /// <summary>
+    /// A dot on every connection point: blue where water goes in or out,
+    /// white where steam does. Click one, then another, to join them.
+    /// </summary>
+    private void DrawPorts()
+    {
+        foreach (var p in _ports) p.Node.QueueFree();
+        _ports.Clear();
+        foreach (var part in _session.Document.Parts.Values)
+            foreach (var port in part.Ports)
+            {
+                var w = EditorDocument.PortWorldPosition(part, port);
+                var at = new Vector3((float)w.X, (float)w.Y, (float)w.Z);
+                var colour = port.Kind switch { "water" => new Color(0.3f, 0.6f, 1f), "steam" => new Color(1f, 1f, 1f), _ => new Color(0.95f, 0.8f, 0.3f) };
+                var mat = Shapes.Mat(colour);
+                mat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
+                mat.NoDepthTest = true;   // visible through the part it belongs to
+                var dot = Shapes.Sphere(0.022f, mat);
+                dot.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+                dot.Position = at;
+                AddChild(dot);
+                _ports.Add((part.Id, port.Name, port.Kind, at, dot));
+            }
+    }
+
+    /// <summary>The connection point nearest the mouse ray, within a few pixels' reach.</summary>
+    private (string Part, string Port, string Kind, Vector3 At)? PickPort(Vector2 screen)
+    {
+        var (from, dir) = Ray(screen);
+        (string, string, string, Vector3)? best = null;
+        float bestT = float.MaxValue;
+        foreach (var p in _ports)
+        {
+            float t = (p.At - from).Dot(dir);
+            if (t <= 0) continue;
+            float miss = (from + dir * t).DistanceTo(p.At);
+            if (miss < Mathf.Max(0.03f, t * 0.015f) && t < bestT) { bestT = t; best = (p.Part, p.Port, p.Kind, p.At); }
+        }
+        return best;
+    }
+
+    private void CancelConnect()
+    {
+        _connectFrom = null;
+        _connectLine?.QueueFree();
+        _connectLine = null;
+    }
+
+    private void DrawConnectLine(Vector3 to)
+    {
+        _connectLine?.QueueFree();
+        if (_connectFrom is not { } from) return;
+        var mat = Shapes.Mat(new Color(1f, 0.85f, 0.3f));
+        mat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
+        mat.NoDepthTest = true;
+        _connectLine = Shapes.Rod(from.At, to, 0.006f, mat);
+        AddChild(_connectLine);
     }
 
     private IEnumerable<Node3D> NodesOf(string id) =>
@@ -661,6 +823,16 @@ public partial class BuildMode : Node3D
             return;
         }
         if (_placingPaletteId is not null) { MoveGhost(mm.Position); return; }
+        var hoverPort = PickPort(mm.Position);
+        foreach (var p in _ports) p.Node.Scale = Vector3.One * (hoverPort is { } h && h.Part == p.Part && h.Port == p.Port ? 1.8f : 1f);
+        if (_connectFrom is not null)
+        {
+            if (hoverPort is { } hp) DrawConnectLine(hp.At);
+            else if (SurfacePoint(mm.Position, null, out var ground)) DrawConnectLine(ground);
+            return;
+        }
+        if (hoverPort is { } hovered && _pressedId is null)
+            _status.Text = $"{hovered.Part}: {hovered.Kind} point \"{hovered.Port}\". Click it, then another, to connect them";
         if (_pressedId is { } id)
         {
             if (!_dragging && mm.Position.DistanceTo(_pressPos) > DragThreshold) BeginDrag(id, _pressPos);
@@ -677,7 +849,8 @@ public partial class BuildMode : Node3D
         switch (key.Keycode)
         {
             case Key.Escape:
-                if (_placingPaletteId is not null) CancelPlacing();
+                if (_connectFrom is not null) { CancelConnect(); _status.Text = ""; }
+                else if (_placingPaletteId is not null) CancelPlacing();
                 else if (_selectedId is not null) Select(null);
                 else ExitRequested?.Invoke();
                 break;
@@ -780,6 +953,22 @@ public partial class BuildMode : Node3D
             PlaceGhost(paletteId, shift);
             return;
         }
+        if (PickPort(screen) is { } port)
+        {
+            if (_connectFrom is { } from && (from.Part != port.Part || from.Port != port.Port))
+            {
+                RunCommand($"(snap {from.Part}.{from.Port} {port.Part}.{port.Port})");
+                CancelConnect();
+            }
+            else if (_connectFrom is not null) CancelConnect();
+            else
+            {
+                _connectFrom = (port.Part, port.Port, port.At);
+                _status.Text = $"Connecting {port.Part}'s {port.Port}: click the point to join it to, Esc to cancel";
+            }
+            return;
+        }
+        if (_connectFrom is not null) { CancelConnect(); _status.Text = ""; }
         string? id = PickPart(screen, out _);
         Select(id);
         _pressedId = id;
@@ -851,7 +1040,10 @@ public partial class BuildMode : Node3D
         _ghost = BuildGhost(paletteId, out _ghostBottom);
         AddChild(_ghost);
         _ghost.Visible = false;
-        _status.Text = $"Placing {paletteId}: click to place, Shift keeps placing, Esc cancels";
+        var item = _palette.First(p => p.Id == paletteId);
+        string label = item.PrimitiveKind is { } k && PartInfo.TryGetValue(k, out var info) ? info.Label : item.Label;
+        _partHelp.Text = item.PrimitiveKind is { } k2 && PartInfo.TryGetValue(k2, out var info2) ? info2.Description : "";
+        _status.Text = $"Placing {label}: click to place, Shift keeps placing, Esc cancels";
     }
 
     private void CancelPlacing()
@@ -1000,19 +1192,30 @@ public partial class BuildMode : Node3D
         }
     }
 
-    /// <summary>A plain shape standing on its #:at, for a part the real view can't draw yet.</summary>
+    /// <summary>
+    /// A plain shape for a part the real view can't draw yet (a fire not yet
+    /// given a pot, a wheel with no steam), sized and placed as the real part
+    /// will be: most parts stand on their #:at, but a wheel or steam ball is
+    /// centred on its axle there. Ghosts and stacking use this footprint, so
+    /// a pot set on an unfinished fire lands where it will really sit.
+    /// </summary>
     private MeshInstance3D FallbackVisual(PartSpec part)
     {
         var mat = Shapes.Mat(Shapes.ColorFor(part.Material));
-        var size = part.Kind switch
+        float r = (float)part.Number("radius", 0.15);
+        (Vector3 size, bool centred) = part.Kind switch
         {
-            "tank" => new Vector3((float)Math.Sqrt(part.Number("area", 0.05)), (float)part.Number("height", 0.3), (float)Math.Sqrt(part.Number("area", 0.05))),
-            "post" => new Vector3((float)part.Number("size-x", 0.2), (float)part.Number("size-y", 1), (float)part.Number("size-z", 0.2)),
-            "block" => Vector3.One * (float)part.Number("size", 0.1),
-            _ => new Vector3(0.3f, 0.3f, 0.3f),
+            "tank" => (new Vector3((float)Math.Sqrt(part.Number("area", 0.05)), (float)part.Number("height", 0.3), (float)Math.Sqrt(part.Number("area", 0.05))), false),
+            "boiler" => (new Vector3(r * 2, (float)part.Number("height", 0.3), r * 2), false),
+            "post" => (new Vector3((float)part.Number("size-x", 0.2), (float)part.Number("size-y", 1), (float)part.Number("size-z", 0.2)), false),
+            "block" => (Vector3.One * (float)part.Number("size", 0.1), true),
+            "hearth" => (new Vector3(0.3f, 0.08f, 0.3f), false),
+            "jetwheel" => (new Vector3(r * 2, r * 2, (float)part.Number("width", 0.03) + 0.06f), true),
+            "rotor" => (Vector3.One * (float)(part.Number("radius", 0.06) + part.Number("arm", 0.08)) * 2, true),
+            _ => (new Vector3(0.3f, 0.3f, 0.3f), false),
         };
         var box = Shapes.Box(size, mat);
-        box.Position = new Vector3((float)part.At.X, (float)part.At.Y + size.Y / 2, (float)part.At.Z);
+        box.Position = new Vector3((float)part.At.X, (float)part.At.Y + (centred ? 0 : size.Y / 2), (float)part.At.Z);
         return box;
     }
 

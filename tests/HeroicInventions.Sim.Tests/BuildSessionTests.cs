@@ -249,6 +249,28 @@ public class BuildSessionTests
     }
 
     /// <summary>
+    /// The first thing a person tried to build: a fire, a pot of water on it,
+    /// and a paddle wheel the pot's steam turns. These are the commands the
+    /// editor issues for those clicks (place three parts from the palette,
+    /// pick the pot in the fire's inspector, click the pot's steam point then
+    /// the wheel's). The pot boils, and its steam turns the wheel.
+    /// </summary>
+    [Fact]
+    public void FirePotAndPaddleWheelBuiltFromThePaletteTurns()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "first");
+        session.Execute("(hearth fire #:at (0 0 0))");
+        session.Execute("(boiler pot #:at (0 0.1 0))");
+        session.Execute("(set fire #:heats pot)");
+        session.Execute("(jetwheel wheel #:at (0.4 0.15 0))");
+        session.Execute("(snap pot.steam wheel.steam-in)");
+        var runtime = new MachineRuntime(session.Document.ToMachineDef(), Materials);
+        for (int i = 0; i < 60000; i++) runtime.Step(0.01); // ten minutes
+        Assert.True(runtime.Boilers["pot"].Temperature >= 100, $"the pot is at {runtime.Boilers["pot"].Temperature:F1} C");
+        Assert.True(runtime.JetWheels["wheel"].Rpm > 100, $"the wheel turns at {runtime.JetWheels["wheel"].Rpm:F0} rpm");
+    }
+
+    /// <summary>
     /// A mirror placed from the palette starts aimed at nothing (#:onto ?),
     /// which the runtime rejects; (set m #:onto boiler) aims it, the way the
     /// editor's inspector does, and then the machine builds. Naming a part

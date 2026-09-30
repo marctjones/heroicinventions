@@ -42,7 +42,7 @@ public static class PartTemplates
             [], null),
         // Branca's wheel: flat paddles struck by a boiler's steam jet
         "jetwheel" => new PartSpec(id, "jetwheel", material, at,
-            Props(("radius", 0.15), ("bore", 0.005), ("paddles", 8), ("width", 0.03), ("mass", 0.5), ("load", 0)),
+            Props(("radius", 0.15), ("bore", 0.0025), ("paddles", 8), ("width", 0.03), ("mass", 0.5), ("load", 0)),
             [new PortSpec("steam-in", "steam", 0)],
             null),
         // Heron's aeolipile: a sphere spun by its own steam jets
