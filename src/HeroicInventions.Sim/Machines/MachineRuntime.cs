@@ -618,6 +618,7 @@ public sealed class MachineRuntime
                 WallHeatCapacity = box.Number("heat-capacity", 0),
                 Heater = box.Number("heater", 0),
                 LeakArea = box.Number("leak", 0),
+                Supply = box.Number("supply", 0),
                 Cd = box.Number("coefficient", Enclosure.DefaultCoefficient),
             };
             _enclosures[box.Id] = e;
@@ -898,6 +899,8 @@ public sealed class MachineRuntime
             _getters[$"{id}.insulation"] = () => e.Insulation;                // W/K
             _setters[$"{id}.insulation"] = ua => e.Insulation = Math.Max(0, ua);
             _getters[$"{id}.heat"] = () => e.HeatInput;                       // W from fires and mirrors
+            _getters[$"{id}.supply"] = () => e.Supply * 1000;                 // L/s of the surroundings' air blown in
+            _setters[$"{id}.supply"] = ls => e.Supply = Math.Max(0, ls / 1000);
             for (int i = 0; i < GasMix.Names.Length; i++)
             {
                 int gas = i;
@@ -961,6 +964,11 @@ public sealed class MachineRuntime
             _getters[$"{id}.boiled"] = () => h.Boiled;                 // kg of it boiled off
             _getters[$"{id}.drowned"] = () => h.Drowned ? 1 : 0;
             _getters[$"{id}.draught"] = () => h.Draught;
+            _getters[$"{id}.breathing"] = () => h.Breathing ? 1 : 0;          // its air holds oxygen enough to burn
+            _getters[$"{id}.oxygen"] = () => h.Zone.OxygenFraction * 100;      // % of the air it breathes
+            _getters[$"{id}.oxygen-used"] = () => h.OxygenUsed;                // kg taken from its room
+            _getters[$"{id}.oxygen-limit"] = () => h.OxygenLimit * 100;        // %, below which it goes out
+            _setters[$"{id}.oxygen-limit"] = pc => h.OxygenLimit = Math.Clamp(pc / 100, 0, 1);
             _setters[$"{id}.fuel"] = kg => h.Fuel = Math.Max(0, kg);
             _setters[$"{id}.power"] = w => h.Power = Math.Max(0, w);
         }

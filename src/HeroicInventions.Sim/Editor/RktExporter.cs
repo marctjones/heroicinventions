@@ -201,7 +201,7 @@ public static class RktExporter
                        Opt("pressure", "pressure") + Opt("temperature", "temperature") +
                        (gases.Count > 0 ? $" #:air '({string.Join(' ', gases.Select(g => $"({g} {F(N(g))})"))})" : "") +
                        $" #:insulation {F(N("insulation", 2))} #:heat-capacity {F(N("heat-capacity"))} #:heater {F(N("heater"))}" +
-                       $" #:leak {F(N("leak"))} #:coefficient {F(N("coefficient", 0.6))} {Mat()})\n";
+                       $" #:leak {F(N("leak"))} #:supply {F(N("supply"))} #:coefficient {F(N("coefficient", 0.6))} {Mat()})\n";
             }
             case "counterpoise":
                 return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +

@@ -21,7 +21,7 @@ namespace HeroicInventions;
 public partial class MachineView
 {
     private sealed record EnclosureView(Enclosure Room, Node3D Walls, StandardMaterial3D Skin, Node3D Needle,
-                                        GpuParticles3D Hiss, MeshInstance3D? Heater, Label3D Label, double FullFlow, float Height);
+                                        GpuParticles3D Hiss, MeshInstance3D? Heater, Label3D Label, double FullFlow, float Height, bool Membrane, Color Wall);
     private readonly List<EnclosureView> _enclosureViews = [];
     private static readonly Color Membrane = new(0.93f, 0.9f, 0.82f);
 
@@ -36,7 +36,8 @@ public partial class MachineView
             // the walls, scaled about the floor so a slack room sags down onto it
             var walls = new Node3D { Position = at };
             AddChild(walls);
-            var skin = Shapes.Mat(Membrane, roughness: 0.9f, alpha: 0.22f);
+            var wall = part.Material == "hemp" ? Membrane : Shapes.ColorFor(part.Material);
+            var skin = Shapes.Mat(wall, roughness: 0.9f, alpha: 0.22f);
             skin.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
             var box = Shapes.Box(new Vector3(w, h, d), skin);
             box.Position = new Vector3(0, h / 2, 0);
@@ -75,7 +76,9 @@ public partial class MachineView
                 ? Enclosure.OrificeFlow(room.Cd, room.LeakArea, Math.Max(room.Pressure, room.Outside.Pressure),
                                         HeroicInventions.Sim.Physics.ToKelvin(room.Temperature), Math.Min(room.Pressure, room.Outside.Pressure), 1.4, 287)
                 : 1;
-            _enclosureViews.Add(new EnclosureView(room, walls, skin, needle, hiss, heater, label, Math.Max(1e-9, full), h));
+                        // a fabric room stands only while blown up; one of wood, stone or metal keeps its shape
+            _enclosureViews.Add(new EnclosureView(room, walls, skin, needle, hiss, heater, label, Math.Max(1e-9, full), h,
+                                                  part.Material == "hemp", wall));
         }
     }
 
@@ -88,9 +91,9 @@ public partial class MachineView
             v.Needle.RotationDegrees = new Vector3(0, 0, 135 - 270 * (float)Math.Clamp(p / 100_000, 0, 1));
             // taut above ~1 kPa over the outside; slack below, nearly flat when it holds nothing more than outside
             float taut = (float)Math.Clamp(gauge / 1000, 0, 1);
-            v.Walls.Scale = new Vector3(1, 0.12f + 0.88f * taut, 1);
+            if (v.Membrane) v.Walls.Scale = new Vector3(1, 0.12f + 0.88f * taut, 1);
             float frost = (float)Math.Clamp(-room.Temperature / 5, 0, 1);
-            v.Skin.AlbedoColor = Membrane.Lerp(new Color(0.97f, 0.98f, 1f), frost) with { A = 0.22f + 0.2f * frost };
+            v.Skin.AlbedoColor = v.Wall.Lerp(new Color(0.97f, 0.98f, 1f), frost) with { A = 0.22f + 0.2f * frost };
             v.Hiss.Emitting = room.Flow > 0;
             if (room.Flow > 0) v.Hiss.AmountRatio = (float)Math.Clamp(room.Flow / v.FullFlow, 0.1, 1);
             if (v.Heater?.MaterialOverride is StandardMaterial3D hm)
@@ -101,6 +104,7 @@ public partial class MachineView
                 hm.EmissionEnergyMultiplier = on ? 1.5f : 0;
             }
             string o2 = room.TotalMoles > 0 ? $"{room.Moles[0] / room.TotalMoles * 100:0.#}% O₂" : "empty";
+            if (room.TotalMoles > 0 && room.Moles[2] / room.TotalMoles > 0.01) o2 += $", {room.Moles[2] / room.TotalMoles * 100:0.#}% CO₂";
             v.Label.Text = $"{room.Name}: {p / 1000:0.##} kPa, {room.Temperature:0.#} °C, {o2}" +
                            (room.Flow > 0 ? $"\nleaking {room.Flow * 1000:0.##} g/s{(room.Choked ? " (choked)" : "")}" : "");
         }

@@ -584,6 +584,45 @@ public class BuildSessionTests
         Assert.Equal(100 * Math.Exp(-100 / tau), room.Pressure / 1000, 2);
     }
 
+    /// <summary>
+    /// Issue #40. A wood fire in a sealed 1 m³ room burns until the oxygen is
+    /// down to 15%. Wood, as cellulose, takes 6 O₂ and gives 6 CO₂ and 5 H₂O
+    /// per C₆H₁₀O₅: 37.005 mol of O₂ and 30.837 mol of water a kilogram, so the
+    /// room gains moles as it burns and the fire stops at m kg where
+    /// (n_O2 − 37.005 m)/(n + 30.837 m) = 0.15. The same stove outdoors on Mars,
+    /// in 0.17% oxygen, never lights.
+    /// </summary>
+    [Fact]
+    public void AFireBurnsItsRoomsOxygenDownToTheLimitAndWontLightOnMars()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "cell");
+        session.Execute("(enclosure cell #:at (0 0 0) #:insulation 1000)");
+        session.Execute("(set cell #:size-x 1)");
+        session.Execute("(set cell #:size-y 1)");
+        session.Execute("(set cell #:size-z 1)");
+        session.Execute("(hearth fire #:at (0 0 0) #:power 1000 #:fuel 1)");
+        session.Execute("(set fire #:heats cell)");
+        session.Execute("(run 2000)");
+        var run = session.LastRun!;
+        var fire = run.Hearths["fire"];
+        double n = 101_325 * 1 / (8.314 * 293.15), o2 = 0.2095 * n;
+        double perKgO2 = 6 / 0.16214, perKgWater = 5 / 0.16214;          // mol a kilogram
+        double m = (o2 - 0.15 * n) / (perKgO2 + 0.15 * perKgWater);
+        Assert.Equal(m, fire.FuelBurned, 5);
+        Assert.False(fire.Lit);
+        Assert.Equal(0.15, run.Enclosures["cell"].OxygenFraction, 5);
+        Assert.Equal(m * Hearth.OxygenPerKg("wood"), fire.OxygenUsed, 5);
+
+        var mars = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "camp");
+        mars.Execute("(planet mars)");
+        mars.Execute("(boiler pot #:at (0 0.3 0))");
+        mars.Execute("(hearth fire #:at (0 0 0) #:power 1000 #:fuel 1)");
+        mars.Execute("(set fire #:heats pot)");
+        mars.Execute("(run 10)");
+        Assert.False(mars.LastRun!.Hearths["fire"].Lit);
+        Assert.Equal(0, mars.LastRun!.Hearths["fire"].FuelBurned);
+    }
+
     /// <summary>Every existing scene is unchanged: Earth's air is the game's 287.05 J/(kg·K) dry air, 1.204118 kg/m³ at 20 °C.</summary>
     [Fact]
     public void EarthIsTheDefaultPlanetAndItsNumbersAreTheOldConstants()

@@ -293,7 +293,7 @@
       (bad (format "#:pressure must be an absolute pressure, 0 Pa or more, got ~e" (prop 'pressure))))
     (unless (or (not (prop 'temperature)) (and (real? (prop 'temperature)) (> (prop 'temperature) -273.15)))
       (bad (format "#:temperature must be above absolute zero, got ~e" (prop 'temperature))))
-    (for ([k '(insulation leak heater heat-capacity)])
+    (for ([k '(insulation leak heater heat-capacity supply)])
       (unless (and (real? (prop k)) (>= (prop k) 0)) (bad (format "#:~a must be 0 or more, got ~e" k (prop k)))))
     (unless (and (real? (prop 'coefficient)) (> (prop 'coefficient) 0) (<= (prop 'coefficient) 1))
       (bad (format "#:coefficient must be in (0, 1], got ~e" (prop 'coefficient)))))
@@ -809,7 +809,9 @@
     ;; insulated membrane) and hold #:heat-capacity J/K (default 0); a
     ;; #:heater (W) warms it, and so can a hearth or mirror aimed at it. A
     ;; hole of #:leak m² (default 0) lets gas out, or in, as a compressible
-    ;; orifice with discharge coefficient #:coefficient (default 0.6).
+    ;; orifice with discharge coefficient #:coefficient (default 0.6). A fan
+    ;; or bellows can blow in #:supply m³/s of the surroundings' air (default
+    ;; 0): a room's air supply, which a leak then lets out again.
     ;; Enclosures nest: one inside another leaks and loses heat into it.
     (pattern (enclosure id:id
                         (~alt (~once (~seq #:at at:vec3))
@@ -821,6 +823,7 @@
                               (~optional (~seq #:heat-capacity cap-v:expr))
                               (~optional (~seq #:heater heater-v:expr))
                               (~optional (~seq #:leak leak-v:expr))
+                              (~optional (~seq #:supply supply-v:expr))
                               (~optional (~seq #:coefficient cd-v:expr))
                               (~optional (~seq #:material mat:id))) ...)
       #:attr info (pinfo #'id 'enclosure (attribute mat) '())
@@ -828,7 +831,7 @@
                           (list* (cons 'size-x size.x) (cons 'size-y size.y) (cons 'size-z size.z)
                                  (cons 'pressure (~? pressure-v #f)) (cons 'temperature (~? temp-v #f))
                                  (cons 'insulation (~? ua-v 2)) (cons 'heat-capacity (~? cap-v 0))
-                                 (cons 'heater (~? heater-v 0)) (cons 'leak (~? leak-v 0))
+                                 (cons 'heater (~? heater-v 0)) (cons 'leak (~? leak-v 0)) (cons 'supply (~? supply-v 0))
                                  (cons 'coefficient (~? cd-v 0.6))
                                  (enclosure-air-props 'id (~? air-v #f) #,(loc-of this-syntax)))
                           '()

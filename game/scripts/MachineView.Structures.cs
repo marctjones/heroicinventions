@@ -33,7 +33,12 @@ public partial class MachineView
     {
         var hearth = Runtime.Hearths[part.Id];
         var heated = Runtime.Def.Part(part.Symbol("heats", ""))!;
-        float radius = heated.Kind == "boiler" ? (float)heated.Number("radius") : Mathf.Sqrt((float)heated.Number("area")) / 3;
+        float radius = heated.Kind switch
+        {
+            "boiler" => (float)heated.Number("radius"),
+            "enclosure" => 0.25f,                     // a stove standing in the room it heats
+            _ => Mathf.Sqrt((float)heated.Number("area")) / 3,
+        };
         var centre = V(part.At);
         var stone = Surface("granite");
         const int stones = 10;

@@ -143,6 +143,12 @@ public sealed class Enclosure : Zone, IHeated
         return taken;
     }
 
+    /// <summary>Adds (or, negative, takes) moles of one gas made or used inside it, as a fire does; no less than none.</summary>
+    public void ChangeGas(int gas, double moles) => Moles[gas] = Math.Max(0, Moles[gas] + moles);
+
+    /// <summary>m³/s of the surroundings' air a fan or bellows blows in, measured at their pressure and temperature.</summary>
+    public double Supply { get; set; }
+
     /// <summary>Heat from inside another zone (a boiler losing warmth into this room), J.</summary>
     public void AddHeat(double joules)
     {
@@ -152,6 +158,7 @@ public sealed class Enclosure : Zone, IHeated
 
     public void Step(double dt)
     {
+        StepSupply(dt);
         StepLeak(dt);
         StepHeat(dt);
     }
@@ -191,6 +198,14 @@ public sealed class Enclosure : Zone, IHeated
             Flow = -kg / dt;
             Lost -= kg;
         }
+    }
+
+    private void StepSupply(double dt)
+    {
+        if (Supply <= 0) return;
+        double dn = Outside.Pressure * Supply * dt / (R * Physics.ToKelvin(Outside.Temperature));
+        double[] came = Outside is Enclosure parent ? parent.TakeGas(dn) : Fractions(Outside).Select(x => x * dn).ToArray();
+        AddGas(came, Outside.Temperature);
     }
 
     private void StepHeat(double dt)

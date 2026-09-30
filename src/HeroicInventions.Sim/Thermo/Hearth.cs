@@ -24,6 +24,17 @@ namespace HeroicInventions.Sim.Thermo;
 /// only ever raises how fast the fuel burns (and so, while any is left,
 /// the heat given off) — the energy a load of fuel can ever release stays
 /// fuel × density, whatever rate it is burned at.
+///
+/// A fire breathes its zone's air (issue #40). It needs oxygen at its fuel's
+/// stoichiometric rate (<see cref="OxygenPerKg"/>: 2.67 kg a kg of charcoal,
+/// C + O₂ → CO₂; 1.19 of wood, taken as cellulose, C₆H₁₀O₅ + 6 O₂ → 6 CO₂ +
+/// 5 H₂O; 2.45 of bituminous coal by its composition) and burns only while
+/// the oxygen is above the limiting fraction, <see cref="OxygenLimit"/> (about
+/// 15% by volume): outdoors on Mars, 0.17%, it never lights. In an
+/// enclosure it takes that oxygen out of the room's air and puts back the
+/// carbon dioxide and water vapour it makes, and the heat its pot doesn't
+/// take (1 − efficiency) warms the room; so a sealed room's fire burns until
+/// its oxygen has fallen to the limit, and goes out.
 /// </summary>
 public sealed class Hearth(IHeated target, double powerW, double fuelKg, string fuelKind = "wood", double efficiency = 0.5)
 {
@@ -35,6 +46,40 @@ public sealed class Hearth(IHeated target, double powerW, double fuelKg, string 
         "coal" => 24e6,
         _ => throw new ArgumentException($"unknown fuel {kind} (wood, charcoal, coal)"),
     };
+
+    /// <summary>Oxygen a kilogram of fuel burns, kg: charcoal as carbon (32/12), wood as cellulose (6 × 32/162), coal as 80% C, 5% H, 8% O.</summary>
+    public static double OxygenPerKg(string kind) => kind switch
+    {
+        "wood" => 6 * 31.998 / 162.14,
+        "charcoal" => 31.998 / 12.011,
+        "coal" => 0.80 * 31.998 / 12.011 + 0.05 * 7.9367 - 0.08,
+        _ => throw new ArgumentException($"unknown fuel {kind} (wood, charcoal, coal)"),
+    };
+
+    /// <summary>Carbon dioxide a kilogram of fuel makes, kg.</summary>
+    public static double CarbonDioxidePerKg(string kind) => kind switch
+    {
+        "wood" => 6 * 44.01 / 162.14,
+        "charcoal" => 44.01 / 12.011,
+        "coal" => 0.80 * 44.01 / 12.011,
+        _ => throw new ArgumentException($"unknown fuel {kind} (wood, charcoal, coal)"),
+    };
+
+    /// <summary>Water vapour a kilogram of fuel makes, kg: its hydrogen burned.</summary>
+    public static double WaterPerKg(string kind) => kind switch
+    {
+        "wood" => 5 * 18.015 / 162.14,
+        "charcoal" => 0,
+        "coal" => 0.05 * 18.015 / 2.016,
+        _ => throw new ArgumentException($"unknown fuel {kind} (wood, charcoal, coal)"),
+    };
+
+    /// <summary>The oxygen fraction (by volume) below which a fire goes out.</summary>
+    public const double DefaultOxygenLimit = 0.15;
+    public double OxygenLimit { get; set; } = DefaultOxygenLimit;
+    /// <summary>Is there oxygen enough in its zone's air for it to burn?</summary>
+    public bool Breathing => Zone.OxygenFraction >= OxygenLimit;
+    public double OxygenUsed { get; private set; }                 // kg taken from its room's air, all told
 
     /// <summary>Stoichiometric air, kg per kg fuel burned: wood (mostly cellulose), charcoal (nearly pure carbon), bituminous coal.</summary>
     public static double AirFuelRatio(string kind) => kind switch
@@ -69,7 +114,7 @@ public sealed class Hearth(IHeated target, double powerW, double fuelKg, string 
     public double Doused { get; private set; }                     // kg of water poured on, all told
     public double Boiled { get; private set; }                     // kg of it the fire boiled away
     public bool Drowned { get; private set; }
-    public bool Lit => Fuel > 0 && Power > 0 && !Drowned;
+    public bool Lit => Fuel > 0 && Power > 0 && !Drowned && Breathing;
     /// <summary>W reaching the target, last step. The runtime adds it to anything else heating the same target.</summary>
     public double HeatOut { get; private set; }
 
@@ -98,6 +143,16 @@ public sealed class Hearth(IHeated target, double powerW, double fuelKg, string 
         if (!Lit) { Target.HeatInput = HeatOut = 0; return; }
         double density = EnergyDensity(FuelKind);
         double burn = Math.Min(Fuel, Power * Draught * dt / density);
+        if (Zone is Enclosure room)
+        {
+            // it can take no more oxygen than its room has
+            double o2 = burn * OxygenPerKg(FuelKind) / GasMix.O2MolarMass;
+            if (o2 > room.Moles[0]) { burn *= room.Moles[0] / o2; o2 = room.Moles[0]; }
+            room.ChangeGas(0, -o2);
+            room.ChangeGas(2, burn * CarbonDioxidePerKg(FuelKind) / GasMix.CO2MolarMass);
+            room.ChangeGas(3, burn * WaterPerKg(FuelKind) / GasMix.H2OMolarMass);
+            OxygenUsed += o2 * GasMix.O2MolarMass;
+        }
         double released = burn * density;
         Fuel -= burn;
         FuelBurned += burn;
@@ -106,6 +161,8 @@ public sealed class Hearth(IHeated target, double powerW, double fuelKg, string 
         Soak -= boiled;
         Boiled += boiled;
         Target.HeatInput = HeatOut = (released - boiled * QuenchHeat) * Efficiency / dt;
+        // what its pot doesn't take warms the room it stands in
+        if (Zone is Enclosure around) around.AddHeat((released - boiled * QuenchHeat) * (1 - Efficiency));
         if (Soak > 0 && Soak >= Fuel) Drowned = true;
     }
 }

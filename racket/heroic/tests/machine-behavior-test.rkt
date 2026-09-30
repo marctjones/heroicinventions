@@ -1483,3 +1483,23 @@
   ;; the locker's nitrogen went into the module round it, not onto Mars: not a gram lost
   (check-= (+ (at 3600 'sealed.mass) (at 3600 'locker.mass)) (+ (at 0 'sealed.mass) (at 0 'locker.mass)) 1e-9)
   (check-= (at 3600 'locker.pressure) (at 3600 'sealed.pressure) 0.01 "the pinhole has let the two come level"))
+
+;; ---------------------------------------------------------------------------
+;; Oxygen-limited fire (issue #40). Working in racket/machines/stove-rooms.rkt.
+
+(test-case "A charcoal stove in a sealed room burns its oxygen down to 15% and goes out at 12,924 s; ventilated, it settles at 18.19%"
+  (define run (simulate 'stove-rooms #:seconds 28800 #:step 0.05 #:sample-dt 30))
+  (define (at t k) (for/first ([f run] #:when (>= (car f) (- t 1e-6))) (cadr (assq k (cdr f)))))
+  (define out (for/first ([f run] #:when (= 0 (cadr (assq 'stove.lit (cdr f))))) (car f)))
+  (check-= out 12924 30 "the oxygen above 15%, 74.21 mol, at 5.742e-3 mol/s")
+  (check-= (at (+ out 30) 'stove.burned) 0.8913 0.001)
+  (check-= (at (+ out 30) 'sealed.co2) 5.99 0.01 "each O2 swapped for a CO2")
+  (check-= (at (+ out 30) 'sealed.o2) 15 0.01)
+  ;; while it burns the room sits at 20 + 2000/50 = 60 °C and 115.15 kPa
+  (check-= (at 10000 'sealed.temperature) 60 0.01)
+  (check-= (at 10000 'sealed.pressure) 115.15 0.01)
+  ;; ventilated: 5 L/s of outside air, 20.95% - 5.742e-3 / 0.2079 = 18.19%
+  (check-= (at 28800 'supplied.o2) 18.19 0.05)
+  (check-= (at 28800 'stove2.lit) 1 0)
+  ;; outdoors: 8 h burn 1.986 kg of the 3
+  (check-= (at 28800 'stove3.fuel) 1.0138 0.001))

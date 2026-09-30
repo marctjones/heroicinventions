@@ -134,7 +134,7 @@ public static class PartTemplates
                 ["size-x"] = new SNumber(2), ["size-y"] = new SNumber(2), ["size-z"] = new SNumber(2),
                 ["pressure"] = new SBool(false), ["temperature"] = new SBool(false),
                 ["insulation"] = new SNumber(2), ["heat-capacity"] = new SNumber(0), ["heater"] = new SNumber(0),
-                ["leak"] = new SNumber(0), ["coefficient"] = new SNumber(0.6),
+                ["leak"] = new SNumber(0), ["supply"] = new SNumber(0), ["coefficient"] = new SNumber(0.6),
                 ["o2"] = new SBool(false), ["n2"] = new SBool(false), ["co2"] = new SBool(false), ["h2o"] = new SBool(false), ["ar"] = new SBool(false),
             },
             [], null),
