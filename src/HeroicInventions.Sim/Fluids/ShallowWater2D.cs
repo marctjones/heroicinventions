@@ -79,6 +79,14 @@ public sealed class ShallowWater2D
         return true;
     }
 
+    /// <summary>Water poured towards the ground but off the map: on the ledger as poured and run away at once.</summary>
+    public void Leak(double m3)
+    {
+        if (m3 <= 0) return;
+        Poured += m3;
+        Leaked += m3;
+    }
+
     public void Step(double dt)
     {
         for (double t = 0; t < dt - 1e-12;)

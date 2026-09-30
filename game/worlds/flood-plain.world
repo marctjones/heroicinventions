@@ -1,0 +1,8 @@
+;; The flood-plain map (racket/maps/flood-plain.rkt) with a pond on its
+;; hillside (racket/machines/hillside-pond.rkt), standing on the ground at
+;; x = -5 (issue #37). At 10.5 s a water clock draws the pond's sluice; its
+;; race pours onto the hill, and the water runs down the valley and pools
+;; in the hollow at (30, 0).
+(world flood-plain
+  (map flood-plain)
+  (place pond hillside-pond (at -5 0 0)))

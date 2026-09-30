@@ -42,6 +42,18 @@ public sealed class WorldDef
 {
     public required string Name { get; init; }
     public required IReadOnlyList<Placement> Placements { get; init; }
+    /// <summary>The ground the world stands on (issue #37): a map's name (game/maps/NAME.map), or null for the flat floor.</summary>
+    public string? Map { get; init; }
+
+    /// <summary>
+    /// A placed machine's definition, moved into place: on a map its (at x y z)
+    /// is taken as y metres above the ground there, so a machine stands on the
+    /// hillside it is put on; with no map, as written. The machine is moved
+    /// as a whole, not bent to the ground's shape.
+    /// </summary>
+    public static MachineDef Placed(MachineDef def, Placement p, Fluids.Terrain? ground) =>
+        def.Translated(new Vec3(p.At.X, p.At.Y + (ground?.HeightAt(p.At.X, p.At.Z) ?? 0), p.At.Z));
+
     /// <summary>Pipes and shafts joining parts of different machines, resolved after every machine is built.</summary>
     public IReadOnlyList<LinkSpec> Links { get; init; } = [];
 
@@ -52,12 +64,12 @@ public sealed class WorldDef
     {
         if (Links.Any(l => l.Id == link.Id)) throw new MachineFormatException($"world {Name} already has a link named {link.Id}");
         CheckLink(link, Placements, null);
-        return new WorldDef { Name = Name, Placements = Placements, Links = [.. Links, link] };
+        return new WorldDef { Name = Name, Map = Map, Placements = Placements, Links = [.. Links, link] };
     }
 
     /// <summary>The same world without the named link.</summary>
     public WorldDef WithoutLink(string id) =>
-        new() { Name = Name, Placements = Placements, Links = Links.Where(l => l.Id != id).ToList() };
+        new() { Name = Name, Map = Map, Placements = Placements, Links = Links.Where(l => l.Id != id).ToList() };
 
     /// <summary>A link id not yet used in this world: pipe-1, pipe-2, …</summary>
     public string NextLinkId(string stem)
@@ -71,6 +83,7 @@ public sealed class WorldDef
     {
         var sb = new System.Text.StringBuilder();
         sb.Append($"(world {Name}");
+        if (Map is not null) sb.Append($"\n  (map {Map})");
         foreach (var p in Placements)
             sb.Append($"\n  (place {p.Label} {p.Machine} (at {SExprWriter.Number(p.At.X)} {SExprWriter.Number(p.At.Y)} {SExprWriter.Number(p.At.Z)}))");
         foreach (var l in Links)
@@ -142,7 +155,10 @@ public sealed class WorldDef
             CheckLink(link, placements, file);
             links.Add(link);
         }
-        return new WorldDef { Name = name.Name, Placements = placements, Links = links };
+        var map = root.Field("map") is { Items.Count: 2 } m
+            ? (m.Items[1] is SSymbol ms ? ms.Name : throw new MachineFormatException($"{file}: (map NAME)"))
+            : null;
+        return new WorldDef { Name = name.Name, Map = map, Placements = placements, Links = links };
 
         static double Num(SExpr e) => e is SNumber n ? n.Value : throw new MachineFormatException($"expected a number, got {e}");
     }
