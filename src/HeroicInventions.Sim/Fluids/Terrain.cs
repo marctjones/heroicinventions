@@ -125,6 +125,7 @@ public sealed partial class Terrain
             Soils = soils,
             OpenEdges = root.Field("edges")?.Items.ElementAtOrDefault(1) is not SSymbol { Name: "closed" },
             Roughness = root.Field("roughness") is { } r ? Num(r.Items[1]) : 0.03,
+            SettleOnLoad = root.Field("settle")?.Items.ElementAtOrDefault(1) is SBool { Value: true },
             Sources = root.Fields("source").Select(s => new MapSource(((SSymbol)s.Items[1]).Name, Num(s.Items[2]), Num(s.Items[3]), Num(s.Items[4]))).ToList(),
         };
     }
@@ -134,7 +135,7 @@ public sealed partial class Terrain
     {
         static string N(double v) => SExprWriter.Number(v);
         var sb = new StringBuilder();
-        sb.Append($"(map {Name}\n  (origin {N(X0)} {N(Z0)}) (cell {N(Cell)}) (size {Nx} {Nz}) (edges {(OpenEdges ? "open" : "closed")}) (roughness {N(Roughness)})\n");
+        sb.Append($"(map {Name}\n  (origin {N(X0)} {N(Z0)}) (cell {N(Cell)}) (size {Nx} {Nz}) (edges {(OpenEdges ? "open" : "closed")}) (roughness {N(Roughness)}){(SettleOnLoad ? " (settle #t)" : "")}\n");
         sb.Append("  (soils").Append(string.Concat(Soils.Select(s => $" ({s.Material} {N(s.Infiltration)} {N(s.Cohesion)} {N(s.Friction)} {N(s.Density)} {N(s.GrainSize)} {N(s.GrainDensity)})"))).Append(")\n");
         foreach (var s in Sources) sb.Append($"  (source {s.Id} {N(s.X)} {N(s.Z)} {N(s.Flow)})\n");
         sb.Append("  (heights");

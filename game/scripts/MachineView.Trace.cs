@@ -135,6 +135,7 @@ public partial class MachineView
                 Add($"{r.Spec.Id}.wrap-deg", Mathf.RadToDeg(r.Wrap));
             }
         }
+        foreach (var (key, value) in BurialFields()) Add(key, value);   // blocks held by the ground (#54)
         var e = Energy();
         Add("scene.kinetic", e.KineticJ); Add("scene.potential", e.PotentialJ); Add("scene.mechanical", e.KineticJ + e.PotentialJ);
         sb.Append(')');

@@ -237,6 +237,7 @@
         (size ,(ground-map-nx m) ,(ground-map-nz m))
         (edges ,(ground-map-edges m))
         (roughness ,(num "map #:roughness" (ground-map-roughness m)))
+        ,@(if (ground-map-settle m) '((settle #t)) '())
         (soils ,@(for/list ([s soils]) (list* s (rate s) (cohesion s) (field s 'friction) (field s 'density) (grain s))))
         ,@(for/list ([s (ground-map-sources m)])
             `(source ,(map-source-id s) ,(num "source #:at" (map-source-x s)) ,(num "source #:at" (map-source-z s))

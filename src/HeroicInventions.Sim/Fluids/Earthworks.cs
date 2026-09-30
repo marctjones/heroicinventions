@@ -52,6 +52,17 @@ public sealed partial class Terrain
         Version++;
     }
 
+    /// <summary>
+    /// Lets the whole map settle (issue #54): every face taller than its
+    /// soil holds fails, every loose slope steeper than repose slides, until
+    /// the ground stands. A map that asks for it (#:settle) settles as it is
+    /// loaded; what the slides bury, stays buried.
+    /// </summary>
+    public (int Failures, int Passes) Settle(double gravity) => Relax(0, 0, Nx - 1, Nz - 1, gravity, 20000);
+
+    /// <summary>Whether the map settles as it is loaded (a slope or cliff too steep to stand collapses first).</summary>
+    public bool SettleOnLoad { get; init; }
+
     private static readonly (int Di, int Dj, double Run)[] Neighbours =
         [(1, 0, 1), (0, 1, 1), (1, 1, Math.Sqrt(2)), (1, -1, Math.Sqrt(2))];
 

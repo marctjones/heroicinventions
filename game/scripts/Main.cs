@@ -663,7 +663,7 @@ public partial class Main : Node3D
             var def = WorldDef.Placed(MachineDef.Parse(Godot.FileAccess.GetFileAsString(path)), p, _groundSim?.Ground);
             var runtime = new MachineRuntime(def, _materials);
             _groundSim?.Attach(p.Label, runtime);
-            var view = new MachineView(runtime, _materials) { Name = p.Label, Position = Vector3.Zero };
+            var view = new MachineView(runtime, _materials) { Name = p.Label, Position = Vector3.Zero, Ground = _groundSim?.Ground };
             AddChild(view);
             _views.Add(view);
             _viewMachine[view] = p.Machine;
@@ -716,7 +716,7 @@ public partial class Main : Node3D
         _groundSim?.Attach(old.Name, runtime);   // its channels pour onto the ground again
         string label = old.Name;
         old.Name = $"{label}-replaced";   // else Godot renames the new node, and the label no longer finds it (links, traces)
-        var view = new MachineView(runtime, _materials) { Name = label, Position = Vector3.Zero };
+        var view = new MachineView(runtime, _materials) { Name = label, Position = Vector3.Zero, Ground = _groundSim?.Ground };
         AddChild(view);
         view.TakeBodiesFrom(old);
         view.TakeTraceFrom(old);

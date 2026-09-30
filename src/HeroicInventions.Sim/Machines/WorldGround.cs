@@ -44,6 +44,7 @@ public sealed class WorldGround
         _getters["map.leaked"] = () => Water.Leaked;
         _getters["map.bed-moved"] = () => Water.BedMoved;      // m³ of sand the water has shifted (#53)
         _getters["map.bed-lost"] = () => Water.BedLost;        // m³ of it carried off the map
+        _getters["map.settled"] = () => Settled;               // faces that failed as the map settled (#54)
         _getters["map.probe-x"] = () => _probeX;
         _getters["map.probe-z"] = () => _probeZ;
         _setters["map.probe-x"] = x => _probeX = x;
@@ -76,5 +77,13 @@ public sealed class WorldGround
     }
     private int _attached;
 
-    public void Step(double dt) => Water.Step(dt);
+    public void Step(double dt)
+    {
+        // a map that asks to settle lets its too-steep ground go on the world's first tick, onto whatever stands below (#54)
+        if (Ground.SettleOnLoad && !_settled) { _settled = true; Settled = Ground.Settle(Water.Gravity).Failures; }
+        Water.Step(dt);
+    }
+    private bool _settled;
+    /// <summary>How many faces failed when the map settled (0 if it didn't ask to, or nothing was too steep).</summary>
+    public int Settled { get; private set; }
 }

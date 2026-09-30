@@ -2100,3 +2100,25 @@
     (check-= (at foot '(iron-ball speed)) (sqrt (/ (* 10 9.81 (* 1.5 (sin (* 15 (/ pi 180))))) 7)) 0.06 "sqrt(10 g h / 7) = 2.33 m/s where it leaves the ramp")
     (check-true (< (at foot '(iron-ball speed)) (* 0.9 (sqrt (* 2 9.81 (* 1.5 (sin (* 15 (/ pi 180)))))))) "not the sqrt(2 g h) = 2.76 of a block")
     (check-= foot (sqrt (/ (* 2 1.5) a-rolling)) 0.06 "1.286 s to run 1.5 m")))
+;; ---------------------------------------------------------------------------
+;; Buried bodies and slides (issue #54)
+
+(test-case "Slide (#54): the cliff comes down on the first tick and buries the crate at its foot under 0.33 m, held, 4.77 kN to pull out"
+  (when (godot-available?)
+    ;; cliff.rkt: a 2 m2/m wedge at repose against the new face; 0.83 m over x = 5.5, the crate's top at 0.5
+    (define box (hash-ref (godot-simulate-world 'slide #:seconds 2 #:sample-dt 0.5) 'box))
+    (check-= (final-of box '(crate cover)) 0.33 0.01)
+    (check-= (final-of box '(crate buried)) 1 0)
+    (check-= (final-of box '(crate pull-out)) 4770 60)
+    (check-= (final-of box '(crate y)) 0.25 1e-6 "held where it stood")))
+
+(test-case "Digging out (#54): the buried crate takes 14.2 kN to pull, and is freed by the spit that takes the trench to 1 m"
+  (when (godot-available?)
+    ;; buried-crate.rkt: m g + gamma D s^2 + 4 s (c s + K0 gamma tan phi ((D + s)^2 - D^2) / 2) = 14.2 kN under 1 m
+    (define site (hash-ref (godot-simulate-world 'dig-out #:seconds 30 #:sample-dt 0.1) 'site))
+    (check-= (value-at site '(crate pull-out) 0.1) 14200 100)
+    (define freed (for/first ([f site] #:when (let ([b (assq 'crate.buried (cdr f))]) (and b (zero? (cadr b))) )) (car f)))
+    (define third-spit (for/first ([f site] #:when (>= (cadr (assq 'gang.depth (cdr f))) 0.75)) (car f)))
+    (check-true (and freed third-spit (> freed third-spit) (< freed 21))
+                (format "freed at ~a s, during the fourth spit (the third was done at ~a s; the fourth, at 1 m, by 20.9 s)" freed third-spit))
+    (check-= (final-of site '(crate y)) -0.75 0.01 "out, resting on the trench's floor")))

@@ -15,6 +15,7 @@
 ;;     #:grain ((sand 0.0005) (gravel 0.01 2650))        ; m its grains are across [and kg/m³ they weigh, 2650 if not
 ;;                                                       ; given]: flowing water can carry them off (#53); 0: it can't
 ;;     #:edges open #:roughness 0.03
+;;     #:settle #t                                       ; let what can't stand collapse on the world's first tick (#54)
 ;;     (source spring #:at (2 0) #:flow 0.05))
 ;;
 ;; Heights are sampled at each cell's centre, (x0 + (i + 1/2) cell, z0 + (j + 1/2) cell).
@@ -35,7 +36,7 @@
 
 (struct map-source (id x z flow) #:transparent)
 ;; heights: a vector, x fastest (i + j nx); soil: a vector of material symbols, the same order
-(struct ground-map (name origin cell nx nz heights soil infiltration edges roughness sources loc [cohesion #:auto #:mutable] [grain #:auto #:mutable]) #:transparent)
+(struct ground-map (name origin cell nx nz heights soil infiltration edges roughness sources loc [cohesion #:auto #:mutable] [grain #:auto #:mutable] [settle #:auto #:mutable]) #:transparent)
 
 (define registry '())
 (define (register-map! m) (set! registry (cons m registry)))
@@ -150,6 +151,7 @@
                       (~optional (~seq #:infiltration ((im:id ir:expr) ...)))
                       (~optional (~seq #:cohesion ((cm:id cv:expr) ...)))
                       (~optional (~seq #:grain ((gm:id gv:expr ...+) ...)))
+                      (~optional (~seq #:settle settle-v:expr))
                       (~optional (~seq #:edges edges:id))
                       (~optional (~seq #:roughness rough:expr))) ...
         s:source-clause ...)
@@ -179,4 +181,5 @@
                                    (syntax-line stx) (syntax-column stx)))
                       (list (~? (~@ (list 'cm cv) ...)))
                       (list (~? (~@ (list 'gm gv ...) ...)))))
+         (set-ground-map-settle! name (and (~? settle-v #f) #t))
          (register-map! name))]))

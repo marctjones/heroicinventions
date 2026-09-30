@@ -1382,6 +1382,7 @@ public partial class MachineView : Node3D
         TestTriggers();
         ApplyBuoyancy();
         ConstrainChains();
+        CheckBurial();
         Runtime.Step(dt);
         Refresh();
         if (trace) TraceTick(dt);

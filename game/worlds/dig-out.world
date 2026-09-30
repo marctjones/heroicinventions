@@ -1,0 +1,5 @@
+;; A crate buried a metre deep, and a gang digging down to it (issue #54;
+;; racket/machines/buried-crate.rkt): held until its lid is bared, then free.
+(world dig-out
+  (map buried-field)
+  (place site buried-crate (at 0 0 0)))

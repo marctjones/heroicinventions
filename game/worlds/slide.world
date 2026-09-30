@@ -1,0 +1,5 @@
+;; A cliff too tall for its clay comes down on the world's first tick and
+;; buries the crate standing at its foot (issue #54; racket/maps/cliff.rkt).
+(world slide
+  (map cliff)
+  (place box crate (at 5.5 0 0)))
