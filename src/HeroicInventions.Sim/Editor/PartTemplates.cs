@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -76,6 +76,9 @@ public static class PartTemplates
             [], null),
         "ramp" => new PartSpec(id, "ramp", material, at, Props(("length", 1.0), ("width", 0.5), ("angle-deg", 15)), [], null),
         "piston" => new PartSpec(id, "piston", material, at, Props(("bore", 0.1), ("stroke", 0.3), ("start", 0), ("rod-mass", 0)), [], null),
+        // a digging gang (issue #44): a trench from #:at along +x, the spoil thrown to the +z side
+        "digger" => new PartSpec(id, "digger", material, at,
+            Props(("length", 4), ("width", 1), ("depth", 1), ("power", 150), ("spit", 0.25), ("spoil", 5)), [], null),
         "post" => new PartSpec(id, "post", material, at,
             new Dictionary<string, SExpr> { ["size-x"] = new SNumber(0.2), ["size-y"] = new SNumber(1.0), ["size-z"] = new SNumber(0.2), ["round"] = new SBool(false) },
             [], null),

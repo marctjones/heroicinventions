@@ -59,6 +59,7 @@ public sealed class WorldGround
     public void Attach(string label, MachineRuntime machine)
     {
         if (_attached++ == 0) Water.Gravity = machine.Outside.Gravity;
+        foreach (var d in machine.Diggers.Values) d.Attach(Ground, Water.Gravity);   // digging gangs dig this ground (#44)
         foreach (var spec in machine.Def.Channels)
         {
             if (spec.To is not null || spec.Onto is not null || spec.End is not { } end) continue;

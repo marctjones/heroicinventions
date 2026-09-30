@@ -37,7 +37,7 @@
   ;; centres at x = 0, 2 and z = 1, 3: 1 + 0.5x + 0.1z
   (check-equal? (cdr (assq 'heights (cddr s))) '(1.1 2.1 1.3 2.3))
   (check-equal? (assq 'soil (cddr s)) '(soil 0))
-  (check-equal? (assq 'soils (cddr s)) '(soils (sand 1e-5)))
+  (check-equal? (assq 'soils (cddr s)) '(soils (sand 1e-5 0.0 0.62 1600.0)))  ; rate, cohesion (none given), tan phi and density from materials.rktd
   (check-equal? (assq 'source (cddr s)) '(source spring 0.0 1.0 0.01)))
 
 (test-case "the crater generator: floor, rim and ejecta where they should be, finite everywhere, with dunes and bays"
@@ -48,3 +48,9 @@
   (for* ([x (in-range -300 301 7)] [z (in-range -300 301 11)])
     (define h (c x z))
     (check-true (and (real? h) (rational? h)) (format "finite at (~a, ~a)" x z))))
+
+(test-case "a map's cohesion (#44) is per soil, never negative, and written with the soil"
+  (define-map pit #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil clay #:cohesion ((clay 10000)))
+  (check-equal? (assq 'soils (cddr (map->sexp pit))) '(soils (clay 0.0 10000.0 0.35 1800.0)))
+  (check-exn exn:fail:syntax? (λ () (define-map-form '(define-map m #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:cohesion ((mud 5))))))
+  (check-map-error #rx"must be 0 or more" (define-map m #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil clay #:cohesion ((clay -1)))))

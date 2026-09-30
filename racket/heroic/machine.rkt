@@ -39,7 +39,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam ratchet crucible burning-mirror
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger ratchet crucible burning-mirror
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -439,7 +439,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam ratchet crucible burning-mirror
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger ratchet crucible burning-mirror
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt joint)
 
@@ -537,8 +537,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, ratchet, crucible, burning-mirror) or link (pipe, connect, sealed-air)"
-    #:literals (enclosure grip door air-pump cam ratchet crucible burning-mirror tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, ratchet, crucible, burning-mirror) or link (pipe, connect, sealed-air)"
+    #:literals (enclosure grip door air-pump cam digger ratchet crucible burning-mirror tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -961,6 +961,27 @@
       #:with expr #`(part 'id 'ratchet '(~? mat iron) (list at.x at.y at.z)
                           (list (cons 'on 'wheel-id) (cons 'teeth (~? teeth-v 12)) (cons 'radius (~? radius-v 0))
                                 (cons 'reverse (~? reverse-v #f)))
+    ;; A digging gang (issue #44), cutting a trench into the map the machine
+    ;; stands on: from #:at, #:length m along +x, #:width m across, down to
+    ;; #:depth m, a #:spit (default 0.25 m, a spade's depth) at a time,
+    ;; throwing the spoil in a ridge #:spoil m to the +z side (default 5).
+    ;; It works at #:power watts (a labourer keeps up ~150 W): each cubic
+    ;; metre costs the soil's shear strength at the cut's depth, c + γ z tan φ,
+    ;; plus lifting it out, γ z. It stops, and climbs out, when a wall falls
+    ;; in. With no map under it, it has nothing to dig.
+    (pattern (digger id:id
+                     (~alt (~once (~seq #:at at:vec3))
+                           (~once (~seq #:length len-v:expr))
+                           (~once (~seq #:width width-v:expr))
+                           (~once (~seq #:depth depth-v:expr))
+                           (~optional (~seq #:power power-v:expr))
+                           (~optional (~seq #:spit spit-v:expr))
+                           (~optional (~seq #:spoil spoil-v:expr))
+                           (~optional (~seq #:material mat:id))) ...)
+      #:attr info (pinfo #'id 'digger (attribute mat) '())
+      #:with expr #`(part 'id 'digger '(~? mat iron) (list at.x at.y at.z)
+                          (list (cons 'length len-v) (cons 'width width-v) (cons 'depth depth-v)
+                                (cons 'power (~? power-v 150)) (cons 'spit (~? spit-v 0.25)) (cons 'spoil (~? spoil-v 5)))
                           '()
                           #,(loc-of this-syntax)))
 

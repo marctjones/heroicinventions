@@ -167,6 +167,9 @@ public static class RktExporter
             case "piston":
                 return $"  (piston {p.Id} {At()} #:bore {F(N("bore"))} #:stroke {F(N("stroke"))} {Mat()} " +
                        $"#:start {F(N("start"))} #:rod-mass {F(N("rod-mass"))})\n";
+            case "digger":
+                return $"  (digger {p.Id} {At()} #:length {F(N("length"))} #:width {F(N("width"))} #:depth {F(N("depth"))}" +
+                       $" #:power {F(N("power", 150))} #:spit {F(N("spit", 0.25))} #:spoil {F(N("spoil", 5))} {Mat()})\n";
             case "post":
                 return $"  (post {p.Id} {At()} #:size ({F(N("size-x"))} {F(N("size-y"))} {F(N("size-z"))}) {Mat()}" +
                        (p.Props.TryGetValue("round", out var rd) && rd is SBool { Value: true } ? " #:round #t" : "") + ")\n";

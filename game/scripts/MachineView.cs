@@ -97,6 +97,7 @@ public partial class MachineView : Node3D
                 case "windmill": BuildWindmill(part); break;
                 case "capstan": BuildCapstan(part); break;
                 case "counterpoise": BuildCounterpoise(part); break;
+                case "digger": BuildDigger(part); break;
             }
             _partNodes[part.Id] = Enumerable.Range(before, GetChildCount() - before)
                 .Select(i => GetChild(i)).OfType<Node3D>().ToList();
@@ -1495,6 +1496,7 @@ public partial class MachineView : Node3D
         DrawSprings();
         DrawMirrors();
         DrawPumps();
+        DrawDiggers();
     }
 
     public void ToggleFire()

@@ -19,14 +19,18 @@ public partial class TerrainView : Node3D
     private ShallowWater2D _water = null!;
     private MeshInstance3D _waterMesh = null!;
     private double _sinceDrawn;
+    private MeshInstance3D _groundMesh = null!;
+    private StaticBody3D _body = null!;
+    private int _shownVersion;
 
     public void Show(Terrain ground, ShallowWater2D water)
     {
         _ground = ground;
         _water = water;
         foreach (var c in GetChildren()) c.QueueFree();
-        AddChild(new MeshInstance3D { Mesh = GroundMesh(), Name = "Ground" });
-        AddChild(Collision());
+        AddChild(_groundMesh = new MeshInstance3D { Mesh = GroundMesh(), Name = "Ground" });
+        AddChild(_body = Collision());
+        _shownVersion = ground.Version;
         _waterMesh = new MeshInstance3D
         {
             Name = "Water",
@@ -58,6 +62,7 @@ public partial class TerrainView : Node3D
                 var normal = dz.Cross(dx).Normalized();
                 float shade = 0.65f + 0.35f * Mathf.Max(0, normal.Dot(light));
                 var c = Shapes.ColorFor(soil);
+                if (_ground.Loose[i + j * nx]) c = c.Lightened(0.18f);   // spoil and slumped ground: loose, paler (#44)
                 st.SetColor(new Color(c.R * shade, c.G * shade, c.B * shade));
                 st.SetNormal(normal);
                 st.AddVertex(Centre(i, j));
@@ -102,6 +107,14 @@ public partial class TerrainView : Node3D
     {
         if ((_sinceDrawn += dt) < 0.2) return;
         _sinceDrawn = 0;
+        if (_ground.Version != _shownVersion)
+        {
+            // dug or heaped (issue #44): the ground's shape and its collision change with it
+            _shownVersion = _ground.Version;
+            _groundMesh.Mesh = GroundMesh();
+            _body.QueueFree();
+            AddChild(_body = Collision());
+        }
         DrawWater();
     }
 

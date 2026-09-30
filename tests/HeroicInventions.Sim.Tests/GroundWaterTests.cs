@@ -20,7 +20,7 @@ public class GroundWaterTests
         return new Terrain
         {
             Name = "test", X0 = x0, Z0 = z0, Cell = cell, Nx = nx, Nz = nz, Heights = heights,
-            Soil = new int[nx * nz], Soils = [("sand", infiltration)], OpenEdges = open, Sources = sources ?? [],
+            Soil = new int[nx * nz], Soils = [new SoilSpec("sand", infiltration)], OpenEdges = open, Sources = sources ?? [],
         };
     }
 
@@ -135,7 +135,7 @@ public class GroundWaterTests
         for (int j = 0; j < map.Nz; j += 7)
             for (int i = 0; i < map.Nx; i += 5)
                 Assert.Equal(Ground(map.CellX(i), map.CellZ(j)), map.Heights[i + j * map.Nx], 4);
-        Assert.Equal(("loam", 2e-6), map.Soils[0]);
+        Assert.Equal(("loam", 2e-6), (map.Soils[0].Material, map.Soils[0].Infiltration));
         Assert.True(map.OpenEdges);
     }
 

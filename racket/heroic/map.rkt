@@ -11,6 +11,7 @@
 ;;     #:heights (slope #:gradient '(-0.02 0) #:base 1)  ; or (λ (x z) ...), or rows of numbers
 ;;     #:soil loam                                       ; or (λ (x z) 'clay)
 ;;     #:infiltration ((loam 1e-6) (sand 2e-5))          ; m/s each soil soaks away; 0 if not given
+;;     #:cohesion ((clay 10000))                         ; Pa each intact soil holds together by (#44); 0 if not given
 ;;     #:edges open #:roughness 0.03
 ;;     (source spring #:at (2 0) #:flow 0.05))
 ;;
@@ -32,7 +33,7 @@
 
 (struct map-source (id x z flow) #:transparent)
 ;; heights: a vector, x fastest (i + j nx); soil: a vector of material symbols, the same order
-(struct ground-map (name origin cell nx nz heights soil infiltration edges roughness sources loc) #:transparent)
+(struct ground-map (name origin cell nx nz heights soil infiltration edges roughness sources loc [cohesion #:auto #:mutable]) #:transparent)
 
 (define registry '())
 (define (register-map! m) (set! registry (cons m registry)))
@@ -83,7 +84,7 @@
 ;; ---------------------------------------------------------------------------
 ;; define-map
 
-(define (build-map name origin cell size heights soil infiltration edges roughness sources loc)
+(define (build-map name origin cell size heights soil infiltration edges roughness sources loc [cohesion '()])
   (define (fail fmt . args) (raise-user-error name (apply format fmt args)))
   (unless (and (real? cell) (>= cell min-map-cell))
     (fail "#:cell must be at least ~a m (the grid is coarse on purpose: features smaller than a cell belong in a channel), got ~e" min-map-cell cell))
@@ -113,13 +114,17 @@
           [(procedure? soil) (for*/vector #:length (* nx nz) ([j nz] [i nx]) (soil (cx i) (cz j)))]
           [else (fail "#:soil is a material or a procedure (x z) -> material")]))
   (define known (material-ids))
-  (for ([m (remove-duplicates (append (vector->list sv) (map car infiltration)))])
+  (for ([m (remove-duplicates (append (vector->list sv) (map car infiltration) (map car cohesion)))])
     (unless (memq m known) (fail "unknown soil ~a; known materials: ~a" m known)))
   (unless (memq edges '(open closed)) (fail "#:edges is open or closed, got ~e" edges))
   (for ([s sources])
     (unless (and (<= x0 (map-source-x s) (+ x0 (* nx cell))) (<= z0 (map-source-z s) (+ z0 (* nz cell))))
       (fail "source ~a at (~a ~a) is off the map" (map-source-id s) (map-source-x s) (map-source-z s))))
-  (ground-map name origin cell nx nz hv sv infiltration edges roughness sources loc))
+  (for ([c cohesion])
+    (unless (and (real? (cadr c)) (>= (cadr c) 0)) (fail "#:cohesion of ~a must be 0 or more (Pa), got ~e" (car c) (cadr c))))
+  (define m (ground-map name origin cell nx nz hv sv infiltration edges roughness sources loc))
+  (set-ground-map-cohesion! m cohesion)
+  m)
 
 (begin-for-syntax
   (define known-soils (material-ids))
@@ -136,6 +141,7 @@
                       (~once (~seq #:heights heights:expr))
                       (~optional (~seq #:soil soil:expr))
                       (~optional (~seq #:infiltration ((im:id ir:expr) ...)))
+                      (~optional (~seq #:cohesion ((cm:id cv:expr) ...)))
                       (~optional (~seq #:edges edges:id))
                       (~optional (~seq #:roughness rough:expr))) ...
         s:source-clause ...)
@@ -143,6 +149,8 @@
                  (format "unknown soil; known materials: ~a" known-soils)
      #:fail-when (for/first ([m (or (attribute im) '())] #:unless (memq (syntax-e m) known-soils)) m)
                  "unknown soil in #:infiltration"
+     #:fail-when (for/first ([m (or (attribute cm) '())] #:unless (memq (syntax-e m) known-soils)) m)
+                 "unknown soil in #:cohesion"
      #:fail-when (let ([c (syntax-e #'cell)]) (and (real? c) (< c 0.5) #'cell))
                  "#:cell must be at least 0.5 m"
      #:fail-when (let ([a (syntax-e #'sx)] [b (syntax-e #'sz)])
@@ -160,5 +168,6 @@
                       (list s.expr ...)
                       '#,(let ([src (syntax-source stx)])
                            (vector (cond [(path? src) (path->string src)] [(string? src) src] [else "?"])
-                                   (syntax-line stx) (syntax-column stx)))))
+                                   (syntax-line stx) (syntax-column stx)))
+                      (list (~? (~@ (list 'cm cv) ...)))))
          (register-map! name))]))

@@ -1,0 +1,6 @@
+;; A gang digging an unshored trench in stiff clay (issue #44): the walls
+;; stand until the trench is 3.25 m deep, past the clay's critical height of
+;; 3.19 m, and then fall in (racket/machines/trench-crew.rkt).
+(world trench
+  (map clay-pit)
+  (place crew trench-crew (at -2 0 -3)))

@@ -2,7 +2,7 @@
 ;; Turns a machine value into the .machine format: plain S-expressions
 ;; with every number a finite flonum, so the C# reader never meets exact
 ;; rationals (3/100) or infinities.
-(require racket/path racket/match racket/list "machine.rkt" "map.rkt" "geometry/shape.rkt"
+(require racket/path racket/match racket/list "machine.rkt" "map.rkt" "geometry/shape.rkt" "materials.rkt"
          (only-in "planets.rkt" planet-fields))
 (provide machine->sexp write-machine-file map->sexp write-map-file)
 
@@ -207,6 +207,10 @@
   (define name (ground-map-name m))
   (define soils
     (remove-duplicates (append (map car (ground-map-infiltration m)) (vector->list (ground-map-soil m)))))
+  ;; each soil's strength (issue #44): cohesion from the map, friction (tan of repose) and density from materials.rktd
+  (define (cohesion s)
+    (cond [(assq s (or (ground-map-cohesion m) '())) => (λ (e) (num (format "map ~a #:cohesion" name) (cadr e)))] [else 0.0]))
+  (define (field s k) (num (format "soil ~a ~a" s k) (material-field (assq s (material-table)) k)))
   (define (rate s)
     (cond [(assq s (ground-map-infiltration m)) => (λ (e) (num (format "map ~a #:infiltration" name) (cadr e)))]
           [else 0.0]))
@@ -217,7 +221,7 @@
         (size ,(ground-map-nx m) ,(ground-map-nz m))
         (edges ,(ground-map-edges m))
         (roughness ,(num "map #:roughness" (ground-map-roughness m)))
-        (soils ,@(for/list ([s soils]) (list s (rate s))))
+        (soils ,@(for/list ([s soils]) (list s (rate s) (cohesion s) (field s 'friction) (field s 'density))))
         ,@(for/list ([s (ground-map-sources m)])
             `(source ,(map-source-id s) ,(num "source #:at" (map-source-x s)) ,(num "source #:at" (map-source-z s))
                      ,(num "source #:flow" (map-source-flow s))))

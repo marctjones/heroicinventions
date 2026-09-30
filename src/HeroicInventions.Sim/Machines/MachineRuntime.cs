@@ -57,6 +57,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<IHeated, double> _ownHeat = [];
     private readonly Dictionary<string, Counterpoise> _counterpoises = [];
     private readonly Dictionary<string, Pendulum> _pendulums = [];
+    private readonly Dictionary<string, Digger> _diggers = [];
     private readonly Dictionary<string, Func<double>> _getters = [];
     private readonly Dictionary<string, Action<double>> _setters = [];
 
@@ -136,6 +137,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Counterpoise> Counterpoises => _counterpoises;
     /// <summary>Pendulums hung on a bearing (#:bearing-radius): swung here, not by Jolt, so their friction and wear can be checked.</summary>
     public IReadOnlyDictionary<string, Pendulum> Pendulums => _pendulums;
+    /// <summary>Digging gangs (issue #44): they dig the map the world stands the machine on (WorldGround attaches it), and nothing without one.</summary>
+    public IReadOnlyDictionary<string, Digger> Diggers => _diggers;
     public double Time { get; private set; }
 
     /// <summary>
@@ -319,6 +322,15 @@ public sealed class MachineRuntime
                     Zone a = ZoneNamed(part.Symbol("from", ""), part), b = ZoneNamed(part.Symbol("to", ""), part);
                     if (a == b) throw new MachineFormatException($"air-pump {part.Id} draws from and delivers to {part.Symbol("from", "")}", part.Location);
                     _gasPumps[part.Id] = new GasPump(part.Id, a, b, part.Number("speed")) { Until = part.Number("until", 0) };
+                    break;
+                }
+                case "digger":
+                {
+                    double len = part.Number("length"), w = part.Number("width"), d = part.Number("depth");
+                    double power = part.Number("power", 150), spit = part.Number("spit", 0.25);
+                    if (!(len > 0 && w > 0 && d > 0 && spit > 0) || power < 0)
+                        throw new MachineFormatException($"digger {part.Id}: length, width, depth and spit must be more than 0, and power not less", part.Location);
+                    _diggers[part.Id] = new Digger(part.Id, part.At.X, part.At.Z, len, w, d, power, spit, part.Number("spoil", 5));
                     break;
                 }
                 case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump" or "grip" or "cam" or "ratchet":
@@ -1346,6 +1358,18 @@ public sealed class MachineRuntime
             _getters[$"{id}.hanging"] = () => cp.Hanging;                           // kg on the vessel's rope
             _getters[$"{id}.torque"] = () => cp.Torque;                             // N·m, + opening
         }
+        foreach (var (id, d) in _diggers)
+        {
+            _getters[$"{id}.dug"] = () => d.Dug;                       // m³ taken out
+            _getters[$"{id}.work"] = () => d.Work / 1000;              // kJ done
+            _getters[$"{id}.specific-work"] = () => d.SpecificWork / 1000;   // kJ per m³
+            _getters[$"{id}.depth"] = () => d.Depth;                   // m the trench is down to
+            _getters[$"{id}.collapsed"] = () => d.Collapsed ? 1 : 0;
+            _getters[$"{id}.collapse-depth"] = () => d.CollapseDepth;  // m when a wall fell in; -1 none has
+            _getters[$"{id}.done"] = () => d.Done ? 1 : 0;
+            _getters[$"{id}.power"] = () => d.Power;                   // W the gang works at
+            _setters[$"{id}.power"] = w => d.Power = Math.Max(0, w);
+        }
         foreach (var (id, p) in _pendulums)
         {
             _getters[$"{id}.angle"] = () => p.Angle * 180 / Math.PI;                // deg from hanging
@@ -1414,6 +1438,7 @@ public sealed class MachineRuntime
         foreach (var m in _windmills.Values) m.Step(dt);
         foreach (var c in _capstans.Values) c.Step(dt);
         foreach (var p in _pendulums.Values) p.Step(dt);
+        foreach (var d in _diggers.Values) d.Step(dt);
         foreach (var rotor in _rotors.Values) rotor.Step(dt); // steps its own boiler
         foreach (var w in _jetWheels.Values) w.Step(dt);      // so does a jet wheel
         foreach (var c in _cylinders.Values) c.Step(dt);

@@ -1781,3 +1781,17 @@
   ;; clear: 2 kg of silica
   (check-= (final-of run '(clear melt-time)) 930 5)
   (check-= (final-of run '(clear transmittance)) 0.9 0 "clear silica glass"))
+;; ---------------------------------------------------------------------------
+;; Digging (issue #44)
+
+(test-case "Digging (#44): the gang's unshored trench in stiff clay falls in at 3.25 m, past the clay's 3.19 m, after 13 m3 at 48.7 kJ/m3"
+  (when (godot-available?)
+    ;; trench-crew.rkt: 4c/g tan(45 + phi/2) = 3.193 m; W/V = c + g z (1 + tan phi), z averaging 1.625 m
+    (define world (godot-simulate-world 'trench #:seconds 240 #:sample-dt 10))
+    (define crew (hash-ref world 'crew))
+    (check-equal? (final-of crew '(gang collapsed)) 1)
+    (check-= (final-of crew '(gang collapse-depth)) 3.25 1e-9)
+    (check-= (final-of crew '(gang dug)) 13 1e-6)
+    (check-= (final-of crew '(gang specific-work)) 48.74 0.05)
+    (check-true (< 200 (for/first ([f crew] #:when (= 1 (cadr (assq 'gang.collapsed (cdr f))))) (car f)) 230)
+                "it fell in about 211 s in (3 kW into 634 kJ)")))

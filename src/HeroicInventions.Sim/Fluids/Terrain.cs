@@ -4,6 +4,22 @@ using HeroicInventions.Sim.Machines;
 
 namespace HeroicInventions.Sim.Fluids;
 
+/// <summary>
+/// A soil of a map: its material, how fast it soaks water away (m/s), and
+/// its strength by Mohr–Coulomb (issue #44): cohesion c (Pa) and friction
+/// tan φ, the tangent of its angle of repose, with its density (kg/m³).
+/// Shear strength at depth z is c + γ·z·tan φ, γ = ρ·g.
+/// </summary>
+public sealed record SoilSpec(string Material, double Infiltration, double Cohesion = 0, double Friction = 0.6, double Density = 1600)
+{
+    /// <summary>
+    /// How tall a cut face of this soil stands unsupported: 4c/γ · tan(45° + φ/2)
+    /// (Terzaghi's critical height of a vertical cut). Loose soil (c = 0) stands at none.
+    /// </summary>
+    public double CriticalHeight(double gravity) =>
+        4 * Cohesion / (Density * gravity) * Math.Tan(Math.PI / 4 + Math.Atan(Friction) / 2);
+}
+
 /// <summary>A spring on open ground: water welling up at a point of the map, m³/s.</summary>
 public sealed record MapSource(string Id, double X, double Z, double Flow);
 
@@ -19,7 +35,7 @@ public sealed record MapSource(string Id, double X, double Z, double Flow);
 ///   (soils (sand 1e-5) (clay 0)) (heights h ...) (soil k ...) (source ID X Z FLOW) ...)
 /// </code>
 /// </summary>
-public sealed class Terrain
+public sealed partial class Terrain
 {
     public required string Name { get; init; }
     public double X0 { get; init; }
@@ -31,8 +47,8 @@ public sealed class Terrain
     public required double[] Heights { get; init; }
     /// <summary>Each cell's soil, an index into <see cref="Soils"/>.</summary>
     public required int[] Soil { get; init; }
-    /// <summary>The map's soils: a material from the material table, and how fast it soaks water away, m/s.</summary>
-    public required IReadOnlyList<(string Material, double Infiltration)> Soils { get; init; }
+    /// <summary>The map's soils: a material from the material table, how fast it soaks water away, and how strong it is.</summary>
+    public required IReadOnlyList<SoilSpec> Soils { get; init; }
     /// <summary>Open edges let water run off the map (counted as leaked); closed ones are walls.</summary>
     public bool OpenEdges { get; init; } = true;
     /// <summary>Manning's n of the ground's surface (0.03: short grass, bare earth).</summary>
@@ -78,7 +94,11 @@ public sealed class Terrain
         if (heights.Length != nx * nz)
             throw new MachineFormatException($"{file}: map {name.Name} is {nx} x {nz} cells but has {heights.Length} heights");
         var soils = Need("soils").Items.Skip(1).OfType<SList>()
-            .Select(s => (s.Items[0] is SSymbol m ? m.Name : throw new MachineFormatException($"{file}: a soil is (MATERIAL RATE)"), Num(s.Items[1]))).ToList();
+            .Select(s => new SoilSpec(s.Items[0] is SSymbol m ? m.Name : throw new MachineFormatException($"{file}: a soil is (MATERIAL RATE [COHESION FRICTION DENSITY])"),
+                                      Num(s.Items[1]),
+                                      s.Items.Count > 2 ? Num(s.Items[2]) : 0,
+                                      s.Items.Count > 3 ? Num(s.Items[3]) : 0.6,
+                                      s.Items.Count > 4 ? Num(s.Items[4]) : 1600)).ToList();
         var soilItems = root.Field("soil")?.Items.Skip(1).Select(x => (int)Num(x)).ToArray() ?? [];
         var soil = soilItems.Length == 1 ? Enumerable.Repeat(soilItems[0], nx * nz).ToArray()
                  : soilItems.Length == nx * nz ? soilItems
@@ -109,7 +129,7 @@ public sealed class Terrain
         static string N(double v) => SExprWriter.Number(v);
         var sb = new StringBuilder();
         sb.Append($"(map {Name}\n  (origin {N(X0)} {N(Z0)}) (cell {N(Cell)}) (size {Nx} {Nz}) (edges {(OpenEdges ? "open" : "closed")}) (roughness {N(Roughness)})\n");
-        sb.Append("  (soils").Append(string.Concat(Soils.Select(s => $" ({s.Material} {N(s.Infiltration)})"))).Append(")\n");
+        sb.Append("  (soils").Append(string.Concat(Soils.Select(s => $" ({s.Material} {N(s.Infiltration)} {N(s.Cohesion)} {N(s.Friction)} {N(s.Density)})"))).Append(")\n");
         foreach (var s in Sources) sb.Append($"  (source {s.Id} {N(s.X)} {N(s.Z)} {N(s.Flow)})\n");
         sb.Append("  (heights");
         for (int k = 0; k < Heights.Length; k++) sb.Append(k % Nx == 0 ? "\n   " : " ").Append(Heights[k].ToString("0.####", CultureInfo.InvariantCulture));
