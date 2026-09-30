@@ -56,6 +56,7 @@ public partial class Main : Node3D
         ["branca-steam-wheel"] = new(new Vector3(0.35f, 0.95f, 1.35f), new Vector3(0.15f, 0.5f, 0), 45),
         ["kitchen-smoke-jack"] = new(new Vector3(0.9f, 1.75f, 1.3f), new Vector3(0, 1.2f, 0), 50),
         ["solar-steam-wheel"] = new(new Vector3(1.2f, 2.4f, 4.6f), new Vector3(0, 0.8f, 0), 50),
+        ["wake-clock"] = new(new Vector3(0.2f, 0.9f, 3.2f), new Vector3(0f, 0.45f, 0), 50),
         ["sand-timer"] = new(new Vector3(0.6f, 1.2f, 3.6f), new Vector3(0.6f, 0.7f, 0), 55),
         ["ratchet-windlass"] = new(new Vector3(1.6f, 1.6f, 4.6f), new Vector3(0f, 1.4f, -1.5f), 55),
         ["trip-hammer"] = new(new Vector3(1.5f, 1.4f, 3.3f), new Vector3(0.2f, 0.75f, -0.5f), 55),
@@ -305,6 +306,7 @@ public partial class Main : Node3D
     private VBoxContainer _machineList = null!, _windowSection = null!;
     private Button _machinesToggle = null!;
     private Button _editButton = null!;
+    private SleepControl _sleep = null!;
     private ScrollContainer _leftScroll = null!;
     private bool _hudHidden;
     private RigidBody3D? _follow;
@@ -363,6 +365,9 @@ public partial class Main : Node3D
 
         if (double.TryParse(OS.GetEnvironment("HEROIC_QUIT_AFTER_SIM_SECONDS"), System.Globalization.CultureInfo.InvariantCulture, out double quitAfter))
             _quitAfterSimSeconds = quitAfter;
+
+        // HEROIC_SLEEP=<wake id>: start sleeping until one of the machine's wake conditions as soon as it has loaded (scripted checks of the game's own path)
+        if (_current is not null && OS.GetEnvironment("HEROIC_SLEEP") is { Length: > 0 } sleepId) _sleep.StartNamed(sleepId);
 
         if (_current is not null)
         {
@@ -481,6 +486,8 @@ public partial class Main : Node3D
         _editButton.Pressed += EditFocused;
         col.AddChild(_editButton);
         BuildJoinButton(col);
+        _sleep = new SleepControl(() => _views.Count > 0 ? _views : _current is null ? [] : [_current], () => _current, SetRunning, text => { _hudNote.Text = text; _hudNote.Visible = true; });
+        col.AddChild(_sleep);
 
         _menuButton = BigButton("Back to menu");
         _menuButton.Disabled = true;
@@ -844,6 +851,7 @@ public partial class Main : Node3D
         _detailsButton.Disabled = false;
         SetMenuCollapsed(true);
         _follow = FollowBody.TryGetValue(name, out var followId) ? view.BodyNamed(followId) : null;
+        _sleep.Refresh();   // this machine's own wake conditions
     }
 
     private void RestartCurrent()
@@ -1216,7 +1224,9 @@ public partial class Main : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
-        if (_running && _views.Count > 0)
+        if (_sleep.Active)
+            _sleep.Advance();                 // sleeping: run ahead as fast as it can, in place of stepping in real time
+        else if (_running && _views.Count > 0)
             StepWorld(delta); // a world: every machine, stepped together, and the links between them
         else if (_running && _current is not null)
             _current.Simulate(delta); // already scaled: see SetSpeed

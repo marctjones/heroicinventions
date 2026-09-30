@@ -1934,3 +1934,40 @@
     (define slope (/ (- 2 (v 'y 0)) (- (v 'x 0) -1)))
     (define theta (atan slope))
     (check-= (/ (* w 2.5 1/2) (sin theta)) (* w a (cosh (/ 1 a))) (* 0.02 (* w a (cosh (/ 1 a)))) "tension at the hook")))
+
+(test-case "Sleep until: a filling cistern wakes at volume/rate within a step, the estimate agrees, and the sleep leaves the state real time would have"
+  ;; a 500 L cistern, a spring of 2 L/s: 50 L takes 25 s, 20 and 40 L (and) 20 s, (or) 10 s; a condition that cannot be met stops at its limit;
+  ;; an event wakes it early. The sleep steps at the machine's own 1/120 s, never bigger.
+  (define step 1/120)
+  (define filled (sleep-until 'wake-clock 'filled #:step step))
+  (check-eq? (hash-ref filled 'reason) 'condition)
+  (check-= (hash-ref filled 'elapsed) 25.0 (+ step 1e-9) "50 L at 2 L/s: 25 s, within one step")
+  (check-= (hash-ref filled 'predicted) 25.0 0.01 "the estimate from the rate of change")
+  (check-= (hash-ref filled 'steps) 3001 1 "one 1/120 s step at a time")
+  ;; the state the sleep leaves is the state that running in real time gives
+  (define slept-seconds (* (hash-ref filled 'steps) step))
+  (define watched (simulate 'wake-clock #:seconds slept-seconds #:step step #:sample-dt slept-seconds))   ; a frame at the start and one at the end
+  (define (frame-value frame key) (cadr (assq key (cdr frame))))
+  (define woke (hash-ref filled 'frame))
+  (check-= (car woke) (car (last watched)) 1e-9 "the same time")
+  (for ([key '(cistern.water cistern.level spring.flow)])
+    (check-= (frame-value woke key) (frame-value (last watched) key) 1e-9 (format "~a is what watching gives" key)))
+  (check-true (>= (frame-value woke 'cistern.water) 50) "it woke with the condition met")
+  ;; and, or, an event
+  (check-= (hash-ref (sleep-until 'wake-clock 'both #:step step) 'elapsed) 20.0 0.02 "and: the later of 20 L and 40 L: at 40 L, 20 s")
+  (check-= (hash-ref (sleep-until 'wake-clock 'either #:step step) 'elapsed) 10.0 0.02 "or: the earlier: at 20 L, 10 s")
+  (define guarded (sleep-until 'wake-clock 'guarded #:step step))
+  (check-eq? (hash-ref guarded 'reason) 'event)
+  (check-= (hash-ref guarded 'elapsed) 15.0 0.02 "woken early at 30 L")
+  (check-true (regexp-match? #rx"cistern.water" (hash-ref guarded 'detail)) "and it says what woke it")
+  ;; a condition that cannot be met: the estimate says so, and it stops at the limit
+  (define never (sleep-until 'wake-clock 'never #:step step))
+  (check-eq? (hash-ref never 'reason) 'limit)
+  (check-= (hash-ref never 'elapsed) 60.0 0.02 "stopped at its 60 s limit")
+  (check-= (hash-ref never 'predicted) 2500.0 1.0 "5000 L at 2 L/s: 2500 s at the current rate")
+  (check-true (regexp-match? #rx"beyond the 60" (hash-ref never 'note)) "the estimate said it would not make it")
+  ;; a condition of your own, not in the file
+  (define adhoc (sleep-until 'wake-clock '((cistern water above 100)) #:step step))
+  (check-= (hash-ref adhoc 'elapsed) 50.0 0.02 "100 L at 2 L/s")
+  ;; already met: wakes at once
+  (check-= (hash-ref (sleep-until 'wake-clock '((cistern water below 1))) 'elapsed) 0.0 0 "it is already empty"))

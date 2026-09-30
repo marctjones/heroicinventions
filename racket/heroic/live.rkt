@@ -5,7 +5,7 @@
 ;; other side of this protocol.
 (require racket/tcp racket/port racket/string racket/format)
 (provide live-connect live-disconnect live-connected?
-         live-send live-get live-set! live-subscribe live-run live-pause
+         live-send live-get live-set! live-subscribe live-run live-pause live-sleep-until
          live-list-machines live-read-telemetry live-print-telemetry-for)
 
 (struct link (in out) #:mutable)
@@ -38,6 +38,14 @@
   (read (link-in l)))
 
 (define (live-run) (live-send '(run)))
+
+;; (live-sleep-until "machine" 'wake-id) or (live-sleep-until "machine" '((cistern water above 50)) #:join 'and #:limit 600)
+;; sleeps the running machine ahead as fast as it will go until the condition is met (issue #59); the reply is
+;; (slept machine reason elapsed detail steps predicted note).
+(define (live-sleep-until machine condition #:join [join 'and] #:limit [limit 3600])
+  (live-send (if (symbol? condition)
+                 (list 'sleep-until (string->symbol (format "~a" machine)) condition)
+                 (list 'sleep-until (string->symbol (format "~a" machine)) condition join (exact->inexact limit)))))
 (define (live-pause) (live-send '(pause)))
 (define (live-list-machines) (live-send '(list-machines)))
 

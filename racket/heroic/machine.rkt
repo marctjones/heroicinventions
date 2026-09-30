@@ -41,11 +41,11 @@
 (provide define-machine
          tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
-         inflow channel off trigger follow belt joint
+         inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
          (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec) (struct-out lift-spec) (struct-out cylinder-spec)
-         (struct-out inflow-spec) (struct-out channel-spec) (struct-out trigger-spec) (struct-out follow-spec) (struct-out belt-spec) (struct-out joint-spec)
+         (struct-out inflow-spec) (struct-out channel-spec) (struct-out trigger-spec) (struct-out follow-spec) (struct-out belt-spec) (struct-out wake-spec) (struct-out joint-spec)
          take-registered-machines
          planet make-planet planet? planet-field planet-name earth-planet?
          (all-from-out "weather.rkt"))
@@ -53,7 +53,7 @@
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source ambient sun planet weather parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers follows belts joints) #:transparent)
+(struct machine (name source ambient sun planet weather parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers follows belts wakes joints) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -78,6 +78,9 @@
 ;; by: the screw or noria that lifts; from, to: tanks; current: a river's
 ;; speed (m/s) pushing a noria's paddles, or #f.
 (struct lift-spec (id by from to current current-from loc) #:transparent)
+;; Something to sleep until (issue #59): `terms` and `events` are lists of (list target field 'above|'below value);
+;; `all?` is #t to need every term (and), #f for any (or); `limit` is the most seconds it will sleep.
+(struct wake-spec (id terms all? limit events loc) #:transparent)
 ;; An open belt between two drums a and b (wheel part ids), pretensioned to `tension` N,
 ;; gripping as far as the friction of `material` allows.
 (struct belt-spec (id a b tension material loc) #:transparent)
@@ -452,6 +455,7 @@
            (filter trigger-spec? items)
            (filter follow-spec? items)
            (filter belt-spec? items)
+           (filter wake-spec? items)
            (filter joint-spec? items)))
 
 ;; Machines register themselves when their module runs, so the build
@@ -472,7 +476,7 @@
 
 (define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float ratchet crucible burning-mirror hopper pane
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
-  inflow channel off trigger follow belt joint)
+  inflow channel off trigger follow belt wake joint)
 
 ;; A part built from a generated shape (see heroic/geometry). The shape is
 ;; an ordinary runtime value, so whether it suits the clause is checked
@@ -571,7 +575,7 @@
 
   (define-syntax-class clause
     #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, ratchet, crucible, burning-mirror, hopper, pane) or link (pipe, connect, sealed-air)"
-    #:literals (hopper enclosure grip door air-pump cam digger float ratchet crucible burning-mirror pane tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
+    #:literals (hopper enclosure grip door air-pump cam digger float ratchet crucible burning-mirror pane tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1696,6 +1700,25 @@
       #:attr info (jinfo #'id (syntax-e #'kind) #'a #'b)
       #:with expr #`(joint-spec 'id 'kind 'a 'b (list at.x at.y at.z) (~? (list axis.x axis.y axis.z) #f)
                                 '(~? (free ...) ()) (~? limit-v #f) #,(loc-of this-syntax)))
+
+    ;; Something to sleep until: the simulation runs ahead as fast as it can, at
+    ;; its normal step, until every (and, the default) or any (#:join or) of the
+    ;; #:when terms is met, each (target field above|below value) on any readable
+    ;; field; whatever #:events (the same kind of term) come first wake it early;
+    ;; and it stops at #:limit seconds (default 3600) whether or not, so that a
+    ;; condition that cannot be met does not sleep for ever.
+    (pattern (wake id:id
+                   (~alt (~once (~seq #:when ((wt:id wf:id wmode:id wv:expr) ...)))
+                         (~optional (~seq #:join join:id))
+                         (~optional (~seq #:limit limit-v:expr))
+                         (~optional (~seq #:events ((et:id ef:id emode:id ev:expr) ...)))) ...)
+      #:fail-when (for/first ([m (syntax->list #'(wmode ...))] #:unless (memq (syntax-e m) '(above below))) m) "each term is (target field above|below value)"
+      #:fail-when (and (attribute emode) (for/first ([m (syntax->list #'(emode ...))] #:unless (memq (syntax-e m) '(above below))) m)) "each event is (target field above|below value)"
+      #:fail-when (and (null? (syntax->list #'(wt ...))) #'id) "a wake waits for nothing: give it #:when ((target field above|below value) ...)"
+      #:fail-when (and (attribute join) (not (memq (syntax-e #'join) '(and or))) #'join) "#:join is and or or"
+      #:attr info #f
+      #:with expr #`(wake-spec 'id (list (list 'wt 'wf 'wmode wv) ...) (~? (eq? 'join 'and) #t) (~? limit-v 3600)
+                               (~? (list (list 'et 'ef 'emode ev) ...) '()) #,(loc-of this-syntax)))
 
     (pattern (mesh a:id b:id)
       #:attr info (minfo #'a #'b)

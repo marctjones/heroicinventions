@@ -1416,6 +1416,9 @@ public partial class MachineView : Node3D
                           .Concat(_pumpDrives.Select(p => $"{p.Lift.Name} {p.Lift.To.Name}={p.Lift.To.WaterVolume * 1000:F0}L"))
                           .Concat(_springs.Select(sp => $"{sp.Body.Name} θ={Mathf.RadToDeg((float)sp.Angle):F0}°")));
 
+    /// <summary>Redraws the scene from the simulation as it stands now: what a sleep leaves on screen (issue #59).</summary>
+    public void ShowState() => Refresh();
+
     private void Refresh()
     {
         foreach (var (tank, spec, water) in _water)

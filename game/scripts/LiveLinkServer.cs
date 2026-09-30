@@ -151,6 +151,29 @@ public partial class LiveLinkServer : Node
                     peer.Subscriptions.Clear();
                     Reply(peer, "(ok)");
                     break;
+                case "sleep-until":
+                {
+                    // (sleep-until machine wake-id) or (sleep-until machine ((target field above|below value) ...) [and|or] [limit-seconds]):
+                    // steps the machine ahead at its own step, as fast as it will go, until the condition is met (issue #59). The Jolt side
+                    // stays where it was; the reply says why it woke and when: (slept machine reason elapsed "detail" steps predicted note)
+                    if (form.Items.Count < 3) throw new FormatException("(sleep-until machine wake-id) or (sleep-until machine (terms...) [and|or] [limit])");
+                    var view = Machine(Sym(form, 1));
+                    WakeSpec plan;
+                    if (form.Items[2] is SSymbol wakeId)
+                        plan = view.Runtime.Wakes.TryGetValue(wakeId.Name, out var named) ? named : throw new MachineFormatException($"{Sym(form, 1)} has no wake called {wakeId.Name}");
+                    else if (form.Items[2] is SList terms)
+                        plan = new WakeSpec("sleep", terms.Items.OfType<SList>().Select(t => t.Items is [SSymbol tg, SSymbol fl, SSymbol { Name: "above" or "below" } md, SNumber vl]
+                                ? new WakeTerm(tg.Name, fl.Name, md.Name == "above", vl.Value)
+                                : throw new FormatException("each term is (target field above|below value)")).ToList(),
+                            form.Items.ElementAtOrDefault(3) is not SSymbol { Name: "or" },
+                            form.Items.LastOrDefault() is SNumber lim && form.Items.Count > 3 ? lim.Value : 3600, []);
+                    else throw new FormatException("the condition is a wake id or a list of terms");
+                    var prediction = SleepPlanner.Predict(view.Runtime, plan);
+                    var result = SleepSession.FastForward(view.Runtime, plan);
+                    view.ShowState();
+                    Reply(peer, $"(slept {Sym(form, 1)} {result.Reason.ToString().ToLowerInvariant()} {Num(result.Elapsed)} {Str(result.Detail)} {result.Steps} {(prediction.Seconds is { } p ? Num(p) : "#f")} {Str(prediction.Note)})");
+                    break;
+                }
                 case "run":
                     _setRunning(true);
                     Reply(peer, "(ok)");

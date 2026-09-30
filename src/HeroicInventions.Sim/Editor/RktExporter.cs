@@ -70,6 +70,12 @@ public static class RktExporter
                       (t.WatchTarget is { } wt ? $" #:when ({wt} {t.WatchField} {(t.Rising ? "above" : "below")} {F(t.Threshold)})" : "") +
                       $" #:do ({string.Join(' ', t.Actions.Select(a => $"({a.Target} {a.Field} {F(a.Value)})"))}))\n");
 
+        foreach (var w in m.Wakes)
+        {
+            string T(WakeTerm t) => $"({t.Target} {t.Field} {(t.Above ? "above" : "below")} {F(t.Value)})";
+            sb.Append($"  (wake {w.Id} #:when ({string.Join(' ', w.Terms.Select(T))}) #:join {(w.All ? "and" : "or")} #:limit {F(w.Limit)}" +
+                      (w.Events.Count > 0 ? $" #:events ({string.Join(' ', w.Events.Select(T))})" : "") + ")\n");
+        }
         foreach (var b in m.Belts) sb.Append($"  (belt {b.Id} {b.A} {b.B} #:tension {F(b.Tension)} #:material {b.Material})\n");
         foreach (var f in m.Follows)
             sb.Append($"  (follow {f.Id} {(f.Lever is { } lv ? $"#:lever {lv}" : $"#:rope {f.Rope}")} #:from {F(f.From)} #:to {F(f.To)} " +

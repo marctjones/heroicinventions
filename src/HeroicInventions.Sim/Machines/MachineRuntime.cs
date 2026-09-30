@@ -36,6 +36,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Cam> _cams = [];
     private readonly Dictionary<string, Ratchet> _ratchets = [];
     private readonly Dictionary<string, Hopper> _hoppers = [];
+    private readonly Dictionary<string, WakeSpec> _wakes = [];
     private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, (FloatValve Valve, Func<double> Flow)> _floatValves = [];
@@ -82,6 +83,17 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Trigger> Triggers => _triggers;
     /// <summary>Fields that follow a lever or rope, by id; the view that owns the mechanism feeds each one through <see cref="ApplyFollow"/>.</summary>
     public IReadOnlyDictionary<string, Follow> Follows => _follows;
+
+    /// <summary>
+    /// A copy of this machine as it stands now: the same definition built afresh, given this one's running state
+    /// (see <see cref="TakeStateFrom"/>). What a sleep's wake-time estimate runs ahead on, so the real machine is not disturbed.
+    /// </summary>
+    public MachineRuntime Fork()
+    {
+        var copy = new MachineRuntime(Def, _materials);
+        copy.TakeStateFrom(this);
+        return copy;
+    }
     /// <summary>Belts between drums, by id. Whoever owns the drums (the view) grips them each tick with <see cref="Belt.Grip"/>.</summary>
     public IReadOnlyDictionary<string, Belt> Belts => _belts;
     /// <summary>Grips, by id: hooks and tongs that pick up loose bodies. The view owns the bodies and the joints; the grip's state and limits live here.</summary>
@@ -92,6 +104,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Ratchet> Ratchets => _ratchets;
     /// <summary>Hoppers of grain draining at Beverloo's steady rate, by id (issue #50).</summary>
     public IReadOnlyDictionary<string, Hopper> Hoppers => _hoppers;
+    /// <summary>The wake conditions the machine file offers to sleep until, by id (issue #59).</summary>
+    public IReadOnlyDictionary<string, WakeSpec> Wakes => _wakes;
     public IReadOnlyDictionary<string, Channel> Channels => _channels;
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
     /// <summary>Float valves, each with the flow of the feed it throttles (m³/s).</summary>
@@ -575,6 +589,21 @@ public sealed class MachineRuntime
         BuildHoppers(def);
         BuildTriggers(def);
         BuildFollows(def);
+        BuildWakes(def);
+    }
+
+    /// <summary>Wake conditions are built last: every field they watch exists by then, and a bad one is reported at its clause.</summary>
+    private void BuildWakes(MachineDef def)
+    {
+        foreach (var w in def.Wakes)
+        {
+            if (w.Terms.Count == 0) throw new MachineFormatException($"wake {w.Id} waits for nothing: give it a #:when ((target field above|below value) …)", w.Location);
+            if (w.Limit <= 0) throw new MachineFormatException($"wake {w.Id}: #:limit must be more than 0 seconds, so that it cannot sleep for ever", w.Location);
+            foreach (var t in w.Terms.Concat(w.Events))
+                if (!_getters.ContainsKey(t.Path))
+                    throw new MachineFormatException($"wake {w.Id} watches {t.Path}, which is not a readable field", w.Location);
+            if (!_wakes.TryAdd(w.Id, w)) throw new MachineFormatException($"two wakes are called {w.Id}", w.Location);
+        }
     }
 
     private void BuildHoppers(MachineDef def)

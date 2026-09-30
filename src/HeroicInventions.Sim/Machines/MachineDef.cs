@@ -212,6 +212,8 @@ public sealed class MachineDef
     public IReadOnlyList<TriggerSpec> Triggers { get; init; } = [];
     public IReadOnlyList<FollowSpec> Follows { get; init; } = [];
     public IReadOnlyList<BeltSpec> Belts { get; init; } = [];
+    /// <summary>Named things to sleep until (issue #59), offered as presets by the game's sleep control.</summary>
+    public IReadOnlyList<WakeSpec> Wakes { get; init; } = [];
     public IReadOnlyList<JointSpec> Joints { get; init; } = [];
 
     public PartSpec? Part(string id) => Parts.FirstOrDefault(p => p.Id == id);
@@ -254,6 +256,7 @@ public sealed class MachineDef
             Triggers = Triggers.Select(t => t with { At = t.At is { } a ? Move(a) : null }).ToList(),
             Follows = Follows,
             Belts = Belts,
+            Wakes = Wakes,
             Joints = Joints.Select(j => j with { At = Move(j.At) }).ToList(),
         };
     }
@@ -326,6 +329,7 @@ public sealed class MachineDef
             }).ToList(),
             Triggers = clauses.Where(c => c.Head == "trigger").Select(ParseTrigger).ToList(),
             Follows = clauses.Where(c => c.Head == "follow").Select(ParseFollow).ToList(),
+            Wakes = clauses.Where(c => c.Head == "wake").Select(ParseWake).ToList(),
             Belts = clauses.Where(c => c.Head == "belt").Select(c =>
             {
                 var loc = ParseLoc(c);
@@ -445,6 +449,16 @@ public sealed class MachineDef
         return new JointSpec(id, kind, Name("a"), Name("b"), Point(at),
             c.Field("axis") is { Items.Count: 4 } ax ? Point(ax) : null, free,
             c.Field("limit-deg")?.Items.ElementAtOrDefault(1) is SNumber d ? d.Value : null, loc);
+    }
+
+    // (wake id (when (target field above|below value) …) (join and|or) (limit seconds) (events (target field above|below value) …) (srcloc …))
+    private static WakeSpec ParseWake(SList c)
+    {
+        var loc = ParseLoc(c);
+        WakeTerm Term(SList t) => new(Sym(t, 0, loc), Sym(t, 1, loc), Sym(t, 2, loc) == "above", Num(t, 3, loc));
+        IReadOnlyList<WakeTerm> Terms(string field) => (c.Field(field)?.Items.Skip(1) ?? []).OfType<SList>().Select(Term).ToList();
+        return new WakeSpec(Sym(c, 1, loc), Terms("when"), c.Field("join") is { } j ? Sym(j, 1, loc) != "or" : true,
+            c.Field("limit") is { } l ? Num(l, 1, loc) : 3600, Terms("events"), loc);
     }
 
     // (follow id (lever part|#f) (rope id|#f) (from a) (to b) (set target field) (low v) (high v) (srcloc …))

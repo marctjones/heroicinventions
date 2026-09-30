@@ -12,7 +12,7 @@
 ;; HEROIC_AUTORUN headless-Godot smoke test instead.
 (require racket/system racket/port racket/runtime-path racket/path
          racket/string racket/list)
-(provide simulate max-of min-of final-of values-of)
+(provide simulate sleep-until max-of min-of final-of values-of)
 
 (define-runtime-path repo "../..")
 (define machines-dir (build-path repo "game" "machines"))
@@ -94,6 +94,35 @@
     [(and (pair? reply) (eq? (car reply) 'run)) (cdr reply)]
     [(and (pair? reply) (eq? (car reply) 'error)) (error 'simulate "~a" (cadr reply))]
     [else (error 'simulate "unexpected reply from simhost: ~a" reply)]))
+
+;; (sleep-until 'wake-clock 'filled) or (sleep-until 'wake-clock '((cistern water above 50)) #:limit 600)
+;; sleeps the machine until the condition is met (issue #59): the simulation steps ahead at #:step as fast as it
+;; will go, stopping at the first of an #:events term (woken early), the condition, or the #:limit of seconds.
+;; A symbol names a `wake` the machine file defines; a list is terms, (target field above|below value), joined by
+;; #:join 'and or 'or. Returns a hash: 'reason ('condition, 'event or 'limit), 'elapsed (s), 'detail, 'steps,
+;; 'predicted (s from the wake-time estimate made before sleeping, or #f: never at the current rate), 'note, and
+;; 'frame, the state it woke in, as one simulate frame: (time (target.field value) ...).
+(define (sleep-until machine-name condition #:step [step 1/120] #:join [join 'and] #:limit [limit 3600]
+                     #:events [events '()] #:set [settings '()])
+  (define path (build-path machines-dir (format "~a.machine" machine-name)))
+  (unless (file-exists? path)
+    (error 'sleep-until "no such machine file: ~a (run `racket racket/build.rkt` first?)" path))
+  (define (term t) (list (car t) (cadr t) (caddr t) (exact->inexact (cadddr t))))
+  (define reply
+    (send-command! (append (list 'sleep (path->string path) (exact->inexact step))
+                           (if (symbol? condition)
+                               (list condition)
+                               (list (cons 'terms (map term condition))
+                                     (list 'join join) (list 'limit (exact->inexact limit))
+                                     (cons 'events (map term events))))
+                           (if (null? settings) '()
+                               (list (cons 'set (for/list ([s settings]) (list (car s) (cadr s) (exact->inexact (caddr s))))))))))
+  (cond
+    [(and (pair? reply) (eq? (car reply) 'slept))
+     (define-values (reason elapsed detail steps predicted note frame) (apply values (cdr reply)))
+     (hash 'reason reason 'elapsed elapsed 'detail detail 'steps steps 'predicted predicted 'note note 'frame frame)]
+    [(and (pair? reply) (eq? (car reply) 'error)) (error 'sleep-until "~a" (cadr reply))]
+    [else (error 'sleep-until "unexpected reply from simhost: ~a" reply)]))
 
 ;; A field path like '(nozzle jet-height) names the same target.field the
 ;; live link and MachineRuntime.GetField use — joined here into the one

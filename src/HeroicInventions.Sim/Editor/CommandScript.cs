@@ -82,6 +82,11 @@ public static class CommandScript
                 (t.Body is { } body ? $" #:body {body}" : "") +
                 (t.WatchTarget is { } wt ? $" #:when ({wt} {t.WatchField} {(t.Rising ? "above" : "below")} {N(t.Threshold)})" : "") +
                 $" #:do ({string.Join(' ', t.Actions.Select(a => $"({a.Target} {a.Field} {N(a.Value)})"))}))");
+        foreach (var w in m.Wakes)
+        {
+            string T(WakeTerm t) => $"({t.Target} {t.Field} {(t.Above ? "above" : "below")} {N(t.Value)})";
+            Add($"(wake {w.Id} #:when ({string.Join(' ', w.Terms.Select(T))}) #:join {(w.All ? "and" : "or")} #:limit {N(w.Limit)} #:events ({string.Join(' ', w.Events.Select(T))}))");
+        }
         foreach (var b in m.Belts) Add($"(belt {b.Id} {b.A} {b.B} #:tension {N(b.Tension)} #:material {b.Material})");
         foreach (var f in m.Follows)
             Add($"(follow {f.Id} {(f.Lever is { } lv ? $"#:lever {lv}" : $"#:rope {f.Rope}")} #:from {N(f.From)} #:to {N(f.To)} " +

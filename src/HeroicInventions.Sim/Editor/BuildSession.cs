@@ -45,6 +45,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (follow id #:lever part|#:rope rope #:from a #:to b #:set (target field) [#:low v] [#:high v])   ; a field follows a lever's angle (deg) or a rope's tension (N)
 ///   (belt id drum drum #:tension N [#:material M])   ; an open belt between two drums; carries at most 2·T0·tanh(μθ/2) before it slips
 ///   (joint id #:kind pin|ball|universal|6dof #:a part #:b part|world #:at (x y z) [#:axis (x y z)] [#:free (x y z rx ry rz …)] [#:limit-deg d])
+///   (wake id #:when ((target field above|below value) …) [#:join and|or] [#:limit seconds] [#:events ((target field above|below value) …)])   ; something to sleep until
 ///   (port part name kind height) (remove-port part name)   ; add or replace a port on a part
 ///   (set-rope id #:length L [#:diameter D] [#:material M] [#:release-deg d] [#:wind-on part] [#:turns part] [#:nocked #t] [#:bar M|#f] [#:mu μ|#f])   ; change a rope
 ///   (unmesh a b) (unarbor part) (remove-air tank)   ; take a link apart again
@@ -121,6 +122,7 @@ public sealed class BuildSession
         "trigger" => CreateTrigger(cmd),
         "follow" => CreateFollow(cmd),
         "belt" => CreateBelt(cmd),
+        "wake" => CreateWake(cmd),
         "set-belt" => SetBelt(cmd),
         "joint" => CreateJoint(cmd),
         "port" => SetPort(cmd),
@@ -463,6 +465,21 @@ public sealed class BuildSession
         Snapshot();
         Document.ReplaceBelt(next);
         return $"belt {id}: {next.Tension} N";
+    }
+
+    private string CreateWake(SList cmd)
+    {
+        string id = Id(cmd, 1);
+        IReadOnlyList<WakeTerm> Terms(string key) => Kw(cmd, key) is SList l
+            ? l.Items.Select(e => e is SList { Items.Count: 4 } t && t.Items[2] is SSymbol { Name: "above" or "below" } m
+                ? new WakeTerm(Name(t.Items[0], $"wake {id} #:{key}"), Name(t.Items[1], $"wake {id} #:{key}"), m.Name == "above", Num(t.Items[3], $"wake {id} #:{key}"))
+                : throw new FormatException($"wake {id} #:{key}: expected ((target field above|below value) …)")).ToList()
+            : [];
+        bool all = Kw(cmd, "join") is not SSymbol { Name: "or" };
+        double limit = Kw(cmd, "limit") is { } lim ? Num(lim, $"wake {id} #:limit") : 3600;
+        Snapshot();
+        Document.AddWake(new WakeSpec(id, Terms("when"), all, limit, Terms("events")));
+        return $"wake {id}: {Document.Wakes.Last().Describe()}";
     }
 
     private string CreateBelt(SList cmd)

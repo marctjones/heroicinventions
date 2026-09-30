@@ -39,6 +39,7 @@ public static class MachineWriter
         foreach (var a in m.SealedAir) clauses.Add(SealedAirClause(a));
         foreach (var t in m.Triggers) clauses.Add(TriggerClause(t));
         foreach (var f in m.Follows) clauses.Add(FollowClause(f));
+        foreach (var wk in m.Wakes) clauses.Add(WakeClause(wk));
         foreach (var b in m.Belts) clauses.Add(Tagged("belt", Sym(b.Id), Sym(b.A), Sym(b.B), Tagged("tension", Num(b.Tension)), Tagged("material", Sym(b.Material)), SrcLoc(b.Location)));
         foreach (var j in m.Joints) clauses.Add(JointClause(j));
 
@@ -151,6 +152,16 @@ public static class MachineWriter
             new SList([Sym("free"), .. j.Free.Select(f => (SExpr)Sym(f))]),
             Tagged("limit-deg", NumOrFalse(j.LimitDeg)),
             SrcLoc(j.Location));
+
+    private static SExpr WakeTermExpr(WakeTerm t) => List(Sym(t.Target), Sym(t.Field), Sym(t.Above ? "above" : "below"), Num(t.Value));
+
+    private static SExpr WakeClause(WakeSpec w) =>
+        Tagged("wake", Sym(w.Id),
+            new SList([Sym("when"), .. w.Terms.Select(WakeTermExpr)]),
+            Tagged("join", Sym(w.All ? "and" : "or")),
+            Tagged("limit", Num(w.Limit)),
+            new SList([Sym("events"), .. w.Events.Select(WakeTermExpr)]),
+            SrcLoc(w.Location));
 
     private static SExpr FollowClause(FollowSpec f) =>
         Tagged("follow", Sym(f.Id),

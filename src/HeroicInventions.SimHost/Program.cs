@@ -11,6 +11,12 @@ using HeroicInventions.Sim.Materials;
 // Command:  (simulate "<path-to>.machine" <seconds> <step> <sample-dt> [(set (<target> <field> <value> [<at-seconds>]) ...)])
 // Reply:    (run (<time> (<target.field> <value>) ...) (<time> ...) ...)
 //        or (error "<message>")
+//
+// Command:  (sleep "<path-to>.machine" <step> <wake-id | (terms (<target> <field> above|below <value>) ...)>
+//                  [(join and|or)] [(limit <seconds>)] [(events (<target> <field> above|below <value>) ...)] [(set (<target> <field> <value>) ...)])
+//           Sleeps the machine until the condition (issue #59): steps it ahead at <step> as fast as it will go, stopping at the first of an
+//           event, the condition, or the limit.
+// Reply:    (slept <condition|event|limit> <elapsed-seconds> "<detail>" <steps> <predicted-seconds-or-#f> "<prediction note>" (<time> (<target.field> <value>) ...))
 var materials = MaterialLibrary.LoadDefault();
 
 string? line;
@@ -35,8 +41,9 @@ static string Handle(string line, MaterialLibrary materials)
 {
     var forms = SExprReader.ReadAll(line);
     if (forms is not [SList form]) throw new FormatException("expected exactly one command form per line");
+    if (form.Head == "sleep") return Sleep(form, materials);
     if (form.Head != "simulate")
-        throw new FormatException($"unknown command '{form.Head}'; only (simulate ...) is supported");
+        throw new FormatException($"unknown command '{form.Head}'; (simulate ...) and (sleep ...) are supported");
 
     var items = form.Items;
     if (items.Count is not (5 or 6) || items[1] is not SString path || items[2] is not SNumber seconds
@@ -85,6 +92,39 @@ static string Handle(string line, MaterialLibrary materials)
         ApplyDue();
     }
     return $"(run {string.Join(' ', frames)})";
+}
+
+static string Sleep(SList form, MaterialLibrary materials)
+{
+    var items = form.Items;
+    if (items.Count < 4 || items[1] is not SString path || items[2] is not SNumber step)
+        throw new FormatException("usage: (sleep \"<path>.machine\" <step> <wake-id | (terms (<target> <field> above|below <value>) ...)> [(join and|or)] [(limit <seconds>)] [(events ...)] [(set ...)])");
+    var def = MachineDef.Parse(File.ReadAllText(path.Value));
+    var run = new MachineRuntime(def, materials);
+    foreach (var setting in items.Skip(3).OfType<SList>().Where(l => l.Head == "set").SelectMany(l => l.Items.Skip(1).OfType<SList>()))
+        if (setting.Items is [SSymbol target, SSymbol field, SNumber value]) run.SetField(target.Name, field.Name, value.Value);
+    static IReadOnlyList<WakeTerm> Terms(IEnumerable<SExpr> list) => list.OfType<SList>()
+        .Select(t => t.Items is [SSymbol target, SSymbol field, SSymbol { Name: "above" or "below" } mode, SNumber value]
+            ? new WakeTerm(target.Name, field.Name, mode.Name == "above", value.Value)
+            : throw new FormatException("each term is (target field above|below value)")).ToList();
+
+    WakeSpec plan;
+    if (items[3] is SSymbol id)
+        plan = def.Wakes.FirstOrDefault(w => w.Id == id.Name) ?? throw new FormatException($"the machine has no wake called {id.Name}");
+    else if (items[3] is SList { Head: "terms" } terms)
+    {
+        var options = items.Skip(4).OfType<SList>().ToList();
+        plan = new WakeSpec("sleep", Terms(terms.Items.Skip(1)),
+            options.FirstOrDefault(o => o.Head == "join")?.Items.ElementAtOrDefault(1) is not SSymbol { Name: "or" },
+            options.FirstOrDefault(o => o.Head == "limit")?.Items.ElementAtOrDefault(1) is SNumber l ? l.Value : 3600,
+            Terms(options.FirstOrDefault(o => o.Head == "events")?.Items.Skip(1) ?? []));
+    }
+    else throw new FormatException("the wake condition is a wake id or (terms ...)");
+
+    var prediction = SleepPlanner.Predict(run, plan);
+    var result = SleepSession.FastForward(run, plan, step.Value);
+    string reason = result.Reason switch { WakeReason.Condition => "condition", WakeReason.Event => "event", _ => "limit" };
+    return $"(slept {reason} {Num(result.Elapsed)} {Quote(result.Detail)} {result.Steps} {(prediction.Seconds is { } p ? Num(p) : "#f")} {Quote(prediction.Note)} {FrameOf(run)})";
 }
 
 static string FrameOf(MachineRuntime run)
