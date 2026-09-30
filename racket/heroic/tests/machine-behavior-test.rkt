@@ -1119,4 +1119,4 @@
       (check-= (cadr (assq 'rod.rot-z (cdr b))) (cadr (assq 'rod.rot-z (cdr a))) 0.01
                (format "at ~a s the edited pendulum swings as the untouched one" (car a))))
     ;; and the edit really happened: the new block is in the machine by the end
-    (check-true (assq 'extra.y (cdr (last edited))) "the added block is part of the running machine")))
+    (check-not-false (assq 'extra.y (cdr (last edited))) "the added block is part of the running machine")))
