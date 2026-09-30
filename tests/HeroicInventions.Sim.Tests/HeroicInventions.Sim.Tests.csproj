@@ -21,6 +21,7 @@
   <!-- The generated blueprints, so tests run the same files the game loads. -->
   <ItemGroup>
     <None Include="../../game/machines/*.machine" LinkBase="machines" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../game/worlds/*.world" LinkBase="worlds" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

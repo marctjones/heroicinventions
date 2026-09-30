@@ -1,0 +1,10 @@
+;; Two machines joined by a pipe across the world (issue #78): the cistern
+;; drains into the trough 4 m away through a pipe that belongs to neither.
+;; Behind them stands the same pair built as one machine, pipe and all:
+;; the two should fill and empty exactly alike (229 L left in the cistern
+;; at 60 s; dry at 275 s; see racket/machines/cistern-and-trough.rkt).
+(world linked-pipe
+  (place tank-a cistern (at 0 0 0))
+  (place tank-b trough (at 4 0 0))
+  (place reference cistern-and-trough (at 0 0 3))
+  (link feed pipe (from tank-a cistern outlet) (to tank-b trough inlet) (conductance 0.002)))

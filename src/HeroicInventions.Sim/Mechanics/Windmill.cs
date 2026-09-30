@@ -23,7 +23,7 @@ namespace HeroicInventions.Sim.Mechanics;
 /// τ₀ and they run at λ*, taking CpMax of the wind: power that grows as
 /// the cube of the wind speed.
 /// </summary>
-public sealed class Windmill(string name, double radius, double momentOfInertia)
+public sealed class Windmill(string name, double radius, double momentOfInertia) : IShaft
 {
     /// <summary>The most any rotor can take from the wind: 16/27 (Betz).</summary>
     public const double BetzLimit = 16.0 / 27.0;
@@ -51,6 +51,10 @@ public sealed class Windmill(string name, double radius, double momentOfInertia)
     public double Rpm => AngularVelocity * 60 / (2 * Math.PI);
     public double Power => Load * AngularVelocity;             // W into the millstone
     public double KineticEnergy => 0.5 * MomentOfInertia * AngularVelocity * AngularVelocity;
+
+    double IShaft.ShaftInertia => MomentOfInertia;
+    /// <summary>A shaft from another machine turning it (issue #78).</summary>
+    public void AddAngularImpulse(double impulse) => AngularVelocity += impulse / MomentOfInertia;
 
     public double SweptArea => Math.PI * Radius * Radius;
     /// <summary>The wind's kinetic power through the swept disc, ½ρAv³, W.</summary>

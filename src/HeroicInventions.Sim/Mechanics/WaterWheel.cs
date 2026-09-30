@@ -25,7 +25,7 @@ namespace HeroicInventions.Sim.Mechanics;
 /// the classic undershot ceiling of about 30%. The race's own flow isn't
 /// slowed by the wheel; it runs as the channel sets it.
 /// </summary>
-public sealed class WaterWheel(string name, double radius, double width, double momentOfInertia)
+public sealed class WaterWheel(string name, double radius, double width, double momentOfInertia) : IShaft
 {
     /// <summary>The air and gravity it stands in: the planet's open air unless it is inside an enclosure.</summary>
     public Zone Zone { get; set; } = new();
@@ -57,6 +57,10 @@ public sealed class WaterWheel(string name, double radius, double width, double 
     public double Rpm => AngularVelocity * 60 / (2 * Math.PI);
     public double Power => Load * AngularVelocity;             // W into the millstone
     public double KineticEnergy => 0.5 * MomentOfInertia * AngularVelocity * AngularVelocity;
+
+    double IShaft.ShaftInertia => MomentOfInertia;
+    /// <summary>A shaft from another machine turning it (issue #78).</summary>
+    public void AddAngularImpulse(double impulse) => AngularVelocity += impulse / MomentOfInertia;
 
     private double _poured;                                    // kg arrived since the last step
 

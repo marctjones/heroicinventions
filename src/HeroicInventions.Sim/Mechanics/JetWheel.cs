@@ -27,7 +27,7 @@ namespace HeroicInventions.Sim.Mechanics;
 /// second, so a smoke jack turns slowly and weakly, but for as long as the
 /// fire burns.
 /// </summary>
-public sealed class JetWheel(Boiler? boiler)
+public sealed class JetWheel(Boiler? boiler) : IShaft
 {
     /// <summary>The boiler whose spout drives it, or null for a smoke jack.</summary>
     public Boiler? Boiler { get; } = boiler;
@@ -93,6 +93,10 @@ public sealed class JetWheel(Boiler? boiler)
     /// <summary>Power delivered to the load, W.</summary>
     public double Power => Load * AngularVelocity;
     public double KineticEnergy => 0.5 * MomentOfInertia * AngularVelocity * AngularVelocity;
+
+    double IShaft.ShaftInertia => MomentOfInertia;
+    /// <summary>A shaft from another machine turning it (issue #78).</summary>
+    public void AddAngularImpulse(double impulse) => AngularVelocity += impulse / MomentOfInertia;
 
     /// <summary>Smoke jack: how much the chimney air is warmed, K.</summary>
     public double DraughtWarming { get; private set; }
