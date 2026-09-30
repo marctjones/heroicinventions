@@ -4,10 +4,10 @@
 ;; swing a little.
 ;;
 ;; The block, a 10 cm iron cube with its middle 5 m up, falls freely
-;; (Galileo): g = 9.81 m/s2 from the first tick, less the engine's default
-;; damping of 0.1 per second -- a stand-in for air drag, not physics, until
-;; #33 replaces it -- so it is at 3.8145 m at 0.5 s where 5 - g t^2/2 gives
-;; 3.7738 m.
+;; (Galileo): g = 9.81 m/s2 from the first tick, with no damping (#33 took
+;; the engine's default 0.1 per second out; air drag is opt-in, per part,
+;; with #:drag-coefficient) -- so it is at 3.7942 m at 0.5 s, the block
+;; starting one tick in, where 5 - g t^2/2 gives 3.7738 m.
 ;;
 ;; The pendulum is a 1 m iron rod (1 cm radius) with an 8 cm iron ball on
 ;; the end, let go from 5 degrees. It is a physical pendulum: for small

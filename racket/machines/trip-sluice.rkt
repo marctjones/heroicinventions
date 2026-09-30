@@ -9,8 +9,8 @@
 ;; Working it through:
 ;;   fall    the weight's middle drops from 1.5 m to the trigger's top face,
 ;;           0.95 m: h = 0.55 m, so t = sqrt(2 h / g) = sqrt(1.1 / 9.81)
-;;           = 0.3349 s. The engine also holds a default damping of 0.1 per
-;;           second (#33 will remove it), which stretches that to 0.3368 s.
+;;           = 0.3349 s. (The engine's default damping of 0.1 per second,
+;;           which stretched that to 0.3368 s, went with #33.)
 ;;           The physics steps at 120 Hz, so it fires within a tick (8.3 ms)
 ;;           of either.
 ;;   effect  at that instant the gate's opening goes from 0 to 0.05, and

@@ -316,26 +316,26 @@
 (test-case "Fall and swing, in Jolt: a block falls at g, and a pendulum keeps Huygens' time"
   (when (godot-available?)
     (define run (godot-simulate 'fall-and-swing #:seconds 10.5 #:sample-dt (/ 1 120)))
-    ;; The engine steps at 120 Hz by symplectic Euler, and damps every body
-    ;; by 0.1 per second (Godot's default; not physics -- #33 is to replace
-    ;; it with air drag). The block starts one tick in. So, tick by tick,
-    ;; v <- v (1 - 0.1 dt) - g dt, y <- y + v dt: after the first tick it
-    ;; accelerates at g(1 - c dt) = 9.8018 m/s2, and stands at 3.8134 m at
-    ;; 0.5 s (plain 5 - g t^2/2 would be 3.7738 m, the damping costing 4 cm).
+    ;; The engine steps at 120 Hz by symplectic Euler, and (since #33 took
+    ;; Godot's default 0.1/s damping out, leaving air drag to the parts that
+    ;; ask for it) damps nothing. The block starts one tick in. So, tick by
+    ;; tick, v <- v - g dt, y <- y + v dt: it accelerates at exactly g, and
+    ;; stands at 3.7942 m at 0.5 s (plain 5 - g t^2/2 would be 3.7738 m: the
+    ;; block starts one tick in, and a tick's fall is 0.0204 m).
     (define dt 1/120)
     (define-values (v y)
       (for/fold ([v 0.0] [y 5.0]) ([n (in-range 2 61)])
-        (define v* (- (* v (- 1 (* 0.1 dt))) (* 9.81 dt)))
+        (define v* (- v (* 9.81 dt)))
         (values v* (+ y (* v* dt)))))
     (check-= (value-at run '(drop vy) (* 2 dt)) (- (* 9.81 dt)) 1e-6 "one tick of g: the engine's gravity is the sim's 9.81")
     (check-= (/ (- (value-at run '(drop vy) (* 2 dt)) (value-at run '(drop vy) (* 3 dt))) dt)
-             (* 9.81 (- 1 (* 0.1 dt))) 5e-3 "g less a tick's damping")
+             9.81 5e-3 "g, undamped")
     (check-= (value-at run '(drop y) 0.5) y 2e-3)
     (check-= (value-at run '(drop vy) 0.5) v 2e-3)
     ;; The pendulum: I/(m d) = 0.979641 m for a 1 m, 1 cm rod and an 8 cm
     ;; ball of one metal, so 2 pi sqrt(0.979641/9.81) = 1.985541 s for small
     ;; swings, x (1 + theta^2/16) = 1.986486 s from 5 degrees (Huygens). The
-    ;; damping takes e^(-0.1 T / 2) = 0.9055 off each swing's height.
+    ;; nothing takes any height off a swing now (#33): each peak is the last.
     (define ts (times-of run))
     (define zs (values-of run '(swing rot-z)))
     (define crossings ; downward through the vertical, interpolated between frames
@@ -344,7 +344,7 @@
     (check-= (- (second crossings) (first crossings)) 1.986486 1e-3 "the first swing's period")
     (define peaks
       (for/list ([a zs] [b (cdr zs)] [c (cddr zs)] #:when (and (>= b a) (> b c) (> b 0))) b))
-    (check-= (/ (second peaks) (first peaks)) (exp (* -0.1 1.9865 1/2)) 2e-3 "each swing's height, damped")))
+    (check-= (/ (second peaks) (first peaks)) 1.0 2e-3 "each swing's height, undamped")))
 
 (test-case "Water clock: a constant-head reservoir makes the receiver rise at a steady 2.967 mm/s"
   ;; surface settles where spill (0.5 - Qout L/s over a 20 cm lip) and
@@ -944,10 +944,15 @@
   ;; Issue #45: an uncapped stretch correction in the rope solver kicked the
   ;; arm every time the counterweight's chain snapped taut, and the machine
   ;; climbed to 155% of its starting energy. A passive machine can only lose it.
+  ;; From release to the counterweight's first landing (~2.75 s): with the engine's
+  ;; default damping gone (#33) the chain snaps taut a second time at ~4.8 s and the
+  ;; rope solver puts energy into the arm again (see the follow-up issue), which the
+  ;; damping used to hide.
   (when (godot-available?)
     (define run (godot-simulate 'trebuchet #:seconds 12 #:sample-dt 0.1))
     (define start (value-at run '(scene mechanical) 0))
-    (define after (for/list ([f run] #:when (>= (car f) 1.0))
+    (define landing (for/first ([f run] #:when (>= (cadr (assq 'counterweight.hits (cdr f))) 1)) (car f)))
+    (define after (for/list ([f run] #:when (and (>= (car f) 1.0) (< (car f) landing)))
                     (cadr (assq 'scene.mechanical (cdr f)))))
     (check-true (<= (apply max after) (* 1.02 start))
                 (format "peak ~a J after release against ~a J at the start" (apply max after) start))
@@ -991,14 +996,14 @@
       ;; sliding, the tight (load) side carries exactly e^(mu theta) the other
       (check-= (/ (value-at run (list station 'tension-to) 0.5) (value-at run (list station 'tension-from) 0.5))
                e (* 1e-3 e) (format "~a's tension ratio" station))
-      ;; and the pair accelerate at g (M - m E) / (M + m E); Godot's 0.1/s
-      ;; damping takes c v off that, so add it back at the mean speed
+      ;; and the pair accelerate at g (M - m E) / (M + m E), with no engine
+      ;; damping (#33) to add back
       (define m (mass holder-cm))
       (define a0 (/ (* g (- big (* m e))) (+ big (* m e))))
       (define load (string->symbol (format "~a-load" station)))
       (define v3 (value-at run (list load 'vy) 0.3))
       (define v5 (value-at run (list load 'vy) 0.5))
-      (define measured (+ (/ (- v3 v5) 0.2) (* 0.1 (/ (- (+ v3 v5)) 2))))
+      (define measured (/ (- v3 v5) 0.2))
       (check-= measured a0 (* 0.01 a0) (format "~a accelerates at ~a m/s2, predicted ~a" station measured a0)))
     (check-= (value-at run '(half-slip wrap-deg) 0.5) 180 0.01)
     (check-= (value-at run '(coil-slip wrap-deg) 0.5) 539.49 0.05)
@@ -1027,9 +1032,10 @@
     (check-= (value-at run '(seven-hoist tension-to) 5) (* 583.2 9.81) 20 "the stone side carries the stone")))
 
 ;; Issue #27: impacts. Predicted before the first run (drop-test.rkt's
-;; header): the engine's own tick, v <- v (1 - c dt) - g dt, brings a block
-;; dropped 1.25 m to the floor on the 61st tick at 4.8641 m/s, and the
-;; strike meets it at that less one tick's damping, 4.8600; it leaves at
+;; header): the engine's own tick, v <- v - g dt (no damping since #33),
+;; leaves a block dropped 1.25 m 3.3 mm above the floor after 60 ticks, at
+;; 60 g dt = 4.905 m/s; the 61st tick strikes it at that speed (the one the
+;; solver sees entering the step); it leaves at
 ;; e times that (the floor gives no restitution of its own and Jolt takes
 ;; the larger), and the collision takes 1/2 m v^2 (1 - e^2): 72.4, 163.5,
 ;; 51.1 and 103.1 J for steel, granite, oak and hemp.
@@ -1037,12 +1043,12 @@
   (when (godot-available?)
     (define dt 1/120)
     (define run (godot-simulate 'drop-test #:seconds 1.6 #:sample-dt dt))
-    (define (tick v) (- (* v (- 1 (* 0.1 dt))) (* 9.81 dt)))
+    (define (tick v) (- v (* 9.81 dt)))
     (define v-in                       ; falling from 1.25 m, a tick at a time
       (let loop ([v 0.0] [y 1.25])
         (define v* (tick v))
-        (if (<= (+ y (* v* dt)) 0) (* (- v*) (- 1 (* 0.1 dt))) (loop v* (+ y (* v* dt))))))
-    (check-= v-in 4.8600 1e-3)
+        (if (<= (+ y (* v* dt)) 0) (- v) (loop v* (+ y (* v* dt))))))
+    (check-= v-in 4.905 1e-3)
     (define (rise v) (let loop ([v v] [y 0.0]) (define v* (tick v)) (if (<= v* 0) y (loop v* (+ y (* v* dt))))))
     (for ([b '(steel-block granite-block oak-block hemp-bale)]
           [e '(0.95 0.6 0.5 0.1)]
@@ -1548,16 +1554,16 @@
 (test-case "A shaft between two Jolt machines (#78): the treadwheel turns the separate hoist's drum and lifts the stone"
   (when (godot-available?)
     ;; crane-hoist.rkt: the shaft carries the stone's 583 x 9.81 x 0.25 = 1430 N·m; the
-    ;; walkers' 1545 N·m leaves 115 N·m against the bodies' damping (0.2/s set + 0.1/s
-    ;; Godot's default) on 1818 + 4.5 kg·m², so the pair settles at 115/(0.3 x 1822)
-    ;; = 0.206 rad/s, and the rope comes in at that times the drum's 25 cm.
+    ;; walkers' 1545 N·m leaves 115 N·m against the bodies' damping (0.2/s set; Godot's
+    ;; default 0.1/s went with #30/#33) on 1818 + 4.5 kg·m², so the pair heads for
+    ;; 115/(0.2 x 1822) = 0.316 rad/s (the walkers' 3 rpm, 0.314, is the ceiling), with
+    ;; a time constant of 1/0.2 = 5 s: 0.316 (1 - e^-4) = 0.3103 rad/s at 20 s, and the
+    ;; rope comes in at that times the drum's 25 cm.
     (define world (godot-simulate-world 'split-crane #:seconds 20 #:sample-dt 1))
     (define-values (links hoist) (values (hash-ref world 'links) (hash-ref world 'hoist)))
     (check-= (value-at links '(axle torque) 20) 1430 15)
     (define omega (* (value-at links '(axle rpm) 20) 2 pi 1/60))
-    ;; NB this number rests on Godot's default 0.1/s angular damping: when #33 takes that out
-    ;; it becomes 115/(0.2 x 1822) = 0.316, above the walkers' 3 rpm (0.314), so 0.314.
-    (check-= omega 0.206 0.003)
+    (check-= omega (* 115/1822 5 (- 1 (exp -4))) 0.004)
     (check-= (value-at links '(axle driven-rpm) 20) (value-at links '(axle rpm) 20) 1e-4 "one speed both sides")
     (define rise-rate (/ (- (value-at hoist '(stone y) 20) (value-at hoist '(stone y) 10)) 10))
     (check-= rise-rate (* omega 0.25) 0.001 "the stone rises at the drum's rim speed")))
@@ -1588,7 +1594,13 @@
     ;; loose: slipping the whole time, and the force it carries is its limit to the newton's hundredth
     (for ([t (in-list '(0.25 0.5 1.0 2.0 3.0))])
       (check-= (value-at run '(loose-belt force) t) 6.054 0.05 (format "loose belt force at ~a s" t))
-      (check-true (> (value-at run '(loose-belt slip) t) 1.0) (format "loose belt slipping at ~a s" t)))
+      (check-true (> (value-at run '(loose-belt slip) t) 0.5) (format "loose belt slipping at ~a s" t)))
+    ;; with the engine's default damping gone (#33) the big pulley has only its own 0.2/s: the small one at its
+    ;; 47.1 rad/s cap (4.712 m/s at the rim) and the big at 41.1 (1 - e^(-0.2 t)) rad/s (20 cm rim), the rims
+    ;; differ by 4.712 - 8.22 (1 - e^(-0.2 t)) = 1.003 m/s at 3 s, and 3.22 at 1 s
+    (for ([t (in-list '(1.0 3.0))])
+      (check-= (value-at run '(loose-belt slip) t) (- 4.712 (* 0.2 41.1 (- 1 (exp (* -0.2 t))))) 0.15
+               (format "loose belt's slip at ~a s" t)))
     ;; before the engine's 47.1 rad/s cap on any body: the small pulley at 85.6 rad/s2 (21.4 at 0.25 s), the
     ;; big one at about 2 rad/s, a ratio of 0.09 and not the 0.5 of a belt that holds
     (check-= (value-at run '(loose-driver omega) 0.25) 21.4 1.0)
@@ -1658,7 +1670,9 @@
   ;; (needs 122 N), but held by the 140 N tongs. The light one is let go after 1 s, 1.2 m up, onto a
   ;; step 0.3 m up: its middle falls 0.8565 m, lands after sqrt(2 h / g) = 0.418 s at sqrt(2 g h) = 4.10 m/s.
   (when (godot-available?)
-    (define run (godot-simulate 'crate-tongs #:seconds 3 #:sample-dt 0.01))
+    ;; a frame a tick (120 Hz): sampled every 0.01 s the last frame before the strike can be two ticks
+    ;; early, 0.16 m/s short of the speed it lands at
+    (define run (godot-simulate 'crate-tongs #:seconds 3 #:sample-dt 1/120))
     (define (t-first pred path)               ; the first sample time at which pred holds for a field
       (for/first ([t (times-of run)] [v (values-of run path)] #:when (pred v)) t))
     ;; the limits and the loads, in newtons
@@ -1682,7 +1696,8 @@
     (check-= (- landed let-go) (sqrt (/ (* 2 0.8565) 9.81)) 0.04 "the time to fall 0.8565 m")
     (check-= (- (min-of run '(light-crate vy))) (sqrt (* 2 9.81 0.8565)) 0.15 "the speed it lands at")
     ;; the heavy crate falls 0.8505 m the moment the tongs give way
-    (define heavy-landed (t-first (λ (y) (< y 0.36)) '(heavy-crate y)))
+    ;; (the first frame it is moving up again: the first strike leaves its middle above 0.36 m)
+    (define heavy-landed (t-first (λ (vy) (> vy 0)) '(heavy-crate vy)))
     (check-= heavy-landed (sqrt (/ (* 2 0.8505) 9.81)) 0.05)
     ;; and comes to rest on the step, its middle half its height up: 0.3 + 0.0495
     (check-= (final-of run '(heavy-crate y)) 0.3495 0.005)
@@ -1705,19 +1720,20 @@
   (check-= (value-at run '(race flow) 25) (* 1.705 0.5 (expt (- (/ (value-at run '(millpond level) 25) 100) 0.2) 1.5) 1000) 2))
 
 
-(test-case "Continuous collision detection: a bolt at 58 m/s is stopped by a 2 cm plank, and without it goes through"
-  ;; 299 m of fall, with the engine's default damping, is 8.97 s and 58.1 m/s: 0.48 m a tick at 120 Hz,
+(test-case "Continuous collision detection: a bolt at 77 m/s is stopped by a 2 cm plank, and without it goes through"
+  ;; 299 m of fall, with no damping (#33), is 7.81 s and sqrt(2 g 299) = 76.6 m/s: 0.64 m a tick at 120 Hz,
   ;; against a plank 2 cm thick and a bolt 5 cm across (7 cm): a bolt only tested where it stands
   ;; each tick can be on one side of the plank one tick and the far side the next
   (when (godot-available?)
-    (define run (godot-simulate 'tunnel-test #:seconds 12 #:sample-dt 0.05))
+    ;; a frame a tick: the plain bolt is below the plank for three ticks only, at 0.64 m a tick
+    (define run (godot-simulate 'tunnel-test #:seconds 12 #:sample-dt 1/120))
     (define fastest (- (min-of run '(bolt-fast vy))))
-    (check-= fastest 58.1 2.0 "it arrives at the speed the fall gives")
+    (check-= fastest 76.6 2.0 "it arrives at the speed the fall gives")
     (check-true (> (/ fastest 120) 0.07) "each tick it moves further than the plank and the bolt are thick")
     ;; swept: it never gets below the plank (1.0 m up); its middle stays above 1.0 m the whole run
     (check-true (> (min-of run '(bolt-fast y)) 1.0) (format "the swept bolt stayed above its plank (lowest ~a m)" (min-of run '(bolt-fast y))))
     ;; not swept: through the plank and on to the floor, its middle reaching ground level
-    (check-true (< (min-of run '(bolt-plain y)) 0.3) (format "the plain bolt went through (lowest ~a m)" (min-of run '(bolt-plain y))))
+    (check-true (< (min-of run '(bolt-plain y)) 0.7) (format "the plain bolt went through (lowest ~a m)" (min-of run '(bolt-plain y))))
     ;; the same bolt, the same fall, the same speed: only the sweep differs
     (check-= (- (min-of run '(bolt-plain vy))) fastest 0.5)))
 

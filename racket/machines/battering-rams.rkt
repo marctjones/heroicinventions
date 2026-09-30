@@ -4,8 +4,8 @@
 ;; struck 0.8 m above its foot: a slim oak post (8 cm square), a stout one
 ;; (14 cm) and a limestone column (30 cm across).
 ;;
-;; The ram arrives at about 2.2 m/s (2.30 undamped, less Godot's 0.1/s
-;; damping over the swing), with an effective mass at the ball of
+;; The ram arrives at about 2.3 m/s (2.30 undamped; before #33 took Godot's
+;; 0.1/s damping out it was 2.2), with an effective mass at the ball of
 ;; I / L^2 = 536.2 / 4 = 134.0 kg. The post bends like a cantilever spring,
 ;; k = 3 E I / h^3, stops the blow with F = v sqrt(k m), and the moment
 ;; F h at its foot bends it to a stress F h c / I:
