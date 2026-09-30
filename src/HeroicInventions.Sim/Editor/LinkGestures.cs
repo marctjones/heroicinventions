@@ -74,6 +74,9 @@ public static class LinkGestures
             links.Add(($"shares air with {string.Join(", ", a.Tanks.Where(t => t != id))}", $"(remove-air {id})", null));
         foreach (var c in doc.Cylinders.Where(c => c.Piston == id || c.Boiler == id))
             links.Add(($"cylinder {c.Id}: {c.Piston} and {c.Boiler}", $"(remove {c.Id})", null));
+        foreach (var t in doc.Triggers.Where(t => t.Body == id || t.WatchTarget == id || t.Actions.Any(a => a.Target == id)))
+            links.Add(($"trigger {t.Id}: " + (t.Body is { } b ? $"fires when {b} arrives" : $"fires when {t.WatchTarget}.{t.WatchField} goes {(t.Rising ? "above" : "below")} {t.Threshold:0.###}") +
+                       $", sets {string.Join(", ", t.Actions.Select(a => $"{a.Target}.{a.Field} to {a.Value:0.###}"))}", $"(remove {t.Id})", null));
         return links;
     }
 

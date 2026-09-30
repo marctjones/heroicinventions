@@ -29,17 +29,17 @@
 (provide define-machine
          tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
-         inflow channel off
+         inflow channel off trigger
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
          (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec) (struct-out lift-spec) (struct-out cylinder-spec)
-         (struct-out inflow-spec) (struct-out channel-spec)
+         (struct-out inflow-spec) (struct-out channel-spec) (struct-out trigger-spec)
          take-registered-machines)
 
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source ambient sun parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels) #:transparent)
+(struct machine (name source ambient sun parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -62,6 +62,11 @@
 ;; by: the screw or noria that lifts; from, to: tanks; current: a river's
 ;; speed (m/s) pushing a noria's paddles, or #f.
 (struct lift-spec (id by from to current current-from loc) #:transparent)
+;; A sensor that acts when something arrives. Watches a body (body: a part id, with
+;; at and size: the box, (list x y z) each, that fires it when the part's centre enters it)
+;; or a field (when: (list target field mode value), mode 'above or 'below). actions: the
+;; (list target field value) settings it applies, once, when it fires.
+(struct trigger-spec (id at size body when actions loc) #:transparent)
 ;; into: a tank; flow in m³/s.
 (struct inflow-spec (id into flow loc) #:transparent)
 ;; from: (list tank port); to: (list tank port) or 'off; end: (list x y z) or #f;
@@ -283,7 +288,8 @@
            (filter lift-spec? items)
            (filter cylinder-spec? items)
            (filter inflow-spec? items)
-           (filter channel-spec? items)))
+           (filter channel-spec? items)
+           (filter trigger-spec? items)))
 
 ;; Machines register themselves when their module runs, so the build
 ;; script can collect every machine in a file without knowing their names.
@@ -303,7 +309,7 @@
 
 (define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
-  inflow channel off)
+  inflow channel off trigger)
 
 ;; A part built from a generated shape (see heroic/geometry). The shape is
 ;; an ordinary runtime value, so whether it suits the clause is checked
@@ -349,6 +355,7 @@
   (struct puinfo (id from to mat))   ; a lift pump: the tank it draws from, the tank it fills
   (struct cpinfo (id vessel))        ; a counterpoise: the tank that hangs from it
   (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
+  (struct trinfo (id body))          ; a trigger: the part it watches, or #f
   (struct chinfo (id from to onto))  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
 
   (define known-materials (material-ids))
@@ -392,7 +399,7 @@
 
   (define-syntax-class clause
     #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump) or link (pipe, connect, sealed-air)"
-    #:literals (tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off)
+    #:literals (tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1079,6 +1086,28 @@
                                   (~? (list (list via.x via.z) ...) '())
                                   width-v (~? len-v #f) #,(loc-of this-syntax) (~? 'onto #f)))
 
+    ;; A sensor that acts when something arrives, once. #:body part with a box
+    ;; (#:at its centre, #:size its extents) fires when that part's centre
+    ;; enters it (a falling weight tripping a catch); #:when (target field above|below value)
+    ;; fires when a field crosses a value (a float rising to a level). #:do
+    ;; lists what it sets, ((target field value) ...), the same targets and
+    ;; fields the console's (set) and a machine's own fields use.
+    (pattern (trigger id:id
+                      (~alt (~optional (~seq #:at at:vec3))
+                            (~optional (~seq #:size size:vec3))
+                            (~optional (~seq #:body body:id))
+                            (~optional (~seq #:when (wt:id wf:id mode:id wv:expr)))
+                            (~once (~seq #:do ((dt:id df:id dv:expr) ...)))) ...)
+      #:fail-when (and (attribute body) (attribute wt) #'id) "a trigger watches either a body (#:body) or a field (#:when), not both"
+      #:fail-unless (or (attribute body) (attribute wt)) "a trigger needs something to watch: #:body part (with #:at and #:size), or #:when (target field above|below value)"
+      #:fail-when (and (attribute body) (not (and (attribute at) (attribute size))) #'id) "a trigger watching a body needs its box: #:at (x y z) and #:size (w h d)"
+      #:fail-when (and (attribute wt) (not (memq (syntax-e #'mode) '(above below))) #'mode) "the mode is above or below"
+      #:fail-when (and (null? (syntax->list #'(dt ...))) #'id) "a trigger does nothing: give it #:do ((target field value) ...)"
+      #:attr info (trinfo #'id (and (attribute body) #'body))
+      #:with expr #`(trigger-spec 'id (~? (list at.x at.y at.z) #f) (~? (list size.x size.y size.z) #f)
+                                  (~? 'body #f) (~? (list 'wt 'wf 'mode wv) #f)
+                                  (list (list 'dt 'df dv) ...) #,(loc-of this-syntax)))
+
     (pattern (mesh a:id b:id)
       #:attr info (minfo #'a #'b)
       #:with expr #`(mesh-spec 'a 'b #,(loc-of this-syntax)))
@@ -1259,6 +1288,10 @@
       (define b (hash-ref parts (syntax-e (cinfo-boiler c)) #f))
       (unless (and b (eq? (pinfo-kind b) 'boiler))
         (fail (format "~a is not a boiler; the cylinder needs one for steam" (syntax-e (cinfo-boiler c))) (cinfo-boiler c))))
+
+    (for ([t infos] #:when (and (trinfo? t) (trinfo-body t)))
+      (unless (hash-ref parts (syntax-e (trinfo-body t)) #f)
+        (fail (format "~a is not a part; a trigger watches a part's centre" (syntax-e (trinfo-body t))) (trinfo-body t))))
 
     (for ([i infos] #:when (iinfo? i))
       (define p (hash-ref parts (syntax-e (iinfo-into i)) #f))

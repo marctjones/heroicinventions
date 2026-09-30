@@ -66,6 +66,11 @@ public static class CommandScript
             Add($"(lift {l.Id} #:by {l.By} #:from {l.From} #:to {l.To}" +
                 (l.Current is { } cur ? $" #:current {N(cur)}" : "") +
                 (l.CurrentFrom is { } cf ? $" #:current-from {cf}" : "") + ")");
+        foreach (var t in m.Triggers)
+            Add($"(trigger {t.Id}" + (t.At is { } at ? $" #:at {V(at)}" : "") + (t.Size is { } sz ? $" #:size {V(sz)}" : "") +
+                (t.Body is { } body ? $" #:body {body}" : "") +
+                (t.WatchTarget is { } wt ? $" #:when ({wt} {t.WatchField} {(t.Rising ? "above" : "below")} {N(t.Threshold)})" : "") +
+                $" #:do ({string.Join(' ', t.Actions.Select(a => $"({a.Target} {a.Field} {N(a.Value)})"))}))");
         lines.AddRange(afterLinks);
         return lines;
     }

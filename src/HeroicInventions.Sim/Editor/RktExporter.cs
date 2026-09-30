@@ -58,6 +58,12 @@ public static class RktExporter
         foreach (var c in m.Cylinders)
             sb.Append($"  (atmospheric-cylinder {c.Id} #:piston {c.Piston} #:steam-from {c.Boiler}{(c.InjectionTemperature is { } inj ? $" #:injection-temperature {F(inj)}" : "")})\n");
 
+        foreach (var t in m.Triggers)
+            sb.Append($"  (trigger {t.Id}" + (t.At is { } at ? $" #:at {Vec(at)}" : "") + (t.Size is { } sz ? $" #:size {Vec(sz)}" : "") +
+                      (t.Body is { } body ? $" #:body {body}" : "") +
+                      (t.WatchTarget is { } wt ? $" #:when ({wt} {t.WatchField} {(t.Rising ? "above" : "below")} {F(t.Threshold)})" : "") +
+                      $" #:do ({string.Join(' ', t.Actions.Select(a => $"({a.Target} {a.Field} {F(a.Value)})"))}))\n");
+
         sb.Append(")\n");
         return sb.ToString();
     }

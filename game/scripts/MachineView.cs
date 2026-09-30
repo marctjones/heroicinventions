@@ -111,6 +111,7 @@ public partial class MachineView : Node3D
         BuildChannels();
         BuildFloatValves();
         BuildLeaks();
+        BuildTriggers();
         BuildSafetyValves();
         BuildBellows();
         BuildWarmth();
@@ -1300,6 +1301,7 @@ public partial class MachineView : Node3D
         DriveLifts();
         DrivePistons();
         DriveSprings();
+        TestTriggers();
         Runtime.Step(dt);
         Refresh();
         TraceTick(dt);
@@ -1385,6 +1387,7 @@ public partial class MachineView : Node3D
         DrawBearingPendulums();
         DrawFloatValves();
         DrawLeaks();
+        DrawTriggers();
         DrawSafetyValves();
         DrawBellows();
         DrawWarmth();

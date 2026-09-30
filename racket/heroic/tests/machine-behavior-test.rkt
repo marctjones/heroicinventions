@@ -1120,3 +1120,26 @@
                (format "at ~a s the edited pendulum swings as the untouched one" (car a))))
     ;; and the edit really happened: the new block is in the machine by the end
     (check-not-false (assq 'extra.y (cdr (last edited))) "the added block is part of the running machine")))
+
+(test-case "Tripwire: a trigger under a falling weight fires when the weight arrives, and only then opens the sluice"
+  ;; the weight's middle falls 1.5 m -> 0.95 m, the trigger's top face: h = 0.55 m,
+  ;; t = sqrt(2 h / g) = 0.3349 s, or 0.3368 s with the engine's default 0.1/s damping
+  ;; (until #33); the physics ticks at 120 Hz, so within a tick or two of either
+  (when (godot-available?)
+    (define run (godot-simulate 'trip-sluice #:seconds 4 #:sample-dt 0.05))
+    (define fired-at (final-of run '(tripwire fired-at)))
+    (check-= fired-at (sqrt (/ (* 2 0.55) 9.81)) 0.012 "sqrt(2 h / g)")
+    (check-= (final-of run '(tripwire fired)) 1 0)
+    ;; the action happened: the gate went from shut to 0.05 ...
+    (check-= (min-of run '(gate opening)) 0 0)
+    (check-= (final-of run '(gate opening)) 0.05 1e-9)
+    ;; ... and the reach, dry until then, is filling after it
+    (check-= (min-of run '(reach water)) 0 0)
+    (check-true (> (final-of run '(reach water)) 10) "the pool ran down the race into the reach")
+    ;; the frame just before the fire still shows a shut gate and a dry reach
+    (define times (times-of run))
+    (define before (for/last ([t times] [i (in-naturals)] #:when (< t (- fired-at 0.05))) i))
+    (check-= (list-ref (values-of run '(gate opening)) before) 0 0)
+    (check-= (list-ref (values-of run '(reach water)) before) 0 0)
+    ;; and the weight really had arrived: it is at or below the box's top face by then
+    (check-true (< (final-of run '(weight y)) 0.95))))

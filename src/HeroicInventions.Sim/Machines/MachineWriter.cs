@@ -35,6 +35,7 @@ public static class MachineWriter
         foreach (var g in m.Meshes) clauses.Add(MeshClause(g));
         foreach (var a in m.Arbors) clauses.Add(ArborClause(a));
         foreach (var a in m.SealedAir) clauses.Add(SealedAirClause(a));
+        foreach (var t in m.Triggers) clauses.Add(TriggerClause(t));
 
         var w = new System.Text.StringBuilder();
         w.Append(";; Saved by the in-game editor. Building from Racket will replace this file.\n");
@@ -124,6 +125,17 @@ public static class MachineWriter
             Tagged("current", NumOrFalse(l.Current)),
             Tagged("current-from", SymOrFalse(l.CurrentFrom)),
             SrcLoc(l.Location));
+
+    private static SExpr TriggerClause(TriggerSpec t) =>
+        Tagged("trigger", Sym(t.Id),
+            t.At is { } at ? Tagged("at", Num(at.X), Num(at.Y), Num(at.Z)) : Tagged("at"),
+            t.Size is { } sz ? Tagged("size", Num(sz.X), Num(sz.Y), Num(sz.Z)) : Tagged("size"),
+            Tagged("body", SymOrFalse(t.Body)),
+            t.WatchTarget is { } wt
+                ? Tagged("when", Sym(wt), Sym(t.WatchField!), Sym(t.Rising ? "above" : "below"), Num(t.Threshold))
+                : Tagged("when"),
+            new SList([Sym("do"), .. t.Actions.Select(a => (SExpr)List(Sym(a.Target), Sym(a.Field), Num(a.Value)))]),
+            SrcLoc(t.Location));
 
     private static SExpr MeshClause(MeshSpec g) => Tagged("mesh", Sym(g.A), Sym(g.B), SrcLoc(g.Location));
 

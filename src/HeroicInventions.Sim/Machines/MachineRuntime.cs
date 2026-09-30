@@ -29,6 +29,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, WaterLift> _lifts = [];
     private readonly Dictionary<string, AtmosphericCylinder> _cylinders = [];
     private readonly Dictionary<string, WaterSource> _sources = [];
+    private readonly Dictionary<string, Trigger> _triggers = [];
     private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, (FloatValve Valve, Func<double> Flow)> _floatValves = [];
@@ -61,6 +62,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, WaterLift> Lifts => _lifts;
     public IReadOnlyDictionary<string, AtmosphericCylinder> Cylinders => _cylinders;
     public IReadOnlyDictionary<string, WaterSource> Sources => _sources;
+    /// <summary>Triggers, by id. Body triggers are tested by the view that owns the bodies, through <see cref="TestBodyTrigger"/>.</summary>
+    public IReadOnlyDictionary<string, Trigger> Triggers => _triggers;
     public IReadOnlyDictionary<string, Channel> Channels => _channels;
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
     /// <summary>Float valves, each with the flow of the feed it throttles (m³/s).</summary>
@@ -424,6 +427,70 @@ public sealed class MachineRuntime
 
         Ambient = _ambient;   // hand it to every part now they all exist
         RegisterFields();
+        BuildTriggers(def);
+    }
+
+    /// <summary>
+    /// Triggers are built last, once every field exists, so a trigger's watched
+    /// field and each of its actions can be checked against the real getters
+    /// and setters and reported at the clause.
+    /// </summary>
+    private void BuildTriggers(MachineDef def)
+    {
+        foreach (var spec in def.Triggers)
+        {
+            bool body = spec.Body is not null;
+            if (body == (spec.WatchTarget is not null))
+                throw new MachineFormatException($"trigger {spec.Id} must watch either a body (#:watch part, with #:at and #:size) or a field (#:when target.field), not both or neither", spec.Location);
+            if (body)
+            {
+                if (spec.At is null || spec.Size is null || spec.Size is { } sz && (sz.X <= 0 || sz.Y <= 0 || sz.Z <= 0))
+                    throw new MachineFormatException($"trigger {spec.Id} needs #:at and a positive #:size to watch {spec.Body}", spec.Location);
+                if (def.Part(spec.Body!) is null)
+                    throw new MachineFormatException($"trigger {spec.Id} watches {spec.Body}, which is not a part", spec.Location);
+            }
+            else if (!_getters.ContainsKey($"{spec.WatchTarget}.{spec.WatchField}"))
+                throw new MachineFormatException($"trigger {spec.Id} watches {spec.WatchTarget}.{spec.WatchField}, which is not a readable field", spec.Location);
+            if (spec.Actions.Count == 0)
+                throw new MachineFormatException($"trigger {spec.Id} does nothing: give it a #:set (target field value)", spec.Location);
+            foreach (var a in spec.Actions)
+                if (!_setters.ContainsKey($"{a.Target}.{a.Field}"))
+                    throw new MachineFormatException($"trigger {spec.Id} sets {a.Target}.{a.Field}, which is not a settable field", spec.Location);
+            if (_triggers.ContainsKey(spec.Id))
+                throw new MachineFormatException($"two triggers are called {spec.Id}", spec.Location);
+            var t = _triggers[spec.Id] = new Trigger(spec);
+            _getters[$"{spec.Id}.fired"] = () => t.Fired ? 1 : 0;
+            _getters[$"{spec.Id}.fired-at"] = () => t.FiredAt;          // s; -1 until it fires
+        }
+    }
+
+    /// <summary>
+    /// Tells a body trigger where its watched body is now; fires it (once) if
+    /// the point is inside its box. Returns true on the call that fires it.
+    /// </summary>
+    public bool TestBodyTrigger(string id, double x, double y, double z)
+    {
+        var t = _triggers[id];
+        if (t.Fired || !t.Contains(x, y, z)) return false;
+        Fire(t);
+        return true;
+    }
+
+    private void Fire(Trigger t)
+    {
+        t.Fired = true;
+        t.FiredAt = Time;
+        foreach (var a in t.Spec.Actions) SetField(a.Target, a.Field, a.Value);
+    }
+
+    private void StepFieldTriggers()
+    {
+        foreach (var t in _triggers.Values)
+        {
+            if (t.Fired || t.Spec.WatchTarget is null) continue;
+            double v = GetField(t.Spec.WatchTarget, t.Spec.WatchField!);
+            if (t.Spec.Rising ? v >= t.Spec.Threshold : v <= t.Spec.Threshold) Fire(t);
+        }
     }
 
     private void BuildSafetyValve(PartSpec part)
@@ -903,6 +970,7 @@ public sealed class MachineRuntime
             if (!_rotorBoiler.ContainsValue(id))
                 boiler.Step(dt, _cylinders.Values.Where(c => c.Boiler == boiler).Sum(c => c.SteamDraw));
         Time += dt;
+        StepFieldTriggers();
     }
 
     /// <summary>Thin spherical shell: I = ⅔·m·r², with m = ρ·4πr²·t.</summary>

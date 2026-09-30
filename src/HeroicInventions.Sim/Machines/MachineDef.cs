@@ -109,6 +109,20 @@ public sealed record RopeSpec(
     public string? Turns { get; init; }
 }
 
+/// <summary>One thing a trigger does when it fires: sets a runtime field, as <c>(target field value)</c>.</summary>
+public sealed record TriggerAction(string Target, string Field, double Value);
+
+/// <summary>
+/// A sensor that acts when something arrives (issue #32). It watches either a
+/// body — fires once when the part <see cref="Body"/>'s centre enters the box
+/// of extent <see cref="Size"/> centred on <see cref="At"/> — or a runtime field,
+/// firing once when <see cref="WatchTarget"/>.<see cref="WatchField"/> rises above
+/// (or, with <see cref="Rising"/> false, falls below) <see cref="Threshold"/>.
+/// Firing applies each of <see cref="Actions"/> through the field setters.
+/// </summary>
+public sealed record TriggerSpec(string Id, Vec3? At, Vec3? Size, string? Body, string? WatchTarget, string? WatchField,
+                                 bool Rising, double Threshold, IReadOnlyList<TriggerAction> Actions, SourceLocation? Location);
+
 /// <summary>
 /// A machine as written by #lang heroic: parts with positions, materials
 /// and ports, plus the pipes, steam connections and sealed-air groups
@@ -133,6 +147,7 @@ public sealed class MachineDef
     public IReadOnlyList<SourceSpec> Sources { get; init; } = [];
     public IReadOnlyList<ChannelSpec> Channels { get; init; } = [];
     public IReadOnlyList<CylinderSpec> Cylinders { get; init; } = [];
+    public IReadOnlyList<TriggerSpec> Triggers { get; init; } = [];
 
     public PartSpec? Part(string id) => Parts.FirstOrDefault(p => p.Id == id);
 
@@ -169,6 +184,7 @@ public sealed class MachineDef
                 Via = c.Via?.Select(v => (v.X + offset.X, v.Z + offset.Z)).ToList(),
             }).ToList(),
             Cylinders = Cylinders,
+            Triggers = Triggers.Select(t => t with { At = t.At is { } a ? Move(a) : null }).ToList(),
         };
     }
 
@@ -232,6 +248,7 @@ public sealed class MachineDef
                 return new CylinderSpec(Sym(c, 1, loc), Field("piston"), Field("steam-from"),
                                         c.Field("injection-temperature") is { } t && t.Items.ElementAtOrDefault(1) is SNumber ? Num(t, 1, loc) : null, loc);
             }).ToList(),
+            Triggers = clauses.Where(c => c.Head == "trigger").Select(ParseTrigger).ToList(),
             Meshes = clauses.Where(c => c.Head == "mesh").Select(c =>
             {
                 var loc = ParseLoc(c);
@@ -313,6 +330,21 @@ public sealed class MachineDef
             Nocked = c.Field("nocked")?.Items.ElementAtOrDefault(1) is SBool { Value: true },
             Turns = c.Field("turns")?.Items.ElementAtOrDefault(1) is SSymbol t ? t.Name : null,
         };
+    }
+
+    // (trigger id (at x y z) (size w h d) (body part|#f) (when target field above|below value) (do (target field value) …) (srcloc …))
+    private static TriggerSpec ParseTrigger(SList c)
+    {
+        var loc = ParseLoc(c);
+        Vec3? Vec(string field) => c.Field(field) is { Items.Count: 4 } v ? new Vec3(Num(v, 1, loc), Num(v, 2, loc), Num(v, 3, loc)) : null;
+        var when = c.Field("when") is { Items.Count: 5 } w ? w : null;
+        return new TriggerSpec(Sym(c, 1, loc), Vec("at"), Vec("size"),
+            c.Field("body")?.Items.ElementAtOrDefault(1) is SSymbol b ? b.Name : null,
+            when is null ? null : Sym(when, 1, loc), when is null ? null : Sym(when, 2, loc),
+            when is null || Sym(when, 3, loc) == "above", when is null ? 0 : Num(when, 4, loc),
+            (c.Field("do")?.Items.Skip(1) ?? []).OfType<SList>()
+                .Select(a => new TriggerAction(Sym(a, 0, loc), Sym(a, 1, loc), Num(a, 2, loc))).ToList(),
+            loc);
     }
 
     // (sealed-air (tanks a b …) (tube-volume v) (srcloc …))

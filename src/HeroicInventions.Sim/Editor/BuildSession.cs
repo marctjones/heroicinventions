@@ -40,6 +40,8 @@ namespace HeroicInventions.Sim.Editor;
 ///   (sealed-air (tank tank ...) #:tube V [#:heat-loss W/K] [#:heat-capacity J/K])   ; tanks sharing one sealed air space
 ///   (atmospheric-cylinder id #:piston p #:steam-from boiler [#:injection-temperature C])
 ///   (inflow id #:into tank #:flow m3/s) (channel id from.port to.port|off ...) (lift id #:by part #:from tank #:to tank)
+///   (trigger id #:at (x y z) #:size (w h d) #:body part #:do ((target field value) ...))   ; fires once when the part's centre enters the box
+///   (trigger id #:when (target field above|below value) #:do ((target field value) ...)) ; fires once when a field crosses the value
 ///   (port part name kind height) (remove-port part name)   ; add or replace a port on a part
 ///   (set-rope id #:length L [#:diameter D] [#:material M] [#:release-deg d] [#:wind-on part] [#:turns part] [#:nocked #t])   ; change a rope
 ///   (unmesh a b) (unarbor part) (remove-air tank)   ; take a link apart again
@@ -110,6 +112,7 @@ public sealed class BuildSession
         "arbor" => CreateArbor(cmd),
         "sealed-air" => CreateSealedAir(cmd),
         "atmospheric-cylinder" => CreateCylinder(cmd),
+        "trigger" => CreateTrigger(cmd),
         "port" => SetPort(cmd),
         "remove-port" => RemovePortCmd(cmd),
         "set-rope" => SetRope(cmd),
@@ -408,6 +411,36 @@ public sealed class BuildSession
         Snapshot();
         Document.AddCylinder(id, piston, boiler, injection);
         return $"cylinder {id}: {piston} fed by {boiler}";
+    }
+
+    private string CreateTrigger(SList cmd)
+    {
+        string id = Id(cmd, 1);
+        var at = Kw(cmd, "at") is { } a ? VecOf(a, $"trigger {id} #:at") : (Vec3?)null;
+        var size = Kw(cmd, "size") is { } z ? VecOf(z, $"trigger {id} #:size") : (Vec3?)null;
+        string? body = Kw(cmd, "body") is SSymbol b ? b.Name : null;
+        string? target = null, field = null;
+        bool rising = true;
+        double threshold = 0;
+        if (Kw(cmd, "when") is { } w)
+        {
+            if (w is not SList { Items.Count: 4 } wl || wl.Items[2] is not SSymbol { Name: "above" or "below" } mode)
+                throw new FormatException($"trigger {id} #:when: expected (target field above|below value)");
+            target = Name(wl.Items[0], $"trigger {id} #:when");
+            field = Name(wl.Items[1], $"trigger {id} #:when");
+            rising = mode.Name == "above";
+            threshold = Num(wl.Items[3], $"trigger {id} #:when");
+        }
+        var actions = new List<TriggerAction>();
+        if (Kw(cmd, "do") is SList dl)
+            foreach (var item in dl.Items)
+            {
+                if (item is not SList { Items.Count: 3 } al) throw new FormatException($"trigger {id} #:do: expected ((target field value) …)");
+                actions.Add(new TriggerAction(Name(al.Items[0], $"trigger {id} #:do"), Name(al.Items[1], $"trigger {id} #:do"), Num(al.Items[2], $"trigger {id} #:do")));
+            }
+        Snapshot();
+        Document.AddTrigger(new TriggerSpec(id, at, size, body, target, field, rising, threshold, actions, null));
+        return $"trigger {id}: {(body is not null ? $"when {body} arrives" : $"when {target}.{field} goes {(rising ? "above" : "below")} {threshold}")}";
     }
 
     /// <summary>(port part name kind height): adds a port (or replaces the one with that name), height above the part's origin.</summary>
