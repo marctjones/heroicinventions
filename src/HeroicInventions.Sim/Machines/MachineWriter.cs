@@ -39,6 +39,7 @@ public static class MachineWriter
         foreach (var t in m.Triggers) clauses.Add(TriggerClause(t));
         foreach (var f in m.Follows) clauses.Add(FollowClause(f));
         foreach (var b in m.Belts) clauses.Add(Tagged("belt", Sym(b.Id), Sym(b.A), Sym(b.B), Tagged("tension", Num(b.Tension)), Tagged("material", Sym(b.Material)), SrcLoc(b.Location)));
+        foreach (var j in m.Joints) clauses.Add(JointClause(j));
 
         var w = new System.Text.StringBuilder();
         w.Append(";; Saved by the in-game editor. Building from Racket will replace this file.\n");
@@ -130,6 +131,15 @@ public static class MachineWriter
             Tagged("current", NumOrFalse(l.Current)),
             Tagged("current-from", SymOrFalse(l.CurrentFrom)),
             SrcLoc(l.Location));
+
+    private static SExpr JointClause(JointSpec j) =>
+        Tagged("joint", Sym(j.Id),
+            Tagged("kind", Sym(j.Kind)), Tagged("a", Sym(j.A)), Tagged("b", Sym(j.B)),
+            Tagged("at", Num(j.At.X), Num(j.At.Y), Num(j.At.Z)),
+            j.Axis is { } ax ? Tagged("axis", Num(ax.X), Num(ax.Y), Num(ax.Z)) : Tagged("axis"),
+            new SList([Sym("free"), .. j.Free.Select(f => (SExpr)Sym(f))]),
+            Tagged("limit-deg", NumOrFalse(j.LimitDeg)),
+            SrcLoc(j.Location));
 
     private static SExpr FollowClause(FollowSpec f) =>
         Tagged("follow", Sym(f.Id),

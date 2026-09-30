@@ -38,18 +38,18 @@
 (provide define-machine
          tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
-         inflow channel off trigger follow belt
+         inflow channel off trigger follow belt joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
          (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec) (struct-out lift-spec) (struct-out cylinder-spec)
-         (struct-out inflow-spec) (struct-out channel-spec) (struct-out trigger-spec) (struct-out follow-spec) (struct-out belt-spec)
+         (struct-out inflow-spec) (struct-out channel-spec) (struct-out trigger-spec) (struct-out follow-spec) (struct-out belt-spec) (struct-out joint-spec)
          take-registered-machines
          planet make-planet planet? planet-field planet-name earth-planet?)
 
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source ambient sun planet parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers follows belts) #:transparent)
+(struct machine (name source ambient sun planet parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers follows belts joints) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -81,6 +81,13 @@
 ;; the input (degrees turned, or newtons of tension) runs from `from` to `to`, and the field
 ;; target.field from `low` to `high`, linearly and held at the ends.
 (struct follow-spec (id lever rope from to target field low high loc) #:transparent)
+;; A joint between two moving parts (or a part and the world). kind: 'pin
+;; (a hinge about axis), 'ball (turns every way about the point; limit-deg,
+;; if given, caps how far it swings), 'universal (a Cardan cross between two
+;; shafts: the parts' own axles set its arms), '6dof (free: the list of
+;; motions it leaves free, among x y z rx ry rz; the rest are locked).
+;; a, b: part ids or 'world; at: (list x y z) in the world; axis: (list x y z) or #f.
+(struct joint-spec (id kind a b at axis free limit-deg loc) #:transparent)
 ;; A sensor that acts when something arrives. Watches a body (body: a part id, with
 ;; at and size: the box, (list x y z) each, that fires it when the part's centre enters it)
 ;; or a field (when: (list target field mode value), mode 'above or 'below). actions: the
@@ -350,7 +357,8 @@
            (filter channel-spec? items)
            (filter trigger-spec? items)
            (filter follow-spec? items)
-           (filter belt-spec? items)))
+           (filter belt-spec? items)
+           (filter joint-spec? items)))
 
 ;; Machines register themselves when their module runs, so the build
 ;; script can collect every machine in a file without knowing their names.
@@ -370,7 +378,7 @@
 
 (define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
-  inflow channel off trigger follow belt)
+  inflow channel off trigger follow belt joint)
 
 ;; A part built from a generated shape (see heroic/geometry). The shape is
 ;; an ordinary runtime value, so whether it suits the clause is checked
@@ -418,6 +426,7 @@
   (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
   (struct beinfo (id a b))           ; a belt: the two drums it runs on
   (struct fwinfo (id lever rope))    ; a follow: the lever it follows, or the rope
+  (struct jinfo (id kind a b))       ; a joint: its kind and the two parts (or world)
   (struct trinfo (id body))          ; a trigger: the part it watches, or #f
   (struct chinfo (id from to onto))  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
 
@@ -462,7 +471,7 @@
 
   (define-syntax-class clause
     #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure) or link (pipe, connect, sealed-air)"
-    #:literals (enclosure tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt)
+    #:literals (enclosure tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -675,7 +684,8 @@
     ;; entry — so shapes can be named, shared and computed like any value.
     ;;
     ;; A wheel turns on an axle through #:at along #:axis (z, the default,
-    ;; faces the camera). #:angle-deg sets where it starts turned to — how
+    ;; faces the camera), or raised #:tilt-deg from it (an x or z axle
+    ;; tilts up toward y; a y axle leans toward x). #:angle-deg sets where it starts turned to — how
     ;; meshing gears are phased (see mate-angle). #:drive-rpm turns it at
     ;; that steady speed, as a man at a crank or a treadmill would; without
     ;; it the wheel turns only if something pushes it. #:drive-torque caps
@@ -689,11 +699,13 @@
                           (~once (~seq #:material mat:id))
                           (~optional (~seq #:axis ax:axis-name))
                           (~optional (~seq #:angle-deg angle-v:expr))
+                          (~optional (~seq #:tilt-deg tilt-v:expr))
                           (~optional (~seq #:drive-rpm rpm-v:expr))
                           (~optional (~seq #:drive-torque torque-v:expr))) ...)
       #:attr info (pinfo #'id 'wheel (attribute mat) '())
       #:with expr #`(shaped-part 'id 'wheel 'mat (list at.x at.y at.z) shape-v
                                  (list (cons 'axis '(~? ax z)) (cons 'angle-deg (~? angle-v 0))
+                                       (~@ . (~? ((cons 'tilt-deg tilt-v)) ()))
                                        (cons 'drive-rpm (~? rpm-v 0)) (cons 'drive-torque (~? torque-v #f)))
                                  #,(loc-of this-syntax)))
 
@@ -1257,6 +1269,39 @@
       #:attr info (beinfo #'id #'a #'b)
       #:with expr #`(belt-spec 'id 'a 'b tension-v '(~? mat hemp) #,(loc-of this-syntax)))
 
+    ;; A joint between two moving parts, or a part and the world, at a point
+    ;; #:at (x y z) in the world. #:kind
+    ;;   pin        a hinge: they turn about #:axis (x y z) through the point
+    ;;              and nothing else -- a crank pin, a door on its post
+    ;;   ball       they turn every way about the point; #:limit-deg caps how
+    ;;              far one swings from where it started (a cone)
+    ;;   universal  a Cardan (Hooke's) joint between two shafts, each on its
+    ;;              own axle through the point: a cross whose arms are hinged
+    ;;              one to each shaft's yoke. At an angle, the driven shaft
+    ;;              speeds up and slows down twice a turn.
+    ;;   6dof       everything locked but the motions named in #:free, among
+    ;;              x y z (sliding along the world's axes) and rx ry rz (turning)
+    (pattern (joint id:id
+                    (~alt (~once (~seq #:kind kind:id))
+                          (~once (~seq #:a a:id))
+                          (~once (~seq #:b b:id))
+                          (~once (~seq #:at at:vec3))
+                          (~optional (~seq #:axis axis:vec3))
+                          (~optional (~seq #:free (free:id ...)))
+                          (~optional (~seq #:limit-deg limit-v:expr))) ...)
+      #:fail-unless (memq (syntax-e #'kind) '(pin ball universal 6dof)) "a joint's #:kind is pin, ball, universal or 6dof"
+      #:fail-when (and (eq? (syntax-e #'kind) 'pin) (not (attribute axis)) #'id) "a pin joint needs the #:axis (x y z) it turns about"
+      #:fail-when (and (attribute free) (not (eq? (syntax-e #'kind) '6dof)) #'id) "only a 6dof joint takes #:free"
+      #:fail-when (for/first ([f (or (attribute free) '())] #:unless (memq (syntax-e f) '(x y z rx ry rz))) f)
+                  "a 6dof joint frees x y z (sliding) or rx ry rz (turning)"
+      #:fail-when (and (attribute limit-v) (not (eq? (syntax-e #'kind) 'ball)) #'id) "only a ball joint takes #:limit-deg"
+      #:fail-when (and (eq? (syntax-e #'a) (syntax-e #'b)) #'b) "a joint joins two different parts"
+      #:fail-when (and (eq? (syntax-e #'kind) 'universal) (or (eq? (syntax-e #'a) 'world) (eq? (syntax-e #'b) 'world)) #'id)
+                  "a universal joint joins two shafts, not a shaft and the world"
+      #:attr info (jinfo #'id (syntax-e #'kind) #'a #'b)
+      #:with expr #`(joint-spec 'id 'kind 'a 'b (list at.x at.y at.z) (~? (list axis.x axis.y axis.z) #f)
+                                '(~? (free ...) ()) (~? limit-v #f) #,(loc-of this-syntax)))
+
     (pattern (mesh a:id b:id)
       #:attr info (minfo #'a #'b)
       #:with expr #`(mesh-spec 'a 'b #,(loc-of this-syntax)))
@@ -1447,6 +1492,15 @@
         (define p (hash-ref parts (syntax-e d) #f))
         (unless (and p (eq? (pinfo-kind p) 'wheel))
           (fail (format "~a is not a wheel, pulley or drum; a belt runs on two of them" (syntax-e d)) d))))
+
+    (for* ([j infos] #:when (jinfo? j) [end (list (jinfo-a j) (jinfo-b j))] #:unless (eq? (syntax-e end) 'world))
+      (define p (hash-ref parts (syntax-e end) #f))
+      (unless p (fail (format "~a is not a part" (syntax-e end)) end))
+      (unless (memq (pinfo-kind p) '(block pendulum lever wheel screw piston))
+        (fail (format "~a is a ~a, which doesn't move; a joint joins blocks, pendulums, levers, wheels, screws or pistons (or world)"
+                      (syntax-e end) (pinfo-kind p)) end))
+      (when (and (eq? (jinfo-kind j) 'universal) (not (memq (pinfo-kind p) '(wheel screw))))
+        (fail (format "~a is not a shaft; a universal joint joins two wheels or screws, each on its own axle" (syntax-e end)) end)))
 
     (for ([f infos] #:when (and (fwinfo? f) (fwinfo-lever f)))
       (define p (hash-ref parts (syntax-e (fwinfo-lever f)) #f))

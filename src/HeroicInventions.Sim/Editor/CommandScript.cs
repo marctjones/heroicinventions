@@ -78,6 +78,7 @@ public static class CommandScript
         foreach (var f in m.Follows)
             Add($"(follow {f.Id} {(f.Lever is { } lv ? $"#:lever {lv}" : $"#:rope {f.Rope}")} #:from {N(f.From)} #:to {N(f.To)} " +
                 $"#:set ({f.Target} {f.Field}) #:low {N(f.Low)} #:high {N(f.High)})");
+        foreach (var j in m.Joints) Add(RktExporter.JointCommand(j, N));
         lines.AddRange(afterLinks);
         return lines;
     }

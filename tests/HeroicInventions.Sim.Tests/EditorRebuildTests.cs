@@ -261,4 +261,38 @@ public class EditorRebuildTests
         Assert.Null(s.Document.Ropes.Single().Bar);
         Assert.Throws<FormatException>(() => s.Execute("(set-rope over #:mu 0.3)"));
     }
+
+    [Fact]
+    public void JointsRoundTripThroughEveryWriterAndRefuseWhatTheyCantHold()
+    {
+        var s = Fresh("bench");
+        s.Execute("(block rod #:at (0 1 0) #:size 0.05 #:material oak)");
+        s.Execute("(block bob #:at (0 0.5 0) #:size 0.1 #:material iron)");
+        s.Execute("(post frame #:at (1 0 0))");
+        s.Execute("(joint hang #:kind ball #:a rod #:b bob #:at (0 0.75 0) #:limit-deg 40)");
+        s.Execute("(joint slide #:kind 6dof #:a rod #:b world #:at (0 1 0) #:free (y ry))");
+        s.Execute("(joint hinge #:kind pin #:a bob #:b world #:at (0 0.5 0) #:axis (0 0 1))");
+
+        var def = s.Document.ToMachineDef();
+        var reread = MachineDef.Parse(MachineWriter.Write(def)).Joints;
+        Assert.Equal(["hang", "slide", "hinge"], reread.Select(j => j.Id));
+        Assert.Equal(40, reread[0].LimitDeg);
+        Assert.Equal(["y", "ry"], reread[1].Free);
+        Assert.Equal(new Vec3(0, 0, 1), reread[2].Axis);
+        string rkt = RktExporter.Write(def);
+        Assert.Contains("(joint hang #:kind ball #:a rod #:b bob #:at (0 0.75 0) #:limit-deg 40)", rkt);
+        Assert.Contains("#:free (y ry)", rkt);
+
+        Assert.Throws<InvalidOperationException>(() => s.Execute("(joint j #:kind ball #:a rod #:b frame #:at (0 1 0))"));   // a post doesn't move
+        Assert.Throws<InvalidOperationException>(() => s.Execute("(joint j #:kind universal #:a rod #:b bob #:at (0 1 0))")); // not shafts
+        Assert.Throws<FormatException>(() => s.Execute("(joint j #:kind pin #:a rod #:b bob #:at (0 1 0))"));                // no axis
+        Assert.Throws<FormatException>(() => s.Execute("(joint j #:kind ball #:a rod #:b bob #:at (0 1 0) #:free (x))"));   // only 6dof frees
+
+        // the Ball joint tool: halfway between the two parts
+        Assert.Equal("(joint joint-1 #:kind ball #:a rod #:b bob #:at (0 0.75 0))", LinkGestures.Command(s.Document, LinkGestures.Kind.Joint, ["rod", "bob"]));
+        Assert.Throws<InvalidOperationException>(() => LinkGestures.Command(s.Document, LinkGestures.Kind.Joint, ["rod", "frame"]));
+
+        s.Execute("(remove bob)");                                   // a joint goes with its part
+        Assert.Equal(["slide"], s.Document.Joints.Select(j => j.Id));
+    }
 }

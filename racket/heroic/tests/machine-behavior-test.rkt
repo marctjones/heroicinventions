@@ -1072,6 +1072,54 @@
     (check-equal? (map (λ (b) (at struck (string->symbol (format "~a.impacts" b)))) '(ball-0 ball-4)) '(1 1))
     (check-true (> (at struck 'ball-4.impact-speed) (* 0.9 (at struck 'ball-0.impact-speed))) "the far ball is struck nearly as hard")))
 
+;; Issue #30: joints. Predicted before the first run (the machines' headers):
+;; the crank-slider's piston at y_c - r cos(theta) - sqrt(l^2 - r^2 sin^2(theta))
+;; against the traced crank angle -- 0.85 and 1.15 m at the dead centres,
+;; 1.01905 m at a quarter turn -- and the universal joint's driven shaft
+;; at tan(out) = cos b tan(in), its speed between cos b and 1/cos b.
+(test-case "Crank and connecting rod: the piston follows y_c - r cos(theta) - sqrt(l^2 - r^2 sin^2(theta))"
+  (when (godot-available?)
+    (define run (godot-simulate 'crank-slider #:seconds 2 #:sample-dt 1/120))
+    (define (at f key) (cadr (assq key (cdr f))))
+    (define (predicted deg)
+      (define th (* deg (/ pi 180)))
+      (- 1.6 (* 0.15 (cos th)) (sqrt (- (* 0.6 0.6) (* 0.15 0.15 (sin th) (sin th))))))
+    ;; Jolt's joints give a little, in step with speed: the loop runs a
+    ;; steady ~1.3 degrees behind the crank at 60 rpm (4.3 mm at most off
+    ;; the formula, measured; 2.0 mm at 30 rpm)
+    (define worst (for/fold ([w 0]) ([f run]) (max w (abs (- (at f 'piston.y) (predicted (at f 'crank.angle)))))))
+    (check-true (< worst 0.005) (format "the piston keeps within ~a m of the formula" worst))
+    ;; at the dead centres the piston stands still, so only the joints'
+    ;; stretch under its turning load is left (1.6 mm measured at the bottom,
+    ;; where they pull it up at g + r w^2 (1 + r/l)): 0.85 m and 1.15 m
+    (check-= (apply min (map (λ (f) (at f 'piston.y)) run)) 0.85 0.002)
+    (check-= (apply max (map (λ (f) (at f 'piston.y)) run)) 1.15 0.002)
+    ;; and the give is opposite either side, so a quarter turn and three
+    ;; quarters, averaged, stand where the formula says: 1.01905 m, 19 mm
+    ;; below mid-stroke, the rod's lean (a plain sine would give 1.0)
+    (define (y-crossing deg)
+      (for/first ([f run] [g (cdr run)] #:when (and (< (at f 'crank.angle) deg) (>= (at g 'crank.angle) deg)
+                                                    (< (- (at g 'crank.angle) (at f 'crank.angle)) 10)))
+        (define k (/ (- deg (at f 'crank.angle)) (- (at g 'crank.angle) (at f 'crank.angle))))
+        (+ (at f 'piston.y) (* k (- (at g 'piston.y) (at f 'piston.y))))))
+    (check-= (/ (+ (y-crossing 90) (y-crossing -90)) 2) (predicted 90) 0.0005)))
+
+(test-case "Universal joint: the driven shaft turns tan(out) = cos 30 tan(in), running 0.866 to 1.155 of the driver's speed"
+  (when (godot-available?)
+    (define run (godot-simulate 'universal-joint #:seconds 2 #:sample-dt 1/120))
+    (define (at f key) (cadr (assq key (cdr f))))
+    (define cb (cos (/ pi 6)))
+    (define worst   ; once the driven shaft is up to speed (the first 0.1 s jerks it off rest, and it rings a little after)
+      (for/fold ([w 0]) ([f run] #:when (> (car f) 0.25))
+        (define in (* (at f 'driver.angle) (/ pi 180)))
+        (define out (* (/ 180 pi) (atan (* cb (sin in)) (cos in))))
+        (define d (- (at f 'driven.angle) out))
+        (max w (abs (- d (* 360 (round (/ d 360))))))))
+    (check-true (< worst 0.3) (format "the driven shaft's angle is off by at most ~a degrees" worst))
+    (define ratios (for/list ([f run] #:when (> (car f) 0.25)) (/ (at f 'driven.omega) (at f 'driver.omega))))
+    (check-= (apply min ratios) cb 0.003)
+    (check-= (apply max ratios) (/ 1 cb) 0.003)))
+
 ;; ---------------------------------------------------------------------------
 ;; One real-game check for each remaining rigid-body machine, each against
 ;; the prediction in its .rkt header. Measured 2026-09-29 before writing;

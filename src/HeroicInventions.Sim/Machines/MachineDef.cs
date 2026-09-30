@@ -140,6 +140,22 @@ public sealed record TriggerSpec(string Id, Vec3? At, Vec3? Size, string? Body, 
 /// to <see cref="To"/>, and the field from <see cref="Low"/> to <see cref="High"/>, linearly and
 /// held at the ends: a plug lifted part-way lets part of the flow through.
 /// </summary>
+/// <summary>
+/// A joint between two moving parts, or a part and the world (issue #30).
+/// Kind: <c>pin</c> (a hinge about <see cref="Axis"/> through <see cref="At"/>),
+/// <c>ball</c> (turns every way about the point, within <see cref="LimitDeg"/>
+/// of where it started if given), <c>universal</c> (a Cardan cross between two
+/// shafts, its arms set by their axles), <c>6dof</c> (locked but for the
+/// motions in <see cref="Free"/>: x y z sliding, rx ry rz turning).
+/// A and B are part ids or <c>world</c>.
+/// </summary>
+public sealed record JointSpec(string Id, string Kind, string A, string B, Vec3 At, Vec3? Axis,
+                               IReadOnlyList<string> Free, double? LimitDeg, SourceLocation? Location)
+{
+    public static readonly IReadOnlyList<string> Kinds = ["pin", "ball", "universal", "6dof"];
+    public static readonly IReadOnlyList<string> Motions = ["x", "y", "z", "rx", "ry", "rz"];
+}
+
 public sealed record FollowSpec(string Id, string? Lever, string? Rope, double From, double To,
                                 string Target, string Field, double Low, double High, SourceLocation? Location);
 
@@ -175,6 +191,7 @@ public sealed class MachineDef
     public IReadOnlyList<TriggerSpec> Triggers { get; init; } = [];
     public IReadOnlyList<FollowSpec> Follows { get; init; } = [];
     public IReadOnlyList<BeltSpec> Belts { get; init; } = [];
+    public IReadOnlyList<JointSpec> Joints { get; init; } = [];
 
     public PartSpec? Part(string id) => Parts.FirstOrDefault(p => p.Id == id);
 
@@ -215,6 +232,7 @@ public sealed class MachineDef
             Triggers = Triggers.Select(t => t with { At = t.At is { } a ? Move(a) : null }).ToList(),
             Follows = Follows,
             Belts = Belts,
+            Joints = Joints.Select(j => j with { At = Move(j.At) }).ToList(),
         };
     }
 
@@ -288,6 +306,7 @@ public sealed class MachineDef
                     c.Field("tension") is { } t ? Num(t, 1, loc) : throw new MachineFormatException("belt has no tension", loc),
                     c.Field("material") is { } m ? Sym(m, 1, loc) : "hemp", loc);
             }).ToList(),
+            Joints = clauses.Where(c => c.Head == "joint").Select(ParseJoint).ToList(),
             Meshes = clauses.Where(c => c.Head == "mesh").Select(c =>
             {
                 var loc = ParseLoc(c);
@@ -371,6 +390,22 @@ public sealed class MachineDef
             Bar = c.Field("bar")?.Items.ElementAtOrDefault(1) is SSymbol b ? b.Name : null,
             Mu = c.Field("mu")?.Items.ElementAtOrDefault(1) is SNumber mu ? mu.Value : null,
         };
+    }
+
+    // (joint id (kind k) (a part) (b part) (at x y z) (axis x y z | nothing) (free m …) (limit-deg d|#f) (srcloc …))
+    private static JointSpec ParseJoint(SList c)
+    {
+        var loc = ParseLoc(c);
+        string id = Sym(c, 1, loc);
+        string Name(string f) => c.Field(f) is { } l ? Sym(l, 1, loc) : throw new MachineFormatException($"joint {id} has no ({f} …)", loc);
+        Vec3 Point(SList l) => new(Num(l, 1, loc), Num(l, 2, loc), Num(l, 3, loc));
+        var at = c.Field("at") ?? throw new MachineFormatException($"joint {id} has no (at x y z)", loc);
+        string kind = Name("kind");
+        if (!JointSpec.Kinds.Contains(kind)) throw new MachineFormatException($"joint {id}: kind {kind} is not one of {string.Join(", ", JointSpec.Kinds)}", loc);
+        var free = (c.Field("free")?.Items.Skip(1) ?? []).Select(e => e is SSymbol s ? s.Name : throw new MachineFormatException($"joint {id}: (free …) takes motion names", loc)).ToList();
+        return new JointSpec(id, kind, Name("a"), Name("b"), Point(at),
+            c.Field("axis") is { Items.Count: 4 } ax ? Point(ax) : null, free,
+            c.Field("limit-deg")?.Items.ElementAtOrDefault(1) is SNumber d ? d.Value : null, loc);
     }
 
     // (follow id (lever part|#f) (rope id|#f) (from a) (to b) (set target field) (low v) (high v) (srcloc …))

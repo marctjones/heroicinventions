@@ -44,6 +44,7 @@ public sealed class EditorDocument
     public IReadOnlyList<TriggerSpec> Triggers => _triggers;
     public IReadOnlyList<FollowSpec> Follows => _follows;
     public IReadOnlyList<BeltSpec> Belts => _belts;
+    public IReadOnlyList<JointSpec> Joints => _joints;
     public IReadOnlyList<SourceSpec> Sources => _sources;
     public IReadOnlyList<ChannelSpec> Channels => _channels;
     public IReadOnlyList<LiftSpec> Lifts => _lifts;
@@ -61,6 +62,7 @@ public sealed class EditorDocument
     private IReadOnlyList<TriggerSpec> _triggers = [];
     private IReadOnlyList<FollowSpec> _follows = [];
     private IReadOnlyList<BeltSpec> _belts = [];
+    private IReadOnlyList<JointSpec> _joints = [];
 
     /// <summary>Starts a fresh, empty document.</summary>
     public static EditorDocument New(string name) => new() { Name = name };
@@ -83,6 +85,7 @@ public sealed class EditorDocument
         doc._triggers = def.Triggers;
         doc._follows = def.Follows;
         doc._belts = def.Belts;
+        doc._joints = def.Joints;
         int maxPipe = def.Pipes.Select(p => int.TryParse(p.Id.AsSpan(p.Id.LastIndexOf('-') + 1), out int n) ? n : 0).DefaultIfEmpty(0).Max();
         doc._nextPipeId = maxPipe + 1;
         return doc;
@@ -123,18 +126,20 @@ public sealed class EditorDocument
         _follows = _follows.Where(f => f.Lever != id && f.Target != id).ToList();
         _follows = _follows.Where(f => f.Rope is null || _ropes.Any(r => r.Id == f.Rope)).ToList();
         _belts = _belts.Where(b => b.A != id && b.B != id).ToList();
+        _joints = _joints.Where(j => j.A != id && j.B != id).ToList();
     }
 
     /// <summary>True if a part or a link (pipe, rope, inflow, channel, lift, cylinder) has this id — what a prop like a sluice's #:on or a wheel's #:race may name.</summary>
     public bool HasName(string id) =>
         _parts.ContainsKey(id) || _pipes.ContainsKey(id) || _ropes.Any(r => r.Id == id) || _sources.Any(s => s.Id == id) ||
-        _channels.Any(c => c.Id == id) || _lifts.Any(l => l.Id == id) || _cylinders.Any(c => c.Id == id) || _triggers.Any(t => t.Id == id) || _follows.Any(f => f.Id == id) || _belts.Any(b => b.Id == id);
+        _channels.Any(c => c.Id == id) || _lifts.Any(l => l.Id == id) || _cylinders.Any(c => c.Id == id) || _triggers.Any(t => t.Id == id) || _follows.Any(f => f.Id == id) || _belts.Any(b => b.Id == id) ||
+        _joints.Any(j => j.Id == id);
 
     /// <summary>Removes the pipe, rope, inflow, channel, lift or cylinder with this id; false if none has it.</summary>
     public bool RemoveLink(string id)
     {
         if (_pipes.Remove(id)) return true;
-        int before = _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count + _triggers.Count + _follows.Count + _belts.Count;
+        int before = _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count + _triggers.Count + _follows.Count + _belts.Count + _joints.Count;
         _ropes = _ropes.Where(r => r.Id != id).ToList();
         _sources = _sources.Where(s => s.Id != id).ToList();
         _channels = _channels.Where(c => c.Id != id).ToList();
@@ -144,7 +149,8 @@ public sealed class EditorDocument
         _follows = _follows.Where(f => f.Id != id).ToList();
         _follows = _follows.Where(f => f.Rope is null || _ropes.Any(r => r.Id == f.Rope)).ToList();   // a rope removed takes its follows
         _belts = _belts.Where(b => b.Id != id).ToList();
-        return _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count + _triggers.Count + _follows.Count + _belts.Count != before;
+        _joints = _joints.Where(j => j.Id != id).ToList();
+        return _ropes.Count + _sources.Count + _channels.Count + _lifts.Count + _cylinders.Count + _triggers.Count + _follows.Count + _belts.Count + _joints.Count != before;
     }
 
     /// <summary>Removes the mesh joining these two gears; false if they are not meshed.</summary>
@@ -370,6 +376,14 @@ public sealed class EditorDocument
         return trigger;
     }
 
+    /// <summary>Adds a joint clause unchecked — see <see cref="AddPipe"/>.</summary>
+    public JointSpec AddJoint(JointSpec joint)
+    {
+        if (HasName(joint.Id)) throw new InvalidOperationException($"something named {joint.Id} already exists");
+        _joints = [.. _joints, joint];
+        return joint;
+    }
+
     /// <summary>Adds a follow clause unchecked — see <see cref="AddPipe"/>.</summary>
     public FollowSpec AddFollow(FollowSpec follow)
     {
@@ -419,5 +433,6 @@ public sealed class EditorDocument
         Triggers = _triggers,
         Follows = _follows,
         Belts = _belts,
+        Joints = _joints,
     };
 }

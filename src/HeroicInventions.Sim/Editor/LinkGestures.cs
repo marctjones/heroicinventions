@@ -11,7 +11,7 @@ namespace HeroicInventions.Sim.Editor;
 /// </summary>
 public static class LinkGestures
 {
-    public enum Kind { Rope, Mesh, Arbor, SealedAir, Cylinder, Belt }
+    public enum Kind { Rope, Mesh, Arbor, SealedAir, Cylinder, Belt, Joint }
 
     /// <summary>How many parts a gesture takes: 2 for a rope, mesh or cylinder; any number from 2 for an arbor or shared air.</summary>
     public static (int Min, int? Max) Picks(Kind kind) => kind is Kind.Arbor or Kind.SealedAir ? (2, null) : (2, 2);
@@ -21,6 +21,7 @@ public static class LinkGestures
         Kind.Rope => picked == 0 ? "Rope: click the part it starts on" : "Rope: click the part it ends on",
         Kind.Mesh => picked == 0 ? "Gear mesh: click the first gear" : "Gear mesh: click the gear it meshes with",
         Kind.Belt => picked == 0 ? "Belt: click the driving drum" : "Belt: click the drum it drives",
+        Kind.Joint => picked == 0 ? "Ball joint: click the first part" : "Ball joint: click the part it joins (it goes halfway between; change it in the console)",
         Kind.Cylinder => picked == 0 ? "Cylinder: click the piston (or the boiler)" : "Cylinder: click the boiler (or the piston)",
         Kind.Arbor => picked < 2 ? "Axle: click the wheels fixed on it (the first carries the bearing), then Enter" : $"Axle: {picked} wheels; click more, or press Enter",
         _ => picked < 2 ? "Shared air: click the tanks that share it, then Enter" : $"Shared air: {picked} tanks; click more, or press Enter",
@@ -56,6 +57,15 @@ public static class LinkGestures
             case Kind.SealedAir:
                 Require(parts, "tank", "a tank", "shared air joins tanks");
                 return $"(sealed-air ({string.Join(' ', picks)}) #:tube 0.0005)";
+            case Kind.Joint:
+            {
+                // a ball joint halfway between them; (joint …) in the console makes a pin, universal or 6dof
+                string[] moving = ["block", "pendulum", "lever", "wheel", "screw", "piston"];
+                if (parts.FirstOrDefault(p => !moving.Contains(p.Kind)) is { } still)
+                    throw new InvalidOperationException($"{still.Id} is a {still.Kind}, which doesn't move; a joint holds moving parts");
+                var mid = new Vec3((parts[0].At.X + parts[1].At.X) / 2, (parts[0].At.Y + parts[1].At.Y) / 2, (parts[0].At.Z + parts[1].At.Z) / 2);
+                return $"(joint {NextId(doc, "joint")} #:kind ball #:a {picks[0]} #:b {picks[1]} #:at ({Num(mid.X)} {Num(mid.Y)} {Num(mid.Z)}))";
+            }
             default:
                 var piston = parts.FirstOrDefault(p => p.Kind == "piston");
                 var boiler = parts.FirstOrDefault(p => p.Kind == "boiler");
@@ -83,6 +93,8 @@ public static class LinkGestures
                        $", sets {string.Join(", ", t.Actions.Select(a => $"{a.Target}.{a.Field} to {a.Value:0.###}"))}", $"(remove {t.Id})", null));
         foreach (var b in doc.Belts.Where(b => b.A == id || b.B == id))
             links.Add(($"belt {b.Id}: {b.A} drives {b.B}, {b.Tension:0.#} N", $"(remove {b.Id})", null));
+        foreach (var j in doc.Joints.Where(j => j.A == id || j.B == id))
+            links.Add(($"{j.Kind} joint {j.Id}: {j.A} and {j.B}", $"(remove {j.Id})", null));
         foreach (var f in doc.Follows.Where(f => f.Lever == id || f.Target == id))
             links.Add(($"follow {f.Id}: {f.Target}.{f.Field} follows {(f.Lever is { } lv ? $"{lv}'s angle" : $"{f.Rope}'s pull")}", $"(remove {f.Id})", null));
         return links;

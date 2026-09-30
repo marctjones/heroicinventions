@@ -70,9 +70,18 @@ public static class RktExporter
             sb.Append($"  (follow {f.Id} {(f.Lever is { } lv ? $"#:lever {lv}" : $"#:rope {f.Rope}")} #:from {F(f.From)} #:to {F(f.To)} " +
                       $"#:set ({f.Target} {f.Field}) #:low {F(f.Low)} #:high {F(f.High)})\n");
 
+        foreach (var j in m.Joints) sb.Append($"  {JointCommand(j, F)}\n");
+
         sb.Append(")\n");
         return sb.ToString();
     }
+
+    /// <summary>A joint clause, the same in a .rkt file and as an editor command.</summary>
+    public static string JointCommand(JointSpec j, Func<double, string> number) =>
+        $"(joint {j.Id} #:kind {j.Kind} #:a {j.A} #:b {j.B} #:at ({number(j.At.X)} {number(j.At.Y)} {number(j.At.Z)})" +
+        (j.Axis is { } ax ? $" #:axis ({number(ax.X)} {number(ax.Y)} {number(ax.Z)})" : "") +
+        (j.Free.Count > 0 ? $" #:free ({string.Join(' ', j.Free)})" : "") +
+        (j.LimitDeg is { } d ? $" #:limit-deg {number(d)}" : "") + ")";
 
     /// <summary>mars, or (planet mars #:gravity 9.81 …) for a preset with numbers changed.</summary>
     private static string PlanetExpr(Planet p)
@@ -211,7 +220,7 @@ public static class RktExporter
                 if (Sym("catalogue", "") is not { Length: > 0 } entry) break;
                 string extras = p.Kind switch
                 {
-                    "wheel" => $" #:axis {Sym("axis", "z")} #:angle-deg {F(N("angle-deg"))} #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque"),
+                    "wheel" => $" #:axis {Sym("axis", "z")} #:angle-deg {F(N("angle-deg"))}" + Opt("tilt-deg", "tilt-deg") + $" #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque"),
                     "screw" => $" #:tilt-deg {F(N("tilt-deg"))} #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque"),
                     _ => $" #:turn-deg {F(N("turn-deg"))}",
                 };

@@ -44,6 +44,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (trigger id #:when (target field above|below value) #:do ((target field value) ...)) ; fires once when a field crosses the value
 ///   (follow id #:lever part|#:rope rope #:from a #:to b #:set (target field) [#:low v] [#:high v])   ; a field follows a lever's angle (deg) or a rope's tension (N)
 ///   (belt id drum drum #:tension N [#:material M])   ; an open belt between two drums; carries at most 2·T0·tanh(μθ/2) before it slips
+///   (joint id #:kind pin|ball|universal|6dof #:a part #:b part|world #:at (x y z) [#:axis (x y z)] [#:free (x y z rx ry rz …)] [#:limit-deg d])
 ///   (port part name kind height) (remove-port part name)   ; add or replace a port on a part
 ///   (set-rope id #:length L [#:diameter D] [#:material M] [#:release-deg d] [#:wind-on part] [#:turns part] [#:nocked #t] [#:bar M|#f] [#:mu μ|#f])   ; change a rope
 ///   (unmesh a b) (unarbor part) (remove-air tank)   ; take a link apart again
@@ -119,6 +120,7 @@ public sealed class BuildSession
         "follow" => CreateFollow(cmd),
         "belt" => CreateBelt(cmd),
         "set-belt" => SetBelt(cmd),
+        "joint" => CreateJoint(cmd),
         "port" => SetPort(cmd),
         "remove-port" => RemovePortCmd(cmd),
         "set-rope" => SetRope(cmd),
@@ -461,6 +463,41 @@ public sealed class BuildSession
         Snapshot();
         Document.AddBelt(new BeltSpec(id, a, b, tension, material, null));
         return $"belt {id}: {a} and {b}, {tension} N";
+    }
+
+    /// <summary>Parts a joint can hold: the ones that move.</summary>
+    private static readonly string[] JointableKinds = ["block", "pendulum", "lever", "wheel", "screw", "piston"];
+
+    private string CreateJoint(SList cmd)
+    {
+        string id = Id(cmd, 1);
+        string kind = RequireKw(cmd, "kind") is SSymbol k ? k.Name : throw new FormatException($"joint {id}: #:kind is pin, ball, universal or 6dof");
+        if (!JointSpec.Kinds.Contains(kind)) throw new FormatException($"joint {id}: #:kind is pin, ball, universal or 6dof, not {kind}");
+        string End(string key)
+        {
+            string part = RequireKw(cmd, key) is SSymbol s ? s.Name : throw new FormatException($"joint {id}: #:{key} names a part or world");
+            if (part == "world") return part;
+            var p = Document.Parts.GetValueOrDefault(part) ?? throw new InvalidOperationException($"joint {id}: no part named {part}");
+            if (!JointableKinds.Contains(p.Kind))
+                throw new InvalidOperationException($"joint {id}: {part} is a {p.Kind}, which doesn't move; a joint holds {string.Join(", ", JointableKinds)} or world");
+            if (kind == "universal" && p.Kind is not ("wheel" or "screw"))
+                throw new InvalidOperationException($"joint {id}: a universal joint joins two shafts (wheels or screws); {part} is a {p.Kind}");
+            return part;
+        }
+        string a = End("a"), b = End("b");
+        if (a == b) throw new FormatException($"joint {id}: a joint joins two different parts");
+        if (kind == "universal" && (a == "world" || b == "world")) throw new FormatException($"joint {id}: a universal joint joins two shafts, not a shaft and the world");
+        var at = VecOf(RequireKw(cmd, "at"), $"joint {id} #:at");
+        Vec3? axis = Kw(cmd, "axis") is { } ax ? VecOf(ax, $"joint {id} #:axis") : null;
+        if (kind == "pin" && axis is null) throw new FormatException($"joint {id}: a pin joint needs the #:axis (x y z) it turns about");
+        var free = Kw(cmd, "free") is SList fl ? fl.Items.Select(e => Name(e, $"joint {id} #:free")).ToList() : [];
+        if (free.Count > 0 && kind != "6dof") throw new FormatException($"joint {id}: only a 6dof joint takes #:free");
+        if (free.FirstOrDefault(f => !JointSpec.Motions.Contains(f)) is { } bad) throw new FormatException($"joint {id}: #:free takes x y z rx ry rz, not {bad}");
+        double? limit = Kw(cmd, "limit-deg") is { } l ? Num(l, $"joint {id} #:limit-deg") : null;
+        if (limit is not null && kind != "ball") throw new FormatException($"joint {id}: only a ball joint takes #:limit-deg");
+        Snapshot();
+        Document.AddJoint(new JointSpec(id, kind, a, b, at, axis, free, limit, null));
+        return $"{kind} joint {id}: {a} and {b}";
     }
 
     private string CreateFollow(SList cmd)

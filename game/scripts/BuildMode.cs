@@ -385,6 +385,7 @@ public partial class BuildMode : Node3D
             (LinkGestures.Kind.Arbor, "Axle", "Wheels fixed on one axle: click them, then Enter. The first carries the bearing"),
             (LinkGestures.Kind.SealedAir, "Shared air", "Tanks sharing one sealed air space: click them, then Enter"),
             (LinkGestures.Kind.Cylinder, "Cylinder", "A piston joined to the boiler that feeds it (click both)"),
+            (LinkGestures.Kind.Joint, "Ball joint", "Two moving parts joined at a point halfway between them, turning every way about it (click both)"),
         })
         {
             var b = new Button { Text = label, TooltipText = tip, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };

@@ -150,6 +150,24 @@
   (check-exn #rx"#:wind must be a speed" (λ () (build '(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind -1))))
   (check-not-exn (λ () (build '(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind 6 #:cp 16/27)))))
 
+(test-case "joints: a known kind, between moving parts, with what each kind needs"
+  (define rod '(block rod #:at (0 1 0) #:size 0.05 #:material oak))
+  (define bob '(block bob #:at (0 0.5 0) #:size 0.1 #:material iron))
+  (check-not-exn (λ () (expand-machine rod bob '(joint j #:kind ball #:a rod #:b bob #:at (0 0.75 0)))))
+  (check-not-exn (λ () (expand-machine rod '(joint j #:kind 6dof #:a rod #:b world #:at (0 1 0) #:free (y ry)))))
+  (check-compile-error #rx"pin, ball, universal or 6dof" (block rod #:at (0 1 0) #:size 0.05 #:material oak)
+    (joint j #:kind weld #:a rod #:b world #:at (0 1 0)))
+  (check-compile-error #rx"needs the #:axis" (block rod #:at (0 1 0) #:size 0.05 #:material oak)
+    (joint j #:kind pin #:a rod #:b world #:at (0 1 0)))
+  (check-compile-error #rx"doesn't move" (block rod #:at (0 1 0) #:size 0.05 #:material oak)
+    (post p #:at (0 0 0) #:size (0.1 1 0.1) #:material oak)
+    (joint j #:kind ball #:a rod #:b p #:at (0 1 0)))
+  (check-compile-error #rx"not a shaft" (block rod #:at (0 1 0) #:size 0.05 #:material oak)
+    (block bob #:at (0 0.5 0) #:size 0.1 #:material iron)
+    (joint j #:kind universal #:a rod #:b bob #:at (0 1 0)))
+  (check-compile-error #rx"x y z \\(sliding\\)" (block rod #:at (0 1 0) #:size 0.05 #:material oak)
+    (joint j #:kind 6dof #:a rod #:b world #:at (0 1 0) #:free (up))))
+
 (test-case "a rope runs over turning pulleys or fixed bars, not both; a bar is of a known material"
   (check-compile-error #rx"not both"
     (block a #:at (0 0 0) #:size 0.1 #:material oak)

@@ -120,6 +120,7 @@ public partial class MachineView : Node3D
         BuildMirrors();
         BuildPumps();
         BuildPistonDrives();
+        BuildJoints();
         BuildImpacts();
         Refresh();
 
@@ -1070,7 +1071,14 @@ public partial class MachineView : Node3D
 
     private void BuildWheel(PartSpec part)
     {
-        var axis = part.Symbol("axis", "z") switch { "x" => Vector3.Right, "y" => Vector3.Up, _ => new Vector3(0, 0, 1) };
+        // #:tilt-deg raises an x or z axle toward y, or leans a y axle toward x
+        float tilt = Mathf.DegToRad((float)part.Number("tilt-deg", 0));
+        var axis = part.Symbol("axis", "z") switch
+        {
+            "x" => new Vector3(Mathf.Cos(tilt), Mathf.Sin(tilt), 0),
+            "y" => new Vector3(Mathf.Sin(tilt), Mathf.Cos(tilt), 0),
+            _ => new Vector3(0, Mathf.Sin(tilt), Mathf.Cos(tilt)),
+        };
         string label = part.Symbol("shape", "") == "gear" ? $"{part.Id} · {part.Number("teeth"):F0} teeth" : part.Id;
         BuildOnAxle(part, axis, (float)part.Number("angle-deg", 0), label);
     }
@@ -1424,6 +1432,7 @@ public partial class MachineView : Node3D
         DrawTriggers();
         DrawImpacts();
         DrawBelts();
+        DrawJoints();
         DrawSafetyValves();
         DrawBellows();
         DrawWarmth();
