@@ -1236,11 +1236,39 @@ public partial class MachineView : Node3D
         var impulses = new List<(RigidBody3D Body, Vector3 Impulse, Vector3 At)>();
         Vector3 Velocity(int i) => new Vector3(0, 0, spin[i]).Cross(bobs[i].Arm);
 
+        // Broad phase (issue #73): only bobs that could touch within this step
+        // are ever compared. Sorted along X, a pair is a candidate if the gap
+        // between their centres is within both radii plus the distance they
+        // could close in one step. Impacts pass speed along a row, and an
+        // elastic knock can send a light ball off at up to twice the
+        // striker's speed, so the reach allows twice the fastest bob's speed.
+        // Comparing every pair every pass grew as N²: 800 pendulums ran
+        // 3.2 times slower than real time, 87% of it in this check.
+        float fastest = 0;
+        for (int i = 0; i < bobs.Count; i++) fastest = Mathf.Max(fastest, Velocity(i).Length());
+        float reach = 2 * fastest * dt + 0.001f;
+        float widest = bobs.Max(b => b.BobRadius);
+        var order = Enumerable.Range(0, bobs.Count).OrderBy(i => bobs[i].Centre.X).ToArray();
+        var pairs = new List<(int I, int J)>();
+        for (int oi = 0; oi < order.Length; oi++)
+        {
+            int i = order[oi];
+            for (int oj = oi + 1; oj < order.Length; oj++)
+            {
+                int j = order[oj];
+                if (bobs[j].Centre.X - bobs[i].Centre.X > 2 * widest + reach) break;
+                float limit = bobs[i].BobRadius + bobs[j].BobRadius + reach;
+                if (bobs[i].Centre.DistanceSquaredTo(bobs[j].Centre) <= limit * limit)
+                    pairs.Add(i < j ? (i, j) : (j, i));
+            }
+        }
+        if (pairs.Count == 0) return;
+        pairs.Sort();   // the same order the all-pairs loop used, so a cradle's chain resolves the same way
+
         for (int pass = 0; pass < 4 * bobs.Count; pass++)
         {
             bool struck = false;
-            for (int i = 0; i < bobs.Count; i++)
-            for (int j = i + 1; j < bobs.Count; j++)
+            foreach (var (i, j) in pairs)
             {
                 var a = bobs[i];
                 var b = bobs[j];
