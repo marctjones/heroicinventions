@@ -843,6 +843,21 @@ public partial class BuildMode : Node3D
                     trim.AddChild(new Label { Text = "diameter" });
                     trim.AddChild(NumberField(rope.Diameter, text => { if (TryNumber(text, out double v)) RunCommand($"(set-rope {ropeId} #:diameter {F(v)})"); }));
                     _inspector.AddChild(trim);
+                    if (rope.Over.Count > 0 && rope.Turns is null)
+                    {
+                        // what its #:over points are: pulleys that turn, or fixed bars it drags over (capstan friction)
+                        var over = new HBoxContainer();
+                        over.AddChild(new Label { Text = "  runs over" });
+                        var barBox = new OptionButton { TooltipText = "A fixed bar holds e^(μθ) times the slack side's pull: 4.4× over half a turn of oak" };
+                        barBox.AddItem("pulleys (no friction)");
+                        foreach (var mid in _materialIds) barBox.AddItem($"a fixed {_materials[mid].Name.ToLowerInvariant()} bar");
+                        barBox.Select(rope.Bar is { } bar ? _materialIds.IndexOf(bar) + 1 : 0);
+                        barBox.ItemSelected += index => RunCommand(index == 0
+                            ? $"(set-rope {ropeId} #:bar #f #:mu #f)"
+                            : $"(set-rope {ropeId} #:bar {_materialIds[(int)index - 1]})");
+                        over.AddChild(barBox);
+                        _inspector.AddChild(over);
+                    }
                 }
             }
         }
