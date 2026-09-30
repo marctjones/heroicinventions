@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace HeroicInventions.Sim.Materials;
 
-public enum MaterialCategory { Wood, Stone, Metal, Fiber }
+public enum MaterialCategory { Wood, Stone, Metal, Fiber, Soil }
 
 /// <summary>
 /// Physical properties of a building material. Strengths are in MPa,

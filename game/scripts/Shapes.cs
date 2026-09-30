@@ -51,6 +51,11 @@ public static class Shapes
         "olive" => new Color(0.60f, 0.52f, 0.34f),
         "marble" => new Color(0.92f, 0.91f, 0.88f),
         "hemp" => new Color(0.78f, 0.70f, 0.52f),
+        // the ground (issue #37)
+        "sand" => new Color(0.86f, 0.78f, 0.58f),
+        "loam" => new Color(0.42f, 0.34f, 0.22f),
+        "clay" => new Color(0.62f, 0.43f, 0.31f),
+        "regolith" => new Color(0.68f, 0.42f, 0.28f),
         _ => Stone,
     };
 

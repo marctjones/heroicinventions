@@ -7,11 +7,13 @@
 ;;
 ;; Run from anywhere:  racket racket/build.rkt
 (require racket/runtime-path racket/path racket/file racket/list json
-         heroic/machine heroic/emit heroic/materials heroic/geometry)
+         heroic/machine heroic/map heroic/emit heroic/materials heroic/geometry)
 
 (define-runtime-path repo "..")
 (define machines-dir (build-path repo "racket" "machines"))
 (define out-dir (build-path repo "game" "machines"))
+(define maps-dir (build-path repo "racket" "maps"))            ; define-map sources (issue #37)
+(define maps-out-dir (build-path repo "game" "maps"))
 (define meshes-dir (build-path repo "game" "meshes"))
 ;; Meshes only the catalogue uses are rebuilt by every build and not
 ;; committed; meshes a machine uses are, like the .machine files, so the
@@ -121,6 +123,25 @@
   (printf "~a (~a meshes used by machines; catalogue: ~a entries in ~a)\n"
           (rel meshes-dir) (length machine-shapes) (length entries) (rel catalogue-dir)))
 
+;; racket/maps/*.rkt → game/maps/<name>.map (issue #37), as machines are built.
+(define (build-maps!)
+  (when (directory-exists? maps-dir)
+    (make-directory* maps-out-dir)
+    (define written
+      (for*/list ([src (sort (for/list ([f (directory-list maps-dir #:build? #t)]
+                                        #:when (equal? (path-get-extension f) #".rkt")) f)
+                             path<?)]
+                  [m (begin (dynamic-require (simple-form-path src) #f) (take-registered-maps))])
+        (define dest (build-path maps-out-dir (format "~a.map" (ground-map-name m))))
+        (write-map-file m dest #:root repo #:from (rel src))
+        (printf "~a → ~a (~a x ~a cells of ~a m)\n" (rel src) (rel dest) (ground-map-nx m) (ground-map-nz m) (ground-map-cell m))
+        (simple-form-path dest)))
+    (for ([f (directory-list maps-out-dir #:build? #t)]
+          #:when (and (equal? (path-get-extension f) #".map") (not (member (simple-form-path f) written))))
+      (delete-file f)
+      (printf "removed stale ~a\n" (rel f)))))
+
 (module+ main
   (export-materials!)
-  (build-meshes! (build-machines!)))
+  (build-meshes! (build-machines!))
+  (build-maps!))

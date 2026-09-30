@@ -120,6 +120,25 @@ public class GroundWaterTests
         Assert.True(w.Leaked > 0, "some has run off the low edge");
     }
 
+    /// <summary>The flood-plain map, as built from Racket, has the ground its source describes: the hill and the hollow at the cells' centres.</summary>
+    [Fact]
+    public void TheFloodPlainMapIsTheGroundItsSourceDescribes()
+    {
+        var map = Terrain.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "maps", "flood-plain.map")), "flood-plain.map");
+        Assert.Equal((60, 40, 1.0, -10.0, -20.0), (map.Nx, map.Nz, map.Cell, map.X0, map.Z0));
+        static double Hill(double x, double z) => 3 - 0.06 * (x + 10) + 0.004 * z * z;
+        static double Ground(double x, double z)
+        {
+            double s = ((x - 30) * (x - 30) + z * z) / 81;
+            return Hill(x, z) + (s < 1 ? -1.5 * (1 - s) : 0);
+        }
+        for (int j = 0; j < map.Nz; j += 7)
+            for (int i = 0; i < map.Nx; i += 5)
+                Assert.Equal(Ground(map.CellX(i), map.CellZ(j)), map.Heights[i + j * map.Nx], 4);
+        Assert.Equal(("loam", 2e-6), map.Soils[0]);
+        Assert.True(map.OpenEdges);
+    }
+
     [Fact]
     public void AMapFileReadsBackAsWritten()
     {

@@ -18,3 +18,12 @@
 (iron      (name "Wrought iron") (category metal) (density 7700) (youngs-modulus 190.0) (tension 330) (across-grain 330) (compression 330) (friction 0.40) (restitution 0.55))
 (hemp      (name "Hemp rope")    (category fiber) (density 1100) (youngs-modulus 2.0)   (tension 60)  (across-grain 0)   (compression 0)   (friction 0.50) (restitution 0.10))
 (steel     (name "Hardened steel") (category metal) (density 7850) (youngs-modulus 200.0) (tension 1000) (across-grain 1000) (compression 1000) (friction 0.35) (restitution 0.95))
+
+;; Soils: the ground of a map (issue #37). Loose and weak, so their
+;; strengths are nominal; friction is the tangent of the angle of repose
+;; (dry sand ~32°, Mars regolith ~35°). How fast each soaks up water is the
+;; map's to say (#:infiltration), since it depends on how packed and how wet.
+(sand      (name "Sand")         (category soil)  (density 1600) (youngs-modulus 0.05)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.62) (restitution 0.10))
+(loam      (name "Loam")         (category soil)  (density 1400) (youngs-modulus 0.02)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.55) (restitution 0.10))
+(clay      (name "Clay")         (category soil)  (density 1800) (youngs-modulus 0.03)  (tension 0.05) (across-grain 0.05) (compression 0.2) (friction 0.35) (restitution 0.05))
+(regolith  (name "Mars regolith") (category soil) (density 1500) (youngs-modulus 0.05)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.70) (restitution 0.10))

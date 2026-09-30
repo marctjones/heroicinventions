@@ -22,6 +22,7 @@
   <ItemGroup>
     <None Include="../../game/machines/*.machine" LinkBase="machines" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../game/worlds/*.world" LinkBase="worlds" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../game/maps/*.map" LinkBase="maps" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
