@@ -969,3 +969,95 @@
     (define run (godot-simulate 'roman-crane #:seconds 20 #:sample-dt 1))
     (define rise (- (final-of run '(stone y)) (value-at run '(stone y) 0)))
     (check-true (> rise 0.5) (format "the stone rose ~a m in 20 s" rise))))
+
+;; ---------------------------------------------------------------------------
+;; One real-game check for each remaining rigid-body machine, each against
+;; the prediction in its .rkt header. Measured 2026-09-29 before writing;
+;; the note on each says what was traced.
+
+;; The value of target.field in every frame between two times.
+(define (values-between run path from to)
+  (define key (string->symbol (format "~a.~a" (car path) (cadr path))))
+  (for/list ([f run] #:when (<= from (car f) to)) (cadr (assq key (cdr f)))))
+
+(test-case "Pendulum: a 60 cm iron pendulum from 40 degrees swings with a period between its rod and point-mass limits"
+  ;; point mass at 0.6 m: 2 pi sqrt(0.6/9.81) = 1.554 s, x 1.031 for a 40 degree
+  ;; swing = 1.60 s; a uniform rod: 2 pi sqrt(2 x 0.6 / 3 x 9.81) x 1.031 = 1.31 s.
+  ;; Traced: 1.53-1.55 s. (Its swing also decays, 40 to 23 degrees in 9 s: the
+  ;; engine's default damping, which #13 and #33 replace.)
+  (when (godot-available?)
+    (define run (godot-simulate 'pendulum-demo #:seconds 8 #:sample-dt 0.01))
+    (define tilt (map (λ (f) (cons (car f) (cadr (assq 'rod.rot-z (cdr f))))) run))
+    (define ups (for/list ([a tilt] [b (cdr tilt)] #:when (and (< (cdr a) 0) (>= (cdr b) 0))) (car b)))
+    (check-true (>= (length ups) 3) "it swings back and forth")
+    (for ([a ups] [b (cdr ups)])
+      (check-true (< 1.31 (- b a) 1.60) (format "a period of ~a s" (- b a))))))
+
+(test-case "Lever: the granite end sinks to the 10 degree stop, 1.0 m x sin 10 = 0.174 m below the cedar end"
+  (when (godot-available?)
+    (define run (godot-simulate 'lever-demo #:seconds 5 #:sample-dt 0.1))
+    (check-= (abs (final-of run '(beam angle))) 10.0 0.3)
+    (check-= (- (final-of run '(light y)) (final-of run '(heavy y))) 0.174 0.02)))
+
+(test-case "Material samples: all four dropped cubes come to rest on the floor, centres 7.5 cm up"
+  (when (godot-available?)
+    (define run (godot-simulate 'material-samples #:seconds 5 #:sample-dt 0.1))
+    (for ([c '(cedar-cube oak-cube granite-cube bronze-cube)])
+      (check-= (final-of run (list c 'y)) 0.075 0.003 (format "~a" c))
+      (check-true (< (final-of run (list c 'speed)) 0.01) (format "~a at rest" c)))))
+
+(test-case "Inclined plane: at 25 degrees granite (mu 0.60) holds; cedar, oak and bronze slide, bronze (mu 0.30) fastest"
+  (when (godot-available?)
+    (define run (godot-simulate 'inclined-plane-demo #:seconds 6 #:sample-dt 0.1))
+    (define (moved block t)
+      (define (at t k) (value-at run (list block k) t))
+      (let ([dx (- (at t 'x) (at 0 'x))] [dy (- (at t 'y) (at 0 'y))]) (sqrt (+ (* dx dx) (* dy dy)))))
+    (check-true (< (moved 'granite-block 6) 0.01) "granite holds")
+    (for ([b '(cedar-block oak-block bronze-block)])
+      (check-true (> (moved b 6) 0.3) (format "~a slides" b)))
+    (check-true (> (moved 'bronze-block 0.8) (max (moved 'cedar-block 0.8) (moved 'oak-block 0.8)))
+                "bronze is furthest down the slope at 0.8 s")))
+
+(test-case "Antikythera lunar train: e2 turns 64/38 x 48/24 x 127/32 = 254/19 times per turn of b2"
+  (when (godot-available?)
+    (define run (godot-simulate 'antikythera-lunar-train #:seconds 5 #:sample-dt 1))
+    (check-= (/ (final-of run '(e2 omega)) (final-of run '(b2 omega))) (/ 254.0 19) 0.01)))
+
+(test-case "Noria of Hama: the river turns it at about 1.2 rpm and it waters the fields"
+  ;; traced: 1.29 rpm and ~1000 L in the fields after two minutes
+  (when (godot-available?)
+    (define run (godot-simulate 'hama-noria #:seconds 120 #:sample-dt 10))
+    (check-= (final-of run '(raise rpm)) 1.2 0.2)
+    (check-true (> (final-of run '(fields water)) 500) "the fields are filling")))
+
+(test-case "Newcomen engine: every stroke lifts one pump barrel, 18.5 cm bore x 1.8 m = 48.4 L"
+  (when (godot-available?)
+    (define run (godot-simulate 'newcomen-engine #:seconds 100 #:sample-dt 10))
+    (define strokes (final-of run '(cylinder strokes)))
+    (define delivered (/ (final-of run '(cistern water)) 48.4))
+    (check-true (> strokes 20) (format "~a strokes in 100 s" strokes))
+    (check-true (< (- strokes 2.5) delivered (+ strokes 0.5))
+                (format "~a strokes but ~a barrels in the cistern" strokes delivered))))
+
+(test-case "Archimedes' screw: trodden at 12 rpm, it keeps pace with the 4.5 L/s spring"
+  (when (godot-available?)
+    (define run (godot-simulate 'archimedes-screw #:seconds 60 #:sample-dt 10))
+    (check-= (final-of run '(cochlea omega)) (/ (* 12 2 3.141592653589793) 60) 0.01)
+    (check-= (final-of run '(raise flow)) 4.5 0.4)))
+
+(test-case "Onager: the stone flies toward -X and lands ~19 m out, and the machine never gains energy"
+  (when (godot-available?)
+    (define run (godot-simulate 'torsion-catapult #:seconds 8 #:sample-dt 0.05))
+    (define start (value-at run '(scene mechanical) 0))
+    (check-true (<= (apply max (values-between run '(scene mechanical) 0.5 8)) (* 1.02 start)))
+    (check-true (< (final-of run '(stone x)) -15) (format "stone at x = ~a" (final-of run '(stone x))))))
+
+(test-case "Newton's cradle: the swing passes down the row; the far ball swings out while the middle three stay nearly still"
+  ;; ball-0 is pulled back to -35 degrees. Traced over the first second: the
+  ;; far ball reaches 30 degrees, the middle three move under 1.2 degrees.
+  (when (godot-available?)
+    (define run (godot-simulate 'newtons-cradle #:seconds 1 #:sample-dt 0.02))
+    (define (reach ball) (apply max (map abs (values-between run (list ball 'rot-z) 0 1))))
+    (check-true (> (reach 'ball-4) 20) (format "the far ball reaches ~a degrees" (reach 'ball-4)))
+    (for ([b '(ball-1 ball-2 ball-3)])
+      (check-true (< (reach b) 3) (format "~a moves ~a degrees" b (reach b))))))
