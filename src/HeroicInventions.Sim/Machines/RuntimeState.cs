@@ -30,16 +30,27 @@ public static class RuntimeState
     }
 
     /// <summary>Lays a captured state back on a freshly built runtime of the same machine. Returns the paths that found nothing to set (the machine has changed since).</summary>
-    public static IReadOnlyList<string> Restore(MachineRuntime runtime, SList state)
+    public static IReadOnlyList<string> Restore(MachineRuntime runtime, SList state) => RestoreFrom(Roots(runtime), state);
+
+    private static IReadOnlyList<string> RestoreFrom(IEnumerable<(string Path, object Holder)> roots, SList state)
     {
         var saved = state.Items.Skip(1).OfType<SList>().Where(l => l.Items is [SSymbol, _])
             .ToDictionary(l => ((SSymbol)l.Items[0]).Name, l => l.Items[1]);
         var used = new HashSet<string>();
-        foreach (var (path, holder) in Roots(runtime))
-            Walk(path, holder, [], 0, (p, _) => { }, (p, set) =>
-            {
-                if (saved.TryGetValue(p, out var v)) { if (set(v)) used.Add(p); }
-            });
+        foreach (var (path, holder) in roots)
+            Walk(path, holder, [], 0, (p, _) => { },
+                (p, set) => { if (saved.TryGetValue(p, out var v) && set(v)) used.Add(p); },
+                (p, dict, valueType) =>
+                {
+                    // a name-keyed dictionary of plain values fills as the sim runs: put back the entries the save has and this run has not made yet
+                    foreach (var (key, sx) in saved.Where(e => e.Key.StartsWith(p + "/") && !e.Key[(p.Length + 1)..].Contains('/')).ToList())
+                    {
+                        string name = key[(p.Length + 1)..];
+                        if (dict.Contains(name) || FromSExpr(valueType, sx) is not { } value) continue;
+                        dict[name] = value;
+                        used.Add(key);
+                    }
+                });
         return saved.Keys.Where(k => !used.Contains(k)).ToList();
     }
 
@@ -52,15 +63,7 @@ public static class RuntimeState
         return new SList(items);
     }
 
-    public static IReadOnlyList<string> RestoreGround(WorldGround ground, SList state)
-    {
-        var saved = state.Items.Skip(1).OfType<SList>().Where(l => l.Items is [SSymbol, _])
-            .ToDictionary(l => ((SSymbol)l.Items[0]).Name, l => l.Items[1]);
-        var used = new HashSet<string>();
-        foreach (var (path, holder) in GroundRoots(ground))
-            Walk(path, holder, [], 0, (p, _) => { }, (p, set) => { if (saved.TryGetValue(p, out var v) && set(v)) used.Add(p); });
-        return saved.Keys.Where(k => !used.Contains(k)).ToList();
-    }
+    public static IReadOnlyList<string> RestoreGround(WorldGround ground, SList state) => RestoreFrom(GroundRoots(ground), state);
 
     private static IEnumerable<(string Path, object Holder)> GroundRoots(WorldGround ground)
     {
@@ -90,7 +93,7 @@ public static class RuntimeState
     /// hold when they belong to the simulation, and those of the values in its string- or index-keyed collections. The
     /// same walk, in the same order, runs on save and load, so a path names the same field both times.
     /// </summary>
-    private static void Walk(string path, object holder, HashSet<object> visited, int depth, Action<string, SExpr> visit, Action<string, Func<SExpr, bool>>? restore = null)
+    private static void Walk(string path, object holder, HashSet<object> visited, int depth, Action<string, SExpr> visit, Action<string, Func<SExpr, bool>>? restore = null, Action<string, IDictionary, Type>? named = null)
     {
         if (depth > 6 || !visited.Add(holder) && depth > 0) return;
         var seen = visited;
@@ -118,11 +121,12 @@ public static class RuntimeState
                 else if (value is IDictionary dict && f.FieldType.IsGenericType)
                 {
                     var args = f.FieldType.GetGenericArguments();
-                    bool named = args[0] == typeof(string);
+                    bool byName = args[0] == typeof(string);
+                    if (byName && IsPlain(args[1])) named?.Invoke(p, dict, args[1]);      // entries a fresh runtime has not made yet
                     int i = 0;
                     foreach (DictionaryEntry e in dict)
                     {
-                        string key = named ? (string)e.Key : (i++).ToString();
+                        string key = byName ? (string)e.Key : (i++).ToString();
                         string ep = $"{p}/{key}";
                         object? v = e.Value;
                         if (v is System.Runtime.CompilerServices.ITuple tuple && tuple.Length > 0) v = tuple[0];
@@ -136,16 +140,16 @@ public static class RuntimeState
                                 restore(ep, sx => { var b = FromSExpr(v.GetType(), sx); if (b is null) return false; dict[boxedKey] = b; return true; });
                             }
                         }
-                        else if (v.GetType().IsClass && Sim(v.GetType())) Walk(ep, v, seen, depth + 1, visit, restore);
+                        else if (v.GetType().IsClass && Sim(v.GetType())) Walk(ep, v, seen, depth + 1, visit, restore, named);
                     }
                 }
                 else if (value is IList list && value is not Array && f.FieldType.IsGenericType)
                 {
                     for (int i = 0; i < list.Count; i++)
-                        if (list[i] is { } item && item.GetType().IsClass && Sim(item.GetType())) Walk($"{p}/{i}", item, seen, depth + 1, visit, restore);
+                        if (list[i] is { } item && item.GetType().IsClass && Sim(item.GetType())) Walk($"{p}/{i}", item, seen, depth + 1, visit, restore, named);
                 }
                 else if (value is not null && f.FieldType.IsClass && Sim(f.FieldType) && !typeof(Delegate).IsAssignableFrom(f.FieldType))
-                    Walk(p, value, seen, depth + 1, visit, restore);
+                    Walk(p, value, seen, depth + 1, visit, restore, named);
             }
     }
 
