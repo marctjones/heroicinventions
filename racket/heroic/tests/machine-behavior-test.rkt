@@ -7,7 +7,7 @@
 ;; AeolipileBlueprintSpinsOnceTheWaterBoils, which asserted the same
 ;; things from C# directly against MachineRuntime. See docs/design.html
 ;; §III "Machines as tests".
-(require rackunit heroic/simhost (only-in racket/math pi sinh cosh))
+(require rackunit heroic/simhost (only-in racket/math pi sinh cosh) (only-in racket/file make-temporary-directory delete-directory/files))
 
 (test-case "Heron's fountain lifts water above its basin, then empties the supply vessel"
   (define run (simulate 'herons-fountain #:seconds 60 #:step 0.05 #:sample-dt 0.5))
@@ -2155,3 +2155,47 @@
   (check-= (at 3600 'drill.heat-per-kg) 466.3 1e-9)
   (check-= (at 3600 'splitter.rate) (/ (* 350 3600 1000) 17.875e6) 0.01 "70.5 g/h of O2")
   (check-= (/ (at 3600 'splitter.energy) (at 3600 'splitter.oxygen)) (/ 17.875 0.7) 0.01 "25.5 MJ a kg of O2"))
+
+
+(test-case "Save and load: a machine saved half way and resumed carries on exactly as if it had never stopped"
+  ;; every field agrees, after another 30 s, with a run that was never interrupted: the save holds the running state
+  ;; (water, heat, grain, clocks), and loading lays it back on a machine rebuilt from its own file
+  (for ([name '(sand-timer wake-clock herons-fountain water-clock hama-noria sluice-demo)])
+    (define dir (make-temporary-directory))
+    (define file (build-path dir "world.save"))
+    (define straight (simulate name #:seconds 60 #:step 0.05 #:sample-dt 60))
+    (define first-half (simulate name #:seconds 30 #:step 0.05 #:sample-dt 30 #:save (cons file 30)))
+    (check-true (file-exists? file) (format "~a: the save was written" name))
+    (check-true (regexp-match? #rx"[(]world-save 1" (call-with-input-file file (λ (in) (read-string 4000 in)))) "it is a version 1 world save")
+    (define resumed (simulate name #:seconds 30 #:step 0.05 #:sample-dt 30 #:resume file))
+    (define end-straight (last straight))
+    (define end-resumed (last resumed))
+    (check-= (car end-resumed) (car end-straight) 1e-9 (format "~a: it ends on the same clock" name))
+    (for ([entry (cdr end-straight)])
+      (define other (assq (car entry) (cdr end-resumed)))
+      (check-true (and other #t) (format "~a: ~a is in the resumed run" name (car entry)))
+      (when other
+        (check-= (cadr other) (cadr entry) (* 1e-7 (max 1.0 (abs (cadr entry))))
+                 (format "~a: ~a after saving and loading" name (car entry)))))
+    ;; and the first half's last frame is the state that was saved
+    (check-= (car (last first-half)) 30.0 1e-6)
+    (delete-directory/files dir)))
+
+(test-case "Save and load in the game: a trip-hammer saved at 3 s and loaded in a new run goes on as if it had never stopped"
+  ;; the strong wheel turns at 30 rpm and strikes twice a second: after saving at 3 s and loading, it has done what an
+  ;; uninterrupted run has done by 6 s. The save holds the follower's state and the wheel's pose and speed (the engine's
+  ;; own bodies), so nothing restarts. The weak wheel, hunting round its stall, is only held to the same band.
+  (when (godot-available?)
+    (define dir (make-temporary-directory))
+    (define file (path->string (build-path dir "hammer.save")))
+    (define straight (godot-simulate 'trip-hammer #:seconds 6 #:sample-dt 1))
+    (godot-simulate 'trip-hammer #:seconds 3.05 #:sample-dt 1 #:env `(("HEROIC_SAVE" . ,file) ("HEROIC_SAVE_AT" . "3")))
+    (check-true (file-exists? file) "the game wrote the save")
+    (define resumed (godot-simulate 'trip-hammer #:seconds 6 #:sample-dt 1 #:env `(("HEROIC_LOAD" . ,file))))
+    (check-= (car (last resumed)) (car (last straight)) 1e-6 "ends on the same clock")
+    (for ([path '((strong-hammer strikes) (strong-hammer work) (strong-hammer speed) (strong-wheel omega) (strong-hammer fastest))])
+      (check-= (final-of resumed path) (final-of straight path) (* 1e-4 (max 1.0 (abs (final-of straight path)))) (format "~a after loading" path)))
+    (check-= (final-of resumed '(strong-hammer strikes)) 12 0 "twelve strikes in 6 s, as if never stopped")
+    (check-= (final-of resumed '(weak-hammer strikes)) 0 0 "the stalled wheel still never strikes")
+    (check-true (< 0.4 (final-of resumed '(weak-hammer height)) 1.0) "and its hammer is still held up about 0.7 cm")
+    (delete-directory/files dir)))

@@ -43,10 +43,11 @@ public sealed class SleepSession
     private readonly MachineRuntime _runtime;
     private readonly double _start;
 
-    public SleepSession(MachineRuntime runtime, WakeSpec plan, double dt = 1.0 / 120, double? predicted = null)
+    /// <param name="startedAt">When the sleep began, in the machine's own time, when this is a sleep resumed from a save; null for one starting now.</param>
+    public SleepSession(MachineRuntime runtime, WakeSpec plan, double dt = 1.0 / 120, double? predicted = null, double? startedAt = null)
     {
         _runtime = runtime; Plan = plan; Dt = dt; Predicted = predicted;
-        _start = runtime.Time;
+        _start = startedAt ?? runtime.Time;
         Check(0);      // already true?
     }
 
@@ -54,6 +55,8 @@ public sealed class SleepSession
     public double Dt { get; }
     /// <summary>The estimated time to wake, s, if there is one (see <see cref="SleepPlanner.Predict"/>).</summary>
     public double? Predicted { get; }
+    /// <summary>When this sleep began, on the machine's own clock: saved with the world so a sleep can be resumed.</summary>
+    public double StartedAt => _start;
     public long Steps { get; private set; }
     public double Elapsed => _runtime.Time - _start;
     public bool Done => Result is not null;

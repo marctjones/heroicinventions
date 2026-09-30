@@ -30,7 +30,7 @@
 ;; (godot-simulate 'trebuchet #:seconds 10 #:sample-dt 0.5) -> a run.
 ;; #:set gives sim fields a value before the first step: '((tap opening 0.04)).
 (define (godot-simulate machine-name #:seconds seconds #:sample-dt [sample-dt 0.1]
-                        #:set [settings '()])
+                        #:set [settings '()] #:env [extra-env '()])
   (unless (godot-available?)
     (error 'godot-simulate "Godot not found at ~a (set HEROIC_GODOT)" godot-binary))
   (unless (file-exists? (build-path game-dir "machines" (format "~a.machine" machine-name)))
@@ -46,6 +46,8 @@
   (env! "HEROIC_SET" (string-join (for/list ([s settings])
                                     (format "~a ~a ~a" (car s) (cadr s) (exact->inexact (caddr s))))
                                   "; "))
+  ;; #:env '(("HEROIC_SAVE" . "/tmp/w.save") ("HEROIC_SAVE_AT" . "3")): more of the game's own switches
+  (for ([kv extra-env]) (env! (car kv) (cdr kv)))
   (define errors (open-output-string))
   (define ok?
     (parameterize ([current-directory game-dir]

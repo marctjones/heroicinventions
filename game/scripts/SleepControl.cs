@@ -36,6 +36,25 @@ public partial class SleepControl : VBoxContainer
         _views = views; _focus = focus; _setRunning = setRunning; _say = say;
     }
 
+    /// <summary>The sleep in progress, as a save records it (issue #67), or null when none is; <paramref name="label"/> names the machine it is on.</summary>
+    public SavedSleep? Saved(string label) =>
+        _session is { Done: false } s ? new SavedSleep(label, s.Plan, s.StartedAt, s.Predicted) : null;
+
+    /// <summary>Takes up a sleep a save recorded, on the machine it was on: it knows how long it has slept and the estimate it set out with.</summary>
+    public void Resume(MachineView view, SavedSleep saved)
+    {
+        _sleeper = view;
+        _predicted = saved.Predicted ?? double.NaN;
+        _session = new SleepSession(view.Runtime, saved.Plan, 1.0 / 120, saved.Predicted, saved.StartedAt);
+        _setRunning(false);
+        _go.Disabled = true; _cancel.Disabled = false; _bar.Visible = true;
+        _body.Visible = true;
+        if (_session.Done) Finish();
+    }
+
+    /// <summary>Called when a sleep ends, so the game can save on waking (issue #67).</summary>
+    public event Action? Woke;
+
     /// <summary>True while a sleep is in progress: the game should not step the simulation itself.</summary>
     public bool Active => _session is { Done: false };
 
@@ -221,6 +240,7 @@ public partial class SleepControl : VBoxContainer
         var result = _session!.Result!;
         _progressText.Text = result.ToString();
         _say($"Sleep over: {result}");
+        Woke?.Invoke();
         GD.Print($"[sleep] {result}");
         _session = null;
         End();

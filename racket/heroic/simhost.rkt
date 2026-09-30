@@ -79,7 +79,7 @@
 ;; standing in for what the game's engine side supplies: '((lift rpm 12)),
 ;; or at a given time, as a player's hand would: '((tap opening 0.04 120)).
 (define (simulate machine-name #:seconds seconds #:step [step 0.01] #:sample-dt [sample-dt step]
-                  #:set [settings '()])
+                  #:set [settings '()] #:save [save #f] #:resume [resume #f])
   (define path (build-path machines-dir (format "~a.machine" machine-name)))
   (unless (file-exists? path)
     (error 'simulate "no such machine file: ~a (run `racket racket/build.rkt` first?)" path))
@@ -89,7 +89,11 @@
                            (if (null? settings)
                                '()
                                (list (cons 'set (for/list ([s settings])
-                                                  (list* (car s) (cadr s) (map exact->inexact (cddr s))))))))))
+                                                  (list* (car s) (cadr s) (map exact->inexact (cddr s)))))))
+                           ;; #:save (cons "path" at-seconds) writes the running state to a save file once the clock reaches at-seconds;
+                           ;; #:resume "path" lays a saved state on the machine before the first step (issue #67)
+                           (if save (list (list 'save (path->string (car save)) (exact->inexact (cdr save)))) '())
+                           (if resume (list (list 'resume (path->string resume))) '()))))
   (cond
     [(and (pair? reply) (eq? (car reply) 'run)) (cdr reply)]
     [(and (pair? reply) (eq? (car reply) 'error)) (error 'simulate "~a" (cadr reply))]

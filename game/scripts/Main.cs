@@ -322,6 +322,9 @@ public partial class Main : Node3D
     private Button _machinesToggle = null!;
     private Button _editButton = null!;
     private SleepControl _sleep = null!;
+    private const string SavesDir = "user://saves";
+    private string? _scriptedSavePath;
+    private double _scriptedSaveAt;
     private ScrollContainer _leftScroll = null!;
     private bool _hudHidden;
     private RigidBody3D? _follow;
@@ -381,6 +384,10 @@ public partial class Main : Node3D
         if (double.TryParse(OS.GetEnvironment("HEROIC_QUIT_AFTER_SIM_SECONDS"), System.Globalization.CultureInfo.InvariantCulture, out double quitAfter))
             _quitAfterSimSeconds = quitAfter;
 
+        // HEROIC_LOAD=<save file>: take up a save as soon as it has loaded; HEROIC_SAVE=<file> with HEROIC_SAVE_AT=<sim seconds> writes one when the clock gets there (scripted checks)
+        if ((_current is not null || _views.Count > 0) && OS.GetEnvironment("HEROIC_LOAD") is { Length: > 0 } loadPath) LoadSave(loadPath);
+        _scriptedSavePath = OS.GetEnvironment("HEROIC_SAVE") is { Length: > 0 } sp ? sp : null;
+        _scriptedSaveAt = double.TryParse(OS.GetEnvironment("HEROIC_SAVE_AT"), System.Globalization.CultureInfo.InvariantCulture, out double sa) ? sa : 0;
         // HEROIC_SLEEP=<wake id>: start sleeping until one of the machine's wake conditions as soon as it has loaded (scripted checks of the game's own path)
         if (_current is not null && OS.GetEnvironment("HEROIC_SLEEP") is { Length: > 0 } sleepId) _sleep.StartNamed(sleepId);
 
@@ -503,6 +510,14 @@ public partial class Main : Node3D
         BuildJoinButton(col);
         _sleep = new SleepControl(() => _views.Count > 0 ? _views : _current is null ? [] : [_current], () => _current, SetRunning, text => { _hudNote.Text = text; _hudNote.Visible = true; });
         col.AddChild(_sleep);
+        _sleep.Woke += () => SaveWorld(auto: true);        // a long sleep is worth keeping
+        var saveRow = new HBoxContainer();
+        var saveButton = new Button { Text = "Save", TooltipText = "Save the whole running world, machines and all, to disk", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        saveButton.Pressed += () => SaveWorld(auto: false);
+        var loadButton = new Button { Text = "Load", TooltipText = "Go back to the last save (or autosave) of this machine or world", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        loadButton.Pressed += LoadLatestSave;
+        saveRow.AddChild(saveButton); saveRow.AddChild(loadButton);
+        col.AddChild(saveRow);
 
         _menuButton = BigButton("Back to menu");
         _menuButton.Disabled = true;
@@ -867,6 +882,88 @@ public partial class Main : Node3D
         SetMenuCollapsed(true);
         _follow = FollowBody.TryGetValue(name, out var followId) ? view.BodyNamed(followId) : null;
         _sleep.Refresh();   // this machine's own wake conditions
+    }
+
+    // ---------------------------------------------------------------- save and load (issue #67)
+
+    private string? SaveName => _world?.Name ?? _currentName;
+
+    private string SavePath(bool auto) =>
+        ProjectSettings.GlobalizePath($"{SavesDir}/{SaveName}{(auto ? ".autosave" : "")}.save");
+
+    /// <summary>
+    /// Writes the whole running scene to disk, atomically: each machine's clock and simulation state, what the rigid
+    /// bodies were doing, and any sleep in progress. The machines themselves are not copied: the save names them and
+    /// loading rebuilds them from their own files. <paramref name="path"/> overrides where (scripted checks).
+    /// </summary>
+    private void SaveWorld(bool auto, string? path = null)
+    {
+        if (SaveName is null || (_current is null && _views.Count == 0)) return;
+        try
+        {
+            var views = _views.Count > 0 ? _views : [_current!];
+            var machines = views.Select(v => new SavedMachine(
+                _views.Count > 0 ? v.Name.ToString() : SaveName, _viewMachine.GetValueOrDefault(v, _currentName ?? SaveName),
+                v.Runtime.Time, RuntimeState.Capture(v.Runtime), v.CaptureView())).ToList();
+            var sleep = _sleep.Saved(machines.FirstOrDefault(m => _current is not null && m.Label == (_views.Count > 0 ? _current.Name.ToString() : SaveName))?.Label ?? machines[0].Label);
+            var save = new WorldSave
+            {
+                Kind = _world is not null ? "world" : "machine", Name = SaveName, Machines = machines, Sleep = sleep,
+                Ground = _groundSim is { } ground ? RuntimeState.CaptureGround(ground) : null,     // the dug earth and the water on it
+            };
+            string target = path ?? SavePath(auto);
+            save.WriteAtomic(target);
+            GD.Print($"[save] {(auto ? "autosaved" : "saved")} {SaveName} to {target}");
+            if (!auto) { _hudNote.Text = $"Saved {SaveName}."; _hudNote.Visible = true; }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            GD.PushError($"could not save {SaveName}: {e.Message}");
+            _hudNote.Text = $"Could not save: {e.Message}"; _hudNote.Visible = true;
+        }
+    }
+
+    /// <summary>Loads the newer of this scene's save and autosave.</summary>
+    private void LoadLatestSave()
+    {
+        if (SaveName is null) return;
+        var candidates = new[] { SavePath(false), SavePath(true) }.Where(System.IO.File.Exists).OrderByDescending(System.IO.File.GetLastWriteTimeUtc).ToList();
+        if (candidates.Count == 0) { _hudNote.Text = $"No save of {SaveName} yet."; _hudNote.Visible = true; return; }
+        LoadSave(candidates[0]);
+    }
+
+    /// <summary>Rebuilds what a save names from its own files, lays the saved state on it, and takes up a sleep the save was in the middle of.</summary>
+    private void LoadSave(string path)
+    {
+        WorldSave save;
+        try { save = WorldSave.Read(path); }
+        catch (Exception e) when (e is IOException or FormatException)
+        {
+            GD.PushError($"could not load {path}: {e.Message}");
+            _hudNote.Text = $"Could not load: {e.Message}"; _hudNote.Visible = true;
+            return;
+        }
+        if (save.Kind == "world") LoadWorldNamed(save.Name); else if (_machineFiles.ContainsKey(save.Name)) SelectMachine(save.Name);
+        else { _hudNote.Text = $"The save is of {save.Name}, which is not here."; _hudNote.Visible = true; return; }
+        int unmatched = 0;
+        if (save.Ground is { } groundState && _groundSim is { } groundSim) unmatched += RuntimeState.RestoreGround(groundSim, groundState).Count;
+        foreach (var m in save.Machines)
+        {
+            var view = _views.Count > 0 ? _views.FirstOrDefault(v => v.Name == m.Label) : _current;
+            if (view is null) { unmatched++; continue; }
+            unmatched += RuntimeState.Restore(view.Runtime, m.State).Count;
+            if (m.View is not null) unmatched += view.RestoreView(m.View);
+            view.ShowState();
+        }
+        if (save.Sleep is { } s && (_views.Count > 0 ? _views.FirstOrDefault(v => v.Name == s.Label) : _current) is { } sleeper) _sleep.Resume(sleeper, s);
+        GD.Print($"[save] loaded {save.Name} from {path}{(unmatched > 0 ? $" ({unmatched} entries found nothing to set)" : "")}");
+        _hudNote.Text = $"Loaded {save.Name}." + (unmatched > 0 ? $" ({unmatched} entries no longer fit the machine.)" : "");
+        _hudNote.Visible = true;
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationWMCloseRequest) SaveWorld(auto: true);     // quitting keeps the world
     }
 
     private void RestartCurrent()
@@ -1239,6 +1336,11 @@ public partial class Main : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
+        if (_scriptedSavePath is { } scripted && _current is not null && _current.Runtime.Time >= _scriptedSaveAt)
+        {
+            SaveWorld(auto: false, scripted);
+            _scriptedSavePath = null;
+        }
         if (_sleep.Active)
             _sleep.Advance();                 // sleeping: run ahead as fast as it can, in place of stepping in real time
         else if (_running && _views.Count > 0)

@@ -8,7 +8,10 @@ using HeroicInventions.Sim.Materials;
 // touches HeroicInventions.Sim, so it can run in `raco test` or CI
 // without Godot installed.
 //
-// Command:  (simulate "<path-to>.machine" <seconds> <step> <sample-dt> [(set (<target> <field> <value> [<at-seconds>]) ...)])
+// Command:  (simulate "<path-to>.machine" <seconds> <step> <sample-dt> [(set (<target> <field> <value> [<at-seconds>]) ...)]
+//                     [(save "<path>" <at-seconds>)] [(resume "<path>")])
+//           (save ...) writes the running state to a save file (issue #67) when the clock reaches <at-seconds>; (resume ...) lays a saved
+//           state on the machine before the first step, so the run carries on from where the save left off.
 // Reply:    (run (<time> (<target.field> <value>) ...) (<time> ...) ...)
 //        or (error "<message>")
 //
@@ -46,9 +49,15 @@ static string Handle(string line, MaterialLibrary materials)
         throw new FormatException($"unknown command '{form.Head}'; (simulate ...) and (sleep ...) are supported");
 
     var items = form.Items;
-    if (items.Count is not (5 or 6) || items[1] is not SString path || items[2] is not SNumber seconds
+    if (items.Count < 5 || items[1] is not SString path || items[2] is not SNumber seconds
         || items[3] is not SNumber step || items[4] is not SNumber sampleDt)
-        throw new FormatException("usage: (simulate \"<path>.machine\" <seconds> <step> <sample-dt> [(set (<target> <field> <value> [<at-seconds>]) ...)])");
+        throw new FormatException("usage: (simulate \"<path>.machine\" <seconds> <step> <sample-dt> [(set (<target> <field> <value> [<at-seconds>]) ...)] [(save \"<path>\" <at-seconds>)] [(resume \"<path>\")])");
+    var options = items.Skip(5).OfType<SList>().ToList();
+    var resume = options.FirstOrDefault(o => o.Head == "resume")?.Items.ElementAtOrDefault(1) as SString;
+    var saveOption = options.FirstOrDefault(o => o.Head == "save");
+    string? savePath = (saveOption?.Items.ElementAtOrDefault(1) as SString)?.Value;
+    double saveAt = (saveOption?.Items.ElementAtOrDefault(2) as SNumber)?.Value ?? double.PositiveInfinity;
+    bool saved = false;
     if (step.Value <= 0) throw new FormatException("step must be positive");
     if (sampleDt.Value <= 0) throw new FormatException("sample-dt must be positive");
 
@@ -58,16 +67,29 @@ static string Handle(string line, MaterialLibrary materials)
     // supply (a screw's turning speed, a fire) — applied before the first
     // step, or once the clock reaches <at-seconds> (a player's hand on a tap).
     var pending = new List<(string Target, string Field, double Value, double At)>();
-    if (items.Count == 6)
-        foreach (var setting in ((SList)items[5]).Items.Skip(1).OfType<SList>())
+    if (resume is not null)
+    {
+        var save = WorldSave.Read(resume.Value);
+        var machine = save.Machines.FirstOrDefault(m => m.Machine == def.Name) ?? throw new FormatException($"the save holds no machine called {def.Name}");
+        RuntimeState.Restore(run, machine.State);
+    }
+    if (options.FirstOrDefault(o => o.Head == "set") is { } setList)
+        foreach (var setting in setList.Items.Skip(1).OfType<SList>())
             pending.Add(setting.Items switch
             {
                 [SSymbol target, SSymbol field, SNumber value] => (target.Name, field.Name, value.Value, 0),
                 [SSymbol target, SSymbol field, SNumber value, SNumber at] => (target.Name, field.Name, value.Value, at.Value),
                 _ => throw new FormatException("each setting is (target field value [at-seconds])"),
             });
+    void SaveDue()
+    {
+        if (savePath is null || saved || run.Time + 1e-9 < saveAt) return;
+        WorldSave.OfMachine(def.Name, run).WriteAtomic(savePath);
+        saved = true;
+    }
     void ApplyDue()
     {
+        SaveDue();
         foreach (var due in pending.Where(p => p.At <= run.Time + 1e-9).ToList())
         {
             run.SetField(due.Target, due.Field, due.Value);
