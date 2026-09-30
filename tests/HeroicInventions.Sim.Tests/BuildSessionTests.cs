@@ -249,6 +249,25 @@ public class BuildSessionTests
     }
 
     /// <summary>
+    /// A mirror placed from the palette starts aimed at nothing (#:onto ?),
+    /// which the runtime rejects; (set m #:onto boiler) aims it, the way the
+    /// editor's inspector does, and then the machine builds. Naming a part
+    /// that isn't there is refused.
+    /// </summary>
+    [Fact]
+    public void SetNamesAPartThatAMirrorHeats()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "sunlit");
+        session.Execute("(boiler pot #:at (0 0 0))");
+        session.Execute("(mirror m #:at (2 0 0))");
+        Assert.ThrowsAny<Exception>(() => new MachineRuntime(session.Document.ToMachineDef(), Materials));
+        Assert.Throws<InvalidOperationException>(() => session.Execute("(set m #:onto nowhere)"));
+        session.Execute("(set m #:onto pot)");
+        Assert.Equal("pot", ((SSymbol)session.Document.Parts["m"].Props["onto"]).Name);
+        _ = new MachineRuntime(session.Document.ToMachineDef(), Materials);
+    }
+
+    /// <summary>
     /// A sluice placed from the palette: #:on names its channel, #:opening
     /// narrows the slot, and the pool settles where the orifice passes the
     /// whole spring — h = (Q / 0.6 w a)^2 / 2g above the slot's middle — then

@@ -827,7 +827,12 @@ public partial class MachineView : Node3D
     /// </summary>
     private static ArrayMesh GeneratedMesh(PartSpec part)
     {
+        // A machine's own parts are written to meshes/; the build-mode
+        // palette's standard parts (a 15 cm drum, an 18-tooth gear) to
+        // meshes/catalogue/. Either can appear in a machine built in the editor.
         string path = $"res://meshes/{part.Text("mesh")}.glb";
+        if (!Godot.FileAccess.FileExists(path) && Godot.FileAccess.FileExists($"res://meshes/catalogue/{part.Text("mesh")}.glb"))
+            path = $"res://meshes/catalogue/{part.Text("mesh")}.glb";
         if (GeneratedMeshes.TryGetValue(path, out var cached)) return cached;
         var doc = new GltfDocument();
         var state = new GltfState();

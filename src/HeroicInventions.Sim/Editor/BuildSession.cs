@@ -315,6 +315,16 @@ public sealed class BuildSession
             Document.SetMaterial(id, material);
             return $"set {id} #:material {material}";
         }
+        // A name, where the prop names another part: (set m1 #:onto boiler)
+        if (cmd.Items[3] is SSymbol name && !double.TryParse(name.Name, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _)
+            && Document.Parts.TryGetValue(id, out var named) && named.Props.GetValueOrDefault(key) is SSymbol or SBool)
+        {
+            if (!Document.Parts.ContainsKey(name.Name))
+                throw new InvalidOperationException($"no part named {name.Name}");
+            Snapshot();
+            Document.SetName(id, key, name.Name);
+            return $"set {id} #:{key} {name.Name}";
+        }
         double value = Num(cmd.Items[3], "set");
         Snapshot();
         Document.SetProp(id, key, value);

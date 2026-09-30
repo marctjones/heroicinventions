@@ -95,6 +95,10 @@ public sealed class EditorDocument
     public PartSpec SetProp(string id, string key, double value) =>
         Replace(id, p => p with { Props = Merge(p.Props, key, new SNumber(value)) });
 
+    /// <summary>Sets a prop that names another part (a mirror's #:onto, a float valve's #:on), keeping every other prop as is.</summary>
+    public PartSpec SetName(string id, string key, string target) =>
+        Replace(id, p => p with { Props = Merge(p.Props, key, new SSymbol(target)) });
+
     private static IReadOnlyDictionary<string, SExpr> Merge(IReadOnlyDictionary<string, SExpr> props, string key, SExpr value)
     {
         var next = new Dictionary<string, SExpr>(props) { [key] = value };

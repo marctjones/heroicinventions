@@ -51,7 +51,12 @@ public partial class BuildMode : Node3D
 
     // the machine as it will run, frozen
     private MachineView? _preview;
-    private readonly Dictionary<string, List<Node3D>> _fallbackVisuals = [];   // when the machine can't be built yet
+    private readonly Dictionary<string, List<Node3D>> _fallbackVisuals = [];   // parts that can't be built yet
+    private readonly Dictionary<string, string> _unfinished = [];              // those parts, and why
+
+    /// <summary>An engine error made readable: "mirror mirror_3 heats ?, which is neither..." reads as what the part still needs.</summary>
+    private static string Plain(string message) =>
+        message.Replace(" ?,", " nothing yet,").Replace(" ? ", " nothing yet ").Replace("(?)", "(nothing yet)");
     private readonly List<MeshInstance3D> _pipeVisuals = [];
     private readonly List<MeshInstance3D> _portMarkers = [];
 
@@ -387,31 +392,58 @@ public partial class BuildMode : Node3D
         _pipeVisuals.Clear();
 
         var doc = _session.Document;
-        string? problem = null;
+        _unfinished.Clear();
         if (doc.Parts.Count > 0)
         {
-            try
+            // One unfinished part (a mirror not yet aimed at anything) used to
+            // stop the whole machine being drawn. Set such parts aside one at a
+            // time, naming what each still needs, and draw the rest for real.
+            var working = EditorDocument.Load(doc.ToMachineDef());
+            for (int attempt = 0; attempt <= doc.Parts.Count && working.Parts.Count > 0; attempt++)
             {
-                var view = new MachineView(new MachineRuntime(doc.ToMachineDef(), _materials), _materials)
+                try
                 {
-                    ProcessMode = ProcessModeEnum.Disabled, // out of physics: a frozen snapshot of what will run
-                };
-                AddChild(view);
-                view.SetFrozen(true);
-                _preview = view;
+                    var view = new MachineView(new MachineRuntime(working.ToMachineDef(), _materials), _materials)
+                    {
+                        ProcessMode = ProcessModeEnum.Disabled, // out of physics: a frozen snapshot of what will run
+                    };
+                    AddChild(view);
+                    view.SetFrozen(true);
+                    _preview = view;
+                    break;
+                }
+                catch (Exception e)
+                {
+                    _preview?.QueueFree();
+                    _preview = null;
+                    string? culprit = working.Parts.Keys
+                        .Where(id => System.Text.RegularExpressions.Regex.IsMatch(e.Message, $@"(^|[\s(]){System.Text.RegularExpressions.Regex.Escape(id)}($|[\s:.,)])"))
+                        .OrderByDescending(id => id.Length).FirstOrDefault();
+                    if (culprit is null)
+                    {
+                        foreach (var id in working.Parts.Keys) _unfinished[id] = e.Message;
+                        break;
+                    }
+                    _unfinished[culprit] = e.Message;
+                    working.RemovePart(culprit);
+                }
             }
-            catch (Exception e)
-            {
-                problem = e.Message;
-                _preview?.QueueFree();
-                _preview = null;
-                foreach (var part in doc.Parts.Values) _fallbackVisuals[part.Id] = [FallbackVisual(part)];
-                DrawPipes();
-            }
+            foreach (var id in _unfinished.Keys)
+                if (doc.Parts.TryGetValue(id, out var part))
+                {
+                    var box = FallbackVisual(part);
+                    box.MaterialOverride = Shapes.Mat(new Color(0.9f, 0.3f, 0.2f), alpha: 0.6f);
+                    ((StandardMaterial3D)box.MaterialOverride).Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+                    AddChild(box);
+                    _fallbackVisuals[id] = [box];
+                }
+            if (_unfinished.Count > 0) DrawPipes();
         }
+        string? problem = _unfinished.Count == 0 ? null
+            : $"{_unfinished.Count} part{(_unfinished.Count == 1 ? "" : "s")} not finished (red): {string.Join("; ", _unfinished.Select(kv => $"{kv.Key}: {Plain(kv.Value)}"))}";
         _status.Text = problem is null
             ? (_placingPaletteId is { } p ? $"Placing {p}: click to place, Shift keeps placing, Esc cancels" : _selectedId is { } s ? $"Selected {s}" : "")
-            : $"Not runnable yet ({problem}); shown as placeholders";
+            : problem;
         RefreshHighlights();
         RebuildInspector();
     }
@@ -474,6 +506,8 @@ public partial class BuildMode : Node3D
             return;
         }
         _inspector.AddChild(new Label { Text = $"{part.Id} ({part.Kind})" });
+        if (_unfinished.TryGetValue(id, out var why))
+            _inspector.AddChild(new Label { Text = $"Not finished: {Plain(why)}", AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(1f, 0.55f, 0.45f) });
 
         _inspector.AddChild(new Label { Text = "Position (m)" });
         var posRow = new HBoxContainer();
@@ -504,6 +538,16 @@ public partial class BuildMode : Node3D
             row.AddChild(new Label { Text = key, CustomMinimumSize = new Vector2(120, 0), ClipText = true, TooltipText = key });
             if (value is SNumber n)
                 row.AddChild(NumberField(n.Value, text => { if (TryNumber(text, out double v)) RunCommand($"(set {id} #:{key} {F(v)})"); }));
+            else if (value is SSymbol sym && key is not ("shape" or "axis" or "rope" or "fuel-kind"))
+            {
+                // A prop naming another part: pick it from the parts on the bench.
+                var pick = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                var targets = _session.Document.Parts.Keys.Where(k => k != id).OrderBy(k => k).ToList();
+                pick.AddItem(sym.Name == "?" ? "(choose a part)" : sym.Name);
+                foreach (var t in targets.Where(t => t != sym.Name)) pick.AddItem(t);
+                pick.ItemSelected += index => { if (index > 0) RunCommand($"(set {id} #:{key} {pick.GetItemText((int)index)})"); };
+                row.AddChild(pick);
+            }
             else
                 row.AddChild(new Label { Text = SExprText(value), TooltipText = "set in the console", Modulate = new Color(1, 1, 1, 0.6f) });
             _inspector.AddChild(row);
@@ -841,7 +885,7 @@ public partial class BuildMode : Node3D
         catch (Exception)
         {
             ghost = new Node3D();
-            ghost.AddChild(FallbackVisual(spec));
+            ghost.AddChild(FallbackVisual(spec));   // (FallbackVisual no longer parents its box itself)
         }
         AddChild(ghost);   // briefly, to measure it
         if (ghost is MachineView mv) mv.SetFrozen(true);
@@ -969,7 +1013,6 @@ public partial class BuildMode : Node3D
         };
         var box = Shapes.Box(size, mat);
         box.Position = new Vector3((float)part.At.X, (float)part.At.Y + size.Y / 2, (float)part.At.Z);
-        AddChild(box);
         return box;
     }
 
