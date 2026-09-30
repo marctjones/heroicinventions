@@ -1636,3 +1636,28 @@
   (check-= (at 699 'chamber.pressure) 0.61 1e-4 "down to Mars's pressure")
   (check-= (+ (at 699 'bleed.passed) (at 699 'outer.passed)) 0.41573 1e-4 "V x (5000 - 610) Pa of air, lost")
   (check-= (at 800 'chamber.pressure) (at 800 'habitat.pressure) 1e-3 "the inner door open, they stand level"))
+
+(test-case "Trip-hammer: four pegs a turn, each drop at sqrt(2 g h), n m g h of work a turn, and a weak wheel stalls on the ramp"
+  ;; strong wheel: 30 rpm, 4 pegs -> 8 strikes in 4 s; each lifts 5 kg by 0.1 m: 4.905 J a peg, 19.62 J a turn,
+  ;; a mean torque of 19.62 / 2 pi = 3.12 N.m; each drop 0.1 m: sqrt(2 g h) = 1.401 m/s (less the engine's
+  ;; default damping). Weak wheel: 5 N.m: stalls where m g y'(phi) = 5, sin(pi phi / alpha) = 5 / 9.81,
+  ;; phi = 7.7 degrees in, the hammer 0.70 cm up, never striking.
+  (when (godot-available?)
+    (define run (godot-simulate 'trip-hammer #:seconds 8 #:sample-dt 0.25))
+    (check-= (value-at run '(strong-wheel omega) 4.0) (* 30 (/ (* 2 pi) 60)) 0.05 "30 rpm")
+    (check-= (value-at run '(strong-hammer strikes) 4.0) 8 1 "four pegs, two turns")
+    (check-= (value-at run '(strong-hammer strikes) 8.0) 16 1 "and eight in 4 s more")
+    (check-= (final-of run '(strong-hammer speed)) (sqrt (* 2 9.81 0.1)) 0.03 "sqrt(2 g h)")
+    ;; the wheel gives m g h of work a peg
+    (define strikes (value-at run '(strong-hammer strikes) 6.0))
+    (check-= (/ (value-at run '(strong-hammer work) 6.0) strikes) (* 5 9.81 0.1) 0.15 "4.905 J a peg")
+    (define turns (/ (value-at run '(strong-hammer strikes) 6.0) 4))
+    (check-= (/ (value-at run '(strong-hammer work) 6.0) (* turns 2 pi)) 3.12 0.08 "mean torque of the follower on the wheel")
+    ;; the weak wheel stalls on the ramp, near the angle and height the torque balance gives, and never strikes
+    (check-= (final-of run '(weak-hammer strikes)) 0 0)
+    (define settled (for/list ([t (times-of run)] [angle (values-of run '(weak-wheel angle))] #:when (> t 2.0)) angle))
+    (check-true (for/and ([a settled]) (< 6.0 a 9.0)) (format "stalled near 7.7 degrees: ~a" settled))
+    (define heights (for/list ([t (times-of run)] [h (values-of run '(weak-hammer height))] #:when (> t 2.0)) h))
+    (check-true (for/and ([h heights]) (< 0.4 h 1.0)) (format "hammer near 0.70 cm: ~a" heights))
+    (define torques (for/list ([t (times-of run)] [q (values-of run '(weak-hammer torque))] #:when (> t 2.0)) q))
+    (check-true (for/and ([q torques]) (< 4.4 q 5.4)) (format "the follower asks about what the wheel gives, 5 N.m: ~a" torques))))

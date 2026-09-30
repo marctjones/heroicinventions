@@ -33,6 +33,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Follow> _follows = [];
     private readonly Dictionary<string, Belt> _belts = [];
     private readonly Dictionary<string, Grip> _grips = [];
+    private readonly Dictionary<string, Cam> _cams = [];
     private readonly Dictionary<string, Channel> _channels = [];
     private readonly Dictionary<string, SluiceGate> _gates = [];
     private readonly Dictionary<string, (FloatValve Valve, Func<double> Flow)> _floatValves = [];
@@ -79,6 +80,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Belt> Belts => _belts;
     /// <summary>Grips, by id: hooks and tongs that pick up loose bodies. The view owns the bodies and the joints; the grip's state and limits live here.</summary>
     public IReadOnlyDictionary<string, Grip> Grips => _grips;
+    /// <summary>Cams (peg wheels and their followers), by id. The view owns the wheel and feeds each cam its angle every tick; the cam works the follower and gives back the torque it puts on the wheel.</summary>
+    public IReadOnlyDictionary<string, Cam> Cams => _cams;
     public IReadOnlyDictionary<string, Channel> Channels => _channels;
     public IReadOnlyDictionary<string, SluiceGate> Gates => _gates;
     /// <summary>Float valves, each with the flow of the feed it throttles (m³/s).</summary>
@@ -295,7 +298,7 @@ public sealed class MachineRuntime
                     _gasPumps[part.Id] = new GasPump(part.Id, a, b, part.Number("speed")) { Until = part.Number("until", 0) };
                     break;
                 }
-                case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump" or "grip":
+                case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump" or "grip" or "cam":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);
@@ -487,8 +490,35 @@ public sealed class MachineRuntime
         // belts and grips register their own fields, which triggers and follows may watch and set: build them first
         BuildBelts(def);
         BuildGrips(def);
+        BuildCams(def);
         BuildTriggers(def);
         BuildFollows(def);
+    }
+
+    private void BuildCams(MachineDef def)
+    {
+        foreach (var part in def.Parts.Where(p => p.Kind == "cam"))
+        {
+            string on = part.Symbol("on", "?");
+            if (def.Part(on) is not { Kind: "wheel" })
+                throw new MachineFormatException($"cam {part.Id} is on {on}, which is not a wheel, pulley or drum for it to be pegged on", part.Location);
+            int pegs = (int)Math.Round(part.Number("pegs", 4));
+            double lift = part.Number("lift", 0.1), rise = part.Number("rise", 0.5), mass = part.Number("mass", 5);
+            if (pegs < 1) throw new MachineFormatException($"cam {part.Id} needs at least one peg", part.Location);
+            if (lift <= 0 || mass <= 0) throw new MachineFormatException($"cam {part.Id}: #:lift and #:mass must be more than 0", part.Location);
+            if (rise is <= 0 or > 1) throw new MachineFormatException($"cam {part.Id}: #:rise is the share of a peg's pitch it lifts over, more than 0 and at most 1, not {rise}", part.Location);
+            var cam = _cams[part.Id] = new Cam(part.Id, pegs, lift, rise, mass, Outside.Gravity);
+            string id = part.Id;
+            _getters[$"{id}.height"] = () => cam.Height * 100;                 // cm the follower stands above its anvil
+            _getters[$"{id}.strikes"] = () => cam.Strikes;
+            _getters[$"{id}.speed"] = () => cam.LastStrikeSpeed;               // m/s of the last strike
+            _getters[$"{id}.fastest"] = () => cam.FastestStrike;
+            _getters[$"{id}.torque"] = () => cam.Torque;                       // N·m it asks of the wheel now
+            _getters[$"{id}.work"] = () => cam.Work;                           // J the wheel has put into lifting it
+            _getters[$"{id}.contact"] = () => cam.InContact ? 1 : 0;
+            _getters[$"{id}.pitch"] = () => cam.Pitch * 180 / Math.PI;         // degrees between pegs
+            _setters[$"{id}.mass"] = kg => cam.Mass = Math.Max(1e-6, kg);      // a heavier hammer
+        }
     }
 
     private void BuildGrips(MachineDef def)

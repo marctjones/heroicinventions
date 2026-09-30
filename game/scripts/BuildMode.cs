@@ -122,6 +122,7 @@ public partial class BuildMode : Node3D
         ["door"] = ("Door or valve", "Structure", "An opening between two enclosures (or one and outside). Gas rushes through when it is open."),
         ["air-pump"] = ("Air pump", "Structure", "Pumps gas out of one zone into another, as an airlock's chamber is pumped down."),
         ["enclosure"] = ("Enclosure", "Structure", "A room with its own air: set its pressure, gases (o2, n2 …) and walls. Parts inside read its air instead of the planet's."),
+        ["cam"] = ("Peg wheel (cam)", "Wheels and power", "Pegs on a wheel lift a hammer as it turns, then let it fall. Pick the wheel in the inspector."),
         ["grip"] = ("Tongs or hook (grip)", "Weights and levers", "Takes hold of a loose block within reach while closed, and lets go when opened or overloaded. Hang it on a lever or the world."),
         ["bellows"] = ("Bellows", "Fire, water and steam", "Blows air into a fire so it burns hotter."),
         ["safety-valve"] = ("Safety valve", "Fire, water and steam", "Lets steam out of a pot before it bursts."),

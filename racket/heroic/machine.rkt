@@ -36,7 +36,7 @@
          "geometry/shape.rkt" "planets.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -409,7 +409,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt joint)
 
@@ -457,6 +457,7 @@
   (struct puinfo (id from to mat))   ; a lift pump: the tank it draws from, the tank it fills
   (struct cpinfo (id vessel))        ; a counterpoise: the tank that hangs from it
   (struct winfo (id race tail))      ; a water wheel: the channel it stands in, the tank it spills to (or #f)
+  (struct cminfo (id on))            ; a cam: the wheel it is pegged on
   (struct grinfo (id on mat))        ; a grip: the body it hangs on (or #f: the world)
   (struct beinfo (id a b))           ; a belt: the two drums it runs on
   (struct fwinfo (id lever rope))    ; a follow: the lever it follows, or the rope
@@ -505,8 +506,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump) or link (pipe, connect, sealed-air)"
-    #:literals (enclosure grip door air-pump tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam) or link (pipe, connect, sealed-air)"
+    #:literals (enclosure grip door air-pump cam tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -895,6 +896,29 @@
     ;; so a mass m needs F >= m g / (2 mu); #:kind hook carries #:strength N.
     ;; It starts open; #:closed 1 starts it shut. Set (grip closed 1) or 0 at
     ;; run time, or let a trigger or a follow do it.
+    ;; A peg wheel: #:pegs (default 4) pegs round the wheel #:on names (a
+    ;; wheel, pulley or drum) each lift a follower of #:mass kg (a trip-hammer)
+    ;; standing on its anvil at #:at by #:lift m, over #:rise (default 0.5) of
+    ;; the peg's pitch, on a cosine; then the peg lets go and the follower falls
+    ;; on the anvil, at sqrt(2 g h). The wheel is loaded by the follower's
+    ;; weight through virtual work (torque = F dy/d theta), so it does n m g h
+    ;; of work a turn; a wheel that gives less torque than m g pi h / (2 rise
+    ;; pitch) stalls at the steepest part of a peg.
+    (pattern (cam id:id
+                  (~alt (~once (~seq #:at at:vec3))
+                        (~once (~seq #:on wheel-id:id))
+                        (~optional (~seq #:pegs pegs-v:expr))
+                        (~optional (~seq #:lift lift-v:expr))
+                        (~optional (~seq #:rise rise-v:expr))
+                        (~optional (~seq #:mass mass-v:expr))
+                        (~optional (~seq #:material mat:id))) ...)
+      #:attr info (cminfo #'id #'wheel-id)
+      #:with expr #`(part 'id 'cam '(~? mat oak) (list at.x at.y at.z)
+                          (list (cons 'on 'wheel-id) (cons 'pegs (~? pegs-v 4)) (cons 'lift (~? lift-v 0.1))
+                                (cons 'rise (~? rise-v 0.5)) (cons 'mass (~? mass-v 5)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     (pattern (grip id:id
                    (~alt (~once (~seq #:at at:vec3))
                          (~optional (~seq #:on on-id:id))
@@ -1615,6 +1639,11 @@
     (for ([t infos] #:when (and (trinfo? t) (trinfo-body t)))
       (unless (hash-ref parts (syntax-e (trinfo-body t)) #f)
         (fail (format "~a is not a part; a trigger watches a part's centre" (syntax-e (trinfo-body t))) (trinfo-body t))))
+
+    (for ([c infos] #:when (cminfo? c))
+      (define p (hash-ref parts (syntax-e (cminfo-on c)) #f))
+      (unless (and p (eq? (pinfo-kind p) 'wheel))
+        (fail (format "~a is not a wheel, pulley or drum; a cam is pegged on one" (syntax-e (cminfo-on c))) (cminfo-on c))))
 
     (for ([g infos] #:when (and (grinfo? g) (grinfo-on g)))
       (define p (hash-ref parts (syntax-e (grinfo-on g)) #f))
