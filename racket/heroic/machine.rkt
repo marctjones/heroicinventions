@@ -99,7 +99,7 @@
 ;; via: list of (x z) waypoints the channel bends through, in order; length: m or #f
 ;; (worked out from the tanks' positions and the waypoints).
 ;; onto: a hearth or boiler the water falls onto at #:end, or #f
-(struct channel-spec (id from to end via width length loc onto) #:transparent)
+(struct channel-spec (id from to end via width length loc onto dynamic cells) #:transparent)
 
 ;; A sluice with no #:at stands at the lip where its channel leaves its
 ;; tank: on the tank's wall, facing the way the channel runs.
@@ -1234,15 +1234,27 @@
                             (~optional (~seq #:via (via:xz ...)))
                             (~once (~seq #:width width-v:expr))
                             (~optional (~seq #:length len-v:expr))
-                            (~optional (~seq #:onto onto:id))) ...)
+                            (~optional (~seq #:onto onto:id))
+                            (~optional (~seq #:dynamic dyn:expr))
+                            (~optional (~seq #:cells cells-v:expr))) ...)
       #:fail-when (and (attribute off-kw) (not (attribute end)) #'id) "a channel running off the scene needs an #:end (x y z)"
+      #:fail-when (and (attribute cells-v)
+                       (let ([n (syntax-e #'cells-v)]) (and (number? n) (not (and (exact-integer? n) (<= 2 n 2000)))))
+                       #'cells-v)
+                  "a dynamic channel's #:cells is a whole number from 2 to 2000"
       #:fail-when (and (attribute onto) (not (attribute off-kw)) #'onto) "only a channel running #:to off can pour #:onto a hearth, boiler or water wheel"
       #:attr info (chinfo #'id #'from (and (attribute to) #'to) (attribute onto))
       #:with expr #`(channel-spec 'id (list 'from.part-id 'from.port-id)
                                   (~? (list 'to.part-id 'to.port-id) 'off)
                                   (~? (list end.x end.y end.z) #f)
                                   (~? (list (list via.x via.z) ...) '())
-                                  width-v (~? len-v #f) #,(loc-of this-syntax) (~? 'onto #f)))
+                                  width-v (~? len-v #f) #,(loc-of this-syntax) (~? 'onto #f)
+                                  ;; a dynamic reach (issue #36): #:dynamic #t, or giving #:cells, makes one
+                                  (and (or (~? dyn #f) (~? cells-v #f)) #t)
+                                  (let ([n (~? cells-v #f)])
+                                    (when (and n (not (and (exact-integer? n) (<= 2 n 2000))))
+                                      (raise-user-error 'channel "~a: #:cells must be a whole number from 2 to 2000, got ~e" 'id n))
+                                    n)))
 
     ;; A sensor that acts when something arrives, once. #:body part with a box
     ;; (#:at its centre, #:size its extents) fires when that part's centre

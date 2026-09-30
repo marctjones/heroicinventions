@@ -109,7 +109,7 @@ public static class MachineWriter
         Tagged("inflow", Sym(s.Id), Tagged("into", Sym(s.Into)), Tagged("flow", Num(s.Flow)), SrcLoc(s.Location));
 
     private static SExpr ChannelClause(ChannelSpec c) =>
-        Tagged("channel", Sym(c.Id),
+        Tagged("channel", [Sym(c.Id),
             RefClause("from", c.From),
             c.To is { } to ? RefClause("to", to) : Tagged("to", Sym("off")),
             c.End is { } end ? Tagged("end", Num(end.X), Num(end.Y), Num(end.Z)) : Tagged("end"),
@@ -117,7 +117,9 @@ public static class MachineWriter
             Tagged("width", Num(c.Width)),
             Tagged("length", NumOrFalse(c.Length)),
             Tagged("onto", SymOrFalse(c.Onto)),
-            SrcLoc(c.Location));
+            // a dynamic reach (issue #36) only: steady channels' clauses stay as they were
+            .. c.Dynamic ? [Tagged("dynamic", new SBool(true)), Tagged("cells", c.Cells is { } n ? Num(n) : new SBool(false))] : Array.Empty<SExpr>(),
+            SrcLoc(c.Location)]);
 
     private static SExpr CylinderClause(CylinderSpec c) =>
         Tagged("atmospheric-cylinder", [Sym(c.Id),

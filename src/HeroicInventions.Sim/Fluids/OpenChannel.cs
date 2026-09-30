@@ -102,7 +102,12 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
     // ------------------------------------------------------------------
 
     /// <summary>How many cells the reach is cut into; 0, the steady channel (weir at the head, Manning depth all along).</summary>
-    public int Cells { get; init; }
+    public int Cells
+    {
+        get => _cells;
+        init { _cells = value; _h = new double[value]; _q = new double[value]; }   // sized at once, so a live edit finds arrays to carry
+    }
+    private readonly int _cells;
     public bool Dynamic => Cells > 0;
     /// <summary>Manning's n for a dynamic reach (dressed stone unless changed; 0, frictionless).</summary>
     public double Manning { get; set; } = Roughness;
@@ -113,9 +118,9 @@ public sealed class Channel(string name, Tank from, double lipElevation, Tank? t
     private bool _wasDryAtFoot = true;
 
     /// <summary>Metres of water standing in each cell, head to foot.</summary>
-    public IReadOnlyList<double> Depths => _h;
+    public IReadOnlyList<double> Depths { get { EnsureCells(); return _h; } }
     /// <summary>Each cell's speed down the reach, m/s.</summary>
-    public double VelocityAt(int cell) => ShallowWater.Velocity(_h[cell], _q[cell]);
+    public double VelocityAt(int cell) { EnsureCells(); return ShallowWater.Velocity(_h[cell], _q[cell]); }
     public double CellLength => Length / Math.Max(1, Cells);
     /// <summary>The bed's elevation at a cell: falling evenly from the lip (first cell) to the end (last).</summary>
     public double BedAt(int cell) => Cells <= 1 ? LipElevation : LipElevation + (EndElevation - LipElevation) * cell / (Cells - 1);

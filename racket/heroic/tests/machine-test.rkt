@@ -269,3 +269,8 @@
   (check-exn #rx"#:coefficient must be in" (λ () (build '(enclosure hab #:at (0 0 0) #:size (2 2 2) #:leak 0.001 #:coefficient 2))))
   (check-not-exn (λ () (build '(enclosure hab #:at (0 0 0) #:size (2 2 2) #:pressure 50000 #:air '((o2 0.21) (n2 0.79)))
                               '(hearth stove #:at (0 0 0) #:heats hab #:power 1000 #:fuel 1)))))
+
+(test-case "a dynamic channel (#36) is cut into 2 to 2000 cells"
+  (check-compile-error #rx"#:cells is a whole number from 2 to 2000"
+    (tank pond #:at (0 1 0) #:area 1 #:height 1 (port out #:height 0))
+    (channel race #:from pond.out #:to off #:end (5 0 0) #:width 0.3 #:dynamic #t #:cells 1)))

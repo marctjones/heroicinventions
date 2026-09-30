@@ -61,6 +61,7 @@ public class MachineFileTests
     [InlineData("fire-and-water")]
     [InlineData("hama-noria")]
     [InlineData("newcomen-hearth")]
+    [InlineData("dam-break")]
     public void EditingAMachineMidRunKeepsItsState(string name)
     {
         var def = Load(name);
@@ -77,6 +78,7 @@ public class MachineFileTests
             Parts = [.. def.Parts, extra], Pipes = def.Pipes, Connects = def.Connects, SealedAir = def.SealedAir,
             Ropes = def.Ropes, Arbors = def.Arbors, Meshes = def.Meshes, Lifts = def.Lifts,
             Sources = def.Sources, Channels = def.Channels, Cylinders = def.Cylinders,
+            Planet = def.Planet, Triggers = def.Triggers, Follows = def.Follows, Belts = def.Belts,
         };
         var after = new MachineRuntime(edited, Materials);
         after.TakeStateFrom(before);

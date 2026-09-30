@@ -40,6 +40,10 @@ public partial class MachineView
         public required List<(MeshInstance3D node, float lateral)> Flecks;
         public required float[] Phase;         // distance each fleck has travelled
         public double LastTime;
+        // a reach holding water (issue #36): this leg's share of the reach (0 at the head, 1 at the foot)
+        // and the water drawn in segments along it, each as deep as the cells under it
+        public float From01, To01;
+        public List<MeshInstance3D>? Segments;
     }
 
     private void BuildChannels()
@@ -78,6 +82,7 @@ public partial class MachineView
                 var end = At(i + 1) + (i + 2 < course.Count ? dir * reach : Vector3.Zero);
                 bool final = i + 2 == course.Count;
                 var trough = MakeTrough(start, end, (float)channel.Width, final ? channel.To : null, end + dir * 0.05f);
+                if (channel.Dynamic) AddWaterSegments(trough, channel, cumulative[i] / cumulative[^1], cumulative[i + 1] / cumulative[^1]);
                 if (final && spec.Onto is { } onto && Runtime.Def.Part(onto) is { } target)
                     trough.Onto = (float)(target.At.Y + target.Kind switch { "boiler" => target.Number("height"), "waterwheel" => target.Number("radius"), _ => 0.1 });
                 _troughs.Add((channel, null, trough));
@@ -196,11 +201,81 @@ public partial class MachineView
         };
     }
 
+    /// <summary>
+    /// A dynamic reach's water, drawn as up to 60 segments along each leg of
+    /// the trough, each standing as deep as the cells beneath it: the wave is
+    /// seen running down the race, thin at its front and filling behind.
+    /// </summary>
+    private static void AddWaterSegments(Trough t, Channel channel, float from01, float to01)
+    {
+        t.From01 = from01;
+        t.To01 = to01;
+        int cellsHere = Math.Max(1, (int)Math.Round((to01 - from01) * channel.Cells));
+        int count = Math.Clamp(cellsHere, 1, 60);
+        t.Segments = [];
+        var mat = (StandardMaterial3D)t.Water.MaterialOverride;
+        for (int k = 0; k < count; k++)
+        {
+            var seg = Shapes.Box(new Vector3(t.Length / count, 1, t.Width * 0.98f), mat);
+            seg.Visible = false;
+            t.Frame.AddChild(seg);
+            t.Segments.Add(seg);
+        }
+    }
+
+    /// <summary>Metres of water in a dynamic reach at a fraction of the way down a leg, and how fast it runs there.</summary>
+    private static (double Depth, double Velocity) ReachAt(Channel ch, Trough t, float along01)
+    {
+        int cell = Math.Clamp((int)((t.From01 + (t.To01 - t.From01) * along01) * ch.Cells), 0, ch.Cells - 1);
+        return (ch.Depths[cell], ch.VelocityAt(cell));
+    }
+
+    private void DrawReach(Channel ch, Trough t)
+    {
+        int count = t.Segments!.Count;
+        float seg = t.Length / count;
+        for (int k = 0; k < count; k++)
+        {
+            // the segment's depth: the mean of the cells under it
+            int c0 = Math.Clamp((int)((t.From01 + (t.To01 - t.From01) * k / count) * ch.Cells), 0, ch.Cells - 1);
+            int c1 = Math.Clamp((int)((t.From01 + (t.To01 - t.From01) * (k + 1) / count) * ch.Cells), c0 + 1, ch.Cells);
+            double depth = 0;
+            for (int c = c0; c < c1; c++) depth += ch.Depths[c];
+            float d = (float)(depth / (c1 - c0));
+            var box = t.Segments[k];
+            box.Visible = d > 0.001f;
+            box.Scale = new Vector3(1, Mathf.Max(d, 0.001f), 1);
+            box.Position = new Vector3(seg * (k + 0.5f), d / 2, 0);
+        }
+        double dtime = Runtime.Time - t.LastTime;
+        t.LastTime = Runtime.Time;
+        for (int i = 0; i < t.Flecks.Count; i++)
+        {
+            var (node, lateral) = t.Flecks[i];
+            var (d, u) = ReachAt(ch, t, t.Phase[i] / t.Length);
+            t.Phase[i] = ((t.Phase[i] + (float)(u * dtime)) % t.Length + t.Length) % t.Length;
+            node.Visible = d > 0.003;
+            node.Position = new Vector3(t.Phase[i], (float)d + 0.004f, lateral);
+        }
+        // spilling off the end of the last leg into the low pond
+        float foot = (float)ch.Depths[ch.Cells - 1];
+        float bottom = t.Into is { } into ? (float)into.SurfaceElevation : t.Onto ?? float.NaN;
+        bool falls = t.To01 >= 0.999f && ch.Outflow > 1e-6 && !float.IsNaN(bottom) && t.FallTop - bottom > 0.01f;
+        t.Fall.Visible = falls;
+        if (falls)
+        {
+            float top = t.FallTop + foot, h = top - bottom;
+            t.Fall.Scale = new Vector3(Mathf.Clamp(foot, 0.02f, 0.3f) / 0.05f, h, 1);
+            t.Fall.Position = new Vector3(t.FallAt.X, bottom + h / 2, t.FallAt.Z);
+        }
+    }
+
     private void DrawChannels()
     {
         DrawGates();
         foreach (var (channel, source, t) in _troughs)
         {
+            if (channel is { Dynamic: true } && t.Segments is not null) { DrawReach(channel, t); continue; }
             double flow, depth, velocity;
             if (channel is not null) (flow, depth, velocity) = (channel.Flow, channel.Depth, channel.Velocity);
             else

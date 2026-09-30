@@ -287,7 +287,10 @@ public sealed class BuildSession
         string? onto = Kw(cmd, "onto") is { } o
             ? o is SSymbol os ? os.Name : throw new FormatException("channel #:onto needs a hearth or boiler name")
             : null;
-        Document.AddChannel(id, from, to, end, width, length, via, onto);
+        bool dynamic = Kw(cmd, "dynamic") is SBool { Value: true };
+        int? cells = Kw(cmd, "cells") is { } cn ? (int)Num(cn, "channel") : null;
+        if (cells is < 2 or > 2000) throw new FormatException("channel #:cells: from 2 to 2000");
+        Document.AddChannel(id, from, to, end, width, length, via, onto, dynamic || cells is not null, cells);
         return $"channel {id}: {from} -> {(to is { } t ? t.ToString() : "off")}";
     }
 

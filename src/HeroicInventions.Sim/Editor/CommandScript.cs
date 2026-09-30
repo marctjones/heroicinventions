@@ -55,7 +55,8 @@ public static class CommandScript
                 (c.End is { } e ? $" #:end {V(e)}" : "") +
                 (c.Via is { Count: > 0 } via ? $" #:via ({string.Join(' ', via.Select(p => $"({N(p.X)} {N(p.Z)})"))})" : "") +
                 $" #:width {N(c.Width)}" + (c.Length is { } l ? $" #:length {N(l)}" : "") +
-                (c.Onto is { } onto ? $" #:onto {onto}" : "") + ")");
+                (c.Onto is { } onto ? $" #:onto {onto}" : "") +
+                (c.Dynamic ? " #:dynamic #t" + (c.Cells is { } cells ? $" #:cells {cells}" : "") : "") + ")");
         foreach (var a in m.SealedAir)
             Add($"(sealed-air ({string.Join(' ', a.Tanks)}) #:tube {N(a.TubeVolume)}" +
                 (a.HeatLoss != 0 ? $" #:heat-loss {N(a.HeatLoss)}" : "") +

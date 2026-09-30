@@ -63,6 +63,7 @@ public class WorldLinkTests
             Parts = [.. def.Parts, extra], Pipes = def.Pipes, Connects = def.Connects, SealedAir = def.SealedAir,
             Ropes = def.Ropes, Arbors = def.Arbors, Meshes = def.Meshes, Lifts = def.Lifts,
             Sources = def.Sources, Channels = def.Channels, Cylinders = def.Cylinders,
+            Planet = def.Planet, Triggers = def.Triggers, Follows = def.Follows, Belts = def.Belts,
         };
     }
 

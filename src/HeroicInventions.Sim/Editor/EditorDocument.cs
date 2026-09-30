@@ -310,9 +310,10 @@ public sealed class EditorDocument
 
     /// <summary>Adds a channel clause unchecked — see <see cref="AddPipe"/>.</summary>
     public ChannelSpec AddChannel(string id, PortRef from, PortRef? to, Vec3? end, double width, double? length,
-                                IReadOnlyList<(double X, double Z)>? via = null, string? onto = null)
+                                IReadOnlyList<(double X, double Z)>? via = null, string? onto = null,
+                                bool dynamic = false, int? cells = null)
     {
-        var spec = new ChannelSpec(id, from, to, end, width, length, null, via, onto);
+        var spec = new ChannelSpec(id, from, to, end, width, length, null, via, onto) { Dynamic = dynamic, Cells = cells };
         _channels = [.. _channels, spec];
         return spec;
     }

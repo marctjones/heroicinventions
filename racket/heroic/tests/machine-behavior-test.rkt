@@ -1540,3 +1540,19 @@
     ;; and comes to rest on the step, its middle half its height up: 0.3 + 0.0495
     (check-= (final-of run '(heavy-crate y)) 0.3495 0.005)
     (check-= (final-of run '(light-crate y)) 0.3435 0.005)))
+;; A channel that holds water (issue #36)
+
+(test-case "Dam break (#36): the gate goes at 20 s, the wave reaches the low pond between 33.8 and 52.5 s, and every litre is accounted for"
+  ;; dam-break.rkt: 5 m3 at 250 L/s = 20 s to 55 cm; then waves on the race run at
+  ;; most 2.91 m/s (u + sqrt(g h) at normal depth) and a kinematic shock at 1.23 m/s
+  (define run (simulate 'dam-break #:seconds 120 #:step 0.01 #:sample-dt 1))
+  (check-= (for/first ([f run] #:when (= 1 (cadr (assq 'full.fired (cdr f))))) (car f)) 20 1.01 "the gate goes at 20 s")
+  (define arrival (final-of run '(race arrival)))
+  (check-true (< 33.8 arrival 52.5) (format "the wave reached the low pond at ~a s" arrival))
+  (check-= (value-at run '(race depth-at) 22) 0 1e-9 "the race is dry below the head just after the gate goes")
+  (for ([f run])
+    (define (v k) (cadr (assq k (cdr f))))
+    (check-= (+ (v 'millpond.water) (v 'race.stored) (v 'low-pond.water)) (+ 50000 (* 250 (car f))) 1e-3
+             (format "at ~a s pond + race + low pond = what there was + the stream's" (car f))))
+  ;; the free weir at the head once the gate is up: 1.705 x 0.5 x (level - 0.2 m)^1.5
+  (check-= (value-at run '(race flow) 25) (* 1.705 0.5 (expt (- (/ (value-at run '(millpond level) 25) 100) 0.2) 1.5) 1000) 2))

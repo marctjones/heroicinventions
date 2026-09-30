@@ -850,7 +850,11 @@ public sealed class MachineRuntime
         double length = spec.Length ?? Math.Max(0.1, apart - Half(fromPart) - farHalf);
         if (endY > lip)
             throw new MachineFormatException($"channel {spec.Id} would run uphill: its lip is at {lip:F2} m, its end at {endY:F2} m", spec.Location);
-        return new Channel(spec.Id, from, lip, to, endY, spec.Width, length);
+        // a dynamic reach (issue #36): cells half a metre long unless told, 10 to 400 of them
+        int cells = !spec.Dynamic ? 0 : spec.Cells ?? Math.Clamp((int)Math.Round(length / 0.5), 10, 400);
+        if (spec.Dynamic && cells is < 2 or > 2000)
+            throw new MachineFormatException($"channel {spec.Id}: #:cells must be from 2 to 2000, got {cells}", spec.Location);
+        return new Channel(spec.Id, from, lip, to, endY, spec.Width, length) { Cells = cells };
     }
 
     /// <summary>
@@ -1077,6 +1081,17 @@ public sealed class MachineRuntime
             _getters[$"{id}.flow"] = () => ch.Flow * 1000;             // L/s
             _getters[$"{id}.depth"] = () => ch.Depth * 100;            // cm
             _getters[$"{id}.velocity"] = () => ch.Velocity;            // m/s
+            if (!ch.Dynamic) continue;
+            // a reach holding water (issue #36): flow is what enters at the head; depth and velocity are at its middle
+            double probe = ch.Length / 2;
+            _getters[$"{id}.outflow"] = () => ch.Outflow * 1000;       // L/s leaving the foot
+            _getters[$"{id}.stored"] = () => ch.Stored * 1000;         // L standing in the reach
+            _getters[$"{id}.front"] = () => ch.Front;                  // m from the head to the wet edge
+            _getters[$"{id}.arrival"] = () => ch.Arrival;              // s when water first reached the foot; -1 not yet
+            _getters[$"{id}.probe"] = () => probe;                     // m down the reach that depth-at reads
+            _setters[$"{id}.probe"] = m => probe = Math.Clamp(m, 0, ch.Length);
+            _getters[$"{id}.depth-at"] = () => ch.Depths[ch.CellAt(probe)] * 100;   // cm at the probe
+            _getters[$"{id}.velocity-at"] = () => ch.VelocityAt(ch.CellAt(probe));  // m/s at the probe
         }
         foreach (var (id, g) in _gates)
         {

@@ -114,6 +114,10 @@
                           (width ,(num (format "channel ~a #:width" id) (channel-spec-width c)))
                           (length ,(let ([l (channel-spec-length c)]) (if l (num "channel #:length" l) #f)))
                           (onto ,(channel-spec-onto c))
+                          ;; a dynamic reach (issue #36) only: steady channels' clauses stay as they were
+                          ,@(if (channel-spec-dynamic c)
+                                `((dynamic #t) (cells ,(let ([n (channel-spec-cells c)]) (if n (num "channel #:cells" n) #f))))
+                                '())
                           ,(loc->sexp (channel-spec-loc c) root)))
             ,@(for/list ([t (machine-triggers m)])
                 (define id (trigger-spec-id t))
