@@ -1360,6 +1360,8 @@
     (define-values (links hoist) (values (hash-ref world 'links) (hash-ref world 'hoist)))
     (check-= (value-at links '(axle torque) 20) 1430 15)
     (define omega (* (value-at links '(axle rpm) 20) 2 pi 1/60))
+    ;; NB this number rests on Godot's default 0.1/s angular damping: when #33 takes that out
+    ;; it becomes 115/(0.2 x 1822) = 0.316, above the walkers' 3 rpm (0.314), so 0.314.
     (check-= omega 0.206 0.003)
     (check-= (value-at links '(axle driven-rpm) 20) (value-at links '(axle rpm) 20) 1e-4 "one speed both sides")
     (define rise-rate (/ (- (value-at hoist '(stone y) 20) (value-at hoist '(stone y) 10)) 10))
