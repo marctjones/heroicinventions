@@ -128,6 +128,7 @@ public partial class BuildMode : Node3D
         ["pond"] = ("Warm pond", "Water", "Gives a tank's water a temperature: warmed, it evaporates into the air over it."),
         ["roof"] = ("Cold roof", "Structure", "An enclosure's roof chilled by the outside: its air's vapour condenses on it and rains into a gutter."),
         ["enclosure"] = ("Enclosure", "Structure", "A room with its own air: set its pressure, gases (o2, n2 …) and walls. Parts inside read its air instead of the planet's."),
+        ["ball"] = ("Ball", "Weights and levers", "A solid ball: it rolls where a block slides. Set it on a ramp, or drop it on something."),
         ["hopper"] = ("Sand hopper", "Water", "Grain draining through a hole at a steady rate, however deep: a timer that works where water would freeze."),
         ["ratchet"] = ("Ratchet and pawl", "Wheels and power", "Lets a wheel turn one way only, a tooth at a time, and holds what tries to turn it back. Pick the wheel in the inspector."),
         ["cam"] = ("Peg wheel (cam)", "Wheels and power", "Pegs on a wheel lift a hammer as it turns, then let it fall. Pick the wheel in the inspector."),

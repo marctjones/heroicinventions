@@ -56,6 +56,7 @@ public partial class Main : Node3D
         ["branca-steam-wheel"] = new(new Vector3(0.35f, 0.95f, 1.35f), new Vector3(0.15f, 0.5f, 0), 45),
         ["kitchen-smoke-jack"] = new(new Vector3(0.9f, 1.75f, 1.3f), new Vector3(0, 1.2f, 0), 50),
         ["solar-steam-wheel"] = new(new Vector3(1.2f, 2.4f, 4.6f), new Vector3(0, 0.8f, 0), 50),
+        ["ball-ramp"] = new(new Vector3(3.2f, 1.1f, -1.2f), new Vector3(0f, 0.25f, -1.1f), 50),
         ["wake-clock"] = new(new Vector3(0.2f, 0.9f, 3.2f), new Vector3(0f, 0.45f, 0), 50),
         ["sand-timer"] = new(new Vector3(0.6f, 1.2f, 3.6f), new Vector3(0.6f, 0.7f, 0), 55),
         ["ratchet-windlass"] = new(new Vector3(1.6f, 1.6f, 4.6f), new Vector3(0f, 1.4f, -1.5f), 55),

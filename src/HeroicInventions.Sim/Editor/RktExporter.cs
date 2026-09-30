@@ -197,6 +197,8 @@ public static class RktExporter
             case "windmill":
                 return $"  (windmill {p.Id} {At()} #:radius {F(N("radius"))} #:mass {F(N("mass"))} #:wind {F(N("wind"))} #:load {F(N("load"))} " +
                        $"#:cp {F(N("cp", 0.3))} #:tip-speed-ratio {F(N("tip-speed-ratio", 2.5))} {Mat()})\n";
+            case "ball":
+                return $"  (ball {p.Id} {At()} #:radius {F(N("radius", 0.05))} {Mat()})\n";
             case "hopper":
                 return $"  (hopper {p.Id} {At()} #:area {F(N("area", 0.01))} #:grain {F(N("grain", 5))} #:orifice {F(N("orifice", 0.01))} " +
                        $"#:grain-size {F(N("grain-size", 0.0003))} #:density {F(N("density", 1600))} {Mat()})\n";

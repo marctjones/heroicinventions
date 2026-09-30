@@ -2045,3 +2045,37 @@
     (define g (hash-ref world 'links))
     (check-true (> (final-of g '(map poured)) 1) "the pond ran out onto the slope")
     (check-true (> (final-of g '(map bed-moved)) 0.01) "and moved sand")))
+
+(test-case "Loose balls: a solid ball rolls down a slope at (5/7) g sin(theta), does not slip, and arrives at sqrt(10 g h / 7)"
+  ;; 15 degrees: a = 0.7143 x 9.81 x 0.2588 = 1.8136 m/s2 (a sliding block: 2.539). 1.5 m along the slope: t = sqrt(2 s / a) = 1.286 s,
+  ;; v = 2.332 m/s = sqrt(10 g h / 7), h = 1.5 sin 15 = 0.388 m. The 12 cm iron ball and the 6 cm bronze one keep pace: neither
+  ;; size nor mass enters. w = v / r throughout (rolling without slipping); v^2 = (10/7) g (y0 - y) at every point.
+  (when (godot-available?)
+    (define run (godot-simulate 'ball-ramp #:seconds 1.6 #:sample-dt 0.02))
+    (define a-rolling (* 5/7 9.81 (sin (* 15 (/ pi 180)))))
+    (check-= a-rolling 1.8136 1e-3 "the prediction, worked out")
+    (define (at t k) (value-at run k t))
+    ;; the acceleration, from the speed after 0.5 s and 1 s
+    (check-= (/ (at 0.5 '(iron-ball speed)) 0.5) a-rolling 0.05 "1.81 m/s2 after 0.5 s")
+    (check-= (/ (at 1.0 '(iron-ball speed)) 1.0) a-rolling 0.05 "and after 1 s")
+    (check-true (< (/ (at 1.0 '(iron-ball speed)) 1.0) (* 0.75 9.81 (sin (* 15 (/ pi 180))))) "far from the g sin(theta) of a sliding block")
+    ;; the big and the small ball run together
+    (for ([t (in-list '(0.3 0.5 0.7))])
+      (check-= (at t '(iron-ball speed)) (at t '(bronze-ball speed)) (* 0.01 (at t '(iron-ball speed))) (format "same speed at ~a s, whatever the size and mass" t)))
+    ;; rolling without slipping: omega r = v
+    (for ([t (in-list '(0.3 0.5 0.7 1.0 1.2))])
+      (check-= (* 0.06 (at t '(iron-ball omega))) (at t '(iron-ball speed)) (* 0.01 (at t '(iron-ball speed))) (format "iron ball w r = v at ~a s" t)))
+    (for ([t (in-list '(0.3 0.5 0.7))])
+      (check-= (* 0.03 (at t '(bronze-ball omega))) (at t '(bronze-ball speed)) (* 0.01 (at t '(bronze-ball speed))) (format "bronze ball w r = v at ~a s" t)))
+    ;; the energy law of a rolling sphere, v^2 = (10/7) g dy, and not a sliding block's 2 g dy
+    (define y0 (at 0 '(iron-ball y)))
+    (for ([t (in-list '(0.5 0.7 0.9 1.1 1.25))])
+      (define dy (- y0 (at t '(iron-ball y))))
+      (define ratio (/ (expt (at t '(iron-ball speed)) 2) (* 10/7 9.81 dy)))
+      (check-true (< 0.96 ratio 1.02) (format "v^2 / ((10/7) g dy) at ~a s is ~a" t ratio))
+      (check-true (< (expt (at t '(iron-ball speed)) 2) (* 0.8 2 9.81 dy)) (format "well under a sliding block's 2 g dy at ~a s" t)))
+    ;; arriving at the foot of the ramp
+    (define foot (for/first ([t (times-of run)] [z (values-of run '(iron-ball z))] #:when (> z -0.4)) t))
+    (check-= (at foot '(iron-ball speed)) (sqrt (/ (* 10 9.81 (* 1.5 (sin (* 15 (/ pi 180))))) 7)) 0.06 "sqrt(10 g h / 7) = 2.33 m/s where it leaves the ramp")
+    (check-true (< (at foot '(iron-ball speed)) (* 0.9 (sqrt (* 2 9.81 (* 1.5 (sin (* 15 (/ pi 180)))))))) "not the sqrt(2 g h) = 2.76 of a block")
+    (check-= foot (sqrt (/ (* 2 1.5) a-rolling)) 0.06 "1.286 s to run 1.5 m")))

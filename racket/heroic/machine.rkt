@@ -39,7 +39,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling ball
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -485,7 +485,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling ball
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder
   inflow channel off trigger follow belt wake joint)
 
@@ -586,8 +586,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, roof, stirling) or link (pipe, connect, sealed-air)"
-    #:literals (stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond roof tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt wake joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, roof, stirling, ball) or link (pipe, connect, sealed-air)"
+    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond roof tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1007,6 +1007,22 @@
     ;; valley its pawl is in; #:reverse #t lets it turn the other way. The pawl
     ;; pushes at the teeth's circle, #:radius (default one and a half times the
     ;; wheel's): a load m on a drum r puts m g r on it, and the pawl m g r / R.
+    ;; A loose ball: a solid sphere #:radius m across, of #:material, free to roll
+    ;; and drop. It rolls where a block slides: Jolt gives it a sphere's moment of
+    ;; inertia (2/5 m r^2), so down a slope of angle theta it gains speed at
+    ;; g sin(theta) / (1 + 2/5) = (5/7) g sin(theta), and leaves a ramp of height
+    ;; h at sqrt(10 g h / 7). Its engine damping is off; it is swept along its
+    ;; path so a fast one cannot pass through a thin target.
+    (pattern (ball id:id
+                   (~alt (~once (~seq #:at at:vec3))
+                         (~once (~seq #:radius radius-v:expr))
+                         (~once (~seq #:material mat:id))) ...)
+      #:attr info (pinfo #'id 'ball (attribute mat) '())
+      #:with expr #`(part 'id 'ball 'mat (list at.x at.y at.z)
+                          (list (cons 'radius radius-v))
+                          '()
+                          #,(loc-of this-syntax)))
+
     ;; A hopper of grain (sand, millet, regolith): #:grain kg over a cross-section
     ;; of #:area m2, draining through a round #:orifice m across at its foot, of
     ;; grains #:grain-size m across, #:density kg/m3 in bulk (default 1600, sand).

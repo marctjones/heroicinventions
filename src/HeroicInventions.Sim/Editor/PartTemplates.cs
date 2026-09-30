@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "roof", "stirling"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "roof", "stirling", "ball"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -222,6 +222,8 @@ public static class PartTemplates
                 ["cp"] = new SNumber(0.3), ["tip-speed-ratio"] = new SNumber(2.5),
             },
             [], null),
+        // a solid ball of #:radius m: it rolls where a block slides, at (5/7) g sin(theta) down a slope
+        "ball" => new PartSpec(id, "ball", material, at, Props(("radius", 0.05)), [], null),
         // a hopper of sand: #:grain kg over #:area m2, through an #:orifice at its foot, of #:grain-size grains: it drains at Beverloo's steady rate
         "hopper" => new PartSpec(id, "hopper", material, at,
             new Dictionary<string, SExpr>

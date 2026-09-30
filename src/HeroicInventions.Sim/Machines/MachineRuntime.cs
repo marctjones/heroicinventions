@@ -383,7 +383,7 @@ public sealed class MachineRuntime
                     _diggers[part.Id] = new Digger(part.Id, part.At.X, part.At.Z, len, w, d, power, spit, part.Number("spoil", 5));
                     break;
                 }
-                case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump" or "grip" or "cam" or "ratchet" or "hopper":
+                case "rotor" or "jetwheel" or "smokejack" or "block" or "pendulum" or "lever" or "ramp" or "wheel" or "screw" or "fixture" or "piston" or "post" or "hearth" or "bellows" or "sluice" or "float-valve" or "leak" or "safety-valve" or "pump" or "grip" or "cam" or "ratchet" or "hopper" or "ball":
                     break; // rotors need their steam connection first; the rest are pure Jolt rigid-body physics, engine-side only
                 default:
                     throw new MachineFormatException($"unknown part kind {part.Kind}", part.Location);

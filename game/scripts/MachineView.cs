@@ -84,6 +84,7 @@ public partial class MachineView : Node3D
                 case "jetwheel": BuildJetWheel(part); break;
                 case "smokejack": BuildSmokeJack(part); break;
                 case "block": BuildBlock(part); break;
+                case "ball": BuildBall(part); break;
                 case "pendulum": BuildPendulum(part); break;
                 case "lever": BuildLever(part); break;
                 case "ramp": BuildRamp(part); break;
