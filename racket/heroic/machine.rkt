@@ -961,6 +961,9 @@
       #:with expr #`(part 'id 'ratchet '(~? mat iron) (list at.x at.y at.z)
                           (list (cons 'on 'wheel-id) (cons 'teeth (~? teeth-v 12)) (cons 'radius (~? radius-v 0))
                                 (cons 'reverse (~? reverse-v #f)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     ;; A digging gang (issue #44), cutting a trench into the map the machine
     ;; stands on: from #:at, #:length m along +x, #:width m across, down to
     ;; #:depth m, a #:spit (default 0.25 m, a spade's depth) at a time,
