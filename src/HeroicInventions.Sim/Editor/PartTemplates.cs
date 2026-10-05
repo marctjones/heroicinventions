@@ -71,7 +71,12 @@ public static class PartTemplates
                 .Concat([new KeyValuePair<string, SExpr>("axis", new SSymbol("z")),
                          new KeyValuePair<string, SExpr>("limit-lower-deg", new SBool(false)),
                          new KeyValuePair<string, SExpr>("limit-upper-deg", new SBool(false)),
-                         new KeyValuePair<string, SExpr>("section", new SBool(false))])
+                         new KeyValuePair<string, SExpr>("section", new SBool(false)),
+                         // no bearing (Jolt's own hinge damping) until given a #:bearing-radius
+                         new KeyValuePair<string, SExpr>("bearing-radius", new SBool(false)),
+                         new KeyValuePair<string, SExpr>("bearing-mu", new SNumber(0)),
+                         new KeyValuePair<string, SExpr>("bearing-drag", new SNumber(0)),
+                         new KeyValuePair<string, SExpr>("bearing-wear", new SNumber(0))])
                 .ToDictionary(kv => kv.Key, kv => kv.Value),
             [], null),
         "ramp" => new PartSpec(id, "ramp", material, at, Props(("length", 1.0), ("width", 0.5), ("angle-deg", 15)), [], null),
@@ -134,6 +139,7 @@ public static class PartTemplates
                 ["radius"] = new SNumber(1.0), ["width"] = new SNumber(0.3), ["mass"] = new SNumber(100), ["load"] = new SNumber(0),
                 ["buckets"] = new SNumber(12), ["bucket-volume"] = new SNumber(0.005), ["spill-deg"] = new SNumber(120),
                 ["tail"] = new SBool(false), ["race"] = new SBool(false), ["paddle-depth"] = new SNumber(0),
+                ["bearing-radius"] = new SBool(false), ["bearing-mu"] = new SNumber(0), ["bearing-drag"] = new SNumber(0), ["bearing-wear"] = new SNumber(0),
             },
             [], null),
         // a 0.5 m2 heliostat of polished bronze, throwing the sun onto the boiler or sealed vessel #:onto names
@@ -304,7 +310,8 @@ public static class PartTemplates
         foreach (var (k, v) in entry.ShapeProps) props[k] = v;
         foreach (var (k, v) in entry.PartKind switch
                  {
-                     "wheel" => Props(("axis", "z"), ("angle-deg", 0), ("drive-rpm", 0)).Append(new("drive-torque", new SBool(false))),
+                     "wheel" => Props(("axis", "z"), ("angle-deg", 0), ("drive-rpm", 0), ("start-rpm", 0)).Append(new("drive-torque", new SBool(false)))
+                         .Concat(Props(("bearing-radius", new SBool(false)), ("bearing-mu", 0), ("bearing-drag", 0), ("bearing-wear", 0))),
                      "screw" => Props(("tilt-deg", 0), ("drive-rpm", 0)).Append(new("drive-torque", new SBool(false))),
                      _ => Props(("turn-deg", 0)),
                  })

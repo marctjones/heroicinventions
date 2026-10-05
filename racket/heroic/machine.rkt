@@ -775,7 +775,13 @@
                           (~optional (~seq #:limit-upper-deg hi-v:expr))
                           (~optional (~seq #:spring-stiffness k-v:expr))
                           (~optional (~seq #:spring-rest-deg rest-v:expr))
-                          (~optional (~seq #:section section-v:expr))) ...)
+                          (~optional (~seq #:section section-v:expr))
+                          (~optional (~seq #:bearing-radius journal-v:expr))
+                          (~optional (~seq (~and mu-kw #:bearing-mu) mu-v:expr))
+                          (~optional (~seq (~and drag-kw #:bearing-drag) drag-v:expr))
+                          (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))) ...)
+      #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
+                  "a lever's bearing needs a #:bearing-radius (its pin's radius, m)"
       #:attr info (pinfo #'id 'lever (attribute mat) '())
       #:with expr #`(part 'id 'lever 'mat (list at.x at.y at.z)
                           (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 0))
@@ -787,7 +793,12 @@
                                 (cons 'limit-upper-deg (~? hi-v #f))
                                 (cons 'spring-stiffness (~? k-v 0))
                                 (cons 'spring-rest-deg (~? rest-v 0))
-                                (cons 'section (~? section-v #f)))
+                                (cons 'section (~? section-v #f))
+                                (~@ . (~? ((cons 'bearing-radius journal-v)
+                                           (cons 'bearing-mu (~? mu-v 0))
+                                           (cons 'bearing-drag (~? drag-v 0))
+                                           (cons 'bearing-wear (~? wear-v 0)))
+                                          ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -831,6 +842,13 @@
     ;; only push so hard — so a load too heavy for it wins and runs the
     ;; wheel backwards. Without it, the drive holds its speed whatever it
     ;; takes.
+    ;; #:start-rpm lets it go already spinning (a flywheel, spun up by hand and
+    ;; released). #:bearing-radius m (the axle's radius) puts the same bearing
+    ;; on it that a pendulum has: its weight N = m·g, Coulomb friction μ·N·r
+    ;; (#:bearing-mu), viscous drag c·ω (#:bearing-drag), frictional heat and
+    ;; Archard wear (#:bearing-wear K, mm³/(N·m)). It replaces the engine's
+    ;; own 0.2/s axle damping, so what the wheel loses is what is written here.
+    ;; A lever takes the same four #:bearing- clauses for its pin.
     (pattern (wheel id:id
                     (~alt (~once (~seq #:shape shape-v:expr))
                           (~once (~seq #:at at:vec3))
@@ -843,7 +861,14 @@
                           (~optional (~seq #:grind-torque grind-v:expr))
                           (~optional (~seq #:yield yield-v:expr))
                           (~optional (~seq #:drive-rpm rpm-v:expr))
-                          (~optional (~seq #:drive-torque torque-v:expr))) ...)
+                          (~optional (~seq #:drive-torque torque-v:expr))
+                          (~optional (~seq #:start-rpm start-v:expr))
+                          (~optional (~seq #:bearing-radius journal-v:expr))
+                          (~optional (~seq (~and mu-kw #:bearing-mu) mu-v:expr))
+                          (~optional (~seq (~and drag-kw #:bearing-drag) drag-v:expr))
+                          (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))) ...)
+      #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
+                  "a wheel's bearing needs a #:bearing-radius (its axle's radius, m)"
       #:attr info (pinfo #'id 'wheel (attribute mat) '())
       #:with expr #`(shaped-part 'id 'wheel 'mat (list at.x at.y at.z) shape-v
                                  (list (cons 'axis '(~? ax z)) (cons 'angle-deg (~? angle-v 0))
@@ -852,7 +877,13 @@
                                        (~@ . (~? ((cons 'rolling-resistance rr-v)) ()))
                                        (~@ . (~? ((cons 'grind-torque grind-v)) ()))
                                        (~@ . (~? ((cons 'yield yield-v)) ()))
-                                       (cons 'drive-rpm (~? rpm-v 0)) (cons 'drive-torque (~? torque-v #f)))
+                                       (cons 'drive-rpm (~? rpm-v 0)) (cons 'drive-torque (~? torque-v #f))
+                                       (~@ . (~? ((cons 'start-rpm start-v)) ()))
+                                       (~@ . (~? ((cons 'bearing-radius journal-v)
+                                                  (cons 'bearing-mu (~? mu-v 0))
+                                                  (cons 'bearing-drag (~? drag-v 0))
+                                                  (cons 'bearing-wear (~? wear-v 0)))
+                                                 ())))
                                  #,(loc-of this-syntax)))
 
     ;; An Archimedes' screw, its axle running along X and raised
@@ -1372,6 +1403,10 @@
     ;;   undershot  #:race channel: it stands in that channel, whose current
     ;;              pushes on paddles #:paddle-depth deep; at best 8/27 of
     ;;              the stream's kinetic energy through them.
+    ;; #:bearing-radius m (its axle's) gives the axle the pendulum's bearing:
+    ;; it carries the wheel's weight (mass × g) and takes μ·N·r Coulomb
+    ;; (#:bearing-mu) and c·ω viscous (#:bearing-drag) torque off what the
+    ;; water gives, as heat, and wears by Archard's law (#:bearing-wear).
     (pattern (waterwheel id:id
                          (~alt (~once (~seq #:at at:vec3))
                                (~once (~seq #:radius radius-v:expr))
@@ -1384,7 +1419,13 @@
                                (~optional (~seq #:tail tail-tank:id))
                                (~optional (~seq #:race race-ch:id))
                                (~optional (~seq #:paddle-depth paddle-v:expr))
+                               (~optional (~seq #:bearing-radius journal-v:expr))
+                               (~optional (~seq (~and mu-kw #:bearing-mu) mu-v:expr))
+                               (~optional (~seq (~and drag-kw #:bearing-drag) drag-v:expr))
+                               (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))
                                (~optional (~seq #:material mat:id))) ...)
+      #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
+                  "a water wheel's bearing needs a #:bearing-radius (its axle's radius, m)"
       #:fail-unless (or (attribute buckets-v) (attribute race-ch)) "a water wheel needs #:buckets (overshot) or a #:race (undershot) to be driven"
       #:fail-when (and (attribute buckets-v) (not (attribute bucket-v)) #'id) "#:buckets needs a #:bucket-volume"
       #:fail-when (and (attribute race-ch) (not (attribute paddle-v)) #'id) "an undershot wheel (#:race) needs a #:paddle-depth"
@@ -1395,7 +1436,12 @@
                                 (cons 'buckets (~? buckets-v 0)) (cons 'bucket-volume (~? bucket-v 0))
                                 (cons 'spill-deg (~? spill-v 120))
                                 (cons 'tail (~? 'tail-tank #f)) (cons 'race (~? 'race-ch #f))
-                                (cons 'paddle-depth (~? paddle-v 0)))
+                                (cons 'paddle-depth (~? paddle-v 0))
+                                (~@ . (~? ((cons 'bearing-radius journal-v)
+                                           (cons 'bearing-mu (~? mu-v 0))
+                                           (cons 'bearing-drag (~? drag-v 0))
+                                           (cons 'bearing-wear (~? wear-v 0)))
+                                          ())))
                           '()
                           #,(loc-of this-syntax)))
 

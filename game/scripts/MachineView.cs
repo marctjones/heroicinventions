@@ -136,6 +136,7 @@ public partial class MachineView : Node3D
         BuildPistonDrives();
         BuildCarriedWheels();
         BuildMillstones();
+        BuildAxleFriction();
         BuildJoints();
         BuildImpacts();
         BuildFracture();
@@ -1041,6 +1042,9 @@ public partial class MachineView : Node3D
             CanSleep = false,
         };
         body.Transform = new Transform3D(toAxis * new Basis(new Vector3(0, 0, 1), Mathf.DegToRad(startAngleDeg)), V(part.At));
+        // #:start-rpm lets it go already spinning, a flywheel spun up by hand and released
+        if (part.Props.GetValueOrDefault("start-rpm") is SNumber spin)
+            body.AngularVelocity = axis.Normalized() * (float)(spin.Value * Math.Tau / 60);
         if (part.Symbol("shape", "") is "disc-wheel" or "cart-wheel")
             // a wheel that rolls on the ground needs a round rim: a hull of the
             // mesh's 64 facets bumps from flat to flat and loses to every bump
@@ -1376,6 +1380,7 @@ public partial class MachineView : Node3D
         DriveSprings();
         RollCarriedWheels();
         GrindMillstones(dt);
+        FrictionAxles(dt);
         DriveFollows();
         DriveBelts(dt);
         DriveGrips(dt);
@@ -1501,6 +1506,7 @@ public partial class MachineView : Node3D
         DrawBelts();
         DrawJoints();
         DrawMillstones();
+        DrawAxleFriction();
         DrawFracture();
         DrawGrips();
         DrawCams();

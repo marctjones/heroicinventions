@@ -174,6 +174,24 @@ public sealed class MachineRuntime
     /// <summary>Whether the scene sets its sun or has mirrors: then the view lights it by the sun, else by its fixed studio light.</summary>
     public bool SunShown => Def.Sun is not null || _mirrors.Count > 0;
     public IReadOnlyDictionary<string, Counterpoise> Counterpoises => _counterpoises;
+    /// <summary>
+    /// Every bearing the machine gives an axle or pin (#:bearing-radius), by part id: pendulums', water
+    /// wheels' and, for the wheels and levers Jolt turns, the ones the view slows each tick (issue #13).
+    /// </summary>
+    public IReadOnlyDictionary<string, Bearing> AxleBearings => _axleBearings;
+    private readonly Dictionary<string, Bearing> _axleBearings = [];
+
+    /// <summary>The bearing a part's #:bearing-radius, -mu, -drag and -wear describe, or none.</summary>
+    private static Bearing? BearingOf(PartSpec part) =>
+        part.Props.GetValueOrDefault("bearing-radius") is SNumber journal
+            ? new Bearing(journal.Value)
+            {
+                Mu = part.Number("bearing-mu", 0),
+                Drag = part.Number("bearing-drag", 0),
+                WearRate = part.Number("bearing-wear", 0),
+            }
+            : null;
+
     /// <summary>Pendulums hung on a bearing (#:bearing-radius): swung here, not by Jolt, so their friction and wear can be checked.</summary>
     public IReadOnlyDictionary<string, Pendulum> Pendulums => _pendulums;
     /// <summary>Digging gangs (issue #44): they dig the map the world stands the machine on (WorldGround attaches it), and nothing without one.</summary>
@@ -324,15 +342,14 @@ public sealed class MachineRuntime
                     break;
                 }
                 case "counterpoise": break; // built once its vessel exists
-                case "pendulum" when part.Props.GetValueOrDefault("bearing-radius") is SNumber journal:
+                case "pendulum" when BearingOf(part) is { } pin:
                     _pendulums[part.Id] = new Pendulum(part.Id, part.Number("length"), materials[part.Material].Density,
-                        part.Number("start-angle-deg", 0) * Math.PI / 180,
-                        new Bearing(journal.Value)
-                        {
-                            Mu = part.Number("bearing-mu", 0),
-                            Drag = part.Number("bearing-drag", 0),
-                            WearRate = part.Number("bearing-wear", 0),
-                        });
+                        part.Number("start-angle-deg", 0) * Math.PI / 180, pin);
+                    _axleBearings[part.Id] = pin;
+                    break;
+                // a wheel or lever on a bearing is turned by Jolt; the view feeds this bearing its spin each tick
+                case "wheel" or "lever" when BearingOf(part) is { } axle:
+                    _axleBearings[part.Id] = axle;
                     break;
                 case "mirror" or "burning-mirror" or "pane" or "pond" or "roof" or "plants": break; // built once what they join exists
                 case "melter":
@@ -620,7 +637,9 @@ public sealed class MachineRuntime
                 Tail = tail == "" ? null : TankNamed(tail, part.Location),
                 Race = race == "" ? null : _channels[race],
                 PaddleDepth = part.Number("paddle-depth", 0),
+                Bearing = BearingOf(part),
             };
+            if (_wheels[part.Id].Bearing is { } axle) _axleBearings[part.Id] = axle;
         }
         foreach (var ch in def.Channels)
         {
@@ -1678,13 +1697,16 @@ public sealed class MachineRuntime
             _getters[$"{id}.swings"] = () => p.Swings;                              // turning points since release
             _getters[$"{id}.stopped"] = () => p.Stopped ? 1 : 0;
             _getters[$"{id}.energy"] = () => p.Energy;                              // J of swing left
-            _getters[$"{id}.heat"] = () => p.Bearing.Heat;                          // J made in the bearing
-            _getters[$"{id}.sliding"] = () => p.Bearing.Sliding * 1000;             // mm the pin has slid in its eye
-            _getters[$"{id}.wear"] = () => p.Bearing.Wear;                          // mm³ worn off
-            _getters[$"{id}.mu"] = () => p.Bearing.Mu;
-            _getters[$"{id}.drag"] = () => p.Bearing.Drag;
-            _setters[$"{id}.mu"] = mu => p.Bearing.Mu = Math.Max(0, mu);
-            _setters[$"{id}.drag"] = c => p.Bearing.Drag = Math.Max(0, c);
+        }
+        foreach (var (id, b) in _axleBearings)
+        {
+            _getters[$"{id}.heat"] = () => b.Heat;                          // J made in the bearing
+            _getters[$"{id}.sliding"] = () => b.Sliding * 1000;             // mm the pin has slid in its eye
+            _getters[$"{id}.wear"] = () => b.Wear;                          // mm³ worn off
+            _getters[$"{id}.mu"] = () => b.Mu;
+            _getters[$"{id}.drag"] = () => b.Drag;
+            _setters[$"{id}.mu"] = mu => b.Mu = Math.Max(0, mu);
+            _setters[$"{id}.drag"] = c => b.Drag = Math.Max(0, c);
         }
     }
 

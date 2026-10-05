@@ -2215,3 +2215,117 @@
     (check-= (final-of resumed '(weak-hammer strikes)) 0 0 "the stalled wheel still never strikes")
     (check-true (< 0.4 (final-of resumed '(weak-hammer height)) 1.0) "and its hammer is still held up about 0.7 cm")
     (delete-directory/files dir)))
+
+;; ---- #13, part 2: friction and wear in the axles and hinges Jolt turns (axle-friction.rkt)
+;; Three iron disc flywheels (25 cm radius, 4 cm wide, 2.5 cm bore) let go at
+;; 60 rpm on a 2 cm pin; two 1 m iron beams hung 25 cm from one end, let go
+;; 15 degrees from hanging, on a 1 cm pin; and the overshot water wheel of
+;; water-wheels.rkt on a 3 cm axle. The numbers are worked out here from the
+;; shapes and iron's density; the mesh is a 64-sided revolve, so the disc's
+;; own mass and inertia come out about 0.5% under the ideal disc's.
+(define g 9.81)
+(define fly-r 0.25) (define fly-w 0.04) (define fly-b (* 0.1 fly-r)) (define fly-pin 0.02)
+(define fly-m (* iron-density pi (- (* fly-r fly-r) (* fly-b fly-b)) fly-w))
+(define fly-I (* 1/2 iron-density pi fly-w (- (expt fly-r 4) (expt fly-b 4))))
+(define fly-w0 (* 2 pi 60/60))                                   ; rad/s
+
+(test-case "Flywheels on bearings (Jolt): a frictionless one never slows, grease decays it exponentially, dry friction stops it dead and turns its spin to heat"
+  (when (godot-available?)
+    (define run (godot-simulate 'axle-friction #:seconds 5 #:sample-dt 1))
+    ;; perfect: omega0 for ever
+    (check-= (final-of run '(perfect omega)) fly-w0 (* 1e-3 fly-w0))
+    (check-= (final-of run '(perfect heat)) 0 1e-12)
+    ;; greased: omega = omega0 exp(-c t / I)
+    (for ([t '(1 2 3 4 5)])
+      (define predicted (* fly-w0 (exp (- (/ (* 0.5 t) fly-I)))))
+      (check-= (abs (value-at run '(greased omega) t)) predicted (* 0.015 predicted) (format "rad/s at ~a s" t)))
+    ;; and the heat is the energy lost: 1/2 I (omega0^2 - omega^2)
+    (define w5 (abs (final-of run '(greased omega))))
+    (check-= (final-of run '(greased heat)) (* 1/2 fly-I (- (* fly-w0 fly-w0) (* w5 w5))) (* 0.02 (* 1/2 fly-I fly-w0 fly-w0)) "J")
+    ;; dry: friction mu m g r_pin at any speed, so a straight-line fall and a dead stop
+    (define tau (* 0.4 fly-m g fly-pin))
+    (for ([t '(1 2)])
+      (define predicted (- fly-w0 (/ (* tau t) fly-I)))
+      (check-= (abs (value-at run '(dry omega) t)) predicted (* 0.02 fly-w0) (format "rad/s at ~a s" t)))
+    (define stops (/ (* fly-I fly-w0) tau))                       ; 2.53 s
+    (check-= stops 2.527 0.005)
+    (check-= (final-of run '(dry omega)) 0 1e-9 "rad/s: stopped by 5 s, and stays stopped")
+    (check-= (abs (value-at run '(dry omega) 3)) 0 1e-9)
+    (define spin-energy (* 1/2 fly-I fly-w0 fly-w0))              ; 37.3 J
+    (check-= (final-of run '(dry heat)) spin-energy (* 0.01 spin-energy) "J: all of it, in the pin")
+    ;; Archard: V = K N s, s the pin's surface slid, r_pin x the angle turned (omega0^2 I / 2 tau)
+    (define turned (/ (* fly-w0 fly-w0 fly-I) (* 2 tau)))
+    (define wear (* 1e-4 fly-m g fly-pin turned))
+    (check-= (final-of run '(dry wear)) wear (* 0.02 wear) "mm^3 worn")))
+
+;; The beam: m, I about the pivot (a box's own L^2/12 plus m d^2), d from the pivot
+(define bar-L 1.0) (define bar-t 0.025) (define bar-d (* 0.25 bar-L))
+(define bar-m (* iron-density bar-L bar-t 0.22))
+(define bar-I (* bar-m (+ (/ (+ (* bar-L bar-L) (* bar-t bar-t)) 12) (* bar-d bar-d))))
+(define bar-mgd (* bar-m g bar-d))
+(define bar-pin 0.01)
+
+;; the turning points of a series of angles (deg), in order, after the start
+(define (turning-points vals)
+  (let loop ([prev (car vals)] [dir 0] [rest (cdr vals)] [out '()])
+    (cond [(null? rest) (reverse out)]
+          [else
+           (define d (let ([x (- (car rest) prev)]) (cond [(> x 1e-9) 1] [(< x -1e-9) -1] [else dir])))
+           (loop (car rest) d (cdr rest) (if (and (not (zero? dir)) (not (= d dir))) (cons prev out) out))])))
+
+(test-case "Levers on pins (Jolt): a frictionless pivot keeps its 15 degrees, a dry one loses the same angle every swing (energy balance), stops, and wears"
+  (when (godot-available?)
+    (define run (godot-simulate 'axle-friction #:seconds 12 #:sample-dt 1/120))
+    (define a0 (* 15 (/ pi 180)))
+    (define (swings-of name)
+      (define vals (values-of run (list name 'angle)))
+      (define peaks (turning-points vals))
+      ;; the start is 15 degrees from plumb; the first turning point is on the far side of it
+      (define plumb (+ (car vals) (* (if (> (car peaks) (car vals)) 15 -15))))
+      (values plumb (for/list ([p peaks]) (abs (- p plumb)))))
+    (define-values (plumb-free free-peaks) (swings-of 'free))
+    (check-true (> (length free-peaks) 6) "swinging all along")
+    (for ([a free-peaks] [i (in-naturals 1)]) (check-= a 15 0.2 (format "deg, swing ~a" i)))
+    (check-= (final-of run '(free heat)) 0 1e-12)
+    ;; dry: mu m g r on the pin, each half swing from A to A' obeys m g d (cos A' - cos A) = tau (A + A')
+    (define tau (* 0.4 bar-m g bar-pin))
+    (define (next a)
+      (let loop ([lo 0.0] [hi a] [i 80])
+        (define mid (/ (+ lo hi) 2))
+        (define f (- (* bar-mgd (- (cos mid) (cos a))) (* tau (+ a mid))))
+        (cond [(zero? i) mid] [(> f 0) (loop mid hi (sub1 i))] [else (loop lo mid (sub1 i))])))
+    (define predicted (let loop ([a a0] [out '()])
+                        (if (<= (* bar-mgd (sin a)) tau) (reverse out)
+                            (let ([a2 (next a)]) (loop a2 (cons a2 out))))))
+    (define-values (plumb-worn worn-peaks) (swings-of 'worn))
+    (check-= (deg (- a0 (car predicted))) 1.85 0.01 "deg lost in the first half swing: 1.83 by 2 mu r / d, 1.85 exactly")
+    (check-= (length worn-peaks) (length predicted) 1 "swings before it stops")
+    (for ([a worn-peaks] [p predicted] [i (in-naturals 1)] #:when (<= i 6))
+      (check-= a (deg p) 0.15 (format "deg, swing ~a" i)))
+    (define rest-angle (abs (- (final-of run '(worn angle)) plumb-worn)))
+    (check-true (< rest-angle 0.93) (format "deg off plumb at rest: ~a (within mu r / d = 0.92)" rest-angle))
+    (check-= (final-of run '(worn heat)) (* bar-mgd (- (cos (* rest-angle (/ pi 180))) (cos a0))) (* 0.03 (* bar-mgd (- 1 (cos a0)))) "J: its swing, all heat")
+    ;; the pin slides r times the angle turned: each half swing from A to A' turns A + A'
+    (define sequence (cons a0 predicted))
+    (define slid (* bar-pin (for/sum ([a sequence] [b (cdr sequence)]) (+ a b))))
+    (check-true (> (final-of run '(worn wear)) 0) "the pin wore")
+    (check-= (final-of run '(worn wear)) (* 1e-4 bar-m g slid) (* 0.03 (* 1e-4 bar-m g slid)) "mm^3: V = K N s")))
+
+(test-case "Water wheel axle: the wheel settles at P / (load + mu m g r), the axle takes the rest as heat, and wears"
+  ;; 441.45 W whatever its speed; a 300 N m millstone plus 0.4 x 1962 N x 3 cm = 23.54 N m
+  (define power (* 1000 g 0.020 1.5 (- 1 (cos (* 120 (/ pi 180))))))
+  (define tau (* 0.4 200 g 0.03))
+  (define omega (/ power (+ 300 tau)))
+  (define run (simulate 'axle-friction #:seconds 300 #:step 0.02 #:sample-dt 50))
+  (check-= (rpm->rad (final-of run '(overshot rpm))) omega 1e-4 "rad/s")
+  (check-= omega 1.3644 1e-4)
+  (check-= (final-of run '(overshot power)) (* 300 omega) 0.05 "W into the millstone")
+  ;; heat made over the last 50 s: tau omega each second
+  (define dheat (- (final-of run '(overshot heat)) (value-at run '(overshot heat) 250)))
+  (check-= dheat (* tau omega 50) 0.5 "J in 50 s")
+  (define dwear (- (final-of run '(overshot wear)) (value-at run '(overshot wear) 250)))
+  (check-= dwear (* 1e-4 (* 200 g) 0.03 omega 50) (* 0.01 dwear) "mm^3 in 50 s: V = K N s")
+  ;; no axle, no bearing getters, and the old speed
+  (define bare (simulate 'water-wheels #:seconds 300 #:step 0.02 #:sample-dt 50))
+  (check-= (rpm->rad (final-of bare '(overshot rpm))) (/ power 300) 1e-4)
+  (check-true (< omega (/ power 300))))

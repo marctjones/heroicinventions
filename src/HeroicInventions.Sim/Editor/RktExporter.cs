@@ -131,6 +131,10 @@ public static class RktExporter
         // an optional number that may be #f (no value): omitted when absent
         string Opt(string kw, string key) => p.Props.TryGetValue(key, out var v) && v is SNumber n ? $" #:{kw} {F(n.Value)}" : "";
         string Sym(string key, string fallback) => p.Props.TryGetValue(key, out var v) && v is SSymbol s ? s.Name : fallback;
+        // the four bearing clauses, once a #:bearing-radius is set (a pendulum's pin, a wheel's or lever's axle)
+        string Bearing() => p.Props.GetValueOrDefault("bearing-radius") is SNumber pin
+            ? $" #:bearing-radius {F(pin.Value)} #:bearing-mu {F(N("bearing-mu"))} #:bearing-drag {F(N("bearing-drag"))} #:bearing-wear {F(N("bearing-wear"))}"
+            : "";
         string At() => $"#:at {Vec(p.At)}";
         string Mat() => $"#:material {p.Material}";
 
@@ -159,16 +163,14 @@ public static class RktExporter
                        (p.Props.GetValueOrDefault("fast") is SBool { Value: false } ? " #:fast #f" : "") + Opt("drag-coefficient", "drag-coefficient") + $" {Mat()})\n";
             case "pendulum":
                 return $"  (pendulum {p.Id} {At()} #:length {F(N("length"))} #:start-angle-deg {F(N("start-angle-deg"))} {Mat()}" +
-                       (p.Props.GetValueOrDefault("bearing-radius") is SNumber pin
-                           ? $" #:bearing-radius {F(pin.Value)} #:bearing-mu {F(N("bearing-mu"))} #:bearing-drag {F(N("bearing-drag"))} #:bearing-wear {F(N("bearing-wear"))}"
-                           : "") + ")\n";
+                       Bearing() + ")\n";
             case "lever":
                 return $"  (lever {p.Id} {At()} #:length {F(N("length"))} {Mat()} #:axis {Sym("axis", "z")} " +
                        $"#:start-angle-deg {F(N("start-angle-deg"))} #:pivot-fraction {F(N("pivot-fraction", 0.5))} " +
                        $"#:limit-deg {F(N("limit-deg", 18))} #:damping {F(N("damping", 8))}" +
                        Opt("limit-lower-deg", "limit-lower-deg") + Opt("limit-upper-deg", "limit-upper-deg") +
                        $" #:spring-stiffness {F(N("spring-stiffness"))} #:spring-rest-deg {F(N("spring-rest-deg"))}" +
-                       Opt("section", "section") + ")\n";
+                       Opt("section", "section") + Bearing() + ")\n";
             case "ramp":
                 return $"  (ramp {p.Id} {At()} #:length {F(N("length"))} #:width {F(N("width"))} #:angle-deg {F(N("angle-deg"))} {Mat()})\n";
             case "piston":
@@ -281,7 +283,7 @@ public static class RktExporter
                        (N("buckets") > 0 ? $" #:buckets {F(N("buckets"))} #:bucket-volume {F(N("bucket-volume"))} #:spill-deg {F(N("spill-deg", 120))}" : "") +
                        (Sym("tail", "") is { Length: > 0 } tail ? $" #:tail {tail}" : "") +
                        (Sym("race", "") is { Length: > 0 } race ? $" #:race {race} #:paddle-depth {F(N("paddle-depth"))}" : "") +
-                       $" {Mat()})\n";
+                       Bearing() + $" {Mat()})\n";
             case "wheel":
             case "screw":
             case "fixture":
@@ -290,7 +292,8 @@ public static class RktExporter
                 {
                     "wheel" => $" #:axis {Sym("axis", "z")} #:angle-deg {F(N("angle-deg"))}" + Opt("tilt-deg", "tilt-deg") +
                                 (p.Props.TryGetValue("on", out var on) && on is SSymbol chassis ? $" #:on {chassis.Name}" : "") +
-                                Opt("rolling-resistance", "rolling-resistance") + Opt("grind-torque", "grind-torque") + Opt("yield", "yield") + $" #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque"),
+                                Opt("rolling-resistance", "rolling-resistance") + Opt("grind-torque", "grind-torque") + Opt("yield", "yield") + $" #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque") +
+                                (N("start-rpm") != 0 ? $" #:start-rpm {F(N("start-rpm"))}" : "") + Bearing(),
                     "screw" => $" #:tilt-deg {F(N("tilt-deg"))} #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque"),
                     _ => $" #:turn-deg {F(N("turn-deg"))}",
                 };
