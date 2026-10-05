@@ -940,23 +940,31 @@
   (check-= (final-of run '(short stalled)) 1 0)
   (check-= (final-of run '(short strokes)) 10 0))
 
-(test-case "Trebuchet: after the sling lets go (~0.9 s) the machine never gains energy, and the stone flies well clear"
+(test-case "Trebuchet: the machine never gains energy over the whole run, the chain holds the counterweight on it, and the stone flies well clear"
   ;; Issue #45: an uncapped stretch correction in the rope solver kicked the
   ;; arm every time the counterweight's chain snapped taut, and the machine
   ;; climbed to 155% of its starting energy. A passive machine can only lose it.
-  ;; From release to the counterweight's first landing (~2.75 s): with the engine's
-  ;; default damping gone (#33) the chain snaps taut a second time at ~4.8 s and the
-  ;; rope solver puts energy into the arm again (see the follow-up issue), which the
-  ;; damping used to hide.
+  ;; Issue #80: with the engine's damping gone (#33) the chain stretched 0.75 m and
+  ;; snapped taut again at ~4.8 s, the energy reaching 1462 J (start 856 J). The
+  ;; solver misjudged how far its pull moved the hinged arm's short end (reading
+  ;; the turn about the arm's centre of mass, not its pivot: 3.3 times too far), so
+  ;; the chain never held. Now, worked out beforehand: the chain (0.35 m) holds the
+  ;; counterweight's centre at least 1.4 - 0.27 - 0.35 - 0.15 = 0.63 m up, the
+  ;; lowest the short arm's end goes, so it never strikes the ground; and the
+  ;; energy, spin included, never climbs: no tick ends more than 1% of the
+  ;; start above the lowest it has been, and nothing is ever above the start.
   (when (godot-available?)
-    (define run (godot-simulate 'trebuchet #:seconds 12 #:sample-dt 0.1))
-    (define start (value-at run '(scene mechanical) 0))
-    (define landing (for/first ([f run] #:when (>= (cadr (assq 'counterweight.hits (cdr f))) 1)) (car f)))
-    (define after (for/list ([f run] #:when (and (>= (car f) 1.0) (< (car f) landing)))
-                    (cadr (assq 'scene.mechanical (cdr f)))))
-    (check-true (<= (apply max after) (* 1.02 start))
-                (format "peak ~a J after release against ~a J at the start" (apply max after) start))
-    ;; throws toward -X; traced at about 20 m
+    (define run (godot-simulate 'trebuchet #:seconds 12 #:sample-dt 1/120))
+    (define energy (values-of run '(scene mechanical)))
+    (define start (car energy))
+    (check-= start 856.24 0.01 "73 kg of granite 0.81 m up on a 7 kg arm, at rest")
+    (check-true (<= (apply max energy) (+ start 1e-6)) (format "never above the start: peak ~a J against ~a J" (apply max energy) start))
+    (define climb (for/fold ([worst 0] [lowest +inf.0] #:result worst) ([e energy]) (values (max worst (- e lowest)) (min lowest e))))
+    (check-true (< climb (* 0.01 start)) (format "the most it climbed above its lowest so far: ~a J" climb))
+    (check-= (final-of run '(counterweight hits)) 0 0 "the counterweight never reaches the ground")
+    (check-true (> (min-of run '(counterweight y)) (- 0.63 0.005)) (format "the counterweight's lowest: ~a m, against 0.63 m on a taut chain" (min-of run '(counterweight y))))
+    (check-true (< (max-of run '(cw-chain stretch)) 10) (format "the chain stretched at most ~a mm" (max-of run '(cw-chain stretch))))
+    ;; throws toward -X; traced at 13.1 m
     (check-true (< (final-of run '(stone x)) -12) (format "stone landed at x = ~a" (final-of run '(stone x))))))
 
 (test-case "Vitruvian catapulta: the bolt stays on the ground and comes to rest a sensible distance out"

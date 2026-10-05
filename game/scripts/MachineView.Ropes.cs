@@ -48,6 +48,7 @@ public partial class MachineView
         public float Wound;             // rope wound onto the drum so far, m
         public float Strength;          // breaking load, N
         public float Tension;           // last tick, N (the tight side's, over bars)
+        public float Stretch;           // last tick, m its path was longer than its length (negative: slack)
         // Over fixed bars (#:bar): the capstan friction coefficient (0 for
         // turning pulleys), the angle the rope turns through over the bars
         // (rad), each side's tension, and how fast the rope slides over
@@ -278,7 +279,13 @@ public partial class MachineView
             {
                 // turns about its hinge only: Δω = (r × J)·axis / I, along the axis
                 float inertia = InertiaAbout(body, hinge) + _arborMates.GetValueOrDefault(body, []).Sum(m => InertiaAbout(m, hinge));
-                angular[body] = angular.GetValueOrDefault(body) + hinge.Axis * ((point - hinge.Pivot).Cross(impulse).Dot(hinge.Axis) / inertia);
+                var spin = hinge.Axis * ((point - hinge.Pivot).Cross(impulse).Dot(hinge.Axis) / inertia);
+                angular[body] = angular.GetValueOrDefault(body) + spin;
+                // turning about the pivot carries the centre of mass round with it: Velocity() reads a point's change as
+                // linear + angular × (point − centre of mass), which is then angular × (point − pivot), as the hinge has it.
+                // Without this the tally misread how far an impulse moves a hinged end, by (point − com) over (point −
+                // pivot): on the trebuchet's short arm, 3.3 times, and each pass of the solve then corrected the wrong amount (#80).
+                linear[body] = linear.GetValueOrDefault(body) + spin.Cross(CentreOfMass(body) - hinge.Pivot);
                 return;
             }
             var state = PhysicsServer3D.BodyGetDirectState(body.GetRid());
@@ -315,7 +322,8 @@ public partial class MachineView
             var ub = (path[^2] - b).Normalized();  // and B this way
             float wa = InverseMassAlong(r.A, a, ua), wb = InverseMassAlong(r.B, b, ub);
             if (r.Mu > 0) r.Wrap = WrapAngle(path);
-            active.Add((r, path, a, b, ua, ub, length - ((float)r.Spec.Length - r.Wound), wa + wb, wa, wb));
+            r.Stretch = length - ((float)r.Spec.Length - r.Wound);
+            active.Add((r, path, a, b, ua, ub, r.Stretch, wa + wb, wa, wb));
         }
 
         var total = new float[active.Count];
