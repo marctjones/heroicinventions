@@ -93,8 +93,8 @@ The outline is the signature of the look, so it is applied consistently, not by 
 
 1. **Every solid, opaque, generated part has the outline.** The route is `PartSurface`, not `Surface`. Builders that currently call `Surface` for a visible solid body should switch (this is the work in #102).
 2. **Exceptions, no outline:** transparent or translucent surfaces (glass, water, tank shells, pane pools, frost skins, grip reach volumes), ground and terrain, the sky, labels, and effect meshes (steam, sparks, spray).
-3. **Colour:** a dark warm brown `#140F0D` (current `(0.08, 0.06, 0.05)`). Not pure black, not tinted per part. Under Mars or night it stays the same; it is a line, not a lit surface.
-4. **Width:** scale with part size as now, `size * 0.012`, clamped 0.2 mm to 12 mm. Add a **screen-space floor**: the line should not shrink below about 1 pixel at the default camera distance, which means widening small parts' outline as the camera pulls out (an `Environment`-independent shader parameter on the outline pass, not per-frame C# for each part). Currently small parts lose the line entirely at overview zoom.
+3. **Colour (owner decision 2026-10-05): pure black `#000000`**, for a comic-book edge. Not tinted per part. Under Mars or night it stays the same; it is a line, not a lit surface.
+4. **Width (comic weight):** scale with part size, `size * 0.018`, clamped 0.3 mm to 18 mm (about 1.5 times today's). Add a **screen-space floor**: the line should not shrink below about 1 pixel at the default camera distance, which means widening small parts' outline as the camera pulls out (an `Environment`-independent shader parameter on the outline pass, not per-frame C# for each part). Currently small parts lose the line entirely at overview zoom.
 5. **Thin parts** (rods, ropes, chains under about 1 cm radius) get a fixed minimum so they do not disappear against bright ground.
 6. **Interior creases** are the job of SSAO (keep on), not of the outline.
 7. **State overrides:** the outline colour may be driven by state for #105 (for example an amber or red rim on a part near failure), through one shared helper, never an ad-hoc material swap.
@@ -175,9 +175,10 @@ ffmpeg -i /tmp/trebuchet.avi -vf "select=eq(n\,60)" -vframes 1 docs/art/trebuche
 
 Notes: the build needs the .NET 10 SDK (the csproj rolls net8.0 forward); `dotnet build` in `game/` first. Movie Maker mode renders in about 0.15 to 0.3 s per frame on software GL, so a three-second clip takes about 25 s. The HUD panels are part of the capture; #107 should crop them or add a capture mode that hides them (the `H` key hides only the right-hand panel).
 
-## 10. Open questions for the owner
+## 10. Owner decisions (2026-10-05)
 
-1. Confirm stylised over PBR (section 1). Everything above assumes yes.
-2. Is the outline colour warm brown (as now) acceptable, or should it be pure black for a more comic-book edge?
-3. Is a filmic tonemap acceptable, given it changes every existing colour slightly? It is the cheapest fix for the blown-out ground.
-4. Mars sunset blue halo: in or out of scope for #104?
+1. **Stylised over PBR: confirmed, pushed further toward a comic-book look.** Concretely: pure black, heavier outlines (section 4), and toon (cel) shading, where light falls off in a few flat bands instead of a smooth gradient. In Godot this is a material setting (`diffuse_mode = toon`, `specular_mode = toon` on `StandardMaterial3D`), applied in the shared `Surface` helper, so it is a small change. Shadows stay on and read as a flat dark band.
+2. **Outline colour: pure black.**
+3. **Filmic tonemap: yes.** Plain words: a screen can only show brightness up to a fixed maximum, and a bright sunlit ground simply hits that maximum and turns flat white. A tonemap is a curve applied to the finished image that squeezes very bright values gently into the displayable range, so bright areas keep some shading and detail instead of clipping. Filmic means a curve modelled on how film responds, with a soft shoulder in the highlights. It is a single setting on the scene's environment. It changes every colour slightly, which is why it is called out.
+4. **Mars sunset blue halo: conditional.** It is only a colour gradient near the sun in the procedural sky. Include it in #104 if it is a few lines of sky parameters; drop it if it needs more than that (a custom sky shader, extra render passes, per-frame work).
+
