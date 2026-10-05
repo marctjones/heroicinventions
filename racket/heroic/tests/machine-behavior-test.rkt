@@ -317,25 +317,22 @@
   (when (godot-available?)
     (define run (godot-simulate 'fall-and-swing #:seconds 10.5 #:sample-dt (/ 1 120)))
     ;; The engine steps at 120 Hz by symplectic Euler, and damps every body
-    ;; by 0.1 per second (Godot's default; not physics -- #33 is to replace
-    ;; it with air drag). The block starts one tick in. So, tick by tick,
-    ;; v <- v (1 - 0.1 dt) - g dt, y <- y + v dt: after the first tick it
-    ;; accelerates at g(1 - c dt) = 9.8018 m/s2, and stands at 3.8134 m at
-    ;; 0.5 s (plain 5 - g t^2/2 would be 3.7738 m, the damping costing 4 cm).
+    ;; The block starts one tick in. With Jolt's default damping removed,
+    ;; it falls at exactly g.
     (define dt 1/120)
     (define-values (v y)
       (for/fold ([v 0.0] [y 5.0]) ([n (in-range 2 61)])
-        (define v* (- (* v (- 1 (* 0.1 dt))) (* 9.81 dt)))
+        (define v* (- v (* 9.81 dt)))
         (values v* (+ y (* v* dt)))))
     (check-= (value-at run '(drop vy) (* 2 dt)) (- (* 9.81 dt)) 1e-6 "one tick of g: the engine's gravity is the sim's 9.81")
     (check-= (/ (- (value-at run '(drop vy) (* 2 dt)) (value-at run '(drop vy) (* 3 dt))) dt)
-             (* 9.81 (- 1 (* 0.1 dt))) 5e-3 "g less a tick's damping")
+             9.81 5e-3 "exactly g")
     (check-= (value-at run '(drop y) 0.5) y 2e-3)
     (check-= (value-at run '(drop vy) 0.5) v 2e-3)
     ;; The pendulum: I/(m d) = 0.979641 m for a 1 m, 1 cm rod and an 8 cm
     ;; ball of one metal, so 2 pi sqrt(0.979641/9.81) = 1.985541 s for small
-    ;; swings, x (1 + theta^2/16) = 1.986486 s from 5 degrees (Huygens). The
-    ;; damping takes e^(-0.1 T / 2) = 0.9055 off each swing's height.
+    ;; swings, x (1 + theta^2/16) = 1.986486 s from 5 degrees (Huygens).
+    ;; With damping zeroed, the height is conserved.
     (define ts (times-of run))
     (define zs (values-of run '(swing rot-z)))
     (define crossings ; downward through the vertical, interpolated between frames
@@ -344,7 +341,7 @@
     (check-= (- (second crossings) (first crossings)) 1.986486 1e-3 "the first swing's period")
     (define peaks
       (for/list ([a zs] [b (cdr zs)] [c (cddr zs)] #:when (and (>= b a) (> b c) (> b 0))) b))
-    (check-= (/ (second peaks) (first peaks)) (exp (* -0.1 1.9865 1/2)) 2e-3 "each swing's height, damped")))
+    (check-= (/ (second peaks) (first peaks)) 1.0 2e-3 "each swing's height, undamped")))
 
 (test-case "Water clock: a constant-head reservoir makes the receiver rise at a steady 2.967 mm/s"
   ;; surface settles where spill (0.5 - Qout L/s over a 20 cm lip) and
@@ -991,14 +988,13 @@
       ;; sliding, the tight (load) side carries exactly e^(mu theta) the other
       (check-= (/ (value-at run (list station 'tension-to) 0.5) (value-at run (list station 'tension-from) 0.5))
                e (* 1e-3 e) (format "~a's tension ratio" station))
-      ;; and the pair accelerate at g (M - m E) / (M + m E); Godot's 0.1/s
-      ;; damping takes c v off that, so add it back at the mean speed
+      ;; and the pair accelerate at g (M - m E) / (M + m E)
       (define m (mass holder-cm))
       (define a0 (/ (* g (- big (* m e))) (+ big (* m e))))
       (define load (string->symbol (format "~a-load" station)))
       (define v3 (value-at run (list load 'vy) 0.3))
       (define v5 (value-at run (list load 'vy) 0.5))
-      (define measured (+ (/ (- v3 v5) 0.2) (* 0.1 (/ (- (+ v3 v5)) 2))))
+      (define measured (/ (- v3 v5) 0.2))
       (check-= measured a0 (* 0.01 a0) (format "~a accelerates at ~a m/s2, predicted ~a" station measured a0)))
     (check-= (value-at run '(half-slip wrap-deg) 0.5) 180 0.01)
     (check-= (value-at run '(coil-slip wrap-deg) 0.5) 539.49 0.05)
@@ -1037,11 +1033,11 @@
   (when (godot-available?)
     (define dt 1/120)
     (define run (godot-simulate 'drop-test #:seconds 1.6 #:sample-dt dt))
-    (define (tick v) (- (* v (- 1 (* 0.1 dt))) (* 9.81 dt)))
+    (define (tick v) (- v (* 9.81 dt)))
     (define v-in                       ; falling from 1.25 m, a tick at a time
       (let loop ([v 0.0] [y 1.25])
         (define v* (tick v))
-        (if (<= (+ y (* v* dt)) 0) (* (- v*) (- 1 (* 0.1 dt))) (loop v* (+ y (* v* dt))))))
+        (if (<= (+ y (* v* dt)) 0) (- v*) (loop v* (+ y (* v* dt))))))
     (check-= v-in 4.8600 1e-3)
     (define (rise v) (let loop ([v v] [y 0.0]) (define v* (tick v)) (if (<= v* 0) y (loop v* (+ y (* v* dt))))))
     (for ([b '(steel-block granite-block oak-block hemp-bale)]
