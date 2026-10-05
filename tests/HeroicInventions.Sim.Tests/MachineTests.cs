@@ -114,14 +114,16 @@ public class MachineFileTests
     }
 
     [Fact]
-    public void WorldFilesPlaceMachinesByLabelAndRefuseHeadings()
+    public void WorldFilesPlaceMachinesByLabelAndTakeHeadings()
     {
         var world = WorldDef.Parse("(world bench (place a pendulum-demo (at 0 0 0)) (place b pendulum-demo (at 2 0 0.5)))");
         Assert.Equal("bench", world.Name);
         Assert.Equal(["a", "b"], world.Placements.Select(p => p.Label));
         Assert.Equal(new Vec3(2, 0, 0.5), world.Placements[1].At);
         Assert.Throws<MachineFormatException>(() => WorldDef.Parse("(world w (place a x (at 0 0 0)) (place a y (at 1 0 0)))"));
-        Assert.Throws<MachineFormatException>(() => WorldDef.Parse("(world w (place a x (at 0 0 0) (heading 90)))"));
+        // a heading (issue #83) is read, not refused; a malformed one is
+        Assert.Equal(90, WorldDef.Parse("(world w (place a x (at 0 0 0) (heading 90)))").Placements[0].Heading);
+        Assert.Throws<MachineFormatException>(() => WorldDef.Parse("(world w (place a x (at 0 0 0) (heading north)))"));
     }
 
     /// <summary>A gallery of every shipped machine lays their footprints out without overlaps.</summary>

@@ -1,0 +1,6 @@
+;; The same machine three times, turned 0, 37 and 90 degrees about the vertical (issue #83):
+;; each must behave as the unturned one does, in its own turned frame.
+(world headings
+  (place straight heading-rig (at 0 0 0))
+  (place turned heading-rig (at 30 0 0) (heading 37))
+  (place quarter heading-rig (at 60 0 0) (heading 90)))

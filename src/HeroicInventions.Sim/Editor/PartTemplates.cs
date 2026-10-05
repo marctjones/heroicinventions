@@ -59,11 +59,11 @@ public static class PartTemplates
             Props(("radius", 0.06), ("wall", 0.001), ("bore", 0.002), ("arm", 0.08), ("nozzles", 2)),
             [new PortSpec("steam-in", "steam", 0)],
             null),
-        "block" => new PartSpec(id, "block", material, at, Props(("size", 0.1), ("tilt-deg", 0), ("fast", true), ("drag-coefficient", false)), [], null),
+        "block" => new PartSpec(id, "block", material, at, Props(("size", 0.1), ("tilt-deg", 0), ("fast", true), ("drag-coefficient", false), ("heading-deg", 0)), [], null),
         // no bearing (Jolt swings it) until given a #:bearing-radius; then the sim swings it against the bearing's friction
         "pendulum" => new PartSpec(id, "pendulum", material, at,
             Props(("length", 0.5), ("start-angle-deg", 30), ("bearing-radius", new SBool(false)),
-                  ("bearing-mu", 0), ("bearing-drag", 0), ("bearing-wear", 0)),
+                  ("bearing-mu", 0), ("bearing-drag", 0), ("bearing-wear", 0), ("heading-deg", 0)),
             [], null),
         "lever" => new PartSpec(id, "lever", material, at,
             Props(("length", 1.0), ("start-angle-deg", 0), ("pivot-fraction", 0.5), ("limit-deg", 18),
@@ -76,10 +76,11 @@ public static class PartTemplates
                          new KeyValuePair<string, SExpr>("bearing-radius", new SBool(false)),
                          new KeyValuePair<string, SExpr>("bearing-mu", new SNumber(0)),
                          new KeyValuePair<string, SExpr>("bearing-drag", new SNumber(0)),
-                         new KeyValuePair<string, SExpr>("bearing-wear", new SNumber(0))])
+                         new KeyValuePair<string, SExpr>("bearing-wear", new SNumber(0)),
+                         new KeyValuePair<string, SExpr>("heading-deg", new SNumber(0))])
                 .ToDictionary(kv => kv.Key, kv => kv.Value),
             [], null),
-        "ramp" => new PartSpec(id, "ramp", material, at, Props(("length", 1.0), ("width", 0.5), ("angle-deg", 15)), [], null),
+        "ramp" => new PartSpec(id, "ramp", material, at, Props(("length", 1.0), ("width", 0.5), ("angle-deg", 15), ("heading-deg", 0)), [], null),
         "piston" => new PartSpec(id, "piston", material, at, Props(("bore", 0.1), ("stroke", 0.3), ("start", 0), ("rod-mass", 0)), [], null),
         // a digging gang (issue #44): a trench from #:at along +x, the spoil thrown to the +z side
         // a float riding a tank's water (issue #29); #:in names the tank (the editor's placeholder until set)
@@ -92,7 +93,7 @@ public static class PartTemplates
         "digger" => new PartSpec(id, "digger", material, at,
             Props(("length", 4), ("width", 1), ("depth", 1), ("power", 150), ("spit", 0.25), ("spoil", 5)), [], null),
         "post" => new PartSpec(id, "post", material, at,
-            new Dictionary<string, SExpr> { ["size-x"] = new SNumber(0.2), ["size-y"] = new SNumber(1.0), ["size-z"] = new SNumber(0.2), ["round"] = new SBool(false), ["breakable"] = new SBool(false) },
+            new Dictionary<string, SExpr> { ["size-x"] = new SNumber(0.2), ["size-y"] = new SNumber(1.0), ["size-z"] = new SNumber(0.2), ["round"] = new SBool(false), ["breakable"] = new SBool(false), ["heading-deg"] = new SNumber(0) },
             [], null),
         // a gate across the head of a channel; #:on names it (the editor's
         // placeholder, until set), #:width is the channel's unless given
@@ -245,7 +246,7 @@ public static class PartTemplates
             },
             [], null),
         // a solid ball of #:radius m: it rolls where a block slides, at (5/7) g sin(theta) down a slope
-        "ball" => new PartSpec(id, "ball", material, at, Props(("radius", 0.05), ("drag-coefficient", false)), [], null),
+        "ball" => new PartSpec(id, "ball", material, at, Props(("radius", 0.05), ("drag-coefficient", false), ("heading-deg", 0)), [], null),
         // a hopper of sand: #:grain kg over #:area m2, through an #:orifice at its foot, of #:grain-size grains: it drains at Beverloo's steady rate
         "hopper" => new PartSpec(id, "hopper", material, at,
             new Dictionary<string, SExpr>
@@ -310,10 +311,10 @@ public static class PartTemplates
         foreach (var (k, v) in entry.ShapeProps) props[k] = v;
         foreach (var (k, v) in entry.PartKind switch
                  {
-                     "wheel" => Props(("axis", "z"), ("angle-deg", 0), ("drive-rpm", 0), ("start-rpm", 0)).Append(new("drive-torque", new SBool(false)))
+                     "wheel" => Props(("axis", "z"), ("angle-deg", 0), ("drive-rpm", 0), ("start-rpm", 0), ("heading-deg", 0)).Append(new("drive-torque", new SBool(false)))
                          .Concat(Props(("bearing-radius", new SBool(false)), ("bearing-mu", 0), ("bearing-drag", 0), ("bearing-wear", 0))),
-                     "screw" => Props(("tilt-deg", 0), ("drive-rpm", 0)).Append(new("drive-torque", new SBool(false))),
-                     _ => Props(("turn-deg", 0)),
+                     "screw" => Props(("tilt-deg", 0), ("drive-rpm", 0), ("heading-deg", 0)).Append(new("drive-torque", new SBool(false))),
+                     _ => Props(("turn-deg", 0), ("heading-deg", 0)),
                  })
             props[k] = v;
         return new PartSpec(id, entry.PartKind, material, at, props, [], null);

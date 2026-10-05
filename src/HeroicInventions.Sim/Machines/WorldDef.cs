@@ -1,7 +1,11 @@
 namespace HeroicInventions.Sim.Machines;
 
 /// <summary>One machine placed in a world: a label unique in the world (the same machine can be placed many times), the machine's name, and where its origin goes.</summary>
-public sealed record Placement(string Label, string Machine, Vec3 At, SourceLocation? Location);
+public sealed record Placement(string Label, string Machine, Vec3 At, SourceLocation? Location)
+{
+    /// <summary>The machine's heading (issue #83): degrees turned about the vertical through its placement point, counter-clockwise seen from above.</summary>
+    public double Heading { get; init; }
+}
 
 /// <summary>One end of a link between machines: a placement's label, a part of its machine, and (for a pipe) the part's port.</summary>
 public sealed record LinkEnd(string Label, string Part, string? Port = null)
@@ -33,10 +37,10 @@ public sealed record LinkSpec(string Id, string Kind, LinkEnd From, LinkEnd To, 
 ///   (place p1 pendulum-demo (at 0 0 0))
 ///   (place p2 pendulum-demo (at 2 0 0)))
 /// </code>
-/// Placement is by position only. There is no heading yet: turning a machine
-/// would also have to turn axes written as symbols (a lever's #:axis z), and
-/// a heading silently ignored would put levers and pendulums on wrong axes,
-/// so the parser refuses one.
+/// A placement may carry a heading, <c>(heading 30)</c>: degrees turned about
+/// the vertical through its <c>at</c> point (issue #83), by
+/// <see cref="MachineDef.Turned"/>. A machine with parts that can't be turned
+/// (anything built along the axes) refuses it rather than ignore it.
 /// </summary>
 public sealed class WorldDef
 {
@@ -52,7 +56,7 @@ public sealed class WorldDef
     /// as a whole, not bent to the ground's shape.
     /// </summary>
     public static MachineDef Placed(MachineDef def, Placement p, Fluids.Terrain? ground) =>
-        def.Translated(new Vec3(p.At.X, p.At.Y + (ground?.HeightAt(p.At.X, p.At.Z) ?? 0), p.At.Z));
+        def.Turned(p.Heading).Translated(new Vec3(p.At.X, p.At.Y + (ground?.HeightAt(p.At.X, p.At.Z) ?? 0), p.At.Z));
 
     /// <summary>Pipes and shafts joining parts of different machines, resolved after every machine is built.</summary>
     public IReadOnlyList<LinkSpec> Links { get; init; } = [];
@@ -85,7 +89,8 @@ public sealed class WorldDef
         sb.Append($"(world {Name}");
         if (Map is not null) sb.Append($"\n  (map {Map})");
         foreach (var p in Placements)
-            sb.Append($"\n  (place {p.Label} {p.Machine} (at {SExprWriter.Number(p.At.X)} {SExprWriter.Number(p.At.Y)} {SExprWriter.Number(p.At.Z)}))");
+            sb.Append($"\n  (place {p.Label} {p.Machine} (at {SExprWriter.Number(p.At.X)} {SExprWriter.Number(p.At.Y)} {SExprWriter.Number(p.At.Z)})"
+                      + (p.Heading != 0 ? $" (heading {SExprWriter.Number(p.Heading)})" : "") + ")");
         foreach (var l in Links)
         {
             static string End(LinkEnd e) => e.Port is null ? $"{e.Label} {e.Part}" : $"{e.Label} {e.Part} {e.Port}";
@@ -126,14 +131,16 @@ public sealed class WorldDef
             var loc = new SourceLocation(file, 0, 0);
             if (p.Items.Count < 4 || p.Items[1] is not SSymbol label || p.Items[2] is not SSymbol machine)
                 throw new MachineFormatException($"{file}: (place LABEL MACHINE (at x y z))", loc);
-            if (p.Field("heading") is not null)
-                throw new MachineFormatException($"{file}: place {label.Name}: no heading yet; machines can only be moved, not turned", loc);
+            double heading = p.Field("heading") is { } h
+                ? h.Items.Count == 2 && h.Items[1] is SNumber hn ? hn.Value
+                    : throw new MachineFormatException($"{file}: place {label.Name}: (heading DEGREES)", loc)
+                : 0;
             var at = p.Field("at") is { Items.Count: 4 } a
                 ? new Vec3(Num(a.Items[1]), Num(a.Items[2]), Num(a.Items[3]))
                 : throw new MachineFormatException($"{file}: place {label.Name} needs (at x y z)", loc);
             if (placements.Any(q => q.Label == label.Name))
                 throw new MachineFormatException($"{file}: two placements are labelled {label.Name}", loc);
-            placements.Add(new Placement(label.Name, machine.Name, at, loc));
+            placements.Add(new Placement(label.Name, machine.Name, at, loc) { Heading = heading });
         }
         var links = new List<LinkSpec>();
         foreach (var l in root.Fields("link"))

@@ -152,6 +152,25 @@ public partial class MachineView : Node3D
     private static Vector3 V(Vec3 v) => new((float)v.X, (float)v.Y, (float)v.Z);
 
     /// <summary>
+    /// A part's heading as a turn about the vertical (issue #83): the frame it is built in is the machine's own
+    /// turned by this, so its body, axle and slope stand at the heading and its pivot stays where it was put.
+    /// </summary>
+    private static Basis YawOf(PartSpec part) => new(Vector3.Up, Mathf.DegToRad((float)MachineDef.HeadingOf(part)));
+
+    /// <summary>The axis a wheel or screw turns on, before any heading: #:axis, raised #:tilt-deg.</summary>
+    private static Vector3 AxleOf(PartSpec part)
+    {
+        float tilt = Mathf.DegToRad((float)part.Number("tilt-deg", 0));
+        return part.Kind == "screw" ? new Vector3(Mathf.Cos(tilt), Mathf.Sin(tilt), 0)
+            : part.Symbol("axis", "z") switch
+            {
+                "x" => new Vector3(Mathf.Cos(tilt), Mathf.Sin(tilt), 0),
+                "y" => new Vector3(Mathf.Sin(tilt), Mathf.Cos(tilt), 0),
+                _ => new Vector3(0, Mathf.Sin(tilt), Mathf.Cos(tilt)),
+            };
+    }
+
+    /// <summary>
     /// Roughness driven by the material's real friction coefficient
     /// (0.30 bronze to 0.60 granite across the table) rather than a fixed
     /// per-category value — a low-friction surface reads as polished, a
@@ -622,8 +641,7 @@ public partial class MachineView : Node3D
         var block = new MaterialBlock(_materials[part.Material], dims, Shapes.ColorFor(part.Material))
         {
             Name = part.Id,
-            Position = V(part.At),
-            RotationDegrees = new Vector3((float)part.Number("tilt-deg", 0), 0, 0),
+            Transform = new Transform3D(YawOf(part) * new Basis(Vector3.Right, Mathf.DegToRad((float)part.Number("tilt-deg", 0))), V(part.At)),
             Freeze = true,
         };
         foreach (var visual in block.GetChildren().OfType<MeshInstance3D>())
@@ -677,6 +695,7 @@ public partial class MachineView : Node3D
         }
         float length = (float)part.Number("length");
         float startAngle = (float)part.Number("start-angle-deg");
+        var yaw = YawOf(part);
         const float rodRadius = 0.01f;
         float bobRadius = Mathf.Max(0.03f, length * 0.08f);
         var mat = _materials[part.Material];
@@ -704,7 +723,7 @@ public partial class MachineView : Node3D
                                 + bobMass * (length * length + 0.4 * bobRadius * bobRadius));
         _pendulums.Add((body, length, bobRadius, inertia, (float)mat.Restitution));
         _bodiesById[part.Id] = body;
-        _hinges[body] = (V(part.At), new Vector3(0, 0, 1));
+        _hinges[body] = (V(part.At), yaw * new Vector3(0, 0, 1));
         body.AddChild(new CollisionShape3D { Shape = new CylinderShape3D { Radius = rodRadius, Height = length }, Position = new Vector3(0, -length / 2, 0) });
         body.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = bobRadius }, Position = new Vector3(0, -length, 0) });
         var rod = Shapes.Cylinder(rodRadius, length, surface);
@@ -721,8 +740,8 @@ public partial class MachineView : Node3D
 
         // Released from start-angle-deg off vertical; a HingeJoint3D with
         // no NodeA pins the other end to the world at this joint's transform.
-        body.RotationDegrees = new Vector3(0, 0, startAngle);
-        var joint = new HingeJoint3D { Position = V(part.At) };
+        body.Basis = yaw * new Basis(new Vector3(0, 0, 1), Mathf.DegToRad(startAngle));
+        var joint = new HingeJoint3D { Transform = new Transform3D(yaw, V(part.At)) };
         AddChild(joint);
         joint.NodeB = joint.GetPathTo(body);
         // Parented to the swinging body itself (not the fixed pivot point),
@@ -731,7 +750,7 @@ public partial class MachineView : Node3D
         // the bob is the part actually worth pointing at.
         if (!_manyIdenticalPendulums)
             AddLabel(part.Id, new Vector3(0, -length + bobRadius + 0.06f, 0), body);
-        _pendulumMounts.Add((V(part.At), bobRadius, 0.06f)); // hung from a frame beside the swing, built once all are placed
+        _pendulumMounts.Add((V(part.At), bobRadius, 0.06f, yaw)); // hung from a frame beside the swing, built once all are placed
     }
 
     /// <summary>
@@ -766,8 +785,10 @@ public partial class MachineView : Node3D
         // from the pivot (the body's origin) to match.
         float centerOffset = (0.5f - pivotFraction) * length;
 
-        var axis = part.Symbol("axis", "z") switch { "x" => Vector3.Right, "y" => Vector3.Up, _ => new Vector3(0, 0, 1) };
-        var toAxis = AxleBasis(axis); // the beam is built turning about local Z; this turns that onto #:axis
+        var yaw = YawOf(part);
+        var axis0 = part.Symbol("axis", "z") switch { "x" => Vector3.Right, "y" => Vector3.Up, _ => new Vector3(0, 0, 1) };
+        var axis = yaw * axis0;
+        var toAxis = yaw * AxleBasis(axis0); // the beam is built turning about local Z; this turns that onto #:axis, at the heading
         float stiffness = (float)part.Number("spring-stiffness", 0);
         var body = new RigidBody3D
         {
@@ -877,7 +898,7 @@ public partial class MachineView : Node3D
     }
 
     private const uint FixtureLayer = 8, SprungArmLayer = 16;
-    private readonly List<(Vector3 Pivot, float BobRadius, float Reach)> _pendulumMounts = []; // Reach: clearance past the end pivots
+    private readonly List<(Vector3 Pivot, float BobRadius, float Reach, Basis Yaw)> _pendulumMounts = []; // Reach: clearance past the end pivots
 
     /// <summary>
     /// Pendulums hang from a frame beside their swing, never from a post
@@ -890,19 +911,27 @@ public partial class MachineView : Node3D
     {
         var wood = Surface("oak");
         var iron = Surface("iron");
-        foreach (var row in _pendulumMounts.GroupBy(m => (Mathf.Snapped(m.Pivot.Y, 0.01f), Mathf.Snapped(m.Pivot.Z, 0.01f))))
+        // a row is pendulums at one height, one heading and one line across their swing; it is laid out in the
+        // row's own frame (x along the row, z across the swing) and turned into the world by its heading
+        foreach (var row in _pendulumMounts.GroupBy(m =>
+                 {
+                     var local = m.Yaw.Inverse() * m.Pivot;
+                     return (Mathf.Snapped(m.Pivot.Y, 0.01f), Mathf.Snapped(local.Z, 0.01f), Mathf.Snapped(m.Yaw.GetEuler().Y, 0.001f));
+                 }))
         {
-            float y = row.First().Pivot.Y, z = row.First().Pivot.Z;
+            var yaw = row.First().Yaw;
+            Vector3 At(float x, float y, float z) => yaw * new Vector3(x, y, z);
+            float y = row.First().Pivot.Y, z = (yaw.Inverse() * row.First().Pivot).Z;
             float side = row.Max(m => m.BobRadius) + 0.04f;
-            float left = row.Min(m => m.Pivot.X - m.Reach), right = row.Max(m => m.Pivot.X + m.Reach);
+            float left = row.Min(m => (yaw.Inverse() * m.Pivot).X - m.Reach), right = row.Max(m => (yaw.Inverse() * m.Pivot).X + m.Reach);
             foreach (float dz in new[] { -side, side })
             {
-                AddGroundedSupport(new Vector3(left, y, z + dz), 0.012f, 0.06f);
-                AddGroundedSupport(new Vector3(right, y, z + dz), 0.012f, 0.06f);
-                AddChild(Shapes.Rod(new Vector3(left, y, z + dz), new Vector3(right, y, z + dz), 0.01f, wood));
+                AddGroundedSupport(At(left, y, z + dz), 0.012f, 0.06f);
+                AddGroundedSupport(At(right, y, z + dz), 0.012f, 0.06f);
+                AddChild(Shapes.Rod(At(left, y, z + dz), At(right, y, z + dz), 0.01f, wood));
             }
-            foreach (var (pivot, _, _) in row)
-                AddChild(Shapes.Rod(pivot - new Vector3(0, 0, side), pivot + new Vector3(0, 0, side), 0.005f, iron));
+            foreach (var (pivot, _, _, _) in row)
+                AddChild(Shapes.Rod(pivot - yaw * new Vector3(0, 0, side), pivot + yaw * new Vector3(0, 0, side), 0.005f, iron));
         }
     }
     private readonly List<TorsionSpring> _springs = [];
@@ -944,11 +973,11 @@ public partial class MachineView : Node3D
         // (rather than an offset inside a rotated local frame) keeps this
         // easy to check by hand: at length L and angle a, the centre sits
         // L/2 up and L/2·cos(a) back from the base.
-        var center = V(part.At) + new Vector3(0, length / 2 * Mathf.Sin(angle), -length / 2 * Mathf.Cos(angle));
+        var yaw = YawOf(part);
+        var center = V(part.At) + yaw * new Vector3(0, length / 2 * Mathf.Sin(angle), -length / 2 * Mathf.Cos(angle));
         var body = new StaticBody3D
         {
-            Position = center,
-            RotationDegrees = new Vector3(angleDeg, 0, 0),
+            Transform = new Transform3D(yaw * new Basis(Vector3.Right, angle), center),
             PhysicsMaterialOverride = new PhysicsMaterial { Friction = (float)_materials[part.Material].Friction },
         };
         body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(width, thickness, length) } });
@@ -1021,7 +1050,10 @@ public partial class MachineView : Node3D
     private RigidBody3D BuildOnAxle(PartSpec part, Vector3 axis, float startAngleDeg, string labelText)
     {
         var mesh = GeneratedMesh(part);
-        var toAxis = AxleBasis(axis);
+        // at its heading: the axle turns with the machine, and so does the roll the mesh is stood at about it
+        var yaw = YawOf(part);
+        var toAxis = yaw * AxleBasis(axis);
+        axis = yaw * axis;
         double density = _materials[part.Material].Density;
         var body = new RigidBody3D
         {
@@ -1181,7 +1213,7 @@ public partial class MachineView : Node3D
         var mesh = GeneratedMesh(part);
         var body = new StaticBody3D
         {
-            Name = part.Id, Position = V(part.At), RotationDegrees = new Vector3(0, (float)part.Number("turn-deg", 0), 0),
+            Name = part.Id, Position = V(part.At), RotationDegrees = new Vector3(0, (float)(part.Number("turn-deg", 0) + MachineDef.HeadingOf(part)), 0),
             CollisionLayer = FixtureLayer, CollisionMask = 1, // meets loose bodies, not sprung arms
             PhysicsMaterialOverride = ContactFor(part.Material),
         };
@@ -1298,14 +1330,14 @@ public partial class MachineView : Node3D
         var bobs = _pendulums.Select(p =>
         {
             var centre = p.Body.GlobalTransform * new Vector3(0, -p.Length, 0);
-            return (p.Body, Arm: centre - p.Body.GlobalPosition, Centre: centre, p.BobRadius, p.Inertia, p.Restitution);
+            return (p.Body, Arm: centre - p.Body.GlobalPosition, Centre: centre, p.BobRadius, p.Inertia, p.Restitution, Axis: _hinges[p.Body].Axis.Normalized());
         }).ToList();
         // Impulses given to a body only take effect at the next physics
         // step, so the chain of impacts is worked out on a copy of the
         // balls' spins; each impulse is then handed to Jolt once.
-        var spin = bobs.Select(b => b.Body.AngularVelocity.Z).ToArray();
+        var spin = bobs.Select(b => b.Body.AngularVelocity.Dot(b.Axis)).ToArray();
         var impulses = new List<(RigidBody3D Body, Vector3 Impulse, Vector3 At)>();
-        Vector3 Velocity(int i) => new Vector3(0, 0, spin[i]).Cross(bobs[i].Arm);
+        Vector3 Velocity(int i) => (bobs[i].Axis * spin[i]).Cross(bobs[i].Arm);
 
         // Broad phase (issue #73): only bobs that could touch within this step
         // are ever compared. Sorted along X, a pair is a candidate if the gap
@@ -1348,7 +1380,7 @@ public partial class MachineView : Node3D
                 var n = line / dist;
                 float closing = (Velocity(i) - Velocity(j)).Dot(n);
                 if (closing <= 1e-4f || dist - a.BobRadius - b.BobRadius > closing * dt + 0.0005f) continue;
-                float ka = a.Arm.Cross(n).Z, kb = b.Arm.Cross(n).Z;
+                float ka = a.Arm.Cross(n).Dot(a.Axis), kb = b.Arm.Cross(n).Dot(b.Axis);
                 float e = Mathf.Min(a.Restitution, b.Restitution);
                 float impulse = (1 + e) * closing / (ka * ka / a.Inertia + kb * kb / b.Inertia);
                 spin[i] -= impulse * ka / a.Inertia;

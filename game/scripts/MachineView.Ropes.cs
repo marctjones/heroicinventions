@@ -178,7 +178,8 @@ public partial class MachineView
         if (end.Part == "world") return (null, local);
         if (_bodiesById.TryGetValue(end.Part, out var body)) return (body, local);
         // a part that doesn't move (a fixture, a tank): a fixed point
-        return (null, V(Runtime.Def.Part(end.Part)!.At) + local);
+        var fixedPart = Runtime.Def.Part(end.Part)!;
+        return (null, V(fixedPart.At) + YawOf(fixedPart) * local);
     }
 
     /// <summary>

@@ -135,6 +135,8 @@ public static class RktExporter
         string Bearing() => p.Props.GetValueOrDefault("bearing-radius") is SNumber pin
             ? $" #:bearing-radius {F(pin.Value)} #:bearing-mu {F(N("bearing-mu"))} #:bearing-drag {F(N("bearing-drag"))} #:bearing-wear {F(N("bearing-wear"))}"
             : "";
+        // a part turned about the vertical (issue #83): its #:heading-deg, only once it has one
+        string Heading() => N("heading-deg") != 0 ? $" #:heading-deg {F(N("heading-deg"))}" : "";
         string At() => $"#:at {Vec(p.At)}";
         string Mat() => $"#:material {p.Material}";
 
@@ -160,19 +162,19 @@ public static class RktExporter
             case "block":
                 return $"  (block {p.Id} {At()} #:size {F(N("size"))} #:tilt-deg {F(N("tilt-deg"))}" +
                        (p.Props.ContainsKey("dim-x") ? $" #:dimensions ({F(N("dim-x"))} {F(N("dim-y"))} {F(N("dim-z"))})" : "") +
-                       (p.Props.GetValueOrDefault("fast") is SBool { Value: false } ? " #:fast #f" : "") + Opt("drag-coefficient", "drag-coefficient") + $" {Mat()})\n";
+                       (p.Props.GetValueOrDefault("fast") is SBool { Value: false } ? " #:fast #f" : "") + Opt("drag-coefficient", "drag-coefficient") + Heading() + $" {Mat()})\n";
             case "pendulum":
                 return $"  (pendulum {p.Id} {At()} #:length {F(N("length"))} #:start-angle-deg {F(N("start-angle-deg"))} {Mat()}" +
-                       Bearing() + ")\n";
+                       Bearing() + Heading() + ")\n";
             case "lever":
                 return $"  (lever {p.Id} {At()} #:length {F(N("length"))} {Mat()} #:axis {Sym("axis", "z")} " +
                        $"#:start-angle-deg {F(N("start-angle-deg"))} #:pivot-fraction {F(N("pivot-fraction", 0.5))} " +
                        $"#:limit-deg {F(N("limit-deg", 18))} #:damping {F(N("damping", 8))}" +
                        Opt("limit-lower-deg", "limit-lower-deg") + Opt("limit-upper-deg", "limit-upper-deg") +
                        $" #:spring-stiffness {F(N("spring-stiffness"))} #:spring-rest-deg {F(N("spring-rest-deg"))}" +
-                       Opt("section", "section") + Bearing() + ")\n";
+                       Opt("section", "section") + Bearing() + Heading() + ")\n";
             case "ramp":
-                return $"  (ramp {p.Id} {At()} #:length {F(N("length"))} #:width {F(N("width"))} #:angle-deg {F(N("angle-deg"))} {Mat()})\n";
+                return $"  (ramp {p.Id} {At()} #:length {F(N("length"))} #:width {F(N("width"))} #:angle-deg {F(N("angle-deg"))} {Mat()}" + Heading() + ")\n";
             case "piston":
                 return $"  (piston {p.Id} {At()} #:bore {F(N("bore"))} #:stroke {F(N("stroke"))} {Mat()} " +
                        $"#:start {F(N("start"))} #:rod-mass {F(N("rod-mass"))})\n";
@@ -187,7 +189,7 @@ public static class RktExporter
             case "post":
                 return $"  (post {p.Id} {At()} #:size ({F(N("size-x"))} {F(N("size-y"))} {F(N("size-z"))}) {Mat()}" +
                        (p.Props.TryGetValue("round", out var rd) && rd is SBool { Value: true } ? " #:round #t" : "") +
-                       (p.Props.TryGetValue("breakable", out var bk) && bk is SBool { Value: true } ? " #:breakable #t" : "") + ")\n";
+                       (p.Props.TryGetValue("breakable", out var bk) && bk is SBool { Value: true } ? " #:breakable #t" : "") + Heading() + ")\n";
             case "hearth":
                 return $"  (hearth {p.Id} {At()} #:heats {Sym("heats", "?")} #:power {F(N("power"))} #:fuel {F(N("fuel"))} " +
                        $"#:fuel-kind {Sym("fuel-kind", "wood")} #:efficiency {F(N("efficiency", 0.5))})\n";
@@ -200,7 +202,7 @@ public static class RktExporter
                 return $"  (windmill {p.Id} {At()} #:radius {F(N("radius"))} #:mass {F(N("mass"))} #:wind {F(N("wind"))} #:load {F(N("load"))} " +
                        $"#:cp {F(N("cp", 0.3))} #:tip-speed-ratio {F(N("tip-speed-ratio", 2.5))} {Mat()})\n";
             case "ball":
-                return $"  (ball {p.Id} {At()} #:radius {F(N("radius", 0.05))}" + Opt("drag-coefficient", "drag-coefficient") + $" {Mat()})\n";
+                return $"  (ball {p.Id} {At()} #:radius {F(N("radius", 0.05))}" + Opt("drag-coefficient", "drag-coefficient") + Heading() + $" {Mat()})\n";
             case "hopper":
                 return $"  (hopper {p.Id} {At()} #:area {F(N("area", 0.01))} #:grain {F(N("grain", 5))} #:orifice {F(N("orifice", 0.01))} " +
                        $"#:grain-size {F(N("grain-size", 0.0003))} #:density {F(N("density", 1600))} {Mat()})\n";
@@ -293,9 +295,9 @@ public static class RktExporter
                     "wheel" => $" #:axis {Sym("axis", "z")} #:angle-deg {F(N("angle-deg"))}" + Opt("tilt-deg", "tilt-deg") +
                                 (p.Props.TryGetValue("on", out var on) && on is SSymbol chassis ? $" #:on {chassis.Name}" : "") +
                                 Opt("rolling-resistance", "rolling-resistance") + Opt("grind-torque", "grind-torque") + Opt("yield", "yield") + $" #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque") +
-                                (N("start-rpm") != 0 ? $" #:start-rpm {F(N("start-rpm"))}" : "") + Bearing(),
-                    "screw" => $" #:tilt-deg {F(N("tilt-deg"))} #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque"),
-                    _ => $" #:turn-deg {F(N("turn-deg"))}",
+                                (N("start-rpm") != 0 ? $" #:start-rpm {F(N("start-rpm"))}" : "") + Bearing() + Heading(),
+                    "screw" => $" #:tilt-deg {F(N("tilt-deg"))} #:drive-rpm {F(N("drive-rpm"))}" + Opt("drive-torque", "drive-torque") + Heading(),
+                    _ => $" #:turn-deg {F(N("turn-deg"))}" + Heading(),
                 };
                 return $"  ({p.Kind} {p.Id} #:shape (catalogue-shape '{entry}) {At()} {Mat()}{extras})\n";
         }

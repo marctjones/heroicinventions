@@ -472,7 +472,7 @@ public partial class BuildMode : Node3D
         var help = new Label
         {
             Text = "Right-drag orbit · middle-drag or Shift+right-drag pan · scroll zoom · F frame · "
-                 + "click select · drag move (Ctrl: up/down) · Del delete · Ctrl+D duplicate · Ctrl+Z undo · G grid · Esc cancel",
+                 + "click select · drag move (Ctrl: up/down) · T turn 15° (Shift: back) · Del delete · Ctrl+D duplicate · Ctrl+Z undo · G grid · Esc cancel",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
@@ -901,6 +901,16 @@ public partial class BuildMode : Node3D
         }
 
         var buttons = new HBoxContainer();
+        if (MachineDef.TurnableKinds.Contains(part.Kind))
+        {
+            // the rotate handle (issue #83): the part turns about its own pivot, 15° a click, about the vertical
+            var left = new Button { Text = "↺ Turn", TooltipText = "Turn 15° counter-clockwise seen from above (T)" };
+            left.Pressed += () => TurnSelected(15);
+            buttons.AddChild(left);
+            var right = new Button { Text = "↻ Turn", TooltipText = "Turn 15° clockwise (Shift+T)" };
+            right.Pressed += () => TurnSelected(-15);
+            buttons.AddChild(right);
+        }
         var dup = new Button { Text = "Duplicate" };
         dup.Pressed += DuplicateSelected;
         buttons.AddChild(dup);
@@ -1064,6 +1074,8 @@ public partial class BuildMode : Node3D
                 DeleteSelected(); break;
             case Key.D when cmd:
                 DuplicateSelected(); break;
+            case Key.T when !cmd:
+                TurnSelected(key.ShiftPressed ? -15 : 15); break;
             case Key.Z when cmd && key.ShiftPressed:
                 RunCommand("(redo)"); break;
             case Key.Z when cmd:
@@ -1348,6 +1360,12 @@ public partial class BuildMode : Node3D
     }
 
     // -------------------------------------------------------- edit actions
+
+    /// <summary>Turns the selected part about the vertical through its pivot by <paramref name="degrees"/> (its #:heading-deg); a part built along the axes says so.</summary>
+    private void TurnSelected(double degrees)
+    {
+        if (_selectedId is { } id) RunCommand($"(turn {id} {F(degrees)})");
+    }
 
     private void DeleteSelected()
     {

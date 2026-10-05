@@ -1,0 +1,17 @@
+;; Machines the game already has, each placed unturned and turned 53 degrees (issue #83): a heading is only
+;; right if the turned one does what the unturned one does. A cradle (bob impacts along its row), a
+;; trebuchet and a Roman crane (ropes, drums, a sling), an onager (a torsion spring), the Antikythera
+;; train (gears in mesh) and wagons on rails (carried wheels and a ramp).
+(world headings-machines
+  (place cradle-0 newtons-cradle (at 0 0 0))
+  (place cradle-53 newtons-cradle (at 0 0 150) (heading 53))
+  (place trebuchet-0 trebuchet (at 150 0 0))
+  (place trebuchet-53 trebuchet (at 150 0 150) (heading 53))
+  (place crane-0 roman-crane (at 300 0 0))
+  (place crane-53 roman-crane (at 300 0 150) (heading 53))
+  (place onager-0 torsion-catapult (at 450 0 0))
+  (place onager-53 torsion-catapult (at 450 0 150) (heading 53))
+  (place train-0 antikythera-lunar-train (at 600 0 0))
+  (place train-53 antikythera-lunar-train (at 600 0 150) (heading 53))
+  (place wagons-0 rail-wagons (at 750 0 0))
+  (place wagons-53 rail-wagons (at 750 0 150) (heading 53)))

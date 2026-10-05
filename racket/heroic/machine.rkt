@@ -29,7 +29,12 @@
 ;; fixture) and link clauses (pipe, connect, sealed-air).
 ;; pendulum/lever/ramp need no solver of their own — they're pure Jolt
 ;; rigid-body physics, built in MachineView — except a pendulum hung on a
-;; bearing, which the sim swings so its friction and wear can be checked. The macro checks the whole
+;; bearing, which the sim swings so its friction and wear can be checked.
+;; Block, ball, pendulum, lever, ramp, wheel, screw, fixture and post take
+;; #:heading-deg: their yaw about the vertical, counter-clockwise seen from
+;; above, turning the part about its own #:at (its axle, its slope and its
+;; swing with it). A whole machine is turned about its origin by a world's
+;; (place label machine (at x y z) (heading deg)). The macro checks the whole
 ;; machine while the file compiles: part names, materials, port names,
 ;; port kinds, and that every rotor has steam. Errors point at the exact
 ;; clause that is wrong. Parameter values are ordinary Racket expressions,
@@ -704,14 +709,16 @@
                           (~optional (~seq #:tilt-deg tilt-v:expr))
                           (~optional (~seq #:fast fast-v:expr))
                           (~optional (~seq #:drag-coefficient drag-v:expr))
-                          (~optional (~seq #:dimensions dims:vec3))) ...)
+                          (~optional (~seq #:dimensions dims:vec3))
+                          (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:attr info (pinfo #'id 'block (attribute mat) '())
       #:with expr #`(part 'id 'block 'mat (list at.x at.y at.z)
                           (list (cons 'size size-v)
                                 (cons 'tilt-deg (~? tilt-v 0))
                                 (cons 'fast (~? fast-v #t))
                                 (cons 'drag-coefficient (~? drag-v #f))
-                                (~@ . (~? ((cons 'dim-x dims.x) (cons 'dim-y dims.y) (cons 'dim-z dims.z)) ())))
+                                (~@ . (~? ((cons 'dim-x dims.x) (cons 'dim-y dims.y) (cons 'dim-z dims.z)) ()))
+                                (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -734,7 +741,8 @@
                              (~optional (~seq #:bearing-radius journal-v:expr))
                              (~optional (~seq (~and mu-kw #:bearing-mu) mu-v:expr))
                              (~optional (~seq (~and drag-kw #:bearing-drag) drag-v:expr))
-                             (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))) ...)
+                             (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))
+                             (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
                   "a pendulum's bearing needs a #:bearing-radius (its pin's radius, m)"
       #:attr info (pinfo #'id 'pendulum (attribute mat) '())
@@ -744,7 +752,8 @@
                                            (cons 'bearing-mu (~? mu-v 0))
                                            (cons 'bearing-drag (~? drag-v 0))
                                            (cons 'bearing-wear (~? wear-v 0)))
-                                          ())))
+                                          ()))
+                                (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -779,7 +788,8 @@
                           (~optional (~seq #:bearing-radius journal-v:expr))
                           (~optional (~seq (~and mu-kw #:bearing-mu) mu-v:expr))
                           (~optional (~seq (~and drag-kw #:bearing-drag) drag-v:expr))
-                          (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))) ...)
+                          (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))
+                          (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
                   "a lever's bearing needs a #:bearing-radius (its pin's radius, m)"
       #:attr info (pinfo #'id 'lever (attribute mat) '())
@@ -798,7 +808,8 @@
                                            (cons 'bearing-mu (~? mu-v 0))
                                            (cons 'bearing-drag (~? drag-v 0))
                                            (cons 'bearing-wear (~? wear-v 0)))
-                                          ())))
+                                          ()))
+                                (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -810,10 +821,12 @@
                          (~once (~seq #:length length-v:expr))
                          (~once (~seq #:width width-v:expr))
                          (~once (~seq #:angle-deg angle-v:expr))
-                         (~once (~seq #:material mat:id))) ...)
+                         (~once (~seq #:material mat:id))
+                         (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:attr info (pinfo #'id 'ramp (attribute mat) '())
       #:with expr #`(part 'id 'ramp 'mat (list at.x at.y at.z)
-                          (list (cons 'length length-v) (cons 'width width-v) (cons 'angle-deg angle-v))
+                          (list (cons 'length length-v) (cons 'width width-v) (cons 'angle-deg angle-v)
+                                (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -866,7 +879,8 @@
                           (~optional (~seq #:bearing-radius journal-v:expr))
                           (~optional (~seq (~and mu-kw #:bearing-mu) mu-v:expr))
                           (~optional (~seq (~and drag-kw #:bearing-drag) drag-v:expr))
-                          (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))) ...)
+                          (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))
+                          (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
                   "a wheel's bearing needs a #:bearing-radius (its axle's radius, m)"
       #:attr info (pinfo #'id 'wheel (attribute mat) '())
@@ -883,7 +897,8 @@
                                                   (cons 'bearing-mu (~? mu-v 0))
                                                   (cons 'bearing-drag (~? drag-v 0))
                                                   (cons 'bearing-wear (~? wear-v 0)))
-                                                 ())))
+                                                 ()))
+                                       (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                                  #,(loc-of this-syntax)))
 
     ;; An Archimedes' screw, its axle running along X and raised
@@ -894,11 +909,13 @@
                           (~once (~seq #:material mat:id))
                           (~optional (~seq #:tilt-deg tilt-v:expr))
                           (~optional (~seq #:drive-rpm rpm-v:expr))
-                          (~optional (~seq #:drive-torque torque-v:expr))) ...)
+                          (~optional (~seq #:drive-torque torque-v:expr))
+                          (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:attr info (pinfo #'id 'screw (attribute mat) '())
       #:with expr #`(shaped-part 'id 'screw 'mat (list at.x at.y at.z) shape-v
                                  (list (cons 'tilt-deg (~? tilt-v 0)) (cons 'drive-rpm (~? rpm-v 0))
-                                       (cons 'drive-torque (~? torque-v #f)))
+                                       (cons 'drive-torque (~? torque-v #f))
+                                       (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                                  #,(loc-of this-syntax)))
 
     ;; Generated geometry that doesn't move: a catapult's frame, a stand.
@@ -907,10 +924,12 @@
                       (~alt (~once (~seq #:shape shape-v:expr))
                             (~once (~seq #:at at:vec3))
                             (~once (~seq #:material mat:id))
-                            (~optional (~seq #:turn-deg turn-v:expr))) ...)
+                            (~optional (~seq #:turn-deg turn-v:expr))
+                            (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:attr info (pinfo #'id 'fixture (attribute mat) '())
       #:with expr #`(shaped-part 'id 'fixture 'mat (list at.x at.y at.z) shape-v
-                                 (list (cons 'turn-deg (~? turn-v 0)))
+                                 (list (cons 'turn-deg (~? turn-v 0))
+                                       (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                                  #,(loc-of this-syntax)))
 
     ;; A post, pier or wall: a fixed block of #:material standing on the
@@ -928,12 +947,14 @@
                          (~once (~seq #:size size:vec3))
                          (~once (~seq #:material mat:id))
                          (~optional (~seq #:round round-v:expr))
-                         (~optional (~seq #:breakable breakable-v:expr))) ...)
+                         (~optional (~seq #:breakable breakable-v:expr))
+                         (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:attr info (pinfo #'id 'post (attribute mat) '())
       #:with expr #`(part 'id 'post 'mat (list at.x at.y at.z)
                           (list (cons 'size-x size.x) (cons 'size-y size.y) (cons 'size-z size.z)
                                 (cons 'round (and (~? round-v #f) #t))
-                                (cons 'breakable (and (~? breakable-v #f) #t)))
+                                (cons 'breakable (and (~? breakable-v #f) #t))
+                                (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1055,10 +1076,12 @@
                    (~alt (~once (~seq #:at at:vec3))
                          (~once (~seq #:radius radius-v:expr))
                          (~optional (~seq #:drag-coefficient drag-v:expr))
-                         (~once (~seq #:material mat:id))) ...)
+                         (~once (~seq #:material mat:id))
+                         (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:attr info (pinfo #'id 'ball (attribute mat) '())
       #:with expr #`(part 'id 'ball 'mat (list at.x at.y at.z)
-                          (list (cons 'radius radius-v) (cons 'drag-coefficient (~? drag-v #f)))
+                          (list (cons 'radius radius-v) (cons 'drag-coefficient (~? drag-v #f))
+                                (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 

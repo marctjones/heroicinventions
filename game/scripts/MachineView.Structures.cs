@@ -19,7 +19,7 @@ public partial class MachineView
         bool round = part.Props.TryGetValue("round", out var r) && r is SBool { Value: true };
         var body = new StaticBody3D
         {
-            Position = V(part.At) + new Vector3(0, h / 2, 0),
+            Transform = new Transform3D(YawOf(part), V(part.At) + new Vector3(0, h / 2, 0)),
             PhysicsMaterialOverride = new PhysicsMaterial { Friction = (float)_materials[part.Material].Friction },
         };
         Shape3D shape = round ? new CylinderShape3D { Radius = w / 2, Height = h } : new BoxShape3D { Size = new Vector3(w, h, d) };

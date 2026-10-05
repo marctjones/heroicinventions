@@ -57,6 +57,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (storm #:sol n [#:hour h] #:tau τ [#:sols d] [#:settle k])      ; a dust storm on the run's nth sol
 ///   (ambient °C)           ; the scene's air: boilers cool to it, water and air arrive at it, tanks freeze below 0
 ///   (move id (x y z))
+///   (turn id degrees)       ; a block, ball, pendulum, lever, ramp, wheel, screw, fixture or post, turned about the vertical (its #:heading-deg)
 ///   (set id #:prop value)   ; a number, a symbol (#:axis y), a flag (#:round #t) or the name of another part (#:onto boiler)
 ///   (remove id)             ; a part, with every link on it; or a pipe, rope, inflow, channel, lift or cylinder by its own id
 ///   (snap a.port b.port)         ; picks pipe vs connect by port kind (PortRules)
@@ -134,6 +135,7 @@ public sealed class BuildSession
         "source" => SetSource(cmd),
         "raw-part" => RawPart(cmd),
         "move" => Move(cmd),
+        "turn" => Turn(cmd),
         "ambient" => SetAmbient(cmd),
         "planet" => SetPlanet(cmd),
         "weather" => SetWeather(cmd),
@@ -702,6 +704,25 @@ public sealed class BuildSession
         Snapshot();
         Document.Move(id, at);
         return $"moved {id} to ({at.X} {at.Y} {at.Z})";
+    }
+
+    /// <summary>
+    /// (turn id degrees): turns a part by that many degrees about the vertical, counter-clockwise seen from above,
+    /// on top of whatever heading it has (issue #83); its pivot stays where it is. Only the kinds that can stand at a
+    /// heading (<see cref="MachineDef.TurnableKinds"/>) turn: the rest are built along the axes.
+    /// </summary>
+    private string Turn(SList cmd)
+    {
+        string id = Id(cmd, 1);
+        if (cmd.Items.Count != 3) throw new FormatException("(turn id degrees)");
+        double degrees = Num(cmd.Items[2], "turn");
+        if (!Document.Parts.TryGetValue(id, out var part)) throw new InvalidOperationException($"no part named {id}");
+        if (!MachineDef.TurnableKinds.Contains(part.Kind))
+            throw new InvalidOperationException($"{id} is a {part.Kind}, which is built along the axes and can't be turned (only {string.Join(", ", MachineDef.TurnableKinds)} can)");
+        double heading = ((MachineDef.HeadingOf(part) + degrees) % 360 + 360) % 360;
+        Snapshot();
+        Document.SetProp(id, "heading-deg", heading);
+        return $"turned {id} to heading {heading}";
     }
 
     /// <summary>(set id #:prop value): #:material takes a material symbol; every other prop takes a number (its own unit, if any).</summary>

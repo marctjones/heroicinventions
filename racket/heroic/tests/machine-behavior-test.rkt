@@ -2329,3 +2329,120 @@
   (define bare (simulate 'water-wheels #:seconds 300 #:step 0.02 #:sample-dt 50))
   (check-= (rpm->rad (final-of bare '(overshot rpm))) (/ power 300) 1e-4)
   (check-true (< omega (/ power 300))))
+
+;; ---- #83 rotation and heading for parts (heading-rig.rkt, game/worlds/headings.world)
+;; The same rig placed three times, turned 0, 37 and 90 degrees about the vertical
+;; through its origin (and standing 0, 30 and 60 m along x). A machine turned by a
+;; heading behaves as the unturned one: turn its coordinates back and every body is
+;; where the unturned one is, with the same speed, spin and hinge angle. And each
+;; part's own direction is worked out beforehand (the machine's header).
+(define headings '((straight 0 0 0) (turned 37 30 0) (quarter 90 60 0)))
+(define (to-machine-frame h ox oz x z)          ; the inverse of x' = x cos h + z sin h, z' = -x sin h + z cos h
+  (define r (degrees->radians* h))
+  (define dx (- x ox)) (define dz (- z oz))
+  (values (- (* dx (cos r)) (* dz (sin r))) (+ (* dx (sin r)) (* dz (cos r)))))
+(define (degrees->radians* d) (* d (/ pi 180)))
+(define (field f key) (cadr (assq key (cdr f))))
+
+(test-case "Parts at a heading (Jolt): the rig turned 37 and 90 degrees behaves as the unturned one with its coordinates turned back"
+  (when (godot-available?)
+    (define world (godot-simulate-world 'headings #:seconds 4 #:sample-dt 1/20))
+    (define straight (hash-ref world 'straight))
+    (check-true (> (length straight) 70) "a full trace")
+    (for ([placement (cdr headings)])
+      (define-values (label h ox oz) (apply values placement))
+      (define run (hash-ref world label))
+      (check-equal? (length run) (length straight) (format "~a has a full trace" label))
+      (for ([a straight] [b run])
+        (for ([body '(roller side-roller rod rod2 fly)])
+          (define-values (xa za) (values (field a (string->symbol (format "~a.x" body))) (field a (string->symbol (format "~a.z" body)))))
+          (define-values (xb zb) (to-machine-frame h ox oz (field b (string->symbol (format "~a.x" body))) (field b (string->symbol (format "~a.z" body)))))
+          (define (near? what x y tol) (check-= x y tol (format "~a: ~a's ~a at ~a s" label body what (car a))))
+          (near? "x" xb xa 0.01) (near? "z" zb za 0.01)
+          (near? "y" (field b (string->symbol (format "~a.y" body))) (field a (string->symbol (format "~a.y" body))) 0.003)
+          (near? "speed" (field b (string->symbol (format "~a.speed" body))) (field a (string->symbol (format "~a.speed" body))) 0.01))
+        (check-= (field b 'fly.omega) (field a 'fly.omega) 0.005 (format "~a: the flywheel's spin at ~a s" label (car a)))
+        (check-= (let ([d (- (field b 'fly.angle) (field a 'fly.angle))]) (- d (* 360 (round (/ d 360))))) 0 0.5
+                 (format "~a: the flywheel's turn at ~a s" label (car a)))
+        (check-= (field b 'rod.angle) (field a 'rod.angle) 0.2 (format "~a: the pendulum's angle at ~a s" label (car a)))))))
+
+(test-case "Parts at a heading (Jolt): a rolling ball goes down a turned slope along the turned fall line at (5/7) g sin(angle), a turned part swings in its turned plane, and the flywheel runs down on 0.2 per second"
+  (when (godot-available?)
+    (define world (godot-simulate-world 'headings #:seconds 4 #:sample-dt 1/20))
+    (define theta (degrees->radians* 35))
+    (define g 9.81)
+    ;; rolling: a = (5/7) g sin(35) along the slope; by half a second it has gone s = a t^2 / 2
+    (define s (* 1/2 (* 5/7 g (sin theta)) 0.25))
+    (check-= s 0.5024 1e-4)
+    (for ([placement headings])
+      (define-values (label h ox oz) (apply values placement))
+      (define run (hash-ref world label))
+      (define (moved body)
+        (define (at k) (value-at run (list body k) 0.5))
+        (define (start k) (value-at run (list body k) 0))
+        (values (- (at 'x) (start 'x)) (- (at 'y) (start 'y)) (- (at 'z) (start 'z))))
+      ;; the first ramp's downhill is (sin h, cos h), the second's, turned a further 90, (sin(h + 90), cos(h + 90))
+      (for ([body '(roller side-roller)] [extra '(0 90)])
+        (define-values (dx dy dz) (moved body))
+        (define along (degrees->radians* (+ h extra)))
+        (check-= (+ (* dx (sin along)) (* dz (cos along))) (* s (cos theta)) (* 0.03 s) (format "~a: ~a's way down the slope" label body))
+        (check-= (- (* dx (cos along)) (* dz (sin along))) 0 0.003 (format "~a: ~a goes to neither side" label body))
+        (check-= (- dy) (* s (sin theta)) (* 0.03 s) (format "~a: ~a's drop" label body)))
+      ;; the swing: a compound pendulum, 50 cm of iron rod 1 cm across and a ball 4 cm across, from 10 degrees
+      (define rho iron-density) (define len 0.5) (define rod-r 0.01) (define ball-r 0.04)
+      (define m-rod (* rho pi rod-r rod-r len)) (define m-ball (* rho 4/3 pi (expt ball-r 3)))
+      (define inertia (+ (/ (* m-rod len len) 3) (* m-ball (+ (* len len) (* 0.4 ball-r ball-r)))))
+      (define d (/ (+ (* m-rod len 1/2) (* m-ball len)) (+ m-rod m-ball)))
+      (define a0 (degrees->radians* 10))
+      (define period (* 2 pi (sqrt (/ inertia (* (+ m-rod m-ball) g d))) (+ 1 (/ (* a0 a0) 16))))
+      ;; the bob's place in the machine's own frame, so a swing along x is x, and along z is z
+      (define in-machine
+        (for/list ([f run])
+          (define-values (x z) (to-machine-frame h ox oz (field f 'rod.x) (field f 'rod.z)))
+          (define-values (x2 z2) (to-machine-frame h ox oz (field f 'rod2.x) (field f 'rod2.z)))
+          (list (car f) x z x2 z2)))
+      (define (cross-times k level)
+        (for/list ([a in-machine] [b (cdr in-machine)] #:when (or (and (< (- (list-ref a k) level) 0) (>= (- (list-ref b k) level) 0))
+                                                                   (and (> (- (list-ref a k) level) 0) (<= (- (list-ref b k) level) 0))))
+          (+ (car a) (* (- (car b) (car a)) (/ (- level (list-ref a k)) (- (list-ref b k) (list-ref a k)))))))
+      (define swings (cross-times 1 -2))                  ; the bob under its pivot, every half period
+      (check-true (>= (length swings) 3) (format "~a: swinging" label))
+      (for ([t0 swings] [t1 (cdr swings)])
+        (check-= (* 2 (- t1 t0)) period (* 0.01 period) (format "~a: the rod's period" label)))
+      (for ([row in-machine])
+        (check-= (third row) 0 0.003 (format "~a: the rod stays in its plane at ~a s" label (car row)))
+        (check-= (fourth row) -3 0.003 (format "~a: the second pendulum, hung at heading 90, swings along z at ~a s" label (car row))))
+      (check-true (> (apply max (map fifth in-machine)) 0.06) (format "~a: and does swing along z" label))
+      ;; the flywheel: 30 rpm, damped at 0.2 / s
+      (for ([t '(1 2 3 4)])
+        (define predicted (* pi (exp (* -0.2 t))))
+        (check-= (value-at run '(fly omega) t) predicted (* 0.01 predicted) (format "~a: the flywheel's spin at ~a s" label t))))))
+
+;; Machines the game already has, placed unturned and turned 53 degrees (game/worlds/headings-machines.world).
+;; Each pair agrees, with the turned one's coordinates turned back, for as long as the motion is a
+;; deterministic function of the geometry: the trebuchet's counterweight chain goes chaotic after its
+;; second snap (#80), and a stone that has landed slides on Jolt's friction, applied along two axes
+;; picked from the contact's normal, not along the sliding direction (so it ends a few centimetres
+;; off); both are left out past the times below.
+(test-case "Existing machines turned 53 degrees (Jolt): cradle, trebuchet, Roman crane, onager, lunar train and wagons behave as unturned"
+  (when (godot-available?)
+    (define world (godot-simulate-world 'headings-machines #:seconds 6 #:sample-dt 1/4))
+    (define (bodies-of frame)
+      (remove-duplicates (for/list ([kv (cdr frame)] #:when (regexp-match #rx"[.]x$" (symbol->string (car kv))))
+                           (regexp-replace #rx"[.]x$" (symbol->string (car kv)) ""))))
+    ;; (machine at-x until position-tolerance)
+    (for ([spec '((cradle 0 6 0.003) (trebuchet 150 2.0 0.05) (crane 300 6 0.005) (onager 450 2.5 0.01)
+                  (train 600 6 0.003) (wagons 750 6 0.01))])
+      (define-values (m ox until tol) (apply values spec))
+      (define a (hash-ref world (string->symbol (format "~a-0" m))))
+      (define b (hash-ref world (string->symbol (format "~a-53" m))))
+      (check-equal? (length a) (length b))
+      (check-true (pair? (bodies-of (car a))) (format "~a has bodies" m))
+      (for ([fa a] [fb b] #:when (<= (car fa) until))
+        (for ([body (bodies-of fa)])
+          (define (v f k) (field f (string->symbol (format "~a.~a" body k))))
+          (define-values (xb zb) (to-machine-frame 53 ox 150 (v fb 'x) (v fb 'z)))
+          (define (near? what x y t) (check-= x y t (format "~a: ~a's ~a at ~a s" m body what (car fa))))
+          (near? "x" xb (- (v fa 'x) ox) tol) (near? "z" zb (v fa 'z) tol) (near? "y" (v fb 'y) (v fa 'y) tol)
+          (when (assq (string->symbol (format "~a.angle" body)) (cdr fa))
+            (near? "turn" (let ([d (- (v fb 'angle) (v fa 'angle))]) (- d (* 360 (round (/ d 360))))) 0 0.2)))))))
