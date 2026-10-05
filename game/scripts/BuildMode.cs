@@ -126,6 +126,7 @@ public partial class BuildMode : Node3D
         ["burning-mirror"] = ("Burning mirror", "Fire, water and steam", "A curved mirror (or lens) gathering the sun into a small spot. Pick its target in the inspector."),
         ["pane"] = ("Glass panes", "Structure", "Glass in an enclosure's wall or roof: the only way light gets in. Too thin for the pressure, it cracks."),
         ["pond"] = ("Warm pond", "Water", "Gives a tank's water a temperature: warmed, it evaporates into the air over it."),
+        ["drain"] = ("Drain", "Water", "A grate in the ground over a pipe into a tank: water standing on the map over it runs in. Pick the tank in the inspector."),
         ["roof"] = ("Cold roof", "Structure", "An enclosure's roof chilled by the outside: its air's vapour condenses on it and rains into a gutter."),
         ["plants"] = ("Trees", "Water", "Fast trees in a bed: under light through glass they grow wood from CO2 and water and give off O2."),
         ["melter"] = ("Ice melter", "Water", "An ice drill and melter: 466 kJ a kilogram of Mars ice, into a tank."),

@@ -54,6 +54,12 @@ public sealed class WorldGround
         _getters["map.settled"] = () => Settled;               // faces that failed as the map settled (#54)
         _getters["map.settling"] = () => ground.SettleOnLoad && !_settleDone ? 1 : 0;   // the ground is still coming down (#61)
         _getters["map.settle-passes"] = () => SettlePasses;    // relaxation passes it has taken so far
+        _getters["map.spilled"] = () => Spilled;               // m³ tanks spilled or leaked onto it (#90)
+        _getters["map.drained"] = () => Water.Drained;         // m³ drains took off it into tanks (#90)
+        _getters["map.collapsed"] = () => Ground.Collapsed;       // m³ failed faces of rocky soil lost (#88)
+        _getters["map.boulders"] = () => Ground.Boulders.Count;   // boulders the slides left
+        _getters["map.boulder-volume"] = () => Ground.BoulderVolume;
+        _getters["map.ground-volume"] = () => Ground.Heights.Sum() * Ground.Cell * Ground.Cell;   // m³ of ground above 0 (below, less)
         _getters["map.probe-x"] = () => _probeX;
         _getters["map.probe-z"] = () => _probeZ;
         _setters["map.probe-x"] = x => _probeX = x;
@@ -78,6 +84,18 @@ public sealed class WorldGround
                 _fieldMills.Add((machine, mill, part.At));
                 mill.Wind = WindAt(machine, part.At);
             }
+        // tanks spill onto the ground under them, holes with nothing to catch them pour there, and drains take the
+        // water standing over them into their tanks (#90): water crosses between the machine and the map, all of it counted
+        foreach (var d in machine.Drains.Values) d.Attach(Water);
+        foreach (var (id, tank) in machine.Tanks)
+            if (machine.Def.Part(id) is { } part) tank.Spill = m3 => PourOnto(part.At.X, part.At.Z, m3);
+        foreach (var (id, leak) in machine.Leaks)
+            if (leak.Catch is null && machine.Def.Part(id) is { } hole)
+            {
+                var l = leak;
+                // the jet leaves level along +x at √(2 g h) and falls to the ground under the hole: it lands 2 √(h · drop) out
+                leak.Pour = m3 => PourOnto(hole.At.X + 2 * Math.Sqrt(l.Head * Math.Max(0, hole.At.Y - Ground.HeightAt(hole.At.X, hole.At.Z))), hole.At.Z, m3);
+            }
         foreach (var spec in machine.Def.Channels)
         {
             if (spec.To is not null || spec.Onto is not null || spec.End is not { } end) continue;
@@ -97,6 +115,15 @@ public sealed class WorldGround
     /// <summary>The map's wind at a point, at the machine's solar hour and seconds into its run.</summary>
     private double WindAt(MachineRuntime machine, Vec3 at) =>
         Ground.Wind!.SpeedAt(at.X, at.Z, machine.Sun.Time, machine.Sun.Sols * machine.Sun.SolLength);
+
+    /// <summary>Water a tank lets go of onto the ground at a world point; off the map, it runs away (#90).</summary>
+    private void PourOnto(double x, double z, double m3)
+    {
+        Spilled += m3;
+        if (!Water.AddWater(x, z, m3)) Water.Leak(m3);
+    }
+    /// <summary>m³ the machines' tanks have spilled or leaked onto the ground, all told (#90).</summary>
+    public double Spilled { get; private set; }
 
     public void Step(double dt)
     {
@@ -126,6 +153,34 @@ public sealed class WorldGround
         }
         foreach (var (machine, mill, at) in _fieldMills) mill.Wind = WindAt(machine, at);
         Water.Step(dt);
+        TraceBoulders();
+    }
+
+    /// <summary>
+    /// Each boulder's readings, for the trace (#88): where it is (x y z, m), how fast it goes (speed, m/s), and how
+    /// steep the ground is under it (slope, degrees). The game writes their poses back every tick.
+    /// </summary>
+    public void TraceBoulders()
+    {
+        for (; _boulderFields < Ground.Boulders.Count; _boulderFields++)
+        {
+            var b = Ground.Boulders[_boulderFields];
+            _getters[$"{b.Id}.x"] = () => b.X;
+            _getters[$"{b.Id}.y"] = () => b.Y;
+            _getters[$"{b.Id}.z"] = () => b.Z;
+            _getters[$"{b.Id}.speed"] = () => b.Speed;
+            _getters[$"{b.Id}.size"] = () => b.Size;
+            _getters[$"{b.Id}.slope"] = () => Ground.SlopeAt(b.X, b.Z);
+        }
+    }
+    [NonSerialized] private int _boulderFields;
+
+    /// <summary>After a save's boulders replace the ground's: their readings start again.</summary>
+    public void RetraceBoulders()
+    {
+        foreach (var k in _getters.Keys.Where(k => k.StartsWith("boulder-")).ToList()) _getters.Remove(k);
+        _boulderFields = 0;
+        TraceBoulders();
     }
     private bool _settleDone;
     private double _passDebt;

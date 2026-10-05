@@ -13,8 +13,8 @@ namespace HeroicInventions.Sim.Fluids;
 /// skipped, so dry ground costs next to nothing.
 ///
 /// Every cubic metre is on the ledger: what was poured (springs, anything
-/// run onto the ground) = what stands on it + what soaked in + what ran off
-/// an open edge.
+/// run onto the ground, a tank spilling, #90) = what stands on it + what soaked
+/// in + what ran off an open edge + what drains took into tanks (#90).
 /// </summary>
 public sealed partial class ShallowWater2D
 {
@@ -91,6 +91,27 @@ public sealed partial class ShallowWater2D
         Poured += m3;
         return true;
     }
+
+    /// <summary>
+    /// Takes up to <paramref name="m3"/> of the water standing on the cell at a world point (a drain into a tank, #90),
+    /// no more than is there; returns what it took, on the ledger as drained.
+    /// </summary>
+    public double TakeWater(double x, double z, double m3)
+    {
+        if (m3 <= 0 || Ground.CellAt(x, z) is not { } c) return 0;
+        double area = Ground.Cell * Ground.Cell, taken = Math.Min(m3, _h[c] * area);
+        if (taken <= 0) return 0;
+        double left = _h[c] - taken / area;
+        // what goes keeps the cell's current, so what stays runs as it did
+        double keep = _h[c] > 0 ? left / _h[c] : 0;
+        _h[c] = left;
+        _qx[c] *= keep; _qz[c] *= keep;
+        Drained += taken;
+        return taken;
+    }
+
+    /// <summary>m³ taken off the ground by drains into tanks (#90), all told.</summary>
+    public double Drained { get; private set; }
 
     /// <summary>Water poured towards the ground but off the map: on the ledger as poured and run away at once.</summary>
     public void Leak(double m3)

@@ -7,7 +7,7 @@
 ;; AeolipileBlueprintSpinsOnceTheWaterBoils, which asserted the same
 ;; things from C# directly against MachineRuntime. See docs/design.html
 ;; §III "Machines as tests".
-(require rackunit heroic/simhost (only-in racket/math pi sinh cosh) (only-in racket/file make-temporary-directory delete-directory/files))
+(require rackunit heroic/simhost (only-in racket/math pi sinh cosh sqr) (only-in racket/file make-temporary-directory delete-directory/files))
 
 (test-case "Heron's fountain lifts water above its basin, then empties the supply vessel"
   (define run (simulate 'herons-fountain #:seconds 60 #:step 0.05 #:sample-dt 0.5))
@@ -940,23 +940,31 @@
   (check-= (final-of run '(short stalled)) 1 0)
   (check-= (final-of run '(short strokes)) 10 0))
 
-(test-case "Trebuchet: after the sling lets go (~0.9 s) the machine never gains energy, and the stone flies well clear"
+(test-case "Trebuchet: the machine never gains energy over the whole run, the chain holds the counterweight on it, and the stone flies well clear"
   ;; Issue #45: an uncapped stretch correction in the rope solver kicked the
   ;; arm every time the counterweight's chain snapped taut, and the machine
   ;; climbed to 155% of its starting energy. A passive machine can only lose it.
-  ;; From release to the counterweight's first landing (~2.75 s): with the engine's
-  ;; default damping gone (#33) the chain snaps taut a second time at ~4.8 s and the
-  ;; rope solver puts energy into the arm again (see the follow-up issue), which the
-  ;; damping used to hide.
+  ;; Issue #80: with the engine's damping gone (#33) the chain stretched 0.75 m and
+  ;; snapped taut again at ~4.8 s, the energy reaching 1462 J (start 856 J). The
+  ;; solver misjudged how far its pull moved the hinged arm's short end (reading
+  ;; the turn about the arm's centre of mass, not its pivot: 3.3 times too far), so
+  ;; the chain never held. Now, worked out beforehand: the chain (0.35 m) holds the
+  ;; counterweight's centre at least 1.4 - 0.27 - 0.35 - 0.15 = 0.63 m up, the
+  ;; lowest the short arm's end goes, so it never strikes the ground; and the
+  ;; energy, spin included, never climbs: no tick ends more than 1% of the
+  ;; start above the lowest it has been, and nothing is ever above the start.
   (when (godot-available?)
-    (define run (godot-simulate 'trebuchet #:seconds 12 #:sample-dt 0.1))
-    (define start (value-at run '(scene mechanical) 0))
-    (define landing (for/first ([f run] #:when (>= (cadr (assq 'counterweight.hits (cdr f))) 1)) (car f)))
-    (define after (for/list ([f run] #:when (and (>= (car f) 1.0) (< (car f) landing)))
-                    (cadr (assq 'scene.mechanical (cdr f)))))
-    (check-true (<= (apply max after) (* 1.02 start))
-                (format "peak ~a J after release against ~a J at the start" (apply max after) start))
-    ;; throws toward -X; traced at about 20 m
+    (define run (godot-simulate 'trebuchet #:seconds 12 #:sample-dt 1/120))
+    (define energy (values-of run '(scene mechanical)))
+    (define start (car energy))
+    (check-= start 856.24 0.01 "73 kg of granite 0.81 m up on a 7 kg arm, at rest")
+    (check-true (<= (apply max energy) (+ start 1e-6)) (format "never above the start: peak ~a J against ~a J" (apply max energy) start))
+    (define climb (for/fold ([worst 0] [lowest +inf.0] #:result worst) ([e energy]) (values (max worst (- e lowest)) (min lowest e))))
+    (check-true (< climb (* 0.01 start)) (format "the most it climbed above its lowest so far: ~a J" climb))
+    (check-= (final-of run '(counterweight hits)) 0 0 "the counterweight never reaches the ground")
+    (check-true (> (min-of run '(counterweight y)) (- 0.63 0.005)) (format "the counterweight's lowest: ~a m, against 0.63 m on a taut chain" (min-of run '(counterweight y))))
+    (check-true (< (max-of run '(cw-chain stretch)) 10) (format "the chain stretched at most ~a mm" (max-of run '(cw-chain stretch))))
+    ;; throws toward -X; traced at 13.1 m
     (check-true (< (final-of run '(stone x)) -12) (format "stone landed at x = ~a" (final-of run '(stone x))))))
 
 (test-case "Vitruvian catapulta: the bolt stays on the ground and comes to rest a sensible distance out"
@@ -2140,6 +2148,92 @@
     (check-= (final-of site '(crate y)) -0.75 0.01 "out, resting on the trench's floor")))
 
 
+;; ---------------------------------------------------------------------------
+;; Boulders from terrain collapse (issue #88)
+
+(test-case "Boulders (#88): the talus cliff's collapse of 7.03 m3 leaves 4 granite boulders (0.5 m3) and the ground 0.5 m3 short; they slide down the 35° debris and stop on ground under 31°, 31-35° below where they started"
+  (when (godot-available?)
+    ;; talus.rkt: V = (3 - 1.244) x 0.5 x 8 = 7.03 m3 (3 %); floor(0.08 V / 0.125) = 4 cubes of 0.5 m; granite on the ground holds to atan 0.6 = 31.0°
+    (define g (hash-ref (godot-simulate-world 'talus #:seconds 5 #:sample-dt 1/120) 'links))
+    (define (field f k) (let ([e (assq k (cdr f))]) (and e (cadr e))))
+    (define start (for/first ([f g] #:when (field f 'boulder-1.x)) f))
+    (define end (last g))
+    (check-true (< (car start) 0.02) "the boulders come down with the cliff, on the first tick")
+    (check-= (field (car g) 'map.ground-volume) 120 1e-9 "10 cells of 3 m, 16 rows, 0.25 m2 each")
+    (check-= (field end 'map.collapsed) 7.03 (* 0.03 7.03))
+    (check-= (field end 'map.boulders) 4 0)
+    (check-= (field end 'map.boulders) (floor (/ (* 0.08 (field end 'map.collapsed)) 0.125)) 0)
+    (check-= (field end 'map.boulder-volume) 0.5 1e-12)
+    (check-= (- (field (car g) 'map.ground-volume) (field end 'map.ground-volume)) (field end 'map.boulder-volume) 1e-9
+             "the ground lost exactly what the boulders hold")
+    (for ([i (in-range 1 5)])
+      (define (k s) (string->symbol (format "boulder-~a.~a" i s)))
+      (define-values (x0 y0 z0 x1 y1 z1)
+        (values (field start (k 'x)) (field start (k 'y)) (field start (k 'z)) (field end (k 'x)) (field end (k 'y)) (field end (k 'z))))
+      (check-true (> (field start (k 'slope)) 31.0) (format "boulder ~a laid on ~a°, steeper than it holds on" i (field start (k 'slope))))
+      (check-true (> (- x1 x0) 0.3) (format "boulder ~a slid down the debris, ~a m" i (- x1 x0)))
+      (check-true (< (field end (k 'speed)) 0.005) (format "boulder ~a has stopped" i))
+      (check-true (<= (field end (k 'slope)) 31.0) (format "boulder ~a stopped on ~a°, no steeper than atan 0.6 = 31.0°" i (field end (k 'slope))))
+      (define reach (* (/ 180 pi) (atan (- y0 y1) (sqrt (+ (expt (- x1 x0) 2) (expt (- z1 z0) 2))))))
+      (check-true (<= 30.5 reach 35.0)
+                  (format "boulder ~a: the line from where it started to where it stopped is ~a° below level: friction's 31.0° or steeper (losses), never steeper than the 35° debris" i reach)))))
+
+(test-case "Boulders (#88): saved while sliding and loaded, they lie where they were and come to rest as in a run never stopped"
+  (when (godot-available?)
+    (define dir (make-temporary-directory))
+    (define file (path->string (build-path dir "talus.save")))
+    (define straight (hash-ref (godot-simulate-world 'talus #:seconds 5 #:sample-dt 1) 'links))
+    (godot-simulate-world 'talus #:seconds 1.05 #:sample-dt 1 #:env `(("HEROIC_SAVE" . ,file) ("HEROIC_SAVE_AT" . "1")))
+    (check-true (file-exists? file) "the game wrote the save")
+    (define saved (cdr (assq 'boulders (cddr (call-with-input-file file read)))))
+    (check-equal? (length saved) 4 "the save holds the four boulders")
+    (define resumed (hash-ref (godot-simulate-world 'talus #:seconds 5 #:sample-dt 1/120 #:env `(("HEROIC_LOAD" . ,file))) 'links))
+    (define (field f k) (let ([e (assq k (cdr f))]) (and e (cadr e))))
+    (define first-loaded (for/first ([f resumed] #:when (field f 'boulder-1.x)) f))
+    (for ([b saved] [i (in-naturals 1)])
+      (define (k s) (string->symbol (format "boulder-~a.~a" i s)))
+      (define at (cdr (assq 'at (cddddr b))))
+      (check-equal? (cadr b) (string->symbol (format "boulder-~a" i)))
+      (check-true (> (cadr (assq 'v (cddddr b))) 0.1) (format "boulder ~a was saved sliding" i))
+      ;; within one tick of sliding (under 1 cm) of where the save left it
+      (for ([s '(x y z)] [v at]) (check-= (field first-loaded (k s)) v 0.01 (format "boulder ~a ~a as loaded" i s)))
+      (for ([s '(x y z)]) (check-= (field (last resumed) (k s)) (field (last straight) (k s)) 0.05 (format "boulder ~a ~a at 5 s" i s)))
+      (check-true (< (field (last resumed) (k 'speed)) 0.005) (format "boulder ~a has stopped" i)))
+    (check-= (field (last resumed) 'map.ground-volume) 119.5 1e-9 "the ground as it was left, not collapsed again")
+    (check-= (field (last resumed) 'map.boulders) 4 0 "no more boulders")
+    (delete-directory/files dir)))
+
+;; ---------------------------------------------------------------------------
+;; Tanks and the ground's water (issue #90)
+
+(test-case "Spill (#90): a broken butt on a walled slope lets its 1000 L onto the ground; butt and ground always hold 1000 L, 369.6 L in the butt at 30 s"
+  (when (godot-available?)
+    ;; spill-tank.rkt: sqrt(head) falls 0.013288 a second from sqrt(0.98): 349.6 L over the hole at 30 s, down to it at 74.5 s
+    (define w (godot-simulate-world 'spill #:seconds 90 #:sample-dt 5))
+    (define-values (barrel ground) (values (hash-ref w 'barrel) (hash-ref w 'links)))
+    (for ([b barrel] [g ground])
+      (check-= (+ (/ (cadr (assq 'butt.water (cdr b))) 1000) (cadr (assq 'map.volume (cdr g)))) 1.0 1e-9
+               (format "butt and ground hold 1000 L at ~a s" (car b))))
+    (check-= (value-at barrel '(butt water) 30) 369.6 1.5)
+    (check-= (value-at ground '(map volume) 30) 0.6304 0.0015)
+    (check-= (final-of barrel '(butt water)) 20 0.01 "down to the hole, 2 cm up")
+    (check-= (final-of ground '(map spilled)) 0.98 1e-4)
+    (check-= (final-of ground '(map poured)) (final-of ground '(map volume)) 1e-9 "none soaked in, none ran off: the walls held it")))
+
+(test-case "Drain (#90): a grate at the bottom of a hollow fills its cistern at the spring's 2 L/s, the water standing 2.05 cm over it"
+  (when (godot-available?)
+    ;; cistern-drain.rkt: steady, Q = 1.705 x 0.4 x h^1.5 = 2 L/s, h = (0.002 / 0.682)^(2/3) = 2.048 cm
+    (define w (godot-simulate-world 'sump #:seconds 180 #:sample-dt 10))
+    (define-values (yard ground) (values (hash-ref w 'yard) (hash-ref w 'links)))
+    (for ([y yard] [g ground])
+      (check-= (+ (/ (cadr (assq 'cistern.water (cdr y))) 1000) (cadr (assq 'map.volume (cdr g)))) (cadr (assq 'map.poured (cdr g))) 1e-9
+               (format "cistern and ground hold what the spring gave at ~a s" (car y))))
+    (check-= (final-of ground '(map poured)) 0.36 1e-6 "180 s of 2 L/s")
+    (define rate (/ (- (final-of yard '(cistern water)) (value-at yard '(cistern water) 150)) 30))
+    (check-= rate 2.0 0.02 (format "the cistern fills at ~a L/s" rate))
+    (check-= (final-of yard '(grate flow)) 2.0 0.02)
+    (check-= (final-of yard '(grate depth)) (* 100 (expt (/ 0.002 (* 1.705 0.4)) 2/3)) 0.04)
+    (check-= (final-of yard '(grate drained)) (final-of yard '(cistern water)) 1e-9)))
 
 ;; ---------------------------------------------------------------------------
 ;; The greenhouse (issue #42). Working in racket/machines/greenhouse.rkt.
@@ -2420,26 +2514,28 @@
 
 ;; Machines the game already has, placed unturned and turned 53 degrees (game/worlds/headings-machines.world).
 ;; Each pair agrees, with the turned one's coordinates turned back, for as long as the motion is a
-;; deterministic function of the geometry: the trebuchet's counterweight chain goes chaotic after its
-;; second snap (#80), and a stone that has landed slides on Jolt's friction, applied along two axes
-;; picked from the contact's normal, not along the sliding direction (so it ends a few centimetres
-;; off); both are left out past the times below.
+;; deterministic function of the geometry: a stone that has landed meets the ground with Jolt's friction,
+;; applied along two axes picked from the contact's normal, not along the sliding direction, so it ends
+;; some centimetres off (0.2 m for the trebuchet's, 0.15 m for the onager's at once, more as it slides);
+;; stones are compared only in flight. The trebuchet's arm and counterweight, whose chain went chaotic
+;; after its second snap before #80, now agree to a fifth of a millimetre for all six seconds.
 (test-case "Existing machines turned 53 degrees (Jolt): cradle, trebuchet, Roman crane, onager, lunar train and wagons behave as unturned"
   (when (godot-available?)
     (define world (godot-simulate-world 'headings-machines #:seconds 6 #:sample-dt 1/4))
     (define (bodies-of frame)
       (remove-duplicates (for/list ([kv (cdr frame)] #:when (regexp-match #rx"[.]x$" (symbol->string (car kv))))
                            (regexp-replace #rx"[.]x$" (symbol->string (car kv)) ""))))
-    ;; (machine at-x until position-tolerance)
-    (for ([spec '((cradle 0 6 0.003) (trebuchet 150 2.0 0.05) (crane 300 6 0.005) (onager 450 2.5 0.01)
-                  (train 600 6 0.003) (wagons 750 6 0.01))])
-      (define-values (m ox until tol) (apply values spec))
+    ;; (machine at-x until position-tolerance always): every body is compared until `until`; the `always` bodies, the
+    ;; whole 6 s
+    (for ([spec '((cradle 0 6 0.003 ()) (trebuchet 150 2.0 0.05 (arm counterweight)) (crane 300 6 0.005 ())
+                  (onager 450 1.5 0.01 (arm)) (train 600 6 0.003 ()) (wagons 750 6 0.01 ()))])
+      (define-values (m ox until tol always) (apply values spec))
       (define a (hash-ref world (string->symbol (format "~a-0" m))))
       (define b (hash-ref world (string->symbol (format "~a-53" m))))
       (check-equal? (length a) (length b))
       (check-true (pair? (bodies-of (car a))) (format "~a has bodies" m))
-      (for ([fa a] [fb b] #:when (<= (car fa) until))
-        (for ([body (bodies-of fa)])
+      (for ([fa a] [fb b])
+        (for ([body (bodies-of fa)] #:when (or (<= (car fa) until) (memq (string->symbol body) always)))
           (define (v f k) (field f (string->symbol (format "~a.~a" body k))))
           (define-values (xb zb) (to-machine-frame 53 ox 150 (v fb 'x) (v fb 'z)))
           (define (near? what x y t) (check-= x y t (format "~a: ~a's ~a at ~a s" m body what (car fa))))
@@ -2457,18 +2553,18 @@
 ;; The map's own numbers are checked in tests/HeroicInventions.Sim.Tests/CraterTests.cs; here the game
 ;; plays them: the weakened rim comes down on screen over a few seconds and buries the cargo at its foot,
 ;; and two mills on the floor each take the wind of the field where they stand.
-(test-case "The crater's opening (Jolt): the weakened rim comes down over about four seconds and buries the cargo, as deep as its distance from the cliff, the same each run"
+(test-case "The crater's opening (Jolt): the weakened rim comes down over about four seconds, buries the cargo as deep as its distance from the cliff, and leaves boulders, one on the battery bank; the same each run"
   (when (godot-available?)
-    (define (run-it) (godot-simulate-world 'lonely-rover-opening #:seconds 8 #:sample-dt 1/2))
+    (define (run-it) (godot-simulate-world 'lonely-rover-opening #:seconds 40 #:sample-dt 1))
     (define world (run-it))
     (define ground (hash-ref world 'links))
-    ;; settling plays out at 60 passes a second: the whole of it is 261 passes, 4.35 s, and is still going at 4 s
+    ;; settling plays out at 20 passes a second: about 80 passes, four seconds, and is still going at 3 s
     (check-= (value-at-key ground 'map.settling 0.5) 1 0)
-    (check-= (value-at-key ground 'map.settling 4.0) 1 0)
+    (check-= (value-at-key ground 'map.settling 3.0) 1 0)
     (check-= (value-at-key ground 'map.settling 5.0) 0 0)
-    (check-= (final-of-key ground 'map.settle-passes) 261 30)
-    (check-= (/ (final-of-key ground 'map.settle-passes) 60.0) 4.35 0.5 "seconds")
-    (check-true (< 80 (final-of-key ground 'map.settled) 200) "faces of the weakened block that failed")
+    (check-= (final-of-key ground 'map.settle-passes) 80 25)
+    (check-= (/ (final-of-key ground 'map.settle-passes) 20.0) 4.0 1.2 "seconds")
+    (check-true (< 10 (final-of-key ground 'map.settled) 60) "faces of the weakened block that failed")
     ;; each crate: held where the slide left it if more than a quarter of its height (12.5 cm) is over its lid,
     ;; and the pull to free it is its weight, the soil on the lid and the soil's grip on its sides
     (define g 3.71) (define s 0.5)
@@ -2487,15 +2583,38 @@
     ;; the nearer the cliff's foot, the deeper the rubble over it
     (check-true (apply > (take covers 3)) (format "covers fall away from the cliff: ~a" covers))
     (check-true (andmap negative? (drop covers 3)) "and the last two crates are bare")
-    (check-= (first covers) 4.31 0.2 "the battery bank is buried under about 4.3 m: held, 24 kN to pull, within a backhoe's reach")
+    (check-= (first covers) 3.98 0.2 "the battery bank is buried under about 4 m: held, 22 kN to pull, within a backhoe's reach")
     (check-true (> (field (last (hash-ref world 'battery-bank)) 'crate.buried) 0.5) "the battery bank is buried")
-    ;; deterministic: a second run buries them the same way
+    ;; the rock (#88): 2% of what the failed faces lost comes down as 2 m cubes of granite, floor(0.02 V / 8 m3) of them
+    (define end (last ground))
+    (define collapsed (field end 'map.collapsed))
+    (check-= (field end 'map.boulders) (floor (/ (* 0.02 collapsed) 8)) 0 "boulders")
+    (check-= (field end 'map.boulders) 18 3)
+    (check-= (field end 'map.boulder-volume) (* 8 (field end 'map.boulders)) 1e-9 "m3")
+    (check-= (- (field (car ground) 'map.ground-volume) (field end 'map.ground-volume)) (field end 'map.boulder-volume) 1e-6
+             "the ground lost exactly what the boulders hold")
+    (define n (inexact->exact (field end 'map.boulders)))
+    (define (boulder i key) (field end (string->symbol (format "boulder-~a.~a" i key))))
+    (for ([i (in-range 1 (+ n 1))])
+      (check-true (< (boulder i 'speed) 0.01) (format "boulder ~a has come to rest by 40 s" i)))
+    ;; pinned: one of them lies on the rubble over the battery bank, 21.6 t of granite (a rover's backhoe lifts
+    ;; hundreds of kilograms, not that): it must be got off the bank some other way
+    (define bank (last (hash-ref world 'battery-bank)))
+    (define nearest
+      (for/fold ([best #f]) ([i (in-range 1 (+ n 1))])
+        (define d (sqrt (+ (sqr (- (boulder i 'x) (field bank 'crate.x))) (sqr (- (boulder i 'z) (field bank 'crate.z))))))
+        (if (or (not best) (< d (car best))) (cons d i) best)))
+    (check-true (< (car nearest) 3.0) (format "boulder ~a lies ~a m from the battery bank" (cdr nearest) (car nearest)))
+    (define mass (* 2700 (expt (boulder (cdr nearest) 'size) 3)))
+    (check-= mass 21600 1 "kg: too big for a backhoe")
+    (check-true (> mass 5000) "far over what a rover-mounted backhoe lifts")
+    ;; deterministic: a second run buries them the same way and leaves the boulders in the same places
     (define again (run-it))
     (for ([c crates])
       (check-= (field (last (hash-ref again c)) 'crate.cover) (field (last (hash-ref world c)) 'crate.cover) 1e-6 (format "~a again" c)))
-    ;; PENDING #88: the scenario's last claim, that the bank is also pinned by boulders too big for the backhoe,
-    ;; needs boulder bodies from terrain collapse, which #88 builds. Add the assertion when it lands.
-    ))
+    (for* ([i (in-range 1 (+ n 1))] [key '(x y z)])
+      (check-= (field (last (hash-ref again 'links)) (string->symbol (format "boulder-~a.~a" i key))) (boulder i key) 1e-3
+               (format "boulder ~a ~a again" i key)))))
 
 (test-case "Two mills on the crater floor (Jolt): each takes the wind of the map's field where it stands, 6 m/s x corridor x daily x gusts, and the power goes as its cube"
   (when (godot-available?)

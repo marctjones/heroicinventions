@@ -1,11 +1,15 @@
 ;; The Lonely Rover's opening (issue #61): the storm has weakened a section of the crater's rim
 ;; (racket/maps/victoria.rkt), and the world begins with it coming down, on screen, onto the
-;; cargo that stands at its foot. Five crates in a row up the slope from the cliff, along its
-;; middle (azimuth 30); which the rubble buries, and under how much, is where the ground's
-;; physics puts it, the same each run.
+;; cargo that stands at its foot. Five crates up the slope from the cliff, along its middle
+;; (azimuth 30); which the rubble buries, and under how much, is where the ground's physics
+;; puts it, the same each run. The rim is rocky: 2% of what comes down comes down as 2 m
+;; cubes of granite, 21.6 t each, which roll down the rubble and stop on it. Where the cargo
+;; stands is the scenario's choice (#60): the battery bank's place was picked so that one of
+;; them comes to rest on the rubble over it, and a backhoe that can't lift a boulder has to
+;; get it off the bank some other way.
 (world lonely-rover-opening
   (map victoria)
-  (place battery-bank cargo-crate (at 259.81 0 150.0))
+  (place battery-bank cargo-crate (at 264.0 0 143.0))
   (place solar-panels cargo-crate (at 254.62 0 147.0))
   (place gas-cylinders cargo-crate (at 249.42 0 144.0))
   (place hand-tools cargo-crate (at 242.49 0 140.0))

@@ -10,12 +10,16 @@
 ;; than the tip itself — the sling is a second, longer lever on the end
 ;; of the first. The sling's loop slips off its release pin once it has
 ;; swung close to in line with the arm (#:release-deg), and the stone
-;; flies on its own momentum, released at about 0.85 s. Traced, it lands
-;; about 16 m out: roughly an eighth of the machine's 856 J in the stone
-;; (1.4 kg thrown 16 m needs ~110 J). Real trebuchets reach 30–60%,
+;; flies on its own momentum, released at about 0.95 s. Traced, it lands
+;; 13.1 m out: roughly a tenth of the machine's 856 J in the stone
+;; (1.4 kg thrown 13 m needs ~90 J). Real trebuchets reach 30–60%,
 ;; mostly because their arms don't slam into a stop mid-throw. (Before the
 ;; rope fix for issue #45 it landed ~6 m out: the chain's stretch
-;; correction was jerking the arm and wasting the throw.)
+;; correction was jerking the arm and wasting the throw. Until #80 the chain
+;; stretched as much as 0.75 m, let the counterweight fall to the ground,
+;; and yanked it back up with energy that came from nowhere; the 16 m it
+;; landed then was partly that. The chain now holds the counterweight's
+;; centre at least 0.63 m up, the short arm's lowest reach less the chain.)
 ;;
 ;; Throws toward -X. Everything here is rope, hinge and falling weight —
 ;; nothing scripts the flight.

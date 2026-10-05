@@ -54,7 +54,8 @@ public partial class MachineView
         foreach (var (leak, hole, jet) in _leakViews)
         {
             double head = leak.Head;
-            double catchY = leak.Catch is { } c ? c.SurfaceElevation : 0;
+            // into its catch tank, or onto the ground: a map's, under the hole, where the sim pours it (#90)
+            double catchY = leak.Catch is { } c ? c.SurfaceElevation : Ground?.HeightAt(hole.X, hole.Z) ?? 0;
             double drop = hole.Y - catchY;
             bool flowing = leak.Flow > 1e-9 && drop > 1e-3;
             double g = Runtime.Outside.Gravity;

@@ -102,9 +102,10 @@ public class CraterTests
         var before = (double[])t.Heights.Clone();
         double volume = Volume(t);
         var (failures, passes) = t.Settle(Mars);
-        Assert.InRange(failures, 80, 200);                                // columns of the face, a few for each of its edges
-        Assert.InRange(passes, 150, 400);
-        Assert.Equal(volume, Volume(t), 1e-3);                            // volume is kept exactly: soil only moves between cells
+        Assert.InRange(failures, 10, 60);                                 // columns of the face, 5 m of rim each
+        Assert.InRange(passes, 40, 200);
+        // volume is kept exactly: soil only moves between cells, but for the rock that comes down as boulders (below)
+        Assert.Equal(volume - t.BoulderVolume, Volume(t), 1e-3);
         // every cell that moved is the block's, its edges' or the apron it ran out over: east, within 30 degrees of azimuth 30
         int moved = 0;
         for (int k = 0; k < t.Count; k++)
@@ -116,7 +117,14 @@ public class CraterTests
             Assert.InRange(az, 30 - 30, 30 + 30);
             Assert.InRange(r, 260, 470);
         }
-        Assert.InRange(moved, 300, 2000);
+        Assert.InRange(moved, 100, 2000);
+        // the rim is rocky: 2% of what the failed faces lost comes down as 2 m cubes of granite, floor(0.02 V / 8 m3) of them
+        Assert.InRange(t.Collapsed, 5_000, 12_000);
+        int boulders = (int)Math.Floor(0.02 * t.Collapsed / 8 + 1e-9);
+        Assert.Equal(boulders, t.Boulders.Count);
+        Assert.InRange(boulders, 10, 30);
+        Assert.Equal(boulders * 8.0, t.BoulderVolume, 1e-9);
+        Assert.All(t.Boulders, b => { Assert.Equal(2.0, b.Size); Assert.Equal("granite", b.Material); });
         // it stands now: another look at the whole map finds nothing to give
         var (again, more) = t.Relax(0, 0, t.Nx - 1, t.Nz - 1, Mars);
         Assert.Equal(0, again);
@@ -150,20 +158,26 @@ public class CraterTests
         var at_once = Load();
         at_once.Settle(Mars);
         var stepped = Load();
-        Assert.Equal(60, stepped.SettleRate);
+        Assert.Equal(20, stepped.SettleRate);
         Assert.True(stepped.SettleOnLoad);
         int passes = 0, failures = 0, ticks = 0;
         while (!stepped.Stood && ticks < 100_000)
         {
-            // as the world does: a sixtieth of a second's passes a tick at 120 ticks a second, so a pass every other tick
-            var step = stepped.SettleStep(ticks % 2, Mars);
+            // as the world does: 20 passes a second at 120 ticks a second, so a pass every sixth tick
+            var step = stepped.SettleStep(ticks % 6 == 0 ? 1 : 0, Mars);
             passes += step.Passes; failures += step.Failures; ticks++;
         }
         Assert.True(stepped.Stood);
         for (int k = 0; k < at_once.Count; k++) Assert.Equal(at_once.Heights[k], stepped.Heights[k], 1e-5);
+        Assert.Equal(at_once.Boulders.Count, stepped.Boulders.Count);     // the rock comes down once the ground stands, the same rock
+        for (int b = 0; b < at_once.Boulders.Count; b++)
+        {
+            Assert.Equal(at_once.Boulders[b].X, stepped.Boulders[b].X, 1e-5);
+            Assert.Equal(at_once.Boulders[b].Z, stepped.Boulders[b].Z, 1e-5);
+        }
         double seconds = passes / stepped.SettleRate;
         Assert.InRange(seconds, 3, 6);                                    // a few seconds to watch, not a jump
-        Assert.InRange(failures, 80, 200);
+        Assert.InRange(failures, 10, 60);
     }
 
     [Fact]
@@ -194,9 +208,10 @@ public class CraterTests
         Assert.Equal(new WindField(0, 0, 200, 6, 80, 0.3, 0.35, 2, 0.25), t.Wind);
         var again = Terrain.Parse(t.Write(), "again");
         Assert.Equal(t.Wind, again.Wind);
-        Assert.Equal(60, again.SettleRate);
+        Assert.Equal(20, again.SettleRate);
         Assert.True(again.SettleOnLoad);
-        Assert.Contains("(settle 60.0)", t.Write());
+        Assert.Contains("(settle 20.0)", t.Write());
+        Assert.Equal(new BoulderSpec(0.02, 2.0, "granite"), again.Soils.Single(s => s.Material == "sublimed-regolith").Boulders);
         // a map with a plain true still settles at once, as in #54
         var cliff = Terrain.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "maps", "cliff.map")), "cliff");
         Assert.True(cliff.SettleOnLoad);

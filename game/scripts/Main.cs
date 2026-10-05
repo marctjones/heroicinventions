@@ -180,6 +180,8 @@ public partial class Main : Node3D
         ["placer-sluice"] = "Sluice Box (placer gold)",
         ["constant-head"] = "Float Valve (Constant Head)",
         ["tank-leaks"] = "Tank Leaks (Torricelli)",
+        ["spill-tank"] = "Broken Water Butt (spills onto the ground)",
+        ["cistern-drain"] = "Drain into a Cistern",
         ["boiler-safety"] = "Safety Valve and Burst Boiler",
         ["suction-limit"] = "Lift Pumps and the Suction Limit",
         ["fire-and-water"] = "Fire and Water",
@@ -250,6 +252,8 @@ public partial class Main : Node3D
         ["fire-and-water"] = "Water meets fire. Left: a cistern spills 20 g/s onto a 20 kW wood fire. Boiling a kilogram of 20 C water away takes 2.59 MJ, so the fire can boil off only 7.7 g/s; the rest soaks in, and when the soaked water outweighs the fuel left (at about 150 s) the fire drowns. Until then all its heat goes into the water, none into the pot. Right: a copper of 4 kg at 90 C takes 2 L of 20 C feed water and mixes to 66.7 C; its 2 kW stove needs about 7 minutes to bring it back to the boil.",
         ["boiler-safety"] = "Denis Papin's safety valve (1679). Two bronze boilers, each 10 kg of 20 C water rated to burst at 200 kPa, each over a wood fire giving it 10 kW. Sealed, both warm along T = 20 + 5000 (1 - exp(-t / 20930 s)). The left one's weighted lever lifts at 100 kPa (425 s) and its 8 mm valve vents what the fire brings, (Q - h (T - 20)) / L = 4.34 g/s of steam, holding the boiler at 103.4 kPa and 121.1 C for as long as the water lasts. The right one has no valve: it climbs on to 200 kPa and bursts at 482 s, 0.63 kg of its water flashing to steam at once. Tie the valve down (guard.lift 300) and the left one bursts about 51 s later. Try it at 20x.",
         ["suction-limit"] = "Why a lift pump can't raise water more than about 10 m (Galileo's well pump, Berti's tube, Torricelli, 1638-44). The atmosphere pushes the water up after the bucket; once the pressure under the bucket falls to water's vapour pressure the column breaks, at (101325 - 2330 Pa) / (rho g) = 10.09 m over the well. Three pumps, each a 15 cm bucket over a 50 cm stroke at 20 strokes a minute. Left, the bucket 6 m over its water: 0.8 x the swept 8.8 L comes out every stroke, 7.07 L or 2.36 L/s, the rod pulling 1127 N and the water gaining 80% of the work. Middle, 11 m over: the water stands at 10.09 m in the pipe, the rod pulls only 1749 N, A (P_atm - P_v), though the drive could give 10 kN, and nothing comes out. Right, 8 m over a narrow well: it draws the well down 28 mm a stroke, and after 56 strokes the column starts to break partway up; it lifts less and less until the bucket stands 10.09 m over the water, and stops.",
+        ["spill-tank"] = "A 1000 L water butt with a stave stove in: a 100 cm2 hole 2 cm up. On its own it leaks onto the floor and the water is gone; in the spill world (a walled slope of sand) the jet lands on the ground, runs downhill and pools at the low wall, and the butt and the ground always hold the 1000 L between them: 369.6 L left in the butt at 30 s, down to the hole at 74.5 s.",
+        ["cistern-drain"] = "A 10 cm grate over a pipe into a cistern. On its own there is nothing for it to drain; in the sump world it sits at the bottom of a hollow fed by a 2 L/s spring, and once the hollow is steady the cistern fills at the spring's 2 L/s with the water standing 2.05 cm over the grate, Q = 1.705 P h^1.5. Fill the cistern and the drain backs up.",
         ["tank-leaks"] = "Torricelli's law. Four oak barrels, 0.25 m2 each; three are 80 cm full with a 5 cm2 hole in the wall, Q = 0.6 a sqrt(2 g h), h the water above the hole. sqrt(h - hole) falls at a steady 2.66 mm^1/2 per second, so the level runs down to the hole and stops: a hole 10 cm up takes 315 s (1.11 L/s to start with, at 70 cm of head) and leaves 10 cm; the same hole 40 cm up takes 238 s (0.84 L/s) and leaves 40 cm. Lower holes leak faster and further, and throw the jet farther. The third barrel leaks into a catch tank, litre for litre, until a thumb stops the hole at 100 s. The last has no hole, only a seep of 0.05 L/s off its surface: a steady 0.2 mm/s at any level.",
         ["constant-head"] = "Ctesibius' float valve. Two identical cisterns, 40 cm full, each drain through a tap raised 1 cm into a receiver. The front one is fed by a 2 L/s aqueduct through a mouth that a bronze float closes with a conical plug: seated at 40 cm, wide open 2 cm below. It settles at 39.17 cm, where the valve lets in exactly the 0.83 L/s the tap draws, so its receiver rises a steady 1.65 mm/s, a clock. Open the tap to 2 cm (tap.opening 0.04) and the draw doubles, yet the head drops only 0.8 cm, to 38.38 cm. The back cistern, with no valve and no feed, sinks to 22.5 cm in a minute and 10 cm in two, and its receiver slows as it goes.",
         ["dam-break"] = "A millpond held by a shut sluice while a 250 L/s stream fills it. At 55 cm deep (20 s) a trigger draws the gate right up and the pent water runs down a dry 40 m race into the low pond. The race holds water along its length, 80 cells solved by the shallow-water equations: watch the thin fast front go down and the reach fill behind it. It reaches the low pond at 40 s, between the fastest wave's 33.8 s and a kinematic shock's 52.5 s. Pond, race and low pond always add up to what there was plus the stream's.",
@@ -916,6 +920,7 @@ public partial class Main : Node3D
             {
                 Kind = _world is not null ? "world" : "machine", Name = SaveName, Machines = machines, Sleep = sleep,
                 Ground = _groundSim is { } ground ? RuntimeState.CaptureGround(ground) : null,     // the dug earth and the water on it
+                Boulders = _groundSim is { Ground.Boulders.Count: > 0 } rocky ? rocky.Ground.SaveBoulders() : null,   // and the rocks slides left on it (#88)
             };
             string target = path ?? SavePath(auto);
             save.WriteAtomic(target);
@@ -953,6 +958,11 @@ public partial class Main : Node3D
         else { _hudNote.Text = $"The save is of {save.Name}, which is not here."; _hudNote.Visible = true; return; }
         int unmatched = 0;
         if (save.Ground is { } groundState && _groundSim is { } groundSim) unmatched += RuntimeState.RestoreGround(groundSim, groundState).Count;
+        if (save.Boulders is { } boulders && _groundSim is { } rocky)
+        {
+            rocky.Ground.LoadBoulders(boulders);   // the boulders lie (and roll) where they were saved (#88)
+            rocky.RetraceBoulders();
+        }
         foreach (var m in save.Machines)
         {
             var view = _views.Count > 0 ? _views.FirstOrDefault(v => v.Name == m.Label) : _current;
@@ -1442,6 +1452,11 @@ public partial class Main : Node3D
         if (e.RetainedPercent is { } ret) note.Add($"Energy retained: {ret:F0}% of its starting mechanical energy");
         string boiling = BoilingHint();
         if (boiling.Length > 0) note.Add(boiling);
+        // a map that settles as it loads (issue #61): the ground comes down on screen, and the HUD says so while it does
+        if (_groundSim is { Ground: { SettleOnLoad: true } ground } sim && ground.SettleRate > 0 && !ground.Stood)
+            note.Add($"The ground is settling: {sim.Settled} faces have failed so far, after {sim.SettlePasses} passes");
+        else if (_groundSim is { Ground.Boulders.Count: > 0 } rocky)
+            note.Add($"The slide left {rocky.Ground.Boulders.Count} boulders and brought down {rocky.Ground.Collapsed:F0} m³ of rim");
         _hudNote.Text = string.Join("\n", note);
 
         _hudDetails.Text = _current.Details.Replace(" · ", "\n");

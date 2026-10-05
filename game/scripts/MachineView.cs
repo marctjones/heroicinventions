@@ -120,6 +120,7 @@ public partial class MachineView : Node3D
         BuildChannels();
         BuildFloatValves();
         BuildLeaks();
+        BuildDrains();
         BuildTriggers();
         BuildSafetyValves();
         BuildBellows();
@@ -1533,6 +1534,7 @@ public partial class MachineView : Node3D
         DrawBearingPendulums();
         DrawFloatValves();
         DrawLeaks();
+        DrawDrains();
         DrawTriggers();
         DrawImpacts();
         DrawBelts();
@@ -1684,16 +1686,17 @@ public partial class MachineView : Node3D
     /// state dump. Kinetic and thermal energy are exact where the sim core
     /// tracks them directly (the aeolipile's rotor, a boiler's cumulative
     /// heat); for plain Jolt bodies (blocks, pendulums, levers), kinetic
-    /// energy is ½mv² from each body's centre-of-mass velocity only — a
-    /// reasonable approximation that omits each body's own spin about its
-    /// centre, so it understates the true total somewhat.
+    /// energy is ½mv² of each body's centre of mass plus ½ω·Iω of its spin
+    /// about it (#80).
     /// </summary>
     public EnergySummary Energy()
     {
         double rotorKe = Runtime.Rotors.Values.Sum(r => r.KineticEnergy) + Runtime.WaterWheels.Values.Sum(w => w.KineticEnergy)
                          + Runtime.Windmills.Values.Sum(m => m.KineticEnergy);
-        double bodyKe = _freezable.Sum(b => 0.5 * b.Mass * b.LinearVelocity.LengthSquared())
-                        + _axles.Sum(a => SpinEnergy(a.Body)) // wheels only turn, so all their energy is spin
+        // each body's centre of mass moving, and its spin about it (a wheel's is all spin). Without the spin a
+        // counterweight tumbling on its chain, slowed by the chain's pull, showed its spin turned into height
+        // as a 45 J gain the trebuchet never made (#80).
+        double bodyKe = _freezable.Sum(b => 0.5 * b.Mass * b.LinearVelocity.LengthSquared() + SpinEnergy(b))
                         + BearingPendulumEnergy(out double bearingPe);
         // The real centre of mass, not the body's own origin: a pendulum's
         // RigidBody3D origin sits fixed at the pivot for the joint, so its

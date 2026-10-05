@@ -265,6 +265,8 @@ public static class RktExporter
             case "pond":
                 return $"  (pond {p.Id} {At()} #:on {Sym("on", "?")} #:heater {F(N("heater"))}" + Opt("temperature", "temperature") +
                        $" #:coefficient {F(N("coefficient", 3.6e-8))})\n";
+            case "drain":
+                return $"  (drain {p.Id} {At()} #:into {Sym("into", "?")} #:perimeter {F(N("perimeter", 0.4))} {Mat()})\n";
             case "roof":
                 return $"  (roof {p.Id} {At()} #:on {Sym("on", "?")} #:conductance {F(N("conductance"))}" +
                        (p.Props.GetValueOrDefault("gutter") is SSymbol gutter ? $" #:gutter {gutter.Name}" : "") + $" {Mat()})\n";
