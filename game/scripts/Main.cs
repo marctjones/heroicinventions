@@ -356,7 +356,7 @@ public partial class Main : Node3D
         _leftScroll.VerticalScrollMode = collapsed ? ScrollContainer.ScrollMode.Disabled : ScrollContainer.ScrollMode.Auto;
         _leftPanel.SetAnchorsPreset(collapsed ? Control.LayoutPreset.TopLeft : Control.LayoutPreset.LeftWide);
         _leftPanel.OffsetLeft = 20;
-        _leftPanel.OffsetTop = 20;
+        _leftPanel.OffsetTop = 20 + _menuInset;
         _leftPanel.OffsetRight = collapsed ? 240 : 320;
         _leftPanel.OffsetBottom = collapsed ? 20 : -20;
         _leftPanel.Size = Vector2.Zero; // shrink to its contents when collapsed
@@ -563,6 +563,7 @@ public partial class Main : Node3D
         _windowSection.AddChild(fullscreenButton);
 
         BuildInfoPanel(layer);
+        BuildMenuBar(layer);
     }
 
     /// <summary>
