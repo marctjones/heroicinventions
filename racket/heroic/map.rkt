@@ -15,7 +15,11 @@
 ;;     #:grain ((sand 0.0005) (gravel 0.01 2650))        ; m its grains are across [and kg/m³ they weigh, 2650 if not
 ;;                                                       ; given]: flowing water can carry them off (#53); 0: it can't
 ;;     #:edges open #:roughness 0.03
-;;     #:settle #t                                       ; let what can't stand collapse on the world's first tick (#54)
+;;     #:settle #t                                       ; let what can't stand collapse on the world's first tick (#54);
+;;                                                       ; a number, passes a second, lets it play out on screen (#61)
+;;     #:wind (corridor-wind #:through '(0 0) #:notch-deg 200 #:speed 6 #:width 80 ...)   ; the wind over the floor (#61)
+;;     #:boulders ((regolith 0.3 0.6 granite))           ; when a face of this soil fails, 0.3 of what comes down comes
+;;                                                       ; down as 0.6 m cubes of granite (#88): floor(0.3 V / 0.6³) of them
 ;;     (source spring #:at (2 0) #:flow 0.05))
 ;;
 ;; Heights are sampled at each cell's centre, (x0 + (i + 1/2) cell, z0 + (j + 1/2) cell).
@@ -27,7 +31,7 @@
 (require (for-syntax racket/base syntax/parse "materials.rkt")
          racket/list racket/math "materials.rkt")
 (provide define-map source
-         (struct-out ground-map) (struct-out map-source)
+         (struct-out ground-map) (struct-out map-source) (struct-out wind-field) corridor-wind
          take-registered-maps
          slope bowl crater ground+ max-map-cells min-map-cell)
 
@@ -36,7 +40,26 @@
 
 (struct map-source (id x z flow) #:transparent)
 ;; heights: a vector, x fastest (i + j nx); soil: a vector of material symbols, the same order
-(struct ground-map (name origin cell nx nz heights soil infiltration edges roughness sources loc [cohesion #:auto #:mutable] [grain #:auto #:mutable] [settle #:auto #:mutable]) #:transparent)
+(struct ground-map (name origin cell nx nz heights soil infiltration edges roughness sources loc [cohesion #:auto #:mutable] [grain #:auto #:mutable] [settle #:auto #:mutable] [boulders #:auto #:mutable] [wind #:auto #:mutable]) #:transparent)
+
+;; The wind over a map's floor (issue #61), a regular but variable wind funnelled by a notch in the rim:
+;;   v(x, z, t) = speed x corridor(x, z) x daily(hour) x gusts(t)
+;; corridor: base + (1 - base) exp(-(d / width)^2), d the distance across the line that runs from the notch
+;; (at azimuth notch-deg, measured from +x toward +z) through the point #:through: strongest in a ribbon
+;; below the notch, base of it elsewhere. daily: 1 + daily cos(2 pi (hour - peak-hour) / 24), the crater
+;; walls draining cold air down at night (peak-hour 2) and drawing warm air up by day. gusts: 1 + gust
+;; (sin(2 pi t / 37 s) + sin(2 pi t / 91 s + 1.3)) / 2, the same gusts every run.
+(struct wind-field (through notch-deg speed width base daily peak-hour gust) #:transparent)
+(define (corridor-wind #:through [through '(0 0)] #:notch-deg notch #:speed speed #:width width
+                       #:base [base 0.3] #:daily [daily 0.35] #:peak-hour [peak 2] #:gust [gust 0.25])
+  (unless (and (list? through) (= (length through) 2) (andmap real? through))
+    (raise-user-error 'corridor-wind "#:through is (x z), got ~e" through))
+  (unless (and (real? speed) (> speed 0)) (raise-user-error 'corridor-wind "#:speed must be more than 0 m/s, got ~e" speed))
+  (unless (and (real? width) (> width 0)) (raise-user-error 'corridor-wind "#:width must be more than 0 m, got ~e" width))
+  (unless (and (real? base) (<= 0 base 1)) (raise-user-error 'corridor-wind "#:base is a share from 0 to 1, got ~e" base))
+  (unless (and (real? daily) (<= 0 daily 1)) (raise-user-error 'corridor-wind "#:daily is a share from 0 to 1, got ~e" daily))
+  (unless (and (real? gust) (<= 0 gust 1)) (raise-user-error 'corridor-wind "#:gust is a share from 0 to 1, got ~e" gust))
+  (wind-field through notch speed width base daily peak gust))
 
 (define registry '())
 (define (register-map! m) (set! registry (cons m registry)))
@@ -87,7 +110,7 @@
 ;; ---------------------------------------------------------------------------
 ;; define-map
 
-(define (build-map name origin cell size heights soil infiltration edges roughness sources loc [cohesion '()] [grain '()])
+(define (build-map name origin cell size heights soil infiltration edges roughness sources loc [cohesion '()] [grain '()] [boulders '()])
   (define (fail fmt . args) (raise-user-error name (apply format fmt args)))
   (unless (and (real? cell) (>= cell min-map-cell))
     (fail "#:cell must be at least ~a m (the grid is coarse on purpose: features smaller than a cell belong in a channel), got ~e" min-map-cell cell))
@@ -130,8 +153,15 @@
     (unless (and (real? (cadr g)) (>= (cadr g) 0)) (fail "#:grain size of ~a must be 0 or more (m), got ~e" (car g) (cadr g)))
     (when (and (pair? (cddr g)) (not (and (real? (caddr g)) (> (caddr g) 1000))))
       (fail "#:grain density of ~a must be more than water's, 1000 kg/m³, got ~e" (car g) (caddr g))))
+  ;; boulders (#88): (SOIL FRACTION SIZE MATERIAL), a soil of the map, a fraction of 0 to 1, a cube's side over 0, a material
+  (for ([b boulders])
+    (unless (memq (car b) (vector->list sv)) (fail "#:boulders names ~a, which is not a soil of this map" (car b)))
+    (unless (and (real? (cadr b)) (<= 0 (cadr b) 1)) (fail "#:boulders fraction of ~a must be from 0 to 1, got ~e" (car b) (cadr b)))
+    (unless (and (real? (caddr b)) (> (caddr b) 0)) (fail "#:boulders size of ~a must be more than 0 (m), got ~e" (car b) (caddr b)))
+    (unless (memq (cadddr b) known) (fail "#:boulders of ~a: unknown material ~a; known materials: ~a" (car b) (cadddr b) known)))
   (set-ground-map-cohesion! m cohesion)
   (set-ground-map-grain! m grain)
+  (set-ground-map-boulders! m boulders)
   m)
 
 (begin-for-syntax
@@ -152,6 +182,8 @@
                       (~optional (~seq #:cohesion ((cm:id cv:expr) ...)))
                       (~optional (~seq #:grain ((gm:id gv:expr ...+) ...)))
                       (~optional (~seq #:settle settle-v:expr))
+                      (~optional (~seq #:wind wind-v:expr))
+                      (~optional (~seq #:boulders ((bm:id bf:expr bs:expr bmat:id) ...)))
                       (~optional (~seq #:edges edges:id))
                       (~optional (~seq #:roughness rough:expr))) ...
         s:source-clause ...)
@@ -161,6 +193,8 @@
                  "unknown soil in #:infiltration"
      #:fail-when (for/first ([m (or (attribute cm) '())] #:unless (memq (syntax-e m) known-soils)) m)
                  "unknown soil in #:cohesion"
+     #:fail-when (for/first ([m (append (or (attribute bm) '()) (or (attribute bmat) '()))] #:unless (memq (syntax-e m) known-soils)) m)
+                 "unknown material in #:boulders"
      #:fail-when (let ([c (syntax-e #'cell)]) (and (real? c) (< c 0.5) #'cell))
                  "#:cell must be at least 0.5 m"
      #:fail-when (let ([a (syntax-e #'sx)] [b (syntax-e #'sz)])
@@ -180,6 +214,8 @@
                            (vector (cond [(path? src) (path->string src)] [(string? src) src] [else "?"])
                                    (syntax-line stx) (syntax-column stx)))
                       (list (~? (~@ (list 'cm cv) ...)))
-                      (list (~? (~@ (list 'gm gv ...) ...)))))
-         (set-ground-map-settle! name (and (~? settle-v #f) #t))
+                      (list (~? (~@ (list 'gm gv ...) ...)))
+                      (list (~? (~@ (list 'bm bf bs 'bmat) ...)))))
+         (set-ground-map-settle! name (let ([v (~? settle-v #f)]) (cond [(not v) #f] [(and (real? v) (> v 0)) v] [else #t])))
+         (set-ground-map-wind! name (~? wind-v #f))
          (register-map! name))]))

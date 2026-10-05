@@ -52,6 +52,23 @@ public sealed class Tank(string name, double baseElevation, double area, double 
         WaterVolume = Math.Min(Capacity, WaterVolume - water);
     }
 
+    /// <summary>
+    /// Where water over its brim goes (issue #90): a tank standing on a map's ground pours it there. Unset (the plain
+    /// floor), water offered to a full tank is simply not taken, as it always was.
+    /// </summary>
+    public Action<double>? Spill { get; set; }
+    /// <summary>m³ that has run over its brim onto the ground, all told.</summary>
+    public double Spilled { get; private set; }
+
+    /// <summary>Lets <paramref name="m3"/> that found no room run over the brim, if anything is under it to take it; true if it went.</summary>
+    public bool Overflow(double m3)
+    {
+        if (m3 <= 0 || Spill is null) return false;
+        Spilled += m3;
+        Spill(m3);
+        return true;
+    }
+
     public double Capacity => Area * Height;
     public double Level => WaterVolume / Area;
     public double SurfaceElevation => BaseElevation + Level;
@@ -241,6 +258,7 @@ public sealed class FluidNetwork
             double moved = Math.Min(l.Flow * dt, Math.Min(available, room));
             l.Tank.WaterVolume -= moved;
             if (l.Catch is not null) l.Catch.WaterVolume += moved;
+            else l.Pour?.Invoke(moved);      // the jet falls on the ground under it (#90)
             l.Lost += moved;
             double seep = Math.Min(l.Evaporation * EvaporationFactor(l.Tank) * dt, l.Tank.WaterVolume);
             l.Tank.WaterVolume -= seep;

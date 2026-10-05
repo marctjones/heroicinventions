@@ -78,7 +78,7 @@
     (check-equal? (cadr sexp) 'row)
     (define block (assq 'part (cddr sexp)))
     (check-equal? (assq 'at (cdddr block)) '(at 0.25 0.0 0.0))
-    (check-equal? (assq 'props (cdddr block)) '(props (size 0.1) (tilt-deg 0.0) (fast #t)))))
+    (check-equal? (assq 'props (cdddr block)) '(props (size 0.1) (tilt-deg 0.0) (fast #t) (drag-coefficient #f)))))
 
 (test-case "a pendulum's bearing friction needs a pin radius"
   (check-compile-error #rx"needs a #:bearing-radius"
@@ -308,3 +308,13 @@
   (check-compile-error #rx"not a tank; a float rides in a tank's water"
     (post p #:at (0 0 0) #:size (1 1 1) #:material oak)
     (float f #:in p #:mass 1 #:area 0.01)))
+
+(test-case "a drain (#90) runs into a tank"
+  (check-not-exn
+   (λ () (expand-machine '(tank cistern #:at (0 -1 0) #:area 1 #:height 1) '(drain grate #:at (0 0 0) #:into cistern #:perimeter 0.4))))
+  (check-compile-error #rx"pier is not a tank; a drain runs into one"
+    (post pier #:at (0 0 0) #:size (1 1 1) #:material oak)
+    (drain grate #:at (0 0 0) #:into pier))
+  (check-compile-error #rx"already a part named cistern"
+    (tank cistern #:at (0 -1 0) #:area 1 #:height 1)
+    (drain cistern #:at (0 0 0) #:into cistern)))

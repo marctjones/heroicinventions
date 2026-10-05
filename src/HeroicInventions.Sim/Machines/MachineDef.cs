@@ -267,6 +267,72 @@ public sealed class MachineDef
         };
     }
 
+    /// <summary>The kinds of part that know how to stand at a heading (issue #83): the bodies the engine turns, which the view builds in a yawed frame.</summary>
+    public static readonly IReadOnlyList<string> TurnableKinds = ["block", "ball", "pendulum", "lever", "ramp", "wheel", "screw", "fixture", "post"];
+
+    /// <summary>A part's heading: its yaw in degrees about the vertical, counter-clockwise seen from above (the sense Godot turns a body about +Y); 0 if it has none.</summary>
+    public static double HeadingOf(PartSpec part) => part.Number("heading-deg", 0);
+
+    /// <summary>
+    /// The same machine turned <paramref name="degrees"/> about the vertical through
+    /// its origin (issue #83): every position it holds (parts, rope over-points
+    /// and world ends, channel ends and bends, triggers, joints and their axes)
+    /// swung round together, and each part given that much more heading, so the
+    /// view builds its body, its axle and its slope in the turned frame. It
+    /// behaves exactly as the unturned machine does, its traces the same with
+    /// positions and velocities turned. Only the kinds in <see cref="TurnableKinds"/>
+    /// can be turned, and no trigger boxes: the others build their geometry along
+    /// the axes, and a heading silently ignored would put them wrong; asking
+    /// for one raises a <see cref="MachineFormatException"/> naming the part.
+    /// </summary>
+    public MachineDef Turned(double degrees)
+    {
+        if (degrees % 360 == 0) return this;
+        foreach (var p in Parts.Where(p => !TurnableKinds.Contains(p.Kind)))
+            throw new MachineFormatException($"machine {Name} can't be turned: {p.Kind} {p.Id} is built along the axes (only {string.Join(", ", TurnableKinds)} can stand at a heading)", p.Location);
+        if (Triggers.FirstOrDefault(t => t.Size is not null) is { } box)
+            throw new MachineFormatException($"machine {Name} can't be turned: trigger {box.Id} watches a box along the axes", box.Location);
+        double a = degrees * Math.PI / 180, c = Math.Cos(a), s = Math.Sin(a);
+        // Basis(Up, a) maps +X to (cos a, 0, -sin a) and +Z to (sin a, 0, cos a)
+        Vec3 Swing(Vec3 v) => new(v.X * c + v.Z * s, v.Y, -v.X * s + v.Z * c);
+        (double X, double Z) SwingXz((double X, double Z) v) => (v.X * c + v.Z * s, -v.X * s + v.Z * c);
+        RopeEnd End(RopeEnd e) => e.Part == "world" ? e with { Local = Swing(e.Local) } : e;   // a part's own end turns with the part
+        PartSpec Turn(PartSpec p) => p with
+        {
+            At = Swing(p.At),
+            Props = new Dictionary<string, SExpr>(p.Props) { ["heading-deg"] = new SNumber(HeadingOf(p) + degrees) },
+        };
+        return new MachineDef
+        {
+            Name = Name,
+            Source = Source,
+            Ambient = Ambient,
+            Sun = Sun,
+            Planet = Planet,
+            Weather = Weather,
+            Parts = Parts.Select(Turn).ToList(),
+            Pipes = Pipes,
+            Connects = Connects,
+            SealedAir = SealedAir,
+            Ropes = Ropes.Select(r => r with { From = End(r.From), To = End(r.To), Over = r.Over.Select(Swing).ToList() }).ToList(),
+            Arbors = Arbors,
+            Meshes = Meshes,
+            Lifts = Lifts,
+            Sources = Sources,
+            Channels = Channels.Select(ch => ch with
+            {
+                End = ch.End is { } e ? Swing(e) : null,
+                Via = ch.Via?.Select(SwingXz).ToList(),
+            }).ToList(),
+            Cylinders = Cylinders,
+            Triggers = Triggers.Select(t => t with { At = t.At is { } at ? Swing(at) : null }).ToList(),
+            Follows = Follows,
+            Belts = Belts,
+            Wakes = Wakes,
+            Joints = Joints.Select(j => j with { At = Swing(j.At), Axis = j.Axis is { } ax ? Swing(ax) : null }).ToList(),
+        };
+    }
+
     public static MachineDef Parse(string text)
     {
         var forms = SExprReader.ReadAll(text);

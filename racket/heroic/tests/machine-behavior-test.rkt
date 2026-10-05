@@ -7,7 +7,7 @@
 ;; AeolipileBlueprintSpinsOnceTheWaterBoils, which asserted the same
 ;; things from C# directly against MachineRuntime. See docs/design.html
 ;; §III "Machines as tests".
-(require rackunit heroic/simhost (only-in racket/math pi sinh cosh) (only-in racket/file make-temporary-directory delete-directory/files))
+(require rackunit heroic/simhost (only-in racket/math pi sinh cosh sqr) (only-in racket/file make-temporary-directory delete-directory/files))
 
 (test-case "Heron's fountain lifts water above its basin, then empties the supply vessel"
   (define run (simulate 'herons-fountain #:seconds 60 #:step 0.05 #:sample-dt 0.5))
@@ -316,9 +316,12 @@
 (test-case "Fall and swing, in Jolt: a block falls at g, and a pendulum keeps Huygens' time"
   (when (godot-available?)
     (define run (godot-simulate 'fall-and-swing #:seconds 10.5 #:sample-dt (/ 1 120)))
-    ;; The engine steps at 120 Hz by symplectic Euler, and damps every body
-    ;; The block starts one tick in. With Jolt's default damping removed,
-    ;; it falls at exactly g.
+    ;; The engine steps at 120 Hz by symplectic Euler, and (since #33 took
+    ;; Godot's default 0.1/s damping out, leaving air drag to the parts that
+    ;; ask for it) damps nothing. The block starts one tick in. So, tick by
+    ;; tick, v <- v - g dt, y <- y + v dt: it accelerates at exactly g, and
+    ;; stands at 3.7942 m at 0.5 s (plain 5 - g t^2/2 would be 3.7738 m: the
+    ;; block starts one tick in, and a tick's fall is 0.0204 m).
     (define dt 1/120)
     (define-values (v y)
       (for/fold ([v 0.0] [y 5.0]) ([n (in-range 2 61)])
@@ -326,13 +329,13 @@
         (values v* (+ y (* v* dt)))))
     (check-= (value-at run '(drop vy) (* 2 dt)) (- (* 9.81 dt)) 1e-6 "one tick of g: the engine's gravity is the sim's 9.81")
     (check-= (/ (- (value-at run '(drop vy) (* 2 dt)) (value-at run '(drop vy) (* 3 dt))) dt)
-             9.81 5e-3 "exactly g")
+             9.81 5e-3 "g, undamped")
     (check-= (value-at run '(drop y) 0.5) y 2e-3)
     (check-= (value-at run '(drop vy) 0.5) v 2e-3)
     ;; The pendulum: I/(m d) = 0.979641 m for a 1 m, 1 cm rod and an 8 cm
     ;; ball of one metal, so 2 pi sqrt(0.979641/9.81) = 1.985541 s for small
-    ;; swings, x (1 + theta^2/16) = 1.986486 s from 5 degrees (Huygens).
-    ;; With damping zeroed, the height is conserved.
+    ;; swings, x (1 + theta^2/16) = 1.986486 s from 5 degrees (Huygens). The
+    ;; nothing takes any height off a swing now (#33): each peak is the last.
     (define ts (times-of run))
     (define zs (values-of run '(swing rot-z)))
     (define crossings ; downward through the vertical, interpolated between frames
@@ -937,18 +940,31 @@
   (check-= (final-of run '(short stalled)) 1 0)
   (check-= (final-of run '(short strokes)) 10 0))
 
-(test-case "Trebuchet: after the sling lets go (~0.9 s) the machine never gains energy, and the stone flies well clear"
+(test-case "Trebuchet: the machine never gains energy over the whole run, the chain holds the counterweight on it, and the stone flies well clear"
   ;; Issue #45: an uncapped stretch correction in the rope solver kicked the
   ;; arm every time the counterweight's chain snapped taut, and the machine
   ;; climbed to 155% of its starting energy. A passive machine can only lose it.
+  ;; Issue #80: with the engine's damping gone (#33) the chain stretched 0.75 m and
+  ;; snapped taut again at ~4.8 s, the energy reaching 1462 J (start 856 J). The
+  ;; solver misjudged how far its pull moved the hinged arm's short end (reading
+  ;; the turn about the arm's centre of mass, not its pivot: 3.3 times too far), so
+  ;; the chain never held. Now, worked out beforehand: the chain (0.35 m) holds the
+  ;; counterweight's centre at least 1.4 - 0.27 - 0.35 - 0.15 = 0.63 m up, the
+  ;; lowest the short arm's end goes, so it never strikes the ground; and the
+  ;; energy, spin included, never climbs: no tick ends more than 1% of the
+  ;; start above the lowest it has been, and nothing is ever above the start.
   (when (godot-available?)
-    (define run (godot-simulate 'trebuchet #:seconds 12 #:sample-dt 0.1))
-    (define start (value-at run '(scene mechanical) 0))
-    (define after (for/list ([f run] #:when (>= (car f) 1.0))
-                    (cadr (assq 'scene.mechanical (cdr f)))))
-    (check-true (<= (apply max after) (* 1.02 start))
-                (format "peak ~a J after release against ~a J at the start" (apply max after) start))
-    ;; throws toward -X; traced at about 20 m
+    (define run (godot-simulate 'trebuchet #:seconds 12 #:sample-dt 1/120))
+    (define energy (values-of run '(scene mechanical)))
+    (define start (car energy))
+    (check-= start 856.24 0.01 "73 kg of granite 0.81 m up on a 7 kg arm, at rest")
+    (check-true (<= (apply max energy) (+ start 1e-6)) (format "never above the start: peak ~a J against ~a J" (apply max energy) start))
+    (define climb (for/fold ([worst 0] [lowest +inf.0] #:result worst) ([e energy]) (values (max worst (- e lowest)) (min lowest e))))
+    (check-true (< climb (* 0.01 start)) (format "the most it climbed above its lowest so far: ~a J" climb))
+    (check-= (final-of run '(counterweight hits)) 0 0 "the counterweight never reaches the ground")
+    (check-true (> (min-of run '(counterweight y)) (- 0.63 0.005)) (format "the counterweight's lowest: ~a m, against 0.63 m on a taut chain" (min-of run '(counterweight y))))
+    (check-true (< (max-of run '(cw-chain stretch)) 10) (format "the chain stretched at most ~a mm" (max-of run '(cw-chain stretch))))
+    ;; throws toward -X; traced at 13.1 m
     (check-true (< (final-of run '(stone x)) -12) (format "stone landed at x = ~a" (final-of run '(stone x))))))
 
 (test-case "Vitruvian catapulta: the bolt stays on the ground and comes to rest a sensible distance out"
@@ -988,7 +1004,8 @@
       ;; sliding, the tight (load) side carries exactly e^(mu theta) the other
       (check-= (/ (value-at run (list station 'tension-to) 0.5) (value-at run (list station 'tension-from) 0.5))
                e (* 1e-3 e) (format "~a's tension ratio" station))
-      ;; and the pair accelerate at g (M - m E) / (M + m E)
+      ;; and the pair accelerate at g (M - m E) / (M + m E), with no engine
+      ;; damping (#33) to add back
       (define m (mass holder-cm))
       (define a0 (/ (* g (- big (* m e))) (+ big (* m e))))
       (define load (string->symbol (format "~a-load" station)))
@@ -1023,9 +1040,10 @@
     (check-= (value-at run '(seven-hoist tension-to) 5) (* 583.2 9.81) 20 "the stone side carries the stone")))
 
 ;; Issue #27: impacts. Predicted before the first run (drop-test.rkt's
-;; header): the engine's own tick, v <- v (1 - c dt) - g dt, brings a block
-;; dropped 1.25 m to the floor on the 61st tick at 4.8641 m/s, and the
-;; strike meets it at that less one tick's damping, 4.8600; it leaves at
+;; header): the engine's own tick, v <- v - g dt (no damping since #33),
+;; leaves a block dropped 1.25 m 3.3 mm above the floor after 60 ticks, at
+;; 60 g dt = 4.905 m/s; the 61st tick strikes it at that speed (the one the
+;; solver sees entering the step); it leaves at
 ;; e times that (the floor gives no restitution of its own and Jolt takes
 ;; the larger), and the collision takes 1/2 m v^2 (1 - e^2): 72.4, 163.5,
 ;; 51.1 and 103.1 J for steel, granite, oak and hemp.
@@ -1037,8 +1055,8 @@
     (define v-in                       ; falling from 1.25 m, a tick at a time
       (let loop ([v 0.0] [y 1.25])
         (define v* (tick v))
-        (if (<= (+ y (* v* dt)) 0) (- v*) (loop v* (+ y (* v* dt))))))
-    (check-= v-in 4.8600 1e-3)
+        (if (<= (+ y (* v* dt)) 0) (- v) (loop v* (+ y (* v* dt))))))
+    (check-= v-in 4.905 1e-3)
     (define (rise v) (let loop ([v v] [y 0.0]) (define v* (tick v)) (if (<= v* 0) y (loop v* (+ y (* v* dt))))))
     (for ([b '(steel-block granite-block oak-block hemp-bale)]
           [e '(0.95 0.6 0.5 0.1)]
@@ -1544,16 +1562,16 @@
 (test-case "A shaft between two Jolt machines (#78): the treadwheel turns the separate hoist's drum and lifts the stone"
   (when (godot-available?)
     ;; crane-hoist.rkt: the shaft carries the stone's 583 x 9.81 x 0.25 = 1430 N·m; the
-    ;; walkers' 1545 N·m leaves 115 N·m against the bodies' damping (0.2/s set + 0.1/s
-    ;; Godot's default) on 1818 + 4.5 kg·m², so the pair settles at 115/(0.3 x 1822)
-    ;; = 0.206 rad/s, and the rope comes in at that times the drum's 25 cm.
+    ;; walkers' 1545 N·m leaves 115 N·m against the bodies' damping (0.2/s set; Godot's
+    ;; default 0.1/s went with #30/#33) on 1818 + 4.5 kg·m², so the pair heads for
+    ;; 115/(0.2 x 1822) = 0.316 rad/s (the walkers' 3 rpm, 0.314, is the ceiling), with
+    ;; a time constant of 1/0.2 = 5 s: 0.316 (1 - e^-4) = 0.3103 rad/s at 20 s, and the
+    ;; rope comes in at that times the drum's 25 cm.
     (define world (godot-simulate-world 'split-crane #:seconds 20 #:sample-dt 1))
     (define-values (links hoist) (values (hash-ref world 'links) (hash-ref world 'hoist)))
     (check-= (value-at links '(axle torque) 20) 1430 15)
     (define omega (* (value-at links '(axle rpm) 20) 2 pi 1/60))
-    ;; NB this number rests on Godot's default 0.1/s angular damping: when #33 takes that out
-    ;; it becomes 115/(0.2 x 1822) = 0.316, above the walkers' 3 rpm (0.314), so 0.314.
-    (check-= omega 0.206 0.003)
+    (check-= omega (* 115/1822 5 (- 1 (exp -4))) 0.004)
     (check-= (value-at links '(axle driven-rpm) 20) (value-at links '(axle rpm) 20) 1e-4 "one speed both sides")
     (define rise-rate (/ (- (value-at hoist '(stone y) 20) (value-at hoist '(stone y) 10)) 10))
     (check-= rise-rate (* omega 0.25) 0.001 "the stone rises at the drum's rim speed")))
@@ -1584,7 +1602,13 @@
     ;; loose: slipping the whole time, and the force it carries is its limit to the newton's hundredth
     (for ([t (in-list '(0.25 0.5 1.0 2.0 3.0))])
       (check-= (value-at run '(loose-belt force) t) 6.054 0.05 (format "loose belt force at ~a s" t))
-      (check-true (> (value-at run '(loose-belt slip) t) 1.0) (format "loose belt slipping at ~a s" t)))
+      (check-true (> (value-at run '(loose-belt slip) t) 0.5) (format "loose belt slipping at ~a s" t)))
+    ;; with the engine's default damping gone (#33) the big pulley has only its own 0.2/s: the small one at its
+    ;; 47.1 rad/s cap (4.712 m/s at the rim) and the big at 41.1 (1 - e^(-0.2 t)) rad/s (20 cm rim), the rims
+    ;; differ by 4.712 - 8.22 (1 - e^(-0.2 t)) = 1.003 m/s at 3 s, and 3.22 at 1 s
+    (for ([t (in-list '(1.0 3.0))])
+      (check-= (value-at run '(loose-belt slip) t) (- 4.712 (* 0.2 41.1 (- 1 (exp (* -0.2 t))))) 0.15
+               (format "loose belt's slip at ~a s" t)))
     ;; before the engine's 47.1 rad/s cap on any body: the small pulley at 85.6 rad/s2 (21.4 at 0.25 s), the
     ;; big one at about 2 rad/s, a ratio of 0.09 and not the 0.5 of a belt that holds
     (check-= (value-at run '(loose-driver omega) 0.25) 21.4 1.0)
@@ -1654,7 +1678,9 @@
   ;; (needs 122 N), but held by the 140 N tongs. The light one is let go after 1 s, 1.2 m up, onto a
   ;; step 0.3 m up: its middle falls 0.8565 m, lands after sqrt(2 h / g) = 0.418 s at sqrt(2 g h) = 4.10 m/s.
   (when (godot-available?)
-    (define run (godot-simulate 'crate-tongs #:seconds 3 #:sample-dt 0.01))
+    ;; a frame a tick (120 Hz): sampled every 0.01 s the last frame before the strike can be two ticks
+    ;; early, 0.16 m/s short of the speed it lands at
+    (define run (godot-simulate 'crate-tongs #:seconds 3 #:sample-dt 1/120))
     (define (t-first pred path)               ; the first sample time at which pred holds for a field
       (for/first ([t (times-of run)] [v (values-of run path)] #:when (pred v)) t))
     ;; the limits and the loads, in newtons
@@ -1678,7 +1704,8 @@
     (check-= (- landed let-go) (sqrt (/ (* 2 0.8565) 9.81)) 0.04 "the time to fall 0.8565 m")
     (check-= (- (min-of run '(light-crate vy))) (sqrt (* 2 9.81 0.8565)) 0.15 "the speed it lands at")
     ;; the heavy crate falls 0.8505 m the moment the tongs give way
-    (define heavy-landed (t-first (λ (y) (< y 0.36)) '(heavy-crate y)))
+    ;; (the first frame it is moving up again: the first strike leaves its middle above 0.36 m)
+    (define heavy-landed (t-first (λ (vy) (> vy 0)) '(heavy-crate vy)))
     (check-= heavy-landed (sqrt (/ (* 2 0.8505) 9.81)) 0.05)
     ;; and comes to rest on the step, its middle half its height up: 0.3 + 0.0495
     (check-= (final-of run '(heavy-crate y)) 0.3495 0.005)
@@ -1701,19 +1728,20 @@
   (check-= (value-at run '(race flow) 25) (* 1.705 0.5 (expt (- (/ (value-at run '(millpond level) 25) 100) 0.2) 1.5) 1000) 2))
 
 
-(test-case "Continuous collision detection: a bolt at 58 m/s is stopped by a 2 cm plank, and without it goes through"
-  ;; 299 m of fall, with the engine's default damping, is 8.97 s and 58.1 m/s: 0.48 m a tick at 120 Hz,
+(test-case "Continuous collision detection: a bolt at 77 m/s is stopped by a 2 cm plank, and without it goes through"
+  ;; 299 m of fall, with no damping (#33), is 7.81 s and sqrt(2 g 299) = 76.6 m/s: 0.64 m a tick at 120 Hz,
   ;; against a plank 2 cm thick and a bolt 5 cm across (7 cm): a bolt only tested where it stands
   ;; each tick can be on one side of the plank one tick and the far side the next
   (when (godot-available?)
-    (define run (godot-simulate 'tunnel-test #:seconds 12 #:sample-dt 0.05))
+    ;; a frame a tick: the plain bolt is below the plank for three ticks only, at 0.64 m a tick
+    (define run (godot-simulate 'tunnel-test #:seconds 12 #:sample-dt 1/120))
     (define fastest (- (min-of run '(bolt-fast vy))))
-    (check-= fastest 58.1 2.0 "it arrives at the speed the fall gives")
+    (check-= fastest 76.6 2.0 "it arrives at the speed the fall gives")
     (check-true (> (/ fastest 120) 0.07) "each tick it moves further than the plank and the bolt are thick")
     ;; swept: it never gets below the plank (1.0 m up); its middle stays above 1.0 m the whole run
     (check-true (> (min-of run '(bolt-fast y)) 1.0) (format "the swept bolt stayed above its plank (lowest ~a m)" (min-of run '(bolt-fast y))))
     ;; not swept: through the plank and on to the floor, its middle reaching ground level
-    (check-true (< (min-of run '(bolt-plain y)) 0.3) (format "the plain bolt went through (lowest ~a m)" (min-of run '(bolt-plain y))))
+    (check-true (< (min-of run '(bolt-plain y)) 0.7) (format "the plain bolt went through (lowest ~a m)" (min-of run '(bolt-plain y))))
     ;; the same bolt, the same fall, the same speed: only the sweep differs
     (check-= (- (min-of run '(bolt-plain vy))) fastest 0.5)))
 
@@ -2120,6 +2148,92 @@
     (check-= (final-of site '(crate y)) -0.75 0.01 "out, resting on the trench's floor")))
 
 
+;; ---------------------------------------------------------------------------
+;; Boulders from terrain collapse (issue #88)
+
+(test-case "Boulders (#88): the talus cliff's collapse of 7.03 m3 leaves 4 granite boulders (0.5 m3) and the ground 0.5 m3 short; they slide down the 35° debris and stop on ground under 31°, 31-35° below where they started"
+  (when (godot-available?)
+    ;; talus.rkt: V = (3 - 1.244) x 0.5 x 8 = 7.03 m3 (3 %); floor(0.08 V / 0.125) = 4 cubes of 0.5 m; granite on the ground holds to atan 0.6 = 31.0°
+    (define g (hash-ref (godot-simulate-world 'talus #:seconds 5 #:sample-dt 1/120) 'links))
+    (define (field f k) (let ([e (assq k (cdr f))]) (and e (cadr e))))
+    (define start (for/first ([f g] #:when (field f 'boulder-1.x)) f))
+    (define end (last g))
+    (check-true (< (car start) 0.02) "the boulders come down with the cliff, on the first tick")
+    (check-= (field (car g) 'map.ground-volume) 120 1e-9 "10 cells of 3 m, 16 rows, 0.25 m2 each")
+    (check-= (field end 'map.collapsed) 7.03 (* 0.03 7.03))
+    (check-= (field end 'map.boulders) 4 0)
+    (check-= (field end 'map.boulders) (floor (/ (* 0.08 (field end 'map.collapsed)) 0.125)) 0)
+    (check-= (field end 'map.boulder-volume) 0.5 1e-12)
+    (check-= (- (field (car g) 'map.ground-volume) (field end 'map.ground-volume)) (field end 'map.boulder-volume) 1e-9
+             "the ground lost exactly what the boulders hold")
+    (for ([i (in-range 1 5)])
+      (define (k s) (string->symbol (format "boulder-~a.~a" i s)))
+      (define-values (x0 y0 z0 x1 y1 z1)
+        (values (field start (k 'x)) (field start (k 'y)) (field start (k 'z)) (field end (k 'x)) (field end (k 'y)) (field end (k 'z))))
+      (check-true (> (field start (k 'slope)) 31.0) (format "boulder ~a laid on ~a°, steeper than it holds on" i (field start (k 'slope))))
+      (check-true (> (- x1 x0) 0.3) (format "boulder ~a slid down the debris, ~a m" i (- x1 x0)))
+      (check-true (< (field end (k 'speed)) 0.005) (format "boulder ~a has stopped" i))
+      (check-true (<= (field end (k 'slope)) 31.0) (format "boulder ~a stopped on ~a°, no steeper than atan 0.6 = 31.0°" i (field end (k 'slope))))
+      (define reach (* (/ 180 pi) (atan (- y0 y1) (sqrt (+ (expt (- x1 x0) 2) (expt (- z1 z0) 2))))))
+      (check-true (<= 30.5 reach 35.0)
+                  (format "boulder ~a: the line from where it started to where it stopped is ~a° below level: friction's 31.0° or steeper (losses), never steeper than the 35° debris" i reach)))))
+
+(test-case "Boulders (#88): saved while sliding and loaded, they lie where they were and come to rest as in a run never stopped"
+  (when (godot-available?)
+    (define dir (make-temporary-directory))
+    (define file (path->string (build-path dir "talus.save")))
+    (define straight (hash-ref (godot-simulate-world 'talus #:seconds 5 #:sample-dt 1) 'links))
+    (godot-simulate-world 'talus #:seconds 1.05 #:sample-dt 1 #:env `(("HEROIC_SAVE" . ,file) ("HEROIC_SAVE_AT" . "1")))
+    (check-true (file-exists? file) "the game wrote the save")
+    (define saved (cdr (assq 'boulders (cddr (call-with-input-file file read)))))
+    (check-equal? (length saved) 4 "the save holds the four boulders")
+    (define resumed (hash-ref (godot-simulate-world 'talus #:seconds 5 #:sample-dt 1/120 #:env `(("HEROIC_LOAD" . ,file))) 'links))
+    (define (field f k) (let ([e (assq k (cdr f))]) (and e (cadr e))))
+    (define first-loaded (for/first ([f resumed] #:when (field f 'boulder-1.x)) f))
+    (for ([b saved] [i (in-naturals 1)])
+      (define (k s) (string->symbol (format "boulder-~a.~a" i s)))
+      (define at (cdr (assq 'at (cddddr b))))
+      (check-equal? (cadr b) (string->symbol (format "boulder-~a" i)))
+      (check-true (> (cadr (assq 'v (cddddr b))) 0.1) (format "boulder ~a was saved sliding" i))
+      ;; within one tick of sliding (under 1 cm) of where the save left it
+      (for ([s '(x y z)] [v at]) (check-= (field first-loaded (k s)) v 0.01 (format "boulder ~a ~a as loaded" i s)))
+      (for ([s '(x y z)]) (check-= (field (last resumed) (k s)) (field (last straight) (k s)) 0.05 (format "boulder ~a ~a at 5 s" i s)))
+      (check-true (< (field (last resumed) (k 'speed)) 0.005) (format "boulder ~a has stopped" i)))
+    (check-= (field (last resumed) 'map.ground-volume) 119.5 1e-9 "the ground as it was left, not collapsed again")
+    (check-= (field (last resumed) 'map.boulders) 4 0 "no more boulders")
+    (delete-directory/files dir)))
+
+;; ---------------------------------------------------------------------------
+;; Tanks and the ground's water (issue #90)
+
+(test-case "Spill (#90): a broken butt on a walled slope lets its 1000 L onto the ground; butt and ground always hold 1000 L, 369.6 L in the butt at 30 s"
+  (when (godot-available?)
+    ;; spill-tank.rkt: sqrt(head) falls 0.013288 a second from sqrt(0.98): 349.6 L over the hole at 30 s, down to it at 74.5 s
+    (define w (godot-simulate-world 'spill #:seconds 90 #:sample-dt 5))
+    (define-values (barrel ground) (values (hash-ref w 'barrel) (hash-ref w 'links)))
+    (for ([b barrel] [g ground])
+      (check-= (+ (/ (cadr (assq 'butt.water (cdr b))) 1000) (cadr (assq 'map.volume (cdr g)))) 1.0 1e-9
+               (format "butt and ground hold 1000 L at ~a s" (car b))))
+    (check-= (value-at barrel '(butt water) 30) 369.6 1.5)
+    (check-= (value-at ground '(map volume) 30) 0.6304 0.0015)
+    (check-= (final-of barrel '(butt water)) 20 0.01 "down to the hole, 2 cm up")
+    (check-= (final-of ground '(map spilled)) 0.98 1e-4)
+    (check-= (final-of ground '(map poured)) (final-of ground '(map volume)) 1e-9 "none soaked in, none ran off: the walls held it")))
+
+(test-case "Drain (#90): a grate at the bottom of a hollow fills its cistern at the spring's 2 L/s, the water standing 2.05 cm over it"
+  (when (godot-available?)
+    ;; cistern-drain.rkt: steady, Q = 1.705 x 0.4 x h^1.5 = 2 L/s, h = (0.002 / 0.682)^(2/3) = 2.048 cm
+    (define w (godot-simulate-world 'sump #:seconds 180 #:sample-dt 10))
+    (define-values (yard ground) (values (hash-ref w 'yard) (hash-ref w 'links)))
+    (for ([y yard] [g ground])
+      (check-= (+ (/ (cadr (assq 'cistern.water (cdr y))) 1000) (cadr (assq 'map.volume (cdr g)))) (cadr (assq 'map.poured (cdr g))) 1e-9
+               (format "cistern and ground hold what the spring gave at ~a s" (car y))))
+    (check-= (final-of ground '(map poured)) 0.36 1e-6 "180 s of 2 L/s")
+    (define rate (/ (- (final-of yard '(cistern water)) (value-at yard '(cistern water) 150)) 30))
+    (check-= rate 2.0 0.02 (format "the cistern fills at ~a L/s" rate))
+    (check-= (final-of yard '(grate flow)) 2.0 0.02)
+    (check-= (final-of yard '(grate depth)) (* 100 (expt (/ 0.002 (* 1.705 0.4)) 2/3)) 0.04)
+    (check-= (final-of yard '(grate drained)) (final-of yard '(cistern water)) 1e-9)))
 
 ;; ---------------------------------------------------------------------------
 ;; The greenhouse (issue #42). Working in racket/machines/greenhouse.rkt.
@@ -2195,3 +2309,333 @@
     (check-= (final-of resumed '(weak-hammer strikes)) 0 0 "the stalled wheel still never strikes")
     (check-true (< 0.4 (final-of resumed '(weak-hammer height)) 1.0) "and its hammer is still held up about 0.7 cm")
     (delete-directory/files dir)))
+
+;; ---- #13, part 2: friction and wear in the axles and hinges Jolt turns (axle-friction.rkt)
+;; Three iron disc flywheels (25 cm radius, 4 cm wide, 2.5 cm bore) let go at
+;; 60 rpm on a 2 cm pin; two 1 m iron beams hung 25 cm from one end, let go
+;; 15 degrees from hanging, on a 1 cm pin; and the overshot water wheel of
+;; water-wheels.rkt on a 3 cm axle. The numbers are worked out here from the
+;; shapes and iron's density; the mesh is a 64-sided revolve, so the disc's
+;; own mass and inertia come out about 0.5% under the ideal disc's.
+(define g 9.81)
+(define fly-r 0.25) (define fly-w 0.04) (define fly-b (* 0.1 fly-r)) (define fly-pin 0.02)
+(define fly-m (* iron-density pi (- (* fly-r fly-r) (* fly-b fly-b)) fly-w))
+(define fly-I (* 1/2 iron-density pi fly-w (- (expt fly-r 4) (expt fly-b 4))))
+(define fly-w0 (* 2 pi 60/60))                                   ; rad/s
+
+(test-case "Flywheels on bearings (Jolt): a frictionless one never slows, grease decays it exponentially, dry friction stops it dead and turns its spin to heat"
+  (when (godot-available?)
+    (define run (godot-simulate 'axle-friction #:seconds 5 #:sample-dt 1))
+    ;; perfect: omega0 for ever
+    (check-= (final-of run '(perfect omega)) fly-w0 (* 1e-3 fly-w0))
+    (check-= (final-of run '(perfect heat)) 0 1e-12)
+    ;; greased: omega = omega0 exp(-c t / I)
+    (for ([t '(1 2 3 4 5)])
+      (define predicted (* fly-w0 (exp (- (/ (* 0.5 t) fly-I)))))
+      (check-= (abs (value-at run '(greased omega) t)) predicted (* 0.015 predicted) (format "rad/s at ~a s" t)))
+    ;; and the heat is the energy lost: 1/2 I (omega0^2 - omega^2)
+    (define w5 (abs (final-of run '(greased omega))))
+    (check-= (final-of run '(greased heat)) (* 1/2 fly-I (- (* fly-w0 fly-w0) (* w5 w5))) (* 0.02 (* 1/2 fly-I fly-w0 fly-w0)) "J")
+    ;; dry: friction mu m g r_pin at any speed, so a straight-line fall and a dead stop
+    (define tau (* 0.4 fly-m g fly-pin))
+    (for ([t '(1 2)])
+      (define predicted (- fly-w0 (/ (* tau t) fly-I)))
+      (check-= (abs (value-at run '(dry omega) t)) predicted (* 0.02 fly-w0) (format "rad/s at ~a s" t)))
+    (define stops (/ (* fly-I fly-w0) tau))                       ; 2.53 s
+    (check-= stops 2.527 0.005)
+    (check-= (final-of run '(dry omega)) 0 1e-9 "rad/s: stopped by 5 s, and stays stopped")
+    (check-= (abs (value-at run '(dry omega) 3)) 0 1e-9)
+    (define spin-energy (* 1/2 fly-I fly-w0 fly-w0))              ; 37.3 J
+    (check-= (final-of run '(dry heat)) spin-energy (* 0.01 spin-energy) "J: all of it, in the pin")
+    ;; Archard: V = K N s, s the pin's surface slid, r_pin x the angle turned (omega0^2 I / 2 tau)
+    (define turned (/ (* fly-w0 fly-w0 fly-I) (* 2 tau)))
+    (define wear (* 1e-4 fly-m g fly-pin turned))
+    (check-= (final-of run '(dry wear)) wear (* 0.02 wear) "mm^3 worn")))
+
+;; The beam: m, I about the pivot (a box's own L^2/12 plus m d^2), d from the pivot
+(define bar-L 1.0) (define bar-t 0.025) (define bar-d (* 0.25 bar-L))
+(define bar-m (* iron-density bar-L bar-t 0.22))
+(define bar-I (* bar-m (+ (/ (+ (* bar-L bar-L) (* bar-t bar-t)) 12) (* bar-d bar-d))))
+(define bar-mgd (* bar-m g bar-d))
+(define bar-pin 0.01)
+
+;; the turning points of a series of angles (deg), in order, after the start
+(define (turning-points vals)
+  (let loop ([prev (car vals)] [dir 0] [rest (cdr vals)] [out '()])
+    (cond [(null? rest) (reverse out)]
+          [else
+           (define d (let ([x (- (car rest) prev)]) (cond [(> x 1e-9) 1] [(< x -1e-9) -1] [else dir])))
+           (loop (car rest) d (cdr rest) (if (and (not (zero? dir)) (not (= d dir))) (cons prev out) out))])))
+
+(test-case "Levers on pins (Jolt): a frictionless pivot keeps its 15 degrees, a dry one loses the same angle every swing (energy balance), stops, and wears"
+  (when (godot-available?)
+    (define run (godot-simulate 'axle-friction #:seconds 12 #:sample-dt 1/120))
+    (define a0 (* 15 (/ pi 180)))
+    (define (swings-of name)
+      (define vals (values-of run (list name 'angle)))
+      (define peaks (turning-points vals))
+      ;; the start is 15 degrees from plumb; the first turning point is on the far side of it
+      (define plumb (+ (car vals) (* (if (> (car peaks) (car vals)) 15 -15))))
+      (values plumb (for/list ([p peaks]) (abs (- p plumb)))))
+    (define-values (plumb-free free-peaks) (swings-of 'free))
+    (check-true (> (length free-peaks) 6) "swinging all along")
+    (for ([a free-peaks] [i (in-naturals 1)]) (check-= a 15 0.2 (format "deg, swing ~a" i)))
+    (check-= (final-of run '(free heat)) 0 1e-12)
+    ;; dry: mu m g r on the pin, each half swing from A to A' obeys m g d (cos A' - cos A) = tau (A + A')
+    (define tau (* 0.4 bar-m g bar-pin))
+    (define (next a)
+      (let loop ([lo 0.0] [hi a] [i 80])
+        (define mid (/ (+ lo hi) 2))
+        (define f (- (* bar-mgd (- (cos mid) (cos a))) (* tau (+ a mid))))
+        (cond [(zero? i) mid] [(> f 0) (loop mid hi (sub1 i))] [else (loop lo mid (sub1 i))])))
+    (define predicted (let loop ([a a0] [out '()])
+                        (if (<= (* bar-mgd (sin a)) tau) (reverse out)
+                            (let ([a2 (next a)]) (loop a2 (cons a2 out))))))
+    (define-values (plumb-worn worn-peaks) (swings-of 'worn))
+    (check-= (deg (- a0 (car predicted))) 1.85 0.01 "deg lost in the first half swing: 1.83 by 2 mu r / d, 1.85 exactly")
+    (check-= (length worn-peaks) (length predicted) 1 "swings before it stops")
+    (for ([a worn-peaks] [p predicted] [i (in-naturals 1)] #:when (<= i 6))
+      (check-= a (deg p) 0.15 (format "deg, swing ~a" i)))
+    (define rest-angle (abs (- (final-of run '(worn angle)) plumb-worn)))
+    (check-true (< rest-angle 0.93) (format "deg off plumb at rest: ~a (within mu r / d = 0.92)" rest-angle))
+    (check-= (final-of run '(worn heat)) (* bar-mgd (- (cos (* rest-angle (/ pi 180))) (cos a0))) (* 0.03 (* bar-mgd (- 1 (cos a0)))) "J: its swing, all heat")
+    ;; the pin slides r times the angle turned: each half swing from A to A' turns A + A'
+    (define sequence (cons a0 predicted))
+    (define slid (* bar-pin (for/sum ([a sequence] [b (cdr sequence)]) (+ a b))))
+    (check-true (> (final-of run '(worn wear)) 0) "the pin wore")
+    (check-= (final-of run '(worn wear)) (* 1e-4 bar-m g slid) (* 0.03 (* 1e-4 bar-m g slid)) "mm^3: V = K N s")))
+
+(test-case "Water wheel axle: the wheel settles at P / (load + mu m g r), the axle takes the rest as heat, and wears"
+  ;; 441.45 W whatever its speed; a 300 N m millstone plus 0.4 x 1962 N x 3 cm = 23.54 N m
+  (define power (* 1000 g 0.020 1.5 (- 1 (cos (* 120 (/ pi 180))))))
+  (define tau (* 0.4 200 g 0.03))
+  (define omega (/ power (+ 300 tau)))
+  (define run (simulate 'axle-friction #:seconds 300 #:step 0.02 #:sample-dt 50))
+  (check-= (rpm->rad (final-of run '(overshot rpm))) omega 1e-4 "rad/s")
+  (check-= omega 1.3644 1e-4)
+  (check-= (final-of run '(overshot power)) (* 300 omega) 0.05 "W into the millstone")
+  ;; heat made over the last 50 s: tau omega each second
+  (define dheat (- (final-of run '(overshot heat)) (value-at run '(overshot heat) 250)))
+  (check-= dheat (* tau omega 50) 0.5 "J in 50 s")
+  (define dwear (- (final-of run '(overshot wear)) (value-at run '(overshot wear) 250)))
+  (check-= dwear (* 1e-4 (* 200 g) 0.03 omega 50) (* 0.01 dwear) "mm^3 in 50 s: V = K N s")
+  ;; no axle, no bearing getters, and the old speed
+  (define bare (simulate 'water-wheels #:seconds 300 #:step 0.02 #:sample-dt 50))
+  (check-= (rpm->rad (final-of bare '(overshot rpm))) (/ power 300) 1e-4)
+  (check-true (< omega (/ power 300))))
+
+;; ---- #83 rotation and heading for parts (heading-rig.rkt, game/worlds/headings.world)
+;; The same rig placed three times, turned 0, 37 and 90 degrees about the vertical
+;; through its origin (and standing 0, 30 and 60 m along x). A machine turned by a
+;; heading behaves as the unturned one: turn its coordinates back and every body is
+;; where the unturned one is, with the same speed, spin and hinge angle. And each
+;; part's own direction is worked out beforehand (the machine's header).
+(define headings '((straight 0 0 0) (turned 37 30 0) (quarter 90 60 0)))
+(define (to-machine-frame h ox oz x z)          ; the inverse of x' = x cos h + z sin h, z' = -x sin h + z cos h
+  (define r (degrees->radians* h))
+  (define dx (- x ox)) (define dz (- z oz))
+  (values (- (* dx (cos r)) (* dz (sin r))) (+ (* dx (sin r)) (* dz (cos r)))))
+(define (degrees->radians* d) (* d (/ pi 180)))
+(define (field f key) (cadr (assq key (cdr f))))
+
+(test-case "Parts at a heading (Jolt): the rig turned 37 and 90 degrees behaves as the unturned one with its coordinates turned back"
+  (when (godot-available?)
+    (define world (godot-simulate-world 'headings #:seconds 4 #:sample-dt 1/20))
+    (define straight (hash-ref world 'straight))
+    (check-true (> (length straight) 70) "a full trace")
+    (for ([placement (cdr headings)])
+      (define-values (label h ox oz) (apply values placement))
+      (define run (hash-ref world label))
+      (check-equal? (length run) (length straight) (format "~a has a full trace" label))
+      (for ([a straight] [b run])
+        (for ([body '(roller side-roller rod rod2 fly)])
+          (define-values (xa za) (values (field a (string->symbol (format "~a.x" body))) (field a (string->symbol (format "~a.z" body)))))
+          (define-values (xb zb) (to-machine-frame h ox oz (field b (string->symbol (format "~a.x" body))) (field b (string->symbol (format "~a.z" body)))))
+          (define (near? what x y tol) (check-= x y tol (format "~a: ~a's ~a at ~a s" label body what (car a))))
+          (near? "x" xb xa 0.01) (near? "z" zb za 0.01)
+          (near? "y" (field b (string->symbol (format "~a.y" body))) (field a (string->symbol (format "~a.y" body))) 0.003)
+          (near? "speed" (field b (string->symbol (format "~a.speed" body))) (field a (string->symbol (format "~a.speed" body))) 0.01))
+        (check-= (field b 'fly.omega) (field a 'fly.omega) 0.005 (format "~a: the flywheel's spin at ~a s" label (car a)))
+        (check-= (let ([d (- (field b 'fly.angle) (field a 'fly.angle))]) (- d (* 360 (round (/ d 360))))) 0 0.5
+                 (format "~a: the flywheel's turn at ~a s" label (car a)))
+        (check-= (field b 'rod.angle) (field a 'rod.angle) 0.2 (format "~a: the pendulum's angle at ~a s" label (car a)))))))
+
+(test-case "Parts at a heading (Jolt): a rolling ball goes down a turned slope along the turned fall line at (5/7) g sin(angle), a turned part swings in its turned plane, and the flywheel runs down on 0.2 per second"
+  (when (godot-available?)
+    (define world (godot-simulate-world 'headings #:seconds 4 #:sample-dt 1/20))
+    (define theta (degrees->radians* 35))
+    (define g 9.81)
+    ;; rolling: a = (5/7) g sin(35) along the slope; by half a second it has gone s = a t^2 / 2
+    (define s (* 1/2 (* 5/7 g (sin theta)) 0.25))
+    (check-= s 0.5024 1e-4)
+    (for ([placement headings])
+      (define-values (label h ox oz) (apply values placement))
+      (define run (hash-ref world label))
+      (define (moved body)
+        (define (at k) (value-at run (list body k) 0.5))
+        (define (start k) (value-at run (list body k) 0))
+        (values (- (at 'x) (start 'x)) (- (at 'y) (start 'y)) (- (at 'z) (start 'z))))
+      ;; the first ramp's downhill is (sin h, cos h), the second's, turned a further 90, (sin(h + 90), cos(h + 90))
+      (for ([body '(roller side-roller)] [extra '(0 90)])
+        (define-values (dx dy dz) (moved body))
+        (define along (degrees->radians* (+ h extra)))
+        (check-= (+ (* dx (sin along)) (* dz (cos along))) (* s (cos theta)) (* 0.03 s) (format "~a: ~a's way down the slope" label body))
+        (check-= (- (* dx (cos along)) (* dz (sin along))) 0 0.003 (format "~a: ~a goes to neither side" label body))
+        (check-= (- dy) (* s (sin theta)) (* 0.03 s) (format "~a: ~a's drop" label body)))
+      ;; the swing: a compound pendulum, 50 cm of iron rod 1 cm across and a ball 4 cm across, from 10 degrees
+      (define rho iron-density) (define len 0.5) (define rod-r 0.01) (define ball-r 0.04)
+      (define m-rod (* rho pi rod-r rod-r len)) (define m-ball (* rho 4/3 pi (expt ball-r 3)))
+      (define inertia (+ (/ (* m-rod len len) 3) (* m-ball (+ (* len len) (* 0.4 ball-r ball-r)))))
+      (define d (/ (+ (* m-rod len 1/2) (* m-ball len)) (+ m-rod m-ball)))
+      (define a0 (degrees->radians* 10))
+      (define period (* 2 pi (sqrt (/ inertia (* (+ m-rod m-ball) g d))) (+ 1 (/ (* a0 a0) 16))))
+      ;; the bob's place in the machine's own frame, so a swing along x is x, and along z is z
+      (define in-machine
+        (for/list ([f run])
+          (define-values (x z) (to-machine-frame h ox oz (field f 'rod.x) (field f 'rod.z)))
+          (define-values (x2 z2) (to-machine-frame h ox oz (field f 'rod2.x) (field f 'rod2.z)))
+          (list (car f) x z x2 z2)))
+      (define (cross-times k level)
+        (for/list ([a in-machine] [b (cdr in-machine)] #:when (or (and (< (- (list-ref a k) level) 0) (>= (- (list-ref b k) level) 0))
+                                                                   (and (> (- (list-ref a k) level) 0) (<= (- (list-ref b k) level) 0))))
+          (+ (car a) (* (- (car b) (car a)) (/ (- level (list-ref a k)) (- (list-ref b k) (list-ref a k)))))))
+      (define swings (cross-times 1 -2))                  ; the bob under its pivot, every half period
+      (check-true (>= (length swings) 3) (format "~a: swinging" label))
+      (for ([t0 swings] [t1 (cdr swings)])
+        (check-= (* 2 (- t1 t0)) period (* 0.01 period) (format "~a: the rod's period" label)))
+      (for ([row in-machine])
+        (check-= (third row) 0 0.003 (format "~a: the rod stays in its plane at ~a s" label (car row)))
+        (check-= (fourth row) -3 0.003 (format "~a: the second pendulum, hung at heading 90, swings along z at ~a s" label (car row))))
+      (check-true (> (apply max (map fifth in-machine)) 0.06) (format "~a: and does swing along z" label))
+      ;; the flywheel: 30 rpm, damped at 0.2 / s
+      (for ([t '(1 2 3 4)])
+        (define predicted (* pi (exp (* -0.2 t))))
+        (check-= (value-at run '(fly omega) t) predicted (* 0.01 predicted) (format "~a: the flywheel's spin at ~a s" label t))))))
+
+;; Machines the game already has, placed unturned and turned 53 degrees (game/worlds/headings-machines.world).
+;; Each pair agrees, with the turned one's coordinates turned back, for as long as the motion is a
+;; deterministic function of the geometry: a stone that has landed meets the ground with Jolt's friction,
+;; applied along two axes picked from the contact's normal, not along the sliding direction, so it ends
+;; some centimetres off (0.2 m for the trebuchet's, 0.15 m for the onager's at once, more as it slides);
+;; stones are compared only in flight. The trebuchet's arm and counterweight, whose chain went chaotic
+;; after its second snap before #80, now agree to a fifth of a millimetre for all six seconds.
+(test-case "Existing machines turned 53 degrees (Jolt): cradle, trebuchet, Roman crane, onager, lunar train and wagons behave as unturned"
+  (when (godot-available?)
+    (define world (godot-simulate-world 'headings-machines #:seconds 6 #:sample-dt 1/4))
+    (define (bodies-of frame)
+      (remove-duplicates (for/list ([kv (cdr frame)] #:when (regexp-match #rx"[.]x$" (symbol->string (car kv))))
+                           (regexp-replace #rx"[.]x$" (symbol->string (car kv)) ""))))
+    ;; (machine at-x until position-tolerance always): every body is compared until `until`; the `always` bodies, the
+    ;; whole 6 s
+    (for ([spec '((cradle 0 6 0.003 ()) (trebuchet 150 2.0 0.05 (arm counterweight)) (crane 300 6 0.005 ())
+                  (onager 450 1.5 0.01 (arm)) (train 600 6 0.003 ()) (wagons 750 6 0.01 ()))])
+      (define-values (m ox until tol always) (apply values spec))
+      (define a (hash-ref world (string->symbol (format "~a-0" m))))
+      (define b (hash-ref world (string->symbol (format "~a-53" m))))
+      (check-equal? (length a) (length b))
+      (check-true (pair? (bodies-of (car a))) (format "~a has bodies" m))
+      (for ([fa a] [fb b])
+        (for ([body (bodies-of fa)] #:when (or (<= (car fa) until) (memq (string->symbol body) always)))
+          (define (v f k) (field f (string->symbol (format "~a.~a" body k))))
+          (define-values (xb zb) (to-machine-frame 53 ox 150 (v fb 'x) (v fb 'z)))
+          (define (near? what x y t) (check-= x y t (format "~a: ~a's ~a at ~a s" m body what (car fa))))
+          (near? "x" xb (- (v fa 'x) ox) tol) (near? "z" zb (v fa 'z) tol) (near? "y" (v fb 'y) (v fa 'y) tol)
+          (when (assq (string->symbol (format "~a.angle" body)) (cdr fa))
+            (near? "turn" (let ([d (- (v fb 'angle) (v fa 'angle))]) (- d (* 360 (round (/ d 360))))) 0 0.2)))))))
+
+;; a trace frame list's value of a key at the frame nearest a time, and in its last frame
+(define (value-at-key run key t)
+  (define frame (for/fold ([best (car run)]) ([f (cdr run)]) (if (< (abs (- (car f) t)) (abs (- (car best) t))) f best)))
+  (field frame key))
+(define (final-of-key run key) (field (last run) key))
+
+;; ---- #61 the crater world (victoria.rkt, lonely-rover-opening.world, crater-wind.world)
+;; The map's own numbers are checked in tests/HeroicInventions.Sim.Tests/CraterTests.cs; here the game
+;; plays them: the weakened rim comes down on screen over a few seconds and buries the cargo at its foot,
+;; and two mills on the floor each take the wind of the field where they stand.
+(test-case "The crater's opening (Jolt): the weakened rim comes down over about four seconds, buries the cargo as deep as its distance from the cliff, and leaves boulders, one on the battery bank; the same each run"
+  (when (godot-available?)
+    (define (run-it) (godot-simulate-world 'lonely-rover-opening #:seconds 40 #:sample-dt 1))
+    (define world (run-it))
+    (define ground (hash-ref world 'links))
+    ;; settling plays out at 20 passes a second: about 80 passes, four seconds, and is still going at 3 s
+    (check-= (value-at-key ground 'map.settling 0.5) 1 0)
+    (check-= (value-at-key ground 'map.settling 3.0) 1 0)
+    (check-= (value-at-key ground 'map.settling 5.0) 0 0)
+    (check-= (final-of-key ground 'map.settle-passes) 80 25)
+    (check-= (/ (final-of-key ground 'map.settle-passes) 20.0) 4.0 1.2 "seconds")
+    (check-true (< 10 (final-of-key ground 'map.settled) 60) "faces of the weakened block that failed")
+    ;; each crate: held where the slide left it if more than a quarter of its height (12.5 cm) is over its lid,
+    ;; and the pull to free it is its weight, the soil on the lid and the soil's grip on its sides
+    (define g 3.71) (define s 0.5)
+    (define gamma (* 2700 g)) (define tan-phi 0.60)                      ; rubble over bedrock cells: loose, no cohesion
+    (define k0 (- 1 (sin (atan tan-phi))))
+    (define (pull cover mass) (+ (* mass g) (* gamma cover s s) (* 4 s k0 gamma tan-phi (/ (- (sqr (+ cover s)) (sqr cover)) 2))))
+    (define crates '(battery-bank solar-panels gas-cylinders hand-tools spares))
+    (define covers
+      (for/list ([c crates])
+        (define f (last (hash-ref world c)))
+        (define cover (field f 'crate.cover))
+        (check-= (field f 'crate.buried) (if (> cover (* 0.25 s)) 1 0) 0 (format "~a: held exactly when more than a quarter of it is covered" c))
+        (when (> cover (* 0.25 s))
+          (check-= (field f 'crate.pull-out) (pull cover 90) (* 0.01 (pull cover 90)) (format "~a: the pull to free it" c)))
+        cover))
+    ;; the nearer the cliff's foot, the deeper the rubble over it
+    (check-true (apply > (take covers 3)) (format "covers fall away from the cliff: ~a" covers))
+    (check-true (andmap negative? (drop covers 3)) "and the last two crates are bare")
+    (check-= (first covers) 3.98 0.2 "the battery bank is buried under about 4 m: held, 22 kN to pull, within a backhoe's reach")
+    (check-true (> (field (last (hash-ref world 'battery-bank)) 'crate.buried) 0.5) "the battery bank is buried")
+    ;; the rock (#88): 2% of what the failed faces lost comes down as 2 m cubes of granite, floor(0.02 V / 8 m3) of them
+    (define end (last ground))
+    (define collapsed (field end 'map.collapsed))
+    (check-= (field end 'map.boulders) (floor (/ (* 0.02 collapsed) 8)) 0 "boulders")
+    (check-= (field end 'map.boulders) 18 3)
+    (check-= (field end 'map.boulder-volume) (* 8 (field end 'map.boulders)) 1e-9 "m3")
+    (check-= (- (field (car ground) 'map.ground-volume) (field end 'map.ground-volume)) (field end 'map.boulder-volume) 1e-6
+             "the ground lost exactly what the boulders hold")
+    (define n (inexact->exact (field end 'map.boulders)))
+    (define (boulder i key) (field end (string->symbol (format "boulder-~a.~a" i key))))
+    (for ([i (in-range 1 (+ n 1))])
+      (check-true (< (boulder i 'speed) 0.01) (format "boulder ~a has come to rest by 40 s" i)))
+    ;; pinned: one of them lies on the rubble over the battery bank, 21.6 t of granite (a rover's backhoe lifts
+    ;; hundreds of kilograms, not that): it must be got off the bank some other way
+    (define bank (last (hash-ref world 'battery-bank)))
+    (define nearest
+      (for/fold ([best #f]) ([i (in-range 1 (+ n 1))])
+        (define d (sqrt (+ (sqr (- (boulder i 'x) (field bank 'crate.x))) (sqr (- (boulder i 'z) (field bank 'crate.z))))))
+        (if (or (not best) (< d (car best))) (cons d i) best)))
+    (check-true (< (car nearest) 3.0) (format "boulder ~a lies ~a m from the battery bank" (cdr nearest) (car nearest)))
+    (define mass (* 2700 (expt (boulder (cdr nearest) 'size) 3)))
+    (check-= mass 21600 1 "kg: too big for a backhoe")
+    (check-true (> mass 5000) "far over what a rover-mounted backhoe lifts")
+    ;; deterministic: a second run buries them the same way and leaves the boulders in the same places
+    (define again (run-it))
+    (for ([c crates])
+      (check-= (field (last (hash-ref again c)) 'crate.cover) (field (last (hash-ref world c)) 'crate.cover) 1e-6 (format "~a again" c)))
+    (for* ([i (in-range 1 (+ n 1))] [key '(x y z)])
+      (check-= (field (last (hash-ref again 'links)) (string->symbol (format "boulder-~a.~a" i key))) (boulder i key) 1e-3
+               (format "boulder ~a ~a again" i key)))))
+
+(test-case "Two mills on the crater floor (Jolt): each takes the wind of the map's field where it stands, 6 m/s x corridor x daily x gusts, and the power goes as its cube"
+  (when (godot-available?)
+    (define world (godot-simulate-world 'crater-wind #:seconds 300 #:sample-dt 25))
+    (define on (hash-ref world 'in-corridor))
+    (define off (hash-ref world 'off-corridor))
+    ;; the line from the notch (azimuth 200) through the centre; 0.3 + 0.7 e^-(d/80)^2 across it
+    (define (corridor across) (+ 0.3 (* 0.7 (exp (- (sqr (/ across 80)))))))
+    (define sol-length (let ([a (car on)] [b (last on)])
+                         (/ (- (car b) (car a)) (- (field b 'scene.sols) (field a 'scene.sols)))))
+    (check-= sol-length 88775 5 "Mars's solar day, s")
+    (for ([a on] [b off])
+      (define hour (field a 'scene.time))
+      (define seconds (* (field a 'scene.sols) sol-length))
+      (define daily (+ 1 (* 0.35 (cos (* 2 pi (/ (- hour 2) 24))))))
+      (define gusts (+ 1 (* 0.25 (/ (+ (sin (* 2 pi (/ seconds 37))) (sin (+ (* 2 pi (/ seconds 91)) 1.3))) 2))))
+      (check-= (field a 'mill.wind) (* 6 (corridor 0.01) daily gusts) 0.05 (format "in the corridor at ~a s" (car a)))
+      (check-= (field b 'mill.wind) (* 6 (corridor 160.04) daily gusts) 0.05 (format "across it at ~a s" (car a)))
+      ;; 1/2 rho A v^3 through the sails' 314.16 m2, rho the air's there
+      (check-= (field a 'mill.wind-power) (* 1/2 (field a 'scene.air-density) (* pi 100) (expt (field a 'mill.wind) 3))
+               (* 1e-3 (field a 'mill.wind-power)) "W"))
+    (define last-on (last on)) (define last-off (last off))
+    (check-= (/ (field last-off 'mill.wind-power) (field last-on 'mill.wind-power))
+             (expt (/ (corridor 160.04) (corridor 0.01)) 3) 0.003 "the same wind weaker by 0.313, a power weaker by its cube, 0.031")))

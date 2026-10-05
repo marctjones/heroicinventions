@@ -87,6 +87,8 @@ public partial class Main : Node3D
         ["castellum-aquae"] = new(new Vector3(10.5f, 5.0f, 22f), new Vector3(10.5f, 2.6f, 0), 55),
         ["heron-temple-doors"] = new(new Vector3(1.2f, 2.6f, 5.5f), new Vector3(1.0f, 1.0f, -0.4f), 55),
         ["bearing-friction"] = new(new Vector3(0.1f, 1.1f, 4.0f), new Vector3(0.1f, 0.85f, 0), 45),
+        ["axle-friction"] = new(new Vector3(6.5f, 3.2f, 17f), new Vector3(6.5f, 1.2f, 0), 55),
+        ["heading-rig"] = new(new Vector3(-1f, 3.5f, 9f), new Vector3(-1f, 0.5f, 0), 60),
         ["water-wheels"] = new(new Vector3(4.5f, 5f, 17f), new Vector3(5.5f, 1.3f, 0), 55),
         ["fire-and-water"] = new(new Vector3(0.9f, 2.4f, 6.0f), new Vector3(0.9f, 0.4f, 0), 50),
         ["sluice-demo"] = new(new Vector3(4.5f, 3.2f, 9.5f), new Vector3(4.2f, 0.8f, -0.5f), 55),
@@ -178,12 +180,16 @@ public partial class Main : Node3D
         ["placer-sluice"] = "Sluice Box (placer gold)",
         ["constant-head"] = "Float Valve (Constant Head)",
         ["tank-leaks"] = "Tank Leaks (Torricelli)",
+        ["spill-tank"] = "Broken Water Butt (spills onto the ground)",
+        ["cistern-drain"] = "Drain into a Cistern",
         ["boiler-safety"] = "Safety Valve and Burst Boiler",
         ["suction-limit"] = "Lift Pumps and the Suction Limit",
         ["fire-and-water"] = "Fire and Water",
         ["water-wheels"] = "Water Wheels",
         ["heron-temple-doors"] = "Heron's Temple Doors",
         ["bearing-friction"] = "Bearing Friction",
+        ["axle-friction"] = "Axle and Hinge Friction",
+        ["heading-rig"] = "Parts at a Heading",
         ["bellows-forge"] = "Bellows and Forced Draught",
         ["windmills"] = "Windmills and the Betz Limit",
         ["capstans"] = "Capstans: Rope Friction on a Post",
@@ -239,11 +245,15 @@ public partial class Main : Node3D
         ["water-clock"] = "A Ctesibian clepsydra. A spring keeps the reservoir brimming over its lip, so the pressure driving the outlet never changes; the outlet fills a tall receiver from the top, so the far end holds steady too. The receiver level therefore climbs at a constant 2.97 mm/s (0.1187 L/s over 0.04 m2): the water level is the time. There is no float here; the level is read off the water itself.",
         ["castellum-aquae"] = "A Roman castellum aquae, as Vitruvius describes: an aqueduct on an arcade of piers ends in a distribution tank with three pipes at three heights, fountains lowest, baths above, houses highest. The 6.7 L/s supply is less than the 9 L/s all three could carry, so the level falls past the houses' pipe and settles at 72 cm, where the fountains (3.7 L/s) and baths (3.0 L/s) take everything and the houses go dry.",
         ["bearing-friction"] = "Three identical 1 m iron pendulums (18.9 kg, I = 17.4 kg m2), each on a 3 cm pin, let go from 15 degrees. The left pin is frictionless: it swings to 15 degrees every time, a 1.99 s swing. The middle pin turns in grease, which drags in proportion to speed (c = 0.6 N m s/rad): the swings die away inside the envelope 15 x exp(-c t / 2I), halving every 40 s. The right pin is dry iron on iron (mu 0.4): friction resists with mu m g r = 1.11 N m whatever the speed, so every swing loses the same 0.73 degrees - a straight line, not a curve - and after 20 of them gravity can't pull it past the pin's grip and it stops, 0.25 degrees off plumb. All 5.9 J of its swing become heat in the pin, and the pin wears by Archard's law, V = K N s = 1e-4 x 186 N x 8 cm = 0.0015 mm3. The red dot marks where each last turned.",
+        ["axle-friction"] = "The pendulum's bearing on the wheels and hinges the engine turns. Three iron flywheels (59.9 kg, I = 1.89 kg m2) are let go at 60 rpm on 2 cm pins: the left one is frictionless and spins for ever; the middle one is greased (c = 0.5 N m s/rad) and dies away as exp(-c t / I), losing 63% of its speed in 3.8 s; the right one is dry iron (mu 0.4), friction mu m g r = 4.7 N m at any speed, so its speed falls in a straight line and it stops dead at 2.53 s, all 37.3 J of its spin heat in the pin. Beyond them, two 1 m beams hung 25 cm from one end swing from 15 degrees: the free one for ever, the dry one losing about 1.85 degrees every half swing until it stops within 0.9 degrees of plumb. On the right, the overshot wheel of the water-wheels machine runs on a 3 cm dry axle: the axle takes 23.5 N m on top of the millstone's 300, so it settles at 1.364 rad/s instead of 1.472, and 7% of the water's power heats the axle. Labels show the heat and the pin's wear.",
+        ["heading-rig"] = "Parts that stand at any heading, not only along the axes: an iron ball rolls down a 35 degree slope (at (5/7) g sin 35 = 4.0 m/s2), a second slope turned 90 degrees on its own sends its ball the other way, a pendulum swings in the plane its hinge leaves it (a second, hung at heading 90, along z) and a flywheel on an axle along x runs down at 0.2 per second. World headings.world places this rig turned 0, 37 and 90 degrees; each does exactly what the unturned one does, in its turned frame.",
         ["heron-temple-doors"] = "Hero of Alexandria's temple doors that open by themselves (Pneumatica I.38). A fire on a hollow bronze altar heats the air sealed inside; that air, shared with a closed globe half full of water, rises in pressure as it warms (P = m R T / V) and drives the water through a siphon into a hanging bucket. Once the bucket outweighs its counterweight it sinks, and its rope, wound round the doors' spindles, swings them open. The altar settles 30 K warm with a time constant of 11 minutes, so the doors open after about 13 minutes; when the fire burns out, the air cools, the water siphons back, and the counterweight shuts them. Try it at 20x.",
         ["water-wheels"] = "Two water wheels, each grinding against a millstone. Left, overshot: a 20 L/s race pours onto the top of a 3 m wheel whose buckets carry the water down the far side until they tip it out 120 degrees round. The water's weight gives rho g Q r (1 - cos 120) = 441 W at any speed, so against a 300 N m millstone it settles at 14 rpm - 73% of what the water loses falling from the race's lip, inside the 63-78% Smeaton measured. Load it past 562 N m and the brimming buckets can't turn it. Right, undershot: a 150 L/s race pushes on paddles dipping into it; at best it takes 8/27 of the stream's kinetic energy, the old undershot ceiling of about 30%.",
         ["fire-and-water"] = "Water meets fire. Left: a cistern spills 20 g/s onto a 20 kW wood fire. Boiling a kilogram of 20 C water away takes 2.59 MJ, so the fire can boil off only 7.7 g/s; the rest soaks in, and when the soaked water outweighs the fuel left (at about 150 s) the fire drowns. Until then all its heat goes into the water, none into the pot. Right: a copper of 4 kg at 90 C takes 2 L of 20 C feed water and mixes to 66.7 C; its 2 kW stove needs about 7 minutes to bring it back to the boil.",
         ["boiler-safety"] = "Denis Papin's safety valve (1679). Two bronze boilers, each 10 kg of 20 C water rated to burst at 200 kPa, each over a wood fire giving it 10 kW. Sealed, both warm along T = 20 + 5000 (1 - exp(-t / 20930 s)). The left one's weighted lever lifts at 100 kPa (425 s) and its 8 mm valve vents what the fire brings, (Q - h (T - 20)) / L = 4.34 g/s of steam, holding the boiler at 103.4 kPa and 121.1 C for as long as the water lasts. The right one has no valve: it climbs on to 200 kPa and bursts at 482 s, 0.63 kg of its water flashing to steam at once. Tie the valve down (guard.lift 300) and the left one bursts about 51 s later. Try it at 20x.",
         ["suction-limit"] = "Why a lift pump can't raise water more than about 10 m (Galileo's well pump, Berti's tube, Torricelli, 1638-44). The atmosphere pushes the water up after the bucket; once the pressure under the bucket falls to water's vapour pressure the column breaks, at (101325 - 2330 Pa) / (rho g) = 10.09 m over the well. Three pumps, each a 15 cm bucket over a 50 cm stroke at 20 strokes a minute. Left, the bucket 6 m over its water: 0.8 x the swept 8.8 L comes out every stroke, 7.07 L or 2.36 L/s, the rod pulling 1127 N and the water gaining 80% of the work. Middle, 11 m over: the water stands at 10.09 m in the pipe, the rod pulls only 1749 N, A (P_atm - P_v), though the drive could give 10 kN, and nothing comes out. Right, 8 m over a narrow well: it draws the well down 28 mm a stroke, and after 56 strokes the column starts to break partway up; it lifts less and less until the bucket stands 10.09 m over the water, and stops.",
+        ["spill-tank"] = "A 1000 L water butt with a stave stove in: a 100 cm2 hole 2 cm up. On its own it leaks onto the floor and the water is gone; in the spill world (a walled slope of sand) the jet lands on the ground, runs downhill and pools at the low wall, and the butt and the ground always hold the 1000 L between them: 369.6 L left in the butt at 30 s, down to the hole at 74.5 s.",
+        ["cistern-drain"] = "A 10 cm grate over a pipe into a cistern. On its own there is nothing for it to drain; in the sump world it sits at the bottom of a hollow fed by a 2 L/s spring, and once the hollow is steady the cistern fills at the spring's 2 L/s with the water standing 2.05 cm over the grate, Q = 1.705 P h^1.5. Fill the cistern and the drain backs up.",
         ["tank-leaks"] = "Torricelli's law. Four oak barrels, 0.25 m2 each; three are 80 cm full with a 5 cm2 hole in the wall, Q = 0.6 a sqrt(2 g h), h the water above the hole. sqrt(h - hole) falls at a steady 2.66 mm^1/2 per second, so the level runs down to the hole and stops: a hole 10 cm up takes 315 s (1.11 L/s to start with, at 70 cm of head) and leaves 10 cm; the same hole 40 cm up takes 238 s (0.84 L/s) and leaves 40 cm. Lower holes leak faster and further, and throw the jet farther. The third barrel leaks into a catch tank, litre for litre, until a thumb stops the hole at 100 s. The last has no hole, only a seep of 0.05 L/s off its surface: a steady 0.2 mm/s at any level.",
         ["constant-head"] = "Ctesibius' float valve. Two identical cisterns, 40 cm full, each drain through a tap raised 1 cm into a receiver. The front one is fed by a 2 L/s aqueduct through a mouth that a bronze float closes with a conical plug: seated at 40 cm, wide open 2 cm below. It settles at 39.17 cm, where the valve lets in exactly the 0.83 L/s the tap draws, so its receiver rises a steady 1.65 mm/s, a clock. Open the tap to 2 cm (tap.opening 0.04) and the draw doubles, yet the head drops only 0.8 cm, to 38.38 cm. The back cistern, with no valve and no feed, sinks to 22.5 cm in a minute and 10 cm in two, and its receiver slows as it goes.",
         ["dam-break"] = "A millpond held by a shut sluice while a 250 L/s stream fills it. At 55 cm deep (20 s) a trigger draws the gate right up and the pent water runs down a dry 40 m race into the low pond. The race holds water along its length, 80 cells solved by the shallow-water equations: watch the thin fast front go down and the reach fill behind it. It reaches the low pond at 40 s, between the fastest wave's 33.8 s and a kinematic shock's 52.5 s. Pond, race and low pond always add up to what there was plus the stream's.",
@@ -910,6 +920,7 @@ public partial class Main : Node3D
             {
                 Kind = _world is not null ? "world" : "machine", Name = SaveName, Machines = machines, Sleep = sleep,
                 Ground = _groundSim is { } ground ? RuntimeState.CaptureGround(ground) : null,     // the dug earth and the water on it
+                Boulders = _groundSim is { Ground.Boulders.Count: > 0 } rocky ? rocky.Ground.SaveBoulders() : null,   // and the rocks slides left on it (#88)
             };
             string target = path ?? SavePath(auto);
             save.WriteAtomic(target);
@@ -947,6 +958,11 @@ public partial class Main : Node3D
         else { _hudNote.Text = $"The save is of {save.Name}, which is not here."; _hudNote.Visible = true; return; }
         int unmatched = 0;
         if (save.Ground is { } groundState && _groundSim is { } groundSim) unmatched += RuntimeState.RestoreGround(groundSim, groundState).Count;
+        if (save.Boulders is { } boulders && _groundSim is { } rocky)
+        {
+            rocky.Ground.LoadBoulders(boulders);   // the boulders lie (and roll) where they were saved (#88)
+            rocky.RetraceBoulders();
+        }
         foreach (var m in save.Machines)
         {
             var view = _views.Count > 0 ? _views.FirstOrDefault(v => v.Name == m.Label) : _current;
@@ -1436,6 +1452,11 @@ public partial class Main : Node3D
         if (e.RetainedPercent is { } ret) note.Add($"Energy retained: {ret:F0}% of its starting mechanical energy");
         string boiling = BoilingHint();
         if (boiling.Length > 0) note.Add(boiling);
+        // a map that settles as it loads (issue #61): the ground comes down on screen, and the HUD says so while it does
+        if (_groundSim is { Ground: { SettleOnLoad: true } ground } sim && ground.SettleRate > 0 && !ground.Stood)
+            note.Add($"The ground is settling: {sim.Settled} faces have failed so far, after {sim.SettlePasses} passes");
+        else if (_groundSim is { Ground.Boulders.Count: > 0 } rocky)
+            note.Add($"The slide left {rocky.Ground.Boulders.Count} boulders and brought down {rocky.Ground.Collapsed:F0} m³ of rim");
         _hudNote.Text = string.Join("\n", note);
 
         _hudDetails.Text = _current.Details.Replace(" · ", "\n");

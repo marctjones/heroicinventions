@@ -29,7 +29,12 @@
 ;; fixture) and link clauses (pipe, connect, sealed-air).
 ;; pendulum/lever/ramp need no solver of their own — they're pure Jolt
 ;; rigid-body physics, built in MachineView — except a pendulum hung on a
-;; bearing, which the sim swings so its friction and wear can be checked. The macro checks the whole
+;; bearing, which the sim swings so its friction and wear can be checked.
+;; Block, ball, pendulum, lever, ramp, wheel, screw, fixture and post take
+;; #:heading-deg: their yaw about the vertical, counter-clockwise seen from
+;; above, turning the part about its own #:at (its axle, its slope and its
+;; swing with it). A whole machine is turned about its origin by a world's
+;; (place label machine (at x y z) (heading deg)). The macro checks the whole
 ;; machine while the file compiles: part names, materials, port names,
 ;; port kinds, and that every rotor has steam. Errors point at the exact
 ;; clause that is wrong. Parameter values are ordinary Racket expressions,
@@ -39,7 +44,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling ball plants melter electrolyser
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -485,7 +490,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling ball plants melter electrolyser
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
   inflow channel off trigger follow belt wake joint)
 
@@ -587,8 +592,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, roof, stirling, ball, plants, melter, electrolyser) or link (pipe, connect, sealed-air)"
-    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond roof plants melter electrolyser tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, drain, roof, stirling, ball, plants, melter, electrolyser) or link (pipe, connect, sealed-air)"
+    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond drain roof plants melter electrolyser tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -704,14 +709,16 @@
                           (~optional (~seq #:tilt-deg tilt-v:expr))
                           (~optional (~seq #:fast fast-v:expr))
                           (~optional (~seq #:drag-coefficient drag-v:expr))
-                          (~optional (~seq #:dimensions dims:vec3))) ...)
+                          (~optional (~seq #:dimensions dims:vec3))
+                          (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:attr info (pinfo #'id 'block (attribute mat) '())
       #:with expr #`(part 'id 'block 'mat (list at.x at.y at.z)
                           (list (cons 'size size-v)
                                 (cons 'tilt-deg (~? tilt-v 0))
                                 (cons 'fast (~? fast-v #t))
                                 (cons 'drag-coefficient (~? drag-v #f))
-                                (~@ . (~? ((cons 'dim-x dims.x) (cons 'dim-y dims.y) (cons 'dim-z dims.z)) ())))
+                                (~@ . (~? ((cons 'dim-x dims.x) (cons 'dim-y dims.y) (cons 'dim-z dims.z)) ()))
+                                (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -734,7 +741,8 @@
                              (~optional (~seq #:bearing-radius journal-v:expr))
                              (~optional (~seq (~and mu-kw #:bearing-mu) mu-v:expr))
                              (~optional (~seq (~and drag-kw #:bearing-drag) drag-v:expr))
-                             (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))) ...)
+                             (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))
+                             (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
                   "a pendulum's bearing needs a #:bearing-radius (its pin's radius, m)"
       #:attr info (pinfo #'id 'pendulum (attribute mat) '())
@@ -744,7 +752,8 @@
                                            (cons 'bearing-mu (~? mu-v 0))
                                            (cons 'bearing-drag (~? drag-v 0))
                                            (cons 'bearing-wear (~? wear-v 0)))
-                                          ())))
+                                          ()))
+                                (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -775,7 +784,14 @@
                           (~optional (~seq #:limit-upper-deg hi-v:expr))
                           (~optional (~seq #:spring-stiffness k-v:expr))
                           (~optional (~seq #:spring-rest-deg rest-v:expr))
-                          (~optional (~seq #:section section-v:expr))) ...)
+                          (~optional (~seq #:section section-v:expr))
+                          (~optional (~seq #:bearing-radius journal-v:expr))
+                          (~optional (~seq (~and mu-kw #:bearing-mu) mu-v:expr))
+                          (~optional (~seq (~and drag-kw #:bearing-drag) drag-v:expr))
+                          (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))
+                          (~optional (~seq #:heading-deg heading-v:expr))) ...)
+      #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
+                  "a lever's bearing needs a #:bearing-radius (its pin's radius, m)"
       #:attr info (pinfo #'id 'lever (attribute mat) '())
       #:with expr #`(part 'id 'lever 'mat (list at.x at.y at.z)
                           (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 0))
@@ -787,7 +803,13 @@
                                 (cons 'limit-upper-deg (~? hi-v #f))
                                 (cons 'spring-stiffness (~? k-v 0))
                                 (cons 'spring-rest-deg (~? rest-v 0))
-                                (cons 'section (~? section-v #f)))
+                                (cons 'section (~? section-v #f))
+                                (~@ . (~? ((cons 'bearing-radius journal-v)
+                                           (cons 'bearing-mu (~? mu-v 0))
+                                           (cons 'bearing-drag (~? drag-v 0))
+                                           (cons 'bearing-wear (~? wear-v 0)))
+                                          ()))
+                                (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -799,10 +821,12 @@
                          (~once (~seq #:length length-v:expr))
                          (~once (~seq #:width width-v:expr))
                          (~once (~seq #:angle-deg angle-v:expr))
-                         (~once (~seq #:material mat:id))) ...)
+                         (~once (~seq #:material mat:id))
+                         (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:attr info (pinfo #'id 'ramp (attribute mat) '())
       #:with expr #`(part 'id 'ramp 'mat (list at.x at.y at.z)
-                          (list (cons 'length length-v) (cons 'width width-v) (cons 'angle-deg angle-v))
+                          (list (cons 'length length-v) (cons 'width width-v) (cons 'angle-deg angle-v)
+                                (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -831,6 +855,13 @@
     ;; only push so hard — so a load too heavy for it wins and runs the
     ;; wheel backwards. Without it, the drive holds its speed whatever it
     ;; takes.
+    ;; #:start-rpm lets it go already spinning (a flywheel, spun up by hand and
+    ;; released). #:bearing-radius m (the axle's radius) puts the same bearing
+    ;; on it that a pendulum has: its weight N = m·g, Coulomb friction μ·N·r
+    ;; (#:bearing-mu), viscous drag c·ω (#:bearing-drag), frictional heat and
+    ;; Archard wear (#:bearing-wear K, mm³/(N·m)). It replaces the engine's
+    ;; own 0.2/s axle damping, so what the wheel loses is what is written here.
+    ;; A lever takes the same four #:bearing- clauses for its pin.
     (pattern (wheel id:id
                     (~alt (~once (~seq #:shape shape-v:expr))
                           (~once (~seq #:at at:vec3))
@@ -843,7 +874,15 @@
                           (~optional (~seq #:grind-torque grind-v:expr))
                           (~optional (~seq #:yield yield-v:expr))
                           (~optional (~seq #:drive-rpm rpm-v:expr))
-                          (~optional (~seq #:drive-torque torque-v:expr))) ...)
+                          (~optional (~seq #:drive-torque torque-v:expr))
+                          (~optional (~seq #:start-rpm start-v:expr))
+                          (~optional (~seq #:bearing-radius journal-v:expr))
+                          (~optional (~seq (~and mu-kw #:bearing-mu) mu-v:expr))
+                          (~optional (~seq (~and drag-kw #:bearing-drag) drag-v:expr))
+                          (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))
+                          (~optional (~seq #:heading-deg heading-v:expr))) ...)
+      #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
+                  "a wheel's bearing needs a #:bearing-radius (its axle's radius, m)"
       #:attr info (pinfo #'id 'wheel (attribute mat) '())
       #:with expr #`(shaped-part 'id 'wheel 'mat (list at.x at.y at.z) shape-v
                                  (list (cons 'axis '(~? ax z)) (cons 'angle-deg (~? angle-v 0))
@@ -852,7 +891,14 @@
                                        (~@ . (~? ((cons 'rolling-resistance rr-v)) ()))
                                        (~@ . (~? ((cons 'grind-torque grind-v)) ()))
                                        (~@ . (~? ((cons 'yield yield-v)) ()))
-                                       (cons 'drive-rpm (~? rpm-v 0)) (cons 'drive-torque (~? torque-v #f)))
+                                       (cons 'drive-rpm (~? rpm-v 0)) (cons 'drive-torque (~? torque-v #f))
+                                       (~@ . (~? ((cons 'start-rpm start-v)) ()))
+                                       (~@ . (~? ((cons 'bearing-radius journal-v)
+                                                  (cons 'bearing-mu (~? mu-v 0))
+                                                  (cons 'bearing-drag (~? drag-v 0))
+                                                  (cons 'bearing-wear (~? wear-v 0)))
+                                                 ()))
+                                       (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                                  #,(loc-of this-syntax)))
 
     ;; An Archimedes' screw, its axle running along X and raised
@@ -863,11 +909,13 @@
                           (~once (~seq #:material mat:id))
                           (~optional (~seq #:tilt-deg tilt-v:expr))
                           (~optional (~seq #:drive-rpm rpm-v:expr))
-                          (~optional (~seq #:drive-torque torque-v:expr))) ...)
+                          (~optional (~seq #:drive-torque torque-v:expr))
+                          (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:attr info (pinfo #'id 'screw (attribute mat) '())
       #:with expr #`(shaped-part 'id 'screw 'mat (list at.x at.y at.z) shape-v
                                  (list (cons 'tilt-deg (~? tilt-v 0)) (cons 'drive-rpm (~? rpm-v 0))
-                                       (cons 'drive-torque (~? torque-v #f)))
+                                       (cons 'drive-torque (~? torque-v #f))
+                                       (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                                  #,(loc-of this-syntax)))
 
     ;; Generated geometry that doesn't move: a catapult's frame, a stand.
@@ -876,10 +924,12 @@
                       (~alt (~once (~seq #:shape shape-v:expr))
                             (~once (~seq #:at at:vec3))
                             (~once (~seq #:material mat:id))
-                            (~optional (~seq #:turn-deg turn-v:expr))) ...)
+                            (~optional (~seq #:turn-deg turn-v:expr))
+                            (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:attr info (pinfo #'id 'fixture (attribute mat) '())
       #:with expr #`(shaped-part 'id 'fixture 'mat (list at.x at.y at.z) shape-v
-                                 (list (cons 'turn-deg (~? turn-v 0)))
+                                 (list (cons 'turn-deg (~? turn-v 0))
+                                       (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                                  #,(loc-of this-syntax)))
 
     ;; A post, pier or wall: a fixed block of #:material standing on the
@@ -897,12 +947,14 @@
                          (~once (~seq #:size size:vec3))
                          (~once (~seq #:material mat:id))
                          (~optional (~seq #:round round-v:expr))
-                         (~optional (~seq #:breakable breakable-v:expr))) ...)
+                         (~optional (~seq #:breakable breakable-v:expr))
+                         (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:attr info (pinfo #'id 'post (attribute mat) '())
       #:with expr #`(part 'id 'post 'mat (list at.x at.y at.z)
                           (list (cons 'size-x size.x) (cons 'size-y size.y) (cons 'size-z size.z)
                                 (cons 'round (and (~? round-v #f) #t))
-                                (cons 'breakable (and (~? breakable-v #f) #t)))
+                                (cons 'breakable (and (~? breakable-v #f) #t))
+                                (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1024,10 +1076,12 @@
                    (~alt (~once (~seq #:at at:vec3))
                          (~once (~seq #:radius radius-v:expr))
                          (~optional (~seq #:drag-coefficient drag-v:expr))
-                         (~once (~seq #:material mat:id))) ...)
+                         (~once (~seq #:material mat:id))
+                         (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:attr info (pinfo #'id 'ball (attribute mat) '())
       #:with expr #`(part 'id 'ball 'mat (list at.x at.y at.z)
-                          (list (cons 'radius radius-v) (cons 'drag-coefficient (~? drag-v #f)))
+                          (list (cons 'radius radius-v) (cons 'drag-coefficient (~? drag-v #f))
+                                (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1280,6 +1334,23 @@
                           '()
                           #,(loc-of this-syntax)))
 
+    ;; A drain (issue #90): a grate flush with the ground at #:at over a pipe
+    ;; into tank #:into (a cistern sunk below it, say). On a map, the water
+    ;; standing on the ground over it pours in over the grate's lip, #:perimeter
+    ;; m of it (default 0.4, a 10 cm square grate), as over a broad-crested
+    ;; weir: Q = 1.705 sqrt(g / 9.81) P h^1.5, h the depth over it. A full
+    ;; tank backs it up. On the plain floor there is nothing for it to take.
+    (pattern (drain id:id
+                    (~alt (~once (~seq #:at at:vec3))
+                          (~once (~seq #:into tank-id:id))
+                          (~optional (~seq #:perimeter p-v:expr))
+                          (~optional (~seq #:material mat:id))) ...)
+      #:attr info (rfinfo #'id 'drain #'tank-id #f)
+      #:with expr #`(part 'id 'drain '(~? mat iron) (list at.x at.y at.z)
+                          (list (cons 'into 'tank-id) (cons 'perimeter (~? p-v 0.4)))
+                          '()
+                          #,(loc-of this-syntax)))
+
     ;; A cold roof on enclosure #:on (issue #58), chilled by the outside
     ;; through #:conductance W/K: below the air's dew point it condenses
     ;; U (T_dew - T_out)/L of water, 1.6 kg an hour a kilowatt, into
@@ -1372,6 +1443,10 @@
     ;;   undershot  #:race channel: it stands in that channel, whose current
     ;;              pushes on paddles #:paddle-depth deep; at best 8/27 of
     ;;              the stream's kinetic energy through them.
+    ;; #:bearing-radius m (its axle's) gives the axle the pendulum's bearing:
+    ;; it carries the wheel's weight (mass × g) and takes μ·N·r Coulomb
+    ;; (#:bearing-mu) and c·ω viscous (#:bearing-drag) torque off what the
+    ;; water gives, as heat, and wears by Archard's law (#:bearing-wear).
     (pattern (waterwheel id:id
                          (~alt (~once (~seq #:at at:vec3))
                                (~once (~seq #:radius radius-v:expr))
@@ -1384,7 +1459,13 @@
                                (~optional (~seq #:tail tail-tank:id))
                                (~optional (~seq #:race race-ch:id))
                                (~optional (~seq #:paddle-depth paddle-v:expr))
+                               (~optional (~seq #:bearing-radius journal-v:expr))
+                               (~optional (~seq (~and mu-kw #:bearing-mu) mu-v:expr))
+                               (~optional (~seq (~and drag-kw #:bearing-drag) drag-v:expr))
+                               (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))
                                (~optional (~seq #:material mat:id))) ...)
+      #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
+                  "a water wheel's bearing needs a #:bearing-radius (its axle's radius, m)"
       #:fail-unless (or (attribute buckets-v) (attribute race-ch)) "a water wheel needs #:buckets (overshot) or a #:race (undershot) to be driven"
       #:fail-when (and (attribute buckets-v) (not (attribute bucket-v)) #'id) "#:buckets needs a #:bucket-volume"
       #:fail-when (and (attribute race-ch) (not (attribute paddle-v)) #'id) "an undershot wheel (#:race) needs a #:paddle-depth"
@@ -1395,7 +1476,12 @@
                                 (cons 'buckets (~? buckets-v 0)) (cons 'bucket-volume (~? bucket-v 0))
                                 (cons 'spill-deg (~? spill-v 120))
                                 (cons 'tail (~? 'tail-tank #f)) (cons 'race (~? 'race-ch #f))
-                                (cons 'paddle-depth (~? paddle-v 0)))
+                                (cons 'paddle-depth (~? paddle-v 0))
+                                (~@ . (~? ((cons 'bearing-radius journal-v)
+                                           (cons 'bearing-mu (~? mu-v 0))
+                                           (cons 'bearing-drag (~? drag-v 0))
+                                           (cons 'bearing-wear (~? wear-v 0)))
+                                          ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1436,20 +1522,26 @@
     ;; #:cp (default 0.3) — when their tips run #:tip-speed-ratio (default
     ;; 2.5) times the wind speed, less either side. #:cp can be no more than
     ;; the Betz limit, 16/27: no rotor takes more of the wind than that.
+    ;; #:wind-from-map #t, in a world whose map has a wind field (#:wind in
+    ;; define-map, issue #61), gives it the map's wind at its own place and
+    ;; time of day instead of a fixed #:wind (then 0, until the world starts).
     (pattern (windmill id:id
                        (~alt (~once (~seq #:at at:vec3))
                              (~once (~seq #:radius radius-v:expr))
                              (~once (~seq #:mass mass-v:expr))
-                             (~once (~seq #:wind wind-v:expr))
+                             (~optional (~seq #:wind wind-v:expr))
+                             (~optional (~seq #:wind-from-map map-v:expr))
                              (~optional (~seq #:load load-v:expr))
                              (~optional (~seq #:cp cp-v:expr))
                              (~optional (~seq #:tip-speed-ratio tsr-v:expr))
                              (~optional (~seq #:material mat:id))) ...)
+      #:fail-unless (or (attribute wind-v) (attribute map-v)) "a windmill needs a #:wind (m/s), or #:wind-from-map #t"
       #:attr info (pinfo #'id 'windmill (attribute mat) '())
       #:with expr #`(part 'id 'windmill '(~? mat oak) (list at.x at.y at.z)
-                          (list (cons 'radius radius-v) (cons 'mass mass-v) (cons 'wind wind-v)
+                          (list (cons 'radius radius-v) (cons 'mass mass-v) (cons 'wind (~? wind-v 0))
                                 (cons 'load (~? load-v 0)) (cons 'cp (~? cp-v 0.3))
-                                (cons 'tip-speed-ratio (~? tsr-v 2.5)))
+                                (cons 'tip-speed-ratio (~? tsr-v 2.5))
+                                (~@ . (~? ((cons 'wind-from-map (and map-v #t))) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -2280,9 +2372,11 @@
       (define id (syntax-e (rfinfo-id r)))
       (when (hash-ref parts id #f) (fail (format "there is already a part named ~a" id) (rfinfo-id r)))
       (define p (hash-ref parts (syntax-e (rfinfo-on r)) #f))
-      (define want (if (eq? (rfinfo-kind r) 'pond) 'tank 'enclosure))
+      (define want (if (memq (rfinfo-kind r) '(pond drain)) 'tank 'enclosure))
       (unless (and p (eq? (pinfo-kind p) want))
-        (fail (format "~a is not a~a ~a; a ~a stands on one" (syntax-e (rfinfo-on r)) (if (eq? want 'enclosure) "n" "") want (rfinfo-kind r)) (rfinfo-on r)))
+        (fail (format "~a is not a~a ~a; a ~a ~a one" (syntax-e (rfinfo-on r)) (if (eq? want 'enclosure) "n" "") want (rfinfo-kind r)
+                      (if (eq? (rfinfo-kind r) 'drain) "runs into" "stands on"))
+              (rfinfo-on r)))
       (when (rfinfo-gutter r)
         (define g (hash-ref parts (syntax-e (rfinfo-gutter r)) #f))
         (unless (and g (eq? (pinfo-kind g) 'tank))

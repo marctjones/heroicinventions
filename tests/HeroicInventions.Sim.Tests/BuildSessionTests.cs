@@ -1029,6 +1029,69 @@ public class BuildSessionTests
         Assert.Contains("(pendulum loose #:at (1 1 0) #:length 0.5 #:start-angle-deg 30 #:material iron)", text);
     }
 
+    /// <summary>An overshot wheel on a dry axle settles at P / (load + μ·m·g·r) (issue #13); the axle's heat and wear read back, and its bearing, a lever's and a wheel's round-trip to Racket.</summary>
+    [Fact]
+    public void WaterWheelOnADryAxleTurnsSlowerByTheAxlesFrictionAndBearingsRoundTrip()
+    {
+        var disc = new CatalogueEntry("disc-a", "a disc", "gear", "gear-x", 0.01, new Vec3(1, 1, 2), new Dictionary<string, SExpr>());
+        var session = new BuildSession(Materials, catalogue: [disc], machinesDir: TempDir(), name: "mill");
+        session.Execute("(tank header #:at (0 3 0) #:area 0.5 #:height 0.4 #:water 0.05)");
+        session.Execute("(inflow spring #:into header #:flow 0.02)");
+        session.Execute("(waterwheel wheel #:at (1 1.5 0) #:radius 1.2 #:mass 100 #:load 250 #:buckets 24 #:bucket-volume 0.01 #:bearing-radius 0.03 #:bearing-mu 0.4 #:bearing-wear 1e-4)");
+        session.Execute("(channel race header.outlet off #:end (0.8 2.8 0) #:width 0.3 #:onto wheel)");
+        session.Execute("(lever beam #:at (4 2 0) #:length 1 #:material iron #:bearing-radius 0.01 #:bearing-drag 0.2)");
+        session.Execute("(lever plain #:at (5 2 0) #:length 1 #:material iron)");
+        session.Execute("(wheel fly #:catalogue disc-a #:at (6 1 0) #:material iron)");
+        session.Execute("(set fly #:start-rpm 30)");
+        session.Execute("(set fly #:bearing-radius 0.02)");
+        session.Execute("(set fly #:bearing-mu 0.4)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        session.Execute("(run 400)");
+        double power = 1000 * 9.81 * 0.02 * 1.2 * (1 - Math.Cos(2 * Math.PI / 3));
+        double friction = 0.4 * 100 * 9.81 * 0.03;                       // the axle: mu * m g * r
+        var wheel = session.LastRun!.WaterWheels["wheel"];
+        Assert.Equal(power / (250 + friction), wheel.AngularVelocity, precision: 4);
+        Assert.True(wheel.Bearing!.Heat > 0 && wheel.Bearing.Wear > 0);
+
+        string saved = Path.Combine(TempDir(), "mill.machine");
+        session.SaveFile(saved);
+        var def = MachineDef.Parse(File.ReadAllText(saved));
+        Assert.Equal(0.4, def.Part("wheel")!.Number("bearing-mu"));
+        Assert.Equal(0.2, def.Part("beam")!.Number("bearing-drag"));
+        Assert.Equal(0.02, def.Part("fly")!.Number("bearing-radius"));
+        Assert.IsType<SBool>(def.Part("plain")!.Props["bearing-radius"]);
+        string rkt = Path.Combine(TempDir(), "mill.rkt");
+        session.ExportRkt(rkt);
+        string text = File.ReadAllText(rkt);
+        Assert.Contains("#:bearing-radius 0.03 #:bearing-mu 0.4 #:bearing-drag 0 #:bearing-wear 0.0001", text);
+        Assert.Contains("#:bearing-radius 0.01 #:bearing-mu 0 #:bearing-drag 0.2 #:bearing-wear 0)", text);
+        Assert.Contains("#:start-rpm 30 #:bearing-radius 0.02 #:bearing-mu 0.4", text);
+        Assert.DoesNotContain("(lever plain #:at (5 2 0) #:length 1 #:material iron #:axis z #:start-angle-deg 0 #:pivot-fraction 0.5 #:limit-deg 18 #:damping 8 #:spring-stiffness 0 #:spring-rest-deg 0 #:bearing", text);
+    }
+
+    /// <summary>A windmill set to take its wind from the map (issue #61) says so in the saved machine and the Racket export, and stays an ordinary windmill (its own #:wind) until it is.</summary>
+    [Fact]
+    public void AWindmillTakingItsWindFromTheMapRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "mill");
+        session.Execute("(windmill plain #:at (0 3 0) #:radius 3 #:mass 40 #:wind 7)");
+        session.Execute("(windmill field #:at (10 3 0) #:radius 3 #:mass 40)");
+        session.Execute("(set field #:wind-from-map #t)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        Assert.False(session.Document.Parts["plain"].Props["wind-from-map"] is SBool { Value: true });
+        Assert.True(session.Document.Parts["field"].Props["wind-from-map"] is SBool { Value: true });
+        string saved = Path.Combine(TempDir(), "mill.machine");
+        session.SaveFile(saved);
+        var def = MachineDef.Parse(File.ReadAllText(saved));
+        Assert.True(def.Part("field")!.Props["wind-from-map"] is SBool { Value: true });
+        string rkt = Path.Combine(TempDir(), "mill.rkt");
+        session.ExportRkt(rkt);
+        string text = File.ReadAllText(rkt);
+        Assert.Contains("#:wind-from-map #t", text);
+        Assert.Equal(1, text.Split("#:wind-from-map").Length - 1);   // only the one that asked
+        Assert.Contains("#:wind 7", text);
+    }
+
     [Fact]
     public void ExportsCataloguePartsWaterAndLiftsToRacket()
     {

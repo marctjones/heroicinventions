@@ -113,7 +113,10 @@ public partial class MachineView
         if (Math.Abs(a.Number("module") - b.Number("module")) > 1e-9)
             throw new MachineFormatException($"{a.Id} and {b.Id} are cut to different modules ({a.Number("module") * 1000} and {b.Number("module") * 1000} mm); their teeth can't engage", at);
         double want = a.Number("pitch-radius") + b.Number("pitch-radius");
-        double apart = Math.Sqrt(Math.Pow(a.At.X - b.At.X, 2) + Math.Pow(a.At.Y - b.At.Y, 2));
+        // the distance between their axles, in the plane square to them: x and y for an axle along z, as written; turned with the heading
+        var axle = YawOf(a) * AxleOf(a);
+        var between = new Vector3((float)(a.At.X - b.At.X), (float)(a.At.Y - b.At.Y), (float)(a.At.Z - b.At.Z));
+        double apart = (between - axle * axle.Dot(between)).Length();
         if (Math.Abs(apart - want) > 0.02 * want)
             throw new MachineFormatException($"{a.Id} and {b.Id} are {apart * 1000:F1} mm apart; to mesh they must be {want * 1000:F1} mm (the sum of their pitch radii)", at);
     }

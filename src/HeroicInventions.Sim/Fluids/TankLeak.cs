@@ -42,6 +42,8 @@ public sealed class TankLeak(Tank tank, double height, double area, Tank? catchT
     public static double PlugArea(double bore, double lift) =>
         lift >= bore / 4 ? Math.PI * bore * bore / 4 : Math.PI * bore * Math.Max(0, lift);
     public Tank? Catch { get; } = catchTank;
+    /// <summary>Where the jet lands with no tank to catch it (issue #90): a tank on a map pours it onto the ground there; unset, it is lost.</summary>
+    public Action<double>? Pour { get; set; }
     public double Evaporation { get; init; }              // m³/s
 
     public double Flow { get; internal set; }             // m³/s out of the hole, last step

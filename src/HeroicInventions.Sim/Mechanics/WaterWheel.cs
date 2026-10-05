@@ -47,6 +47,11 @@ public sealed class WaterWheel(string name, double radius, double width, double 
     public Channel? Race { get; init; }
     public double PaddleDepth { get; init; }                  // m
 
+    /// <summary>The axle's bearing, if the machine gives it one (#:bearing-radius): it carries the wheel's own weight and takes friction's share of what the water gives.</summary>
+    public Bearing? Bearing { get; init; }
+    /// <summary>What the axle carries, N: the wheel's mass (I = m·r²) times the gravity it stands in.</summary>
+    public double Weight => MomentOfInertia / (Radius * Radius) * Zone.Gravity;
+
     public double AngularVelocity { get; private set; }      // rad/s
     public double Angle { get; private set; }                 // rad
     public double Water { get; private set; }                 // kg on the descending arc
@@ -93,6 +98,8 @@ public sealed class WaterWheel(string name, double radius, double width, double 
         {
             double before = AngularVelocity;
             AngularVelocity = Math.Max(0, AngularVelocity + (Torque - Load) / MomentOfInertia * dt);
+            // the axle's friction takes its share of the step: Coulomb can stop the wheel, never turn it back
+            if (Bearing is not null) AngularVelocity = Bearing.Slow(AngularVelocity, MomentOfInertia, Weight, dt);
             Work += Load * (before + AngularVelocity) / 2 * dt;
             Angle = (Angle + AngularVelocity * dt) % (2 * Math.PI);
         }
