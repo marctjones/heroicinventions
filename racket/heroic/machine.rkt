@@ -39,7 +39,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling ball plants melter electrolyser
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -485,7 +485,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond roof stirling ball plants melter electrolyser
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
   inflow channel off trigger follow belt wake joint)
 
@@ -587,8 +587,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, roof, stirling, ball, plants, melter, electrolyser) or link (pipe, connect, sealed-air)"
-    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond roof plants melter electrolyser tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, drain, roof, stirling, ball, plants, melter, electrolyser) or link (pipe, connect, sealed-air)"
+    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond drain roof plants melter electrolyser tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1277,6 +1277,23 @@
       #:with expr #`(part 'id 'pond 'limestone (list at.x at.y at.z)
                           (list (cons 'on 'tank-id) (cons 'heater (~? heater-v 0)) (cons 'temperature (~? temp-v #f))
                                 (cons 'coefficient (~? k-v 3.6e-8)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A drain (issue #90): a grate flush with the ground at #:at over a pipe
+    ;; into tank #:into (a cistern sunk below it, say). On a map, the water
+    ;; standing on the ground over it pours in over the grate's lip, #:perimeter
+    ;; m of it (default 0.4, a 10 cm square grate), as over a broad-crested
+    ;; weir: Q = 1.705 sqrt(g / 9.81) P h^1.5, h the depth over it. A full
+    ;; tank backs it up. On the plain floor there is nothing for it to take.
+    (pattern (drain id:id
+                    (~alt (~once (~seq #:at at:vec3))
+                          (~once (~seq #:into tank-id:id))
+                          (~optional (~seq #:perimeter p-v:expr))
+                          (~optional (~seq #:material mat:id))) ...)
+      #:attr info (rfinfo #'id 'drain #'tank-id #f)
+      #:with expr #`(part 'id 'drain '(~? mat iron) (list at.x at.y at.z)
+                          (list (cons 'into 'tank-id) (cons 'perimeter (~? p-v 0.4)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -2280,9 +2297,11 @@
       (define id (syntax-e (rfinfo-id r)))
       (when (hash-ref parts id #f) (fail (format "there is already a part named ~a" id) (rfinfo-id r)))
       (define p (hash-ref parts (syntax-e (rfinfo-on r)) #f))
-      (define want (if (eq? (rfinfo-kind r) 'pond) 'tank 'enclosure))
+      (define want (if (memq (rfinfo-kind r) '(pond drain)) 'tank 'enclosure))
       (unless (and p (eq? (pinfo-kind p) want))
-        (fail (format "~a is not a~a ~a; a ~a stands on one" (syntax-e (rfinfo-on r)) (if (eq? want 'enclosure) "n" "") want (rfinfo-kind r)) (rfinfo-on r)))
+        (fail (format "~a is not a~a ~a; a ~a ~a one" (syntax-e (rfinfo-on r)) (if (eq? want 'enclosure) "n" "") want (rfinfo-kind r)
+                      (if (eq? (rfinfo-kind r) 'drain) "runs into" "stands on"))
+              (rfinfo-on r)))
       (when (rfinfo-gutter r)
         (define g (hash-ref parts (syntax-e (rfinfo-gutter r)) #f))
         (unless (and g (eq? (pinfo-kind g) 'tank))

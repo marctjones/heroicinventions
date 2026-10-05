@@ -45,6 +45,8 @@ public sealed class WorldGround
         _getters["map.bed-moved"] = () => Water.BedMoved;      // m³ of sand the water has shifted (#53)
         _getters["map.bed-lost"] = () => Water.BedLost;        // m³ of it carried off the map
         _getters["map.settled"] = () => Settled;               // faces that failed as the map settled (#54)
+        _getters["map.spilled"] = () => Spilled;               // m³ tanks spilled or leaked onto it (#90)
+        _getters["map.drained"] = () => Water.Drained;         // m³ drains took off it into tanks (#90)
         _getters["map.collapsed"] = () => Ground.Collapsed;       // m³ failed faces of rocky soil lost (#88)
         _getters["map.boulders"] = () => Ground.Boulders.Count;   // boulders the slides left
         _getters["map.boulder-volume"] = () => Ground.BoulderVolume;
@@ -67,6 +69,18 @@ public sealed class WorldGround
     {
         if (_attached++ == 0) Water.Gravity = machine.Outside.Gravity;
         foreach (var d in machine.Diggers.Values) d.Attach(Ground, Water.Gravity);   // digging gangs dig this ground (#44)
+        // tanks spill onto the ground under them, holes with nothing to catch them pour there, and drains take the
+        // water standing over them into their tanks (#90): water crosses between the machine and the map, all of it counted
+        foreach (var d in machine.Drains.Values) d.Attach(Water);
+        foreach (var (id, tank) in machine.Tanks)
+            if (machine.Def.Part(id) is { } part) tank.Spill = m3 => PourOnto(part.At.X, part.At.Z, m3);
+        foreach (var (id, leak) in machine.Leaks)
+            if (leak.Catch is null && machine.Def.Part(id) is { } hole)
+            {
+                var l = leak;
+                // the jet leaves level along +x at √(2 g h) and falls to the ground under the hole: it lands 2 √(h · drop) out
+                leak.Pour = m3 => PourOnto(hole.At.X + 2 * Math.Sqrt(l.Head * Math.Max(0, hole.At.Y - Ground.HeightAt(hole.At.X, hole.At.Z))), hole.At.Z, m3);
+            }
         foreach (var spec in machine.Def.Channels)
         {
             if (spec.To is not null || spec.Onto is not null || spec.End is not { } end) continue;
@@ -80,6 +94,15 @@ public sealed class WorldGround
         }
     }
     private int _attached;
+
+    /// <summary>Water a tank lets go of onto the ground at a world point; off the map, it runs away (#90).</summary>
+    private void PourOnto(double x, double z, double m3)
+    {
+        Spilled += m3;
+        if (!Water.AddWater(x, z, m3)) Water.Leak(m3);
+    }
+    /// <summary>m³ the machines' tanks have spilled or leaked onto the ground, all told (#90).</summary>
+    public double Spilled { get; private set; }
 
     public void Step(double dt)
     {

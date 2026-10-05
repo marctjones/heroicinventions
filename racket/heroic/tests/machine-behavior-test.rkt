@@ -2204,6 +2204,38 @@
     (delete-directory/files dir)))
 
 ;; ---------------------------------------------------------------------------
+;; Tanks and the ground's water (issue #90)
+
+(test-case "Spill (#90): a broken butt on a walled slope lets its 1000 L onto the ground; butt and ground always hold 1000 L, 369.6 L in the butt at 30 s"
+  (when (godot-available?)
+    ;; spill-tank.rkt: sqrt(head) falls 0.013288 a second from sqrt(0.98): 349.6 L over the hole at 30 s, down to it at 74.5 s
+    (define w (godot-simulate-world 'spill #:seconds 90 #:sample-dt 5))
+    (define-values (barrel ground) (values (hash-ref w 'barrel) (hash-ref w 'links)))
+    (for ([b barrel] [g ground])
+      (check-= (+ (/ (cadr (assq 'butt.water (cdr b))) 1000) (cadr (assq 'map.volume (cdr g)))) 1.0 1e-9
+               (format "butt and ground hold 1000 L at ~a s" (car b))))
+    (check-= (value-at barrel '(butt water) 30) 369.6 1.5)
+    (check-= (value-at ground '(map volume) 30) 0.6304 0.0015)
+    (check-= (final-of barrel '(butt water)) 20 0.01 "down to the hole, 2 cm up")
+    (check-= (final-of ground '(map spilled)) 0.98 1e-4)
+    (check-= (final-of ground '(map poured)) (final-of ground '(map volume)) 1e-9 "none soaked in, none ran off: the walls held it")))
+
+(test-case "Drain (#90): a grate at the bottom of a hollow fills its cistern at the spring's 2 L/s, the water standing 2.05 cm over it"
+  (when (godot-available?)
+    ;; cistern-drain.rkt: steady, Q = 1.705 x 0.4 x h^1.5 = 2 L/s, h = (0.002 / 0.682)^(2/3) = 2.048 cm
+    (define w (godot-simulate-world 'sump #:seconds 180 #:sample-dt 10))
+    (define-values (yard ground) (values (hash-ref w 'yard) (hash-ref w 'links)))
+    (for ([y yard] [g ground])
+      (check-= (+ (/ (cadr (assq 'cistern.water (cdr y))) 1000) (cadr (assq 'map.volume (cdr g)))) (cadr (assq 'map.poured (cdr g))) 1e-9
+               (format "cistern and ground hold what the spring gave at ~a s" (car y))))
+    (check-= (final-of ground '(map poured)) 0.36 1e-6 "180 s of 2 L/s")
+    (define rate (/ (- (final-of yard '(cistern water)) (value-at yard '(cistern water) 150)) 30))
+    (check-= rate 2.0 0.02 (format "the cistern fills at ~a L/s" rate))
+    (check-= (final-of yard '(grate flow)) 2.0 0.02)
+    (check-= (final-of yard '(grate depth)) (* 100 (expt (/ 0.002 (* 1.705 0.4)) 2/3)) 0.04)
+    (check-= (final-of yard '(grate drained)) (final-of yard '(cistern water)) 1e-9)))
+
+;; ---------------------------------------------------------------------------
 ;; The greenhouse (issue #42). Working in racket/machines/greenhouse.rkt.
 
 (test-case "A greenhouse on Mars: trees grow 3.181e-7 kg/s of wood, the air's O2 rising 1.1841 kg a kg; burned, the harvest gives it all back"

@@ -1,0 +1,7 @@
+;; A broken water butt on a walled slope of sand that soaks up nothing (issue #90):
+;; its jet runs downhill and pools at the low wall, and the butt and the ground
+;; between them always hold the 1000 L there were (racket/maps/spill-slope.rkt,
+;; racket/machines/spill-tank.rkt).
+(world spill
+  (map spill-slope)
+  (place barrel spill-tank (at 0 0 0)))

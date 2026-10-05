@@ -16,9 +16,11 @@ public sealed class WaterSource(string name, Tank into, double flow)
 
     public void Step(double dt)
     {
-        double added = Math.Min(Rate * (Valve?.Opening ?? 1) * dt, Into.Capacity - Into.WaterVolume);
+        double offered = Rate * (Valve?.Opening ?? 1) * dt;
+        double added = Math.Min(offered, Into.Capacity - Into.WaterVolume);
         Into.WaterVolume += Math.Max(0, added);
         Flow = Math.Max(0, added) / dt;
+        Into.Overflow(offered - Math.Max(0, added));   // a full tank on a map runs over onto the ground (#90)
     }
 }
 

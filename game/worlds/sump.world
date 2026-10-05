@@ -1,0 +1,7 @@
+;; A 2 L/s spring runs into a walled hollow; a grate at its bottom drains it
+;; into a cistern, which fills at the spring's 2 L/s once the hollow is steady,
+;; the water standing 2.05 cm over the grate (issue #90; racket/maps/sump.rkt,
+;; racket/machines/cistern-drain.rkt).
+(world sump
+  (map sump)
+  (place yard cistern-drain (at 0 0 0)))

@@ -120,6 +120,7 @@ public partial class MachineView : Node3D
         BuildChannels();
         BuildFloatValves();
         BuildLeaks();
+        BuildDrains();
         BuildTriggers();
         BuildSafetyValves();
         BuildBellows();
@@ -1496,6 +1497,7 @@ public partial class MachineView : Node3D
         DrawBearingPendulums();
         DrawFloatValves();
         DrawLeaks();
+        DrawDrains();
         DrawTriggers();
         DrawImpacts();
         DrawBelts();

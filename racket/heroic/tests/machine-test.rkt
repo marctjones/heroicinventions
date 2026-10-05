@@ -308,3 +308,13 @@
   (check-compile-error #rx"not a tank; a float rides in a tank's water"
     (post p #:at (0 0 0) #:size (1 1 1) #:material oak)
     (float f #:in p #:mass 1 #:area 0.01)))
+
+(test-case "a drain (#90) runs into a tank"
+  (check-not-exn
+   (λ () (expand-machine '(tank cistern #:at (0 -1 0) #:area 1 #:height 1) '(drain grate #:at (0 0 0) #:into cistern #:perimeter 0.4))))
+  (check-compile-error #rx"pier is not a tank; a drain runs into one"
+    (post pier #:at (0 0 0) #:size (1 1 1) #:material oak)
+    (drain grate #:at (0 0 0) #:into pier))
+  (check-compile-error #rx"already a part named cistern"
+    (tank cistern #:at (0 -1 0) #:area 1 #:height 1)
+    (drain cistern #:at (0 0 0) #:into cistern)))
