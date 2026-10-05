@@ -51,13 +51,28 @@ public partial class MachineView
             arm.AddChild(panel);
         }
         _windmills.Add((mill, sails));
-        AddLabel(part.Id, hub + new Vector3(0, r + 0.8f, 0));
+        if (part.Props.GetValueOrDefault("wind-from-map") is SBool { Value: true })
+        {
+            // a mill that takes the map's wind (issue #61) shows what it is getting, which changes with the gusts and the hour
+            var label = new Label3D
+            {
+                Position = hub + new Vector3(0, r + 0.8f, 0), FontSize = 24, OutlineSize = 6, PixelSize = 0.0025f * Mathf.Max(1, r / 2),
+                Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
+            };
+            AddChild(label);
+            _fieldMillLabels.Add((part.Id, mill, label));
+        }
+        else AddLabel(part.Id, hub + new Vector3(0, r + 0.8f, 0));
     }
+
+    private readonly List<(string Id, Windmill Mill, Label3D Label)> _fieldMillLabels = [];
 
     private void DrawWindmills()
     {
         // seen from the wind's side the sails turn anticlockwise, as English mills' do
         foreach (var (mill, sails) in _windmills)
             sails.Rotation = new Vector3(0, 0, (float)mill.Angle);
+        foreach (var (id, mill, label) in _fieldMillLabels)
+            label.Text = $"{id}\nwind {mill.Wind:F1} m/s\n{mill.WindPower * mill.PowerCoefficient / 1000:F2} kW";
     }
 }

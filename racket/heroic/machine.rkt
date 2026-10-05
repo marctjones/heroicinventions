@@ -1505,20 +1505,26 @@
     ;; #:cp (default 0.3) — when their tips run #:tip-speed-ratio (default
     ;; 2.5) times the wind speed, less either side. #:cp can be no more than
     ;; the Betz limit, 16/27: no rotor takes more of the wind than that.
+    ;; #:wind-from-map #t, in a world whose map has a wind field (#:wind in
+    ;; define-map, issue #61), gives it the map's wind at its own place and
+    ;; time of day instead of a fixed #:wind (then 0, until the world starts).
     (pattern (windmill id:id
                        (~alt (~once (~seq #:at at:vec3))
                              (~once (~seq #:radius radius-v:expr))
                              (~once (~seq #:mass mass-v:expr))
-                             (~once (~seq #:wind wind-v:expr))
+                             (~optional (~seq #:wind wind-v:expr))
+                             (~optional (~seq #:wind-from-map map-v:expr))
                              (~optional (~seq #:load load-v:expr))
                              (~optional (~seq #:cp cp-v:expr))
                              (~optional (~seq #:tip-speed-ratio tsr-v:expr))
                              (~optional (~seq #:material mat:id))) ...)
+      #:fail-unless (or (attribute wind-v) (attribute map-v)) "a windmill needs a #:wind (m/s), or #:wind-from-map #t"
       #:attr info (pinfo #'id 'windmill (attribute mat) '())
       #:with expr #`(part 'id 'windmill '(~? mat oak) (list at.x at.y at.z)
-                          (list (cons 'radius radius-v) (cons 'mass mass-v) (cons 'wind wind-v)
+                          (list (cons 'radius radius-v) (cons 'mass mass-v) (cons 'wind (~? wind-v 0))
                                 (cons 'load (~? load-v 0)) (cons 'cp (~? cp-v 0.3))
-                                (cons 'tip-speed-ratio (~? tsr-v 2.5)))
+                                (cons 'tip-speed-ratio (~? tsr-v 2.5))
+                                (~@ . (~? ((cons 'wind-from-map (and map-v #t))) ())))
                           '()
                           #,(loc-of this-syntax)))
 

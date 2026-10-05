@@ -199,7 +199,8 @@ public static class RktExporter
                 return $"  (capstan {p.Id} {At()} #:turns {F(N("turns"))} #:load {F(N("load"))} #:hold {F(N("hold"))} #:drop {F(N("drop", 1))} " +
                        $"#:radius {F(N("radius", 0.15))}" + Opt("mu", "mu") + $" #:rope {Sym("rope", "hemp")} {Mat()})\n";
             case "windmill":
-                return $"  (windmill {p.Id} {At()} #:radius {F(N("radius"))} #:mass {F(N("mass"))} #:wind {F(N("wind"))} #:load {F(N("load"))} " +
+                return $"  (windmill {p.Id} {At()} #:radius {F(N("radius"))} #:mass {F(N("mass"))} #:wind {F(N("wind"))}" +
+                       (p.Props.GetValueOrDefault("wind-from-map") is SBool { Value: true } ? " #:wind-from-map #t" : "") + $" #:load {F(N("load"))} " +
                        $"#:cp {F(N("cp", 0.3))} #:tip-speed-ratio {F(N("tip-speed-ratio", 2.5))} {Mat()})\n";
             case "ball":
                 return $"  (ball {p.Id} {At()} #:radius {F(N("radius", 0.05))}" + Opt("drag-coefficient", "drag-coefficient") + Heading() + $" {Mat()})\n";

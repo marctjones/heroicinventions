@@ -1,0 +1,8 @@
+;; Two post mills on the crater floor (issue #61), each taking the map's wind where it stands:
+;; one on the line from the rim's notch (azimuth 200) through the centre, where the corridor
+;; is strongest, one 160 m across it, where the wind is the corridor's base 0.3 of that. The
+;; same mill; a very different wind, and a power that goes as its cube.
+(world crater-wind
+  (map victoria)
+  (place in-corridor field-windmill (at -94.0 0 -34.2))
+  (place off-corridor field-windmill (at 54.7 0 -150.4)))

@@ -931,7 +931,7 @@ public partial class BuildMode : Node3D
     };
 
     /// <summary>A true/false prop, as opposed to an optional number that is #f until set.</summary>
-    private static bool IsFlag(string key) => key is "round" or "fast" or "reverse" or "breakable";
+    private static bool IsFlag(string key) => key is "round" or "fast" or "reverse" or "breakable" or "wind-from-map";
 
     /// <summary>A number the part's template starts as #f (a sluice's width, a pendulum's bearing): it can be cleared back to none.</summary>
     private static bool IsOptionalNumber(string kind, string key) =>

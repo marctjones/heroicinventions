@@ -2446,3 +2446,77 @@
           (near? "x" xb (- (v fa 'x) ox) tol) (near? "z" zb (v fa 'z) tol) (near? "y" (v fb 'y) (v fa 'y) tol)
           (when (assq (string->symbol (format "~a.angle" body)) (cdr fa))
             (near? "turn" (let ([d (- (v fb 'angle) (v fa 'angle))]) (- d (* 360 (round (/ d 360))))) 0 0.2)))))))
+
+;; a trace frame list's value of a key at the frame nearest a time, and in its last frame
+(define (value-at-key run key t)
+  (define frame (for/fold ([best (car run)]) ([f (cdr run)]) (if (< (abs (- (car f) t)) (abs (- (car best) t))) f best)))
+  (field frame key))
+(define (final-of-key run key) (field (last run) key))
+
+;; ---- #61 the crater world (victoria.rkt, lonely-rover-opening.world, crater-wind.world)
+;; The map's own numbers are checked in tests/HeroicInventions.Sim.Tests/CraterTests.cs; here the game
+;; plays them: the weakened rim comes down on screen over a few seconds and buries the cargo at its foot,
+;; and two mills on the floor each take the wind of the field where they stand.
+(test-case "The crater's opening (Jolt): the weakened rim comes down over about four seconds and buries the cargo, as deep as its distance from the cliff, the same each run"
+  (when (godot-available?)
+    (define (run-it) (godot-simulate-world 'lonely-rover-opening #:seconds 8 #:sample-dt 1/2))
+    (define world (run-it))
+    (define ground (hash-ref world 'links))
+    ;; settling plays out at 60 passes a second: the whole of it is 261 passes, 4.35 s, and is still going at 4 s
+    (check-= (value-at-key ground 'map.settling 0.5) 1 0)
+    (check-= (value-at-key ground 'map.settling 4.0) 1 0)
+    (check-= (value-at-key ground 'map.settling 5.0) 0 0)
+    (check-= (final-of-key ground 'map.settle-passes) 261 30)
+    (check-= (/ (final-of-key ground 'map.settle-passes) 60.0) 4.35 0.5 "seconds")
+    (check-true (< 80 (final-of-key ground 'map.settled) 200) "faces of the weakened block that failed")
+    ;; each crate: held where the slide left it if more than a quarter of its height (12.5 cm) is over its lid,
+    ;; and the pull to free it is its weight, the soil on the lid and the soil's grip on its sides
+    (define g 3.71) (define s 0.5)
+    (define gamma (* 2700 g)) (define tan-phi 0.60)                      ; rubble over bedrock cells: loose, no cohesion
+    (define k0 (- 1 (sin (atan tan-phi))))
+    (define (pull cover mass) (+ (* mass g) (* gamma cover s s) (* 4 s k0 gamma tan-phi (/ (- (sqr (+ cover s)) (sqr cover)) 2))))
+    (define crates '(battery-bank solar-panels gas-cylinders hand-tools spares))
+    (define covers
+      (for/list ([c crates])
+        (define f (last (hash-ref world c)))
+        (define cover (field f 'crate.cover))
+        (check-= (field f 'crate.buried) (if (> cover (* 0.25 s)) 1 0) 0 (format "~a: held exactly when more than a quarter of it is covered" c))
+        (when (> cover (* 0.25 s))
+          (check-= (field f 'crate.pull-out) (pull cover 90) (* 0.01 (pull cover 90)) (format "~a: the pull to free it" c)))
+        cover))
+    ;; the nearer the cliff's foot, the deeper the rubble over it
+    (check-true (apply > (take covers 3)) (format "covers fall away from the cliff: ~a" covers))
+    (check-true (andmap negative? (drop covers 3)) "and the last two crates are bare")
+    (check-= (first covers) 4.31 0.2 "the battery bank is buried under about 4.3 m: held, 24 kN to pull, within a backhoe's reach")
+    (check-true (> (field (last (hash-ref world 'battery-bank)) 'crate.buried) 0.5) "the battery bank is buried")
+    ;; deterministic: a second run buries them the same way
+    (define again (run-it))
+    (for ([c crates])
+      (check-= (field (last (hash-ref again c)) 'crate.cover) (field (last (hash-ref world c)) 'crate.cover) 1e-6 (format "~a again" c)))
+    ;; PENDING #88: the scenario's last claim, that the bank is also pinned by boulders too big for the backhoe,
+    ;; needs boulder bodies from terrain collapse, which #88 builds. Add the assertion when it lands.
+    ))
+
+(test-case "Two mills on the crater floor (Jolt): each takes the wind of the map's field where it stands, 6 m/s x corridor x daily x gusts, and the power goes as its cube"
+  (when (godot-available?)
+    (define world (godot-simulate-world 'crater-wind #:seconds 300 #:sample-dt 25))
+    (define on (hash-ref world 'in-corridor))
+    (define off (hash-ref world 'off-corridor))
+    ;; the line from the notch (azimuth 200) through the centre; 0.3 + 0.7 e^-(d/80)^2 across it
+    (define (corridor across) (+ 0.3 (* 0.7 (exp (- (sqr (/ across 80)))))))
+    (define sol-length (let ([a (car on)] [b (last on)])
+                         (/ (- (car b) (car a)) (- (field b 'scene.sols) (field a 'scene.sols)))))
+    (check-= sol-length 88775 5 "Mars's solar day, s")
+    (for ([a on] [b off])
+      (define hour (field a 'scene.time))
+      (define seconds (* (field a 'scene.sols) sol-length))
+      (define daily (+ 1 (* 0.35 (cos (* 2 pi (/ (- hour 2) 24))))))
+      (define gusts (+ 1 (* 0.25 (/ (+ (sin (* 2 pi (/ seconds 37))) (sin (+ (* 2 pi (/ seconds 91)) 1.3))) 2))))
+      (check-= (field a 'mill.wind) (* 6 (corridor 0.01) daily gusts) 0.05 (format "in the corridor at ~a s" (car a)))
+      (check-= (field b 'mill.wind) (* 6 (corridor 160.04) daily gusts) 0.05 (format "across it at ~a s" (car a)))
+      ;; 1/2 rho A v^3 through the sails' 314.16 m2, rho the air's there
+      (check-= (field a 'mill.wind-power) (* 1/2 (field a 'scene.air-density) (* pi 100) (expt (field a 'mill.wind) 3))
+               (* 1e-3 (field a 'mill.wind-power)) "W"))
+    (define last-on (last on)) (define last-off (last off))
+    (check-= (/ (field last-off 'mill.wind-power) (field last-on 'mill.wind-power))
+             (expt (/ (corridor 160.04) (corridor 0.01)) 3) 0.003 "the same wind weaker by 0.313, a power weaker by its cube, 0.031")))

@@ -243,6 +243,7 @@ public static class PartTemplates
             {
                 ["radius"] = new SNumber(10), ["mass"] = new SNumber(1500), ["wind"] = new SNumber(6), ["load"] = new SNumber(0),
                 ["cp"] = new SNumber(0.3), ["tip-speed-ratio"] = new SNumber(2.5),
+                ["wind-from-map"] = new SBool(false),   // true: the wind of the map's wind field at its own place (issue #61)
             },
             [], null),
         // a solid ball of #:radius m: it rolls where a block slides, at (5/7) g sin(theta) down a slope

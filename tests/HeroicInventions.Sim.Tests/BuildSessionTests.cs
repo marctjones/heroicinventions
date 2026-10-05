@@ -1069,6 +1069,29 @@ public class BuildSessionTests
         Assert.DoesNotContain("(lever plain #:at (5 2 0) #:length 1 #:material iron #:axis z #:start-angle-deg 0 #:pivot-fraction 0.5 #:limit-deg 18 #:damping 8 #:spring-stiffness 0 #:spring-rest-deg 0 #:bearing", text);
     }
 
+    /// <summary>A windmill set to take its wind from the map (issue #61) says so in the saved machine and the Racket export, and stays an ordinary windmill (its own #:wind) until it is.</summary>
+    [Fact]
+    public void AWindmillTakingItsWindFromTheMapRoundTrips()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "mill");
+        session.Execute("(windmill plain #:at (0 3 0) #:radius 3 #:mass 40 #:wind 7)");
+        session.Execute("(windmill field #:at (10 3 0) #:radius 3 #:mass 40)");
+        session.Execute("(set field #:wind-from-map #t)");
+        Assert.StartsWith("ok:", session.Execute("(check)"));
+        Assert.False(session.Document.Parts["plain"].Props["wind-from-map"] is SBool { Value: true });
+        Assert.True(session.Document.Parts["field"].Props["wind-from-map"] is SBool { Value: true });
+        string saved = Path.Combine(TempDir(), "mill.machine");
+        session.SaveFile(saved);
+        var def = MachineDef.Parse(File.ReadAllText(saved));
+        Assert.True(def.Part("field")!.Props["wind-from-map"] is SBool { Value: true });
+        string rkt = Path.Combine(TempDir(), "mill.rkt");
+        session.ExportRkt(rkt);
+        string text = File.ReadAllText(rkt);
+        Assert.Contains("#:wind-from-map #t", text);
+        Assert.Equal(1, text.Split("#:wind-from-map").Length - 1);   // only the one that asked
+        Assert.Contains("#:wind 7", text);
+    }
+
     [Fact]
     public void ExportsCataloguePartsWaterAndLiftsToRacket()
     {

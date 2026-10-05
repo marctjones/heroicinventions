@@ -24,6 +24,38 @@ public sealed record SoilSpec(string Material, double Infiltration, double Cohes
         4 * Cohesion / (Density * gravity) * Math.Tan(Math.PI / 4 + Math.Atan(Friction) / 2);
 }
 
+/// <summary>
+/// The wind over a map's floor (issue #61): a regular but variable wind that a notch in the rim funnels across
+/// the floor, strongest in a corridor below the notch:
+/// <code>v(x, z, t) = Speed · corridor(x, z) · daily(hour) · gusts(t)</code>
+/// <b>corridor</b> is Base + (1 − Base)·exp(−(d / Width)²), d the distance of the point across the line that
+/// runs from the notch (at azimuth <see cref="NotchDeg"/>, measured from +x toward +z) through the point
+/// (<see cref="ThroughX"/>, <see cref="ThroughZ"/>); <b>daily</b> is 1 + Daily·cos(2π(hour − PeakHour)/24), the
+/// crater's walls draining cold air down them at night and drawing warm air up by day (measured in Gale crater:
+/// stronger and gustier at night); <b>gusts</b> is 1 + Gust·(sin(2πt/37 s) + sin(2πt/91 s + 1.3))/2, the same
+/// gusts every run. A windmill that takes its wind from the map (#:wind-from-map) sees this at its own place.
+/// </summary>
+public sealed record WindField(double ThroughX, double ThroughZ, double NotchDeg, double Speed, double Width,
+                               double Base, double Daily, double PeakHour, double Gust)
+{
+    /// <summary>The corridor's share of the full speed at a point: 1 along its line, Base far from it.</summary>
+    public double Corridor(double x, double z)
+    {
+        double a = NotchDeg * Math.PI / 180;
+        double across = -(x - ThroughX) * Math.Sin(a) + (z - ThroughZ) * Math.Cos(a);
+        return Base + (1 - Base) * Math.Exp(-(across / Width) * (across / Width));
+    }
+
+    public double DailyFactor(double hour) => 1 + Daily * Math.Cos(2 * Math.PI * (hour - PeakHour) / 24);
+
+    public double Gusts(double seconds) =>
+        1 + Gust * (Math.Sin(2 * Math.PI * seconds / 37) + Math.Sin(2 * Math.PI * seconds / 91 + 1.3)) / 2;
+
+    /// <summary>The wind's speed (m/s) at a point, at a solar hour of the day and a number of seconds into the run.</summary>
+    public double SpeedAt(double x, double z, double hour, double seconds) =>
+        Speed * Corridor(x, z) * DailyFactor(hour) * Gusts(seconds);
+}
+
 /// <summary>A spring on open ground: water welling up at a point of the map, m³/s.</summary>
 public sealed record MapSource(string Id, double X, double Z, double Flow);
 
@@ -58,6 +90,8 @@ public sealed partial class Terrain
     /// <summary>Manning's n of the ground's surface (0.03: short grass, bare earth).</summary>
     public double Roughness { get; init; } = 0.03;
     public IReadOnlyList<MapSource> Sources { get; init; } = [];
+    /// <summary>The wind over the floor (issue #61), or null for a map with none: windmills there take the wind they are given.</summary>
+    public WindField? Wind { get; init; }
 
     public int Count => Nx * Nz;
     public double Width => Nx * Cell;
@@ -125,7 +159,11 @@ public sealed partial class Terrain
             Soils = soils,
             OpenEdges = root.Field("edges")?.Items.ElementAtOrDefault(1) is not SSymbol { Name: "closed" },
             Roughness = root.Field("roughness") is { } r ? Num(r.Items[1]) : 0.03,
-            SettleOnLoad = root.Field("settle")?.Items.ElementAtOrDefault(1) is SBool { Value: true },
+            SettleOnLoad = root.Field("settle")?.Items.ElementAtOrDefault(1) is SBool { Value: true } or SNumber { Value: > 0 },
+            SettleRate = root.Field("settle")?.Items.ElementAtOrDefault(1) is SNumber { Value: > 0 } rate ? rate.Value : 0,
+            Wind = root.Field("wind")?.Field("corridor") is { Items.Count: 10 } w
+                ? new WindField(Num(w.Items[1]), Num(w.Items[2]), Num(w.Items[3]), Num(w.Items[4]), Num(w.Items[5]), Num(w.Items[6]), Num(w.Items[7]), Num(w.Items[8]), Num(w.Items[9]))
+                : root.Field("wind") is not null ? throw new MachineFormatException($"{file}: map {name.Name}: (wind (corridor THROUGH-X THROUGH-Z NOTCH-DEG SPEED WIDTH BASE DAILY PEAK-HOUR GUST))") : null,
             Sources = root.Fields("source").Select(s => new MapSource(((SSymbol)s.Items[1]).Name, Num(s.Items[2]), Num(s.Items[3]), Num(s.Items[4]))).ToList(),
         };
     }
@@ -135,7 +173,9 @@ public sealed partial class Terrain
     {
         static string N(double v) => SExprWriter.Number(v);
         var sb = new StringBuilder();
-        sb.Append($"(map {Name}\n  (origin {N(X0)} {N(Z0)}) (cell {N(Cell)}) (size {Nx} {Nz}) (edges {(OpenEdges ? "open" : "closed")}) (roughness {N(Roughness)}){(SettleOnLoad ? " (settle #t)" : "")}\n");
+        sb.Append($"(map {Name}\n  (origin {N(X0)} {N(Z0)}) (cell {N(Cell)}) (size {Nx} {Nz}) (edges {(OpenEdges ? "open" : "closed")}) (roughness {N(Roughness)}){(SettleOnLoad ? (SettleRate > 0 ? $" (settle {N(SettleRate)})" : " (settle #t)") : "")}\n");
+        if (Wind is { } wind)
+            sb.Append($"  (wind (corridor {N(wind.ThroughX)} {N(wind.ThroughZ)} {N(wind.NotchDeg)} {N(wind.Speed)} {N(wind.Width)} {N(wind.Base)} {N(wind.Daily)} {N(wind.PeakHour)} {N(wind.Gust)}))\n");
         sb.Append("  (soils").Append(string.Concat(Soils.Select(s => $" ({s.Material} {N(s.Infiltration)} {N(s.Cohesion)} {N(s.Friction)} {N(s.Density)} {N(s.GrainSize)} {N(s.GrainDensity)})"))).Append(")\n");
         foreach (var s in Sources) sb.Append($"  (source {s.Id} {N(s.X)} {N(s.Z)} {N(s.Flow)})\n");
         sb.Append("  (heights");
