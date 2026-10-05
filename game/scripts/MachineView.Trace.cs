@@ -127,6 +127,7 @@ public partial class MachineView
             Add($"{r.Spec.Id}.tension", r.Tension);
             Add($"{r.Spec.Id}.released", r.Released ? 1 : 0);
             Add($"{r.Spec.Id}.broken", r.Broken ? 1 : 0);
+            Add($"{r.Spec.Id}.stretch", r.Stretch * 1000);   // mm past its length as the tick began (#80); negative, slack
             if (r.Mu > 0)
             {
                 Add($"{r.Spec.Id}.tension-from", r.TensionFrom);

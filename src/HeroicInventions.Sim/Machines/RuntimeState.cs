@@ -101,7 +101,7 @@ public static class RuntimeState
         for (var type = holder.GetType(); type is not null && type != typeof(object); type = type.BaseType)
             foreach (var f in type.GetFields(Fields | BindingFlags.DeclaredOnly).OrderBy(f => f.Name, StringComparer.Ordinal))
             {
-                if (f.IsStatic || Skippable(f.FieldType) || f.Name is "_materials") continue;
+                if (f.IsStatic || f.IsNotSerialized || Skippable(f.FieldType) || f.Name is "_materials") continue;   // [NonSerialized]: saved its own way (a map's boulders)
                 string p = $"{path}/{Clean(f.Name)}";
                 object? value = f.GetValue(holder);
                 if (IsPlain(f.FieldType) || IsPlainArray(f.FieldType))

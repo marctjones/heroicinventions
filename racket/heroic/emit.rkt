@@ -237,8 +237,23 @@
         (size ,(ground-map-nx m) ,(ground-map-nz m))
         (edges ,(ground-map-edges m))
         (roughness ,(num "map #:roughness" (ground-map-roughness m)))
-        ,@(if (ground-map-settle m) '((settle #t)) '())
-        (soils ,@(for/list ([s soils]) (list* s (rate s) (cohesion s) (field s 'friction) (field s 'density) (grain s))))
+        ,@(cond [(real? (ground-map-settle m)) `((settle ,(num "map #:settle" (ground-map-settle m))))]   ; passes a second
+                [(ground-map-settle m) '((settle #t))]
+                [else '()])
+        ,@(let ([w (ground-map-wind m)])
+            (if w
+                `((wind (corridor ,@(for/list ([v (wind-field-through w)]) (num "wind #:through" v))
+                                  ,(num "wind #:notch-deg" (wind-field-notch-deg w)) ,(num "wind #:speed" (wind-field-speed w))
+                                  ,(num "wind #:width" (wind-field-width w)) ,(num "wind #:base" (wind-field-base w))
+                                  ,(num "wind #:daily" (wind-field-daily w)) ,(num "wind #:peak-hour" (wind-field-peak-hour w))
+                                  ,(num "wind #:gust" (wind-field-gust w)))))
+                '()))
+        (soils ,@(for/list ([s soils])
+                   (append (list* s (rate s) (cohesion s) (field s 'friction) (field s 'density) (grain s))
+                           ;; the rock in it (issue #88): what part of a failed face comes down as boulders, their size and material
+                           (cond [(assq s (or (ground-map-boulders m) '()))
+                                  => (λ (b) `((boulders ,(num "map #:boulders" (cadr b)) ,(num "map #:boulders" (caddr b)) ,(cadddr b))))]
+                                 [else '()]))))
         ,@(for/list ([s (ground-map-sources m)])
             `(source ,(map-source-id s) ,(num "source #:at" (map-source-x s)) ,(num "source #:at" (map-source-z s))
                      ,(num "source #:flow" (map-source-flow s))))

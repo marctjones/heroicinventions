@@ -36,7 +36,9 @@ public partial class MachineView
         var housing = Shapes.Cylinder(0.35f, 0.25f, stone);
         housing.Position = new Vector3(axle.X, 0.125f, axle.Z + w / 2 + 0.6f);
         AddChild(housing);
-        AddChild(Shapes.Rod(axle + new Vector3(0, 0, -w / 2 - 0.25f), axle + new Vector3(0, 0, w / 2 + 0.6f), 0.05f, wood));
+        // the axle's own thickness when the machine gives it a bearing (#:bearing-radius), else a plain 5 cm
+        AddChild(Shapes.Rod(axle + new Vector3(0, 0, -w / 2 - 0.25f), axle + new Vector3(0, 0, w / 2 + 0.6f),
+                            wheel.Bearing is { } pin ? (float)pin.JournalRadius : 0.05f, wheel.Bearing is null ? wood : Surface("iron")));
 
         var node = new Node3D { Position = axle };
         AddChild(node);
@@ -88,10 +90,28 @@ public partial class MachineView
         }
         _waterWheels.Add((wheel, node, overshot ? -1 : 1, buckets));
         AddLabel(part.Id, axle + new Vector3(0, r + 0.35f, 0));
+        if (wheel.Bearing is not null)
+        {
+            var axleLabel = new Label3D
+            {
+                Position = axle + new Vector3(0, r + 0.75f, 0), FontSize = 24, OutlineSize = 6, PixelSize = 0.0025f,
+                Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
+            };
+            AddChild(axleLabel);
+            _waterWheelAxleLabels.Add((wheel, axleLabel));
+        }
     }
+
+    private readonly List<(WaterWheel wheel, Label3D label)> _waterWheelAxleLabels = [];
 
     private void DrawWaterWheels()
     {
+        foreach (var (wheel, label) in _waterWheelAxleLabels)
+        {
+            var b = wheel.Bearing!;
+            string wear = b.Wear > 0 ? $"\naxle worn {b.Wear * 1000:F2}×10⁻³ mm³" : "";
+            label.Text = $"axle heat {b.Heat:F1} J{wear}";
+        }
         foreach (var (wheel, node, sense, buckets) in _waterWheels)
         {
             node.Rotation = new Vector3(0, 0, sense * (float)wheel.Angle);

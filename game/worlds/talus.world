@@ -1,0 +1,6 @@
+;; A regolith cliff with rock in it comes down on the world's first tick and
+;; leaves granite boulders that slide down the debris and stop (issue #88;
+;; racket/maps/talus.rkt). The crate stands well clear, at the far end.
+(world talus
+  (map talus)
+  (place box crate (at 12 0 0)))

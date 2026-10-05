@@ -61,3 +61,31 @@
   (define-map heavy #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil sand #:grain ((sand 0.001 5200)))
   (check-equal? (assq 'soils (cddr (map->sexp heavy))) '(soils (sand 0.0 0.0 0.62 1600.0 0.001 5200.0)))
   (check-map-error #rx"density of sand must be more than water's" (define-map m #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil sand #:grain ((sand 0.001 900)))))
+
+(test-case "a map's settle (#54, #61): true settles on the first tick, a number plays it out at that many passes a second"
+  (define-map instant #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:settle #t)
+  (check-equal? (assq 'settle (cddr (map->sexp instant))) '(settle #t))
+  (define-map slow #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:settle 60)
+  (check-equal? (assq 'settle (cddr (map->sexp slow))) '(settle 60.0))
+  (define-map never #:cell 1 #:size (2 2) #:heights (λ (x z) 0))
+  (check-false (assq 'settle (cddr (map->sexp never)))))
+
+(test-case "a map's wind field (#61): a corridor from the rim's notch, written with its seven numbers; checked"
+  (define-map windy #:cell 1 #:size (2 2) #:heights (λ (x z) 0)
+    #:wind (corridor-wind #:through '(0 0) #:notch-deg 200 #:speed 6 #:width 80 #:base 0.3 #:daily 0.35 #:peak-hour 2 #:gust 0.25))
+  (check-equal? (assq 'wind (cddr (map->sexp windy))) '(wind (corridor 0.0 0.0 200.0 6.0 80.0 0.3 0.35 2.0 0.25)))
+  (check-false (assq 'wind (cddr (map->sexp (let () (define-map calm #:cell 1 #:size (2 2) #:heights (λ (x z) 0)) calm)))))
+  (check-exn #rx"speed must be more than 0" (λ () (corridor-wind #:notch-deg 0 #:speed 0 #:width 10)))
+  (check-exn #rx"width must be more than 0" (λ () (corridor-wind #:notch-deg 0 #:speed 5 #:width -1)))
+  (check-exn #rx"base is a share" (λ () (corridor-wind #:notch-deg 0 #:speed 5 #:width 10 #:base 1.5)))
+  (check-exn #rx"through is" (λ () (corridor-wind #:through 3 #:notch-deg 0 #:speed 5 #:width 10))))
+
+(test-case "a map's rock (#88): what part of a failed face comes down as boulders, their size and material, written with the soil; checked"
+  (define-map scarp #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil regolith #:cohesion ((regolith 4000))
+    #:boulders ((regolith 0.08 0.5 granite)))
+  (check-equal? (assq 'soils (cddr (map->sexp scarp)))
+                '(soils (regolith 0.0 4000.0 0.7 1500.0 0.0 2650.0 (boulders 0.08 0.5 granite))))
+  (check-exn exn:fail:syntax? (λ () (define-map-form '(define-map m #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil clay #:boulders ((clay 0.1 0.5 obsidian))))))
+  (check-map-error #rx"not a soil of this map" (define-map m #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil clay #:boulders ((sand 0.1 0.5 granite))))
+  (check-map-error #rx"from 0 to 1" (define-map m #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil clay #:boulders ((clay 1.5 0.5 granite))))
+  (check-map-error #rx"more than 0" (define-map m #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil clay #:boulders ((clay 0.1 0 granite)))))

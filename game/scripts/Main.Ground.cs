@@ -27,7 +27,7 @@ public partial class Main
         _groundSim = new WorldGround(terrain);
         _terrainView = new TerrainView { Name = "Terrain" };
         AddChild(_terrainView);
-        _terrainView.Show(terrain, _groundSim.Water);
+        _terrainView.Show(terrain, _groundSim.Water, _materials);   // the materials: for the boulders slides leave (#88)
         // the floor goes down under the lowest ground, out of sight and out of the way
         if (_floor is not null) _floor.Position = new Vector3(0, (float)terrain.Heights.Min() - 3f, 0);
     }

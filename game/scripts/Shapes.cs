@@ -57,6 +57,12 @@ public static class Shapes
         "loam" => new Color(0.42f, 0.34f, 0.22f),
         "clay" => new Color(0.62f, 0.43f, 0.31f),
         "regolith" => new Color(0.68f, 0.42f, 0.28f),
+        // the crater's layers (issue #61)
+        "basalt-sand" => new Color(0.24f, 0.22f, 0.22f),
+        "silica-sand" => new Color(0.92f, 0.88f, 0.78f),
+        "bedrock" => new Color(0.46f, 0.36f, 0.30f),
+        "ice-cemented-regolith" => new Color(0.60f, 0.52f, 0.50f),
+        "sublimed-regolith" => new Color(0.74f, 0.45f, 0.28f),
         _ => Stone,
     };
 

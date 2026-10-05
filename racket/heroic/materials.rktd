@@ -27,5 +27,16 @@
 (loam      (name "Loam")         (category soil)  (density 1400) (youngs-modulus 0.02)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.55) (restitution 0.10))
 (clay      (name "Clay")         (category soil)  (density 1800) (youngs-modulus 0.03)  (tension 0.05) (across-grain 0.05) (compression 0.2) (friction 0.35) (restitution 0.05))
 (regolith  (name "Mars regolith") (category soil) (density 1500) (youngs-modulus 0.05)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.70) (restitution 0.10))
+;; The Lonely Rover's crater (issue #61): the layers of its ground. Which of them stands as a cliff is the
+;; map's to say, by cohesion (#:cohesion), so the two regoliths that differ only in how well their ice holds
+;; are the same numbers here. Basalt sand is dark, the sand of the dunes on the floor (glass for the dark kind);
+;; silica sand is the pale layer in one bay of the wall (clear glass); bedrock is the wall itself, which the
+;; rover can neither climb nor cut; ice-cemented regolith is soil held by ice on the cold wall; sublimed regolith
+;; is the same soil after the ice has gone.
+(basalt-sand (name "Basalt sand") (category soil) (density 1600) (youngs-modulus 0.05)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.62) (restitution 0.10))
+(silica-sand (name "Silica sand") (category soil) (density 1600) (youngs-modulus 0.05)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.62) (restitution 0.10))
+(bedrock   (name "Bedrock")      (category stone) (density 2700) (youngs-modulus 60.0)  (tension 10)  (across-grain 10)  (compression 180) (friction 0.60) (restitution 0.60))
+(ice-cemented-regolith (name "Ice-cemented regolith") (category soil) (density 1500) (youngs-modulus 0.05) (tension 0) (across-grain 0) (compression 0.1) (friction 0.70) (restitution 0.10))
+(sublimed-regolith (name "Sublimed regolith") (category soil) (density 1500) (youngs-modulus 0.05) (tension 0) (across-grain 0) (compression 0.1) (friction 0.70) (restitution 0.10))
 ;; Glass (issue #57): soda-lime or fused silica, brittle. Tensile strength of a sound pane ~40 MPa (handbook); a pane is designed to ~7 MPa (see Pane.Strength).
 (glass     (name "Glass")        (category stone) (density 2500) (youngs-modulus 70.0)  (tension 40)  (across-grain 40)  (compression 1000) (friction 0.40) (restitution 0.60))
