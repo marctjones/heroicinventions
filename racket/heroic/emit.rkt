@@ -238,7 +238,12 @@
         (edges ,(ground-map-edges m))
         (roughness ,(num "map #:roughness" (ground-map-roughness m)))
         ,@(if (ground-map-settle m) '((settle #t)) '())
-        (soils ,@(for/list ([s soils]) (list* s (rate s) (cohesion s) (field s 'friction) (field s 'density) (grain s))))
+        (soils ,@(for/list ([s soils])
+                   (append (list* s (rate s) (cohesion s) (field s 'friction) (field s 'density) (grain s))
+                           ;; the rock in it (issue #88): what part of a failed face comes down as boulders, their size and material
+                           (cond [(assq s (or (ground-map-boulders m) '()))
+                                  => (λ (b) `((boulders ,(num "map #:boulders" (cadr b)) ,(num "map #:boulders" (caddr b)) ,(cadddr b))))]
+                                 [else '()]))))
         ,@(for/list ([s (ground-map-sources m)])
             `(source ,(map-source-id s) ,(num "source #:at" (map-source-x s)) ,(num "source #:at" (map-source-z s))
                      ,(num "source #:flow" (map-source-flow s))))

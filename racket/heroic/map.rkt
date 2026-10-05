@@ -16,6 +16,8 @@
 ;;                                                       ; given]: flowing water can carry them off (#53); 0: it can't
 ;;     #:edges open #:roughness 0.03
 ;;     #:settle #t                                       ; let what can't stand collapse on the world's first tick (#54)
+;;     #:boulders ((regolith 0.3 0.6 granite))           ; when a face of this soil fails, 0.3 of what comes down comes
+;;                                                       ; down as 0.6 m cubes of granite (#88): floor(0.3 V / 0.6³) of them
 ;;     (source spring #:at (2 0) #:flow 0.05))
 ;;
 ;; Heights are sampled at each cell's centre, (x0 + (i + 1/2) cell, z0 + (j + 1/2) cell).
@@ -36,7 +38,7 @@
 
 (struct map-source (id x z flow) #:transparent)
 ;; heights: a vector, x fastest (i + j nx); soil: a vector of material symbols, the same order
-(struct ground-map (name origin cell nx nz heights soil infiltration edges roughness sources loc [cohesion #:auto #:mutable] [grain #:auto #:mutable] [settle #:auto #:mutable]) #:transparent)
+(struct ground-map (name origin cell nx nz heights soil infiltration edges roughness sources loc [cohesion #:auto #:mutable] [grain #:auto #:mutable] [settle #:auto #:mutable] [boulders #:auto #:mutable]) #:transparent)
 
 (define registry '())
 (define (register-map! m) (set! registry (cons m registry)))
@@ -87,7 +89,7 @@
 ;; ---------------------------------------------------------------------------
 ;; define-map
 
-(define (build-map name origin cell size heights soil infiltration edges roughness sources loc [cohesion '()] [grain '()])
+(define (build-map name origin cell size heights soil infiltration edges roughness sources loc [cohesion '()] [grain '()] [boulders '()])
   (define (fail fmt . args) (raise-user-error name (apply format fmt args)))
   (unless (and (real? cell) (>= cell min-map-cell))
     (fail "#:cell must be at least ~a m (the grid is coarse on purpose: features smaller than a cell belong in a channel), got ~e" min-map-cell cell))
@@ -130,8 +132,15 @@
     (unless (and (real? (cadr g)) (>= (cadr g) 0)) (fail "#:grain size of ~a must be 0 or more (m), got ~e" (car g) (cadr g)))
     (when (and (pair? (cddr g)) (not (and (real? (caddr g)) (> (caddr g) 1000))))
       (fail "#:grain density of ~a must be more than water's, 1000 kg/m³, got ~e" (car g) (caddr g))))
+  ;; boulders (#88): (SOIL FRACTION SIZE MATERIAL), a soil of the map, a fraction of 0 to 1, a cube's side over 0, a material
+  (for ([b boulders])
+    (unless (memq (car b) (vector->list sv)) (fail "#:boulders names ~a, which is not a soil of this map" (car b)))
+    (unless (and (real? (cadr b)) (<= 0 (cadr b) 1)) (fail "#:boulders fraction of ~a must be from 0 to 1, got ~e" (car b) (cadr b)))
+    (unless (and (real? (caddr b)) (> (caddr b) 0)) (fail "#:boulders size of ~a must be more than 0 (m), got ~e" (car b) (caddr b)))
+    (unless (memq (cadddr b) known) (fail "#:boulders of ~a: unknown material ~a; known materials: ~a" (car b) (cadddr b) known)))
   (set-ground-map-cohesion! m cohesion)
   (set-ground-map-grain! m grain)
+  (set-ground-map-boulders! m boulders)
   m)
 
 (begin-for-syntax
@@ -152,6 +161,7 @@
                       (~optional (~seq #:cohesion ((cm:id cv:expr) ...)))
                       (~optional (~seq #:grain ((gm:id gv:expr ...+) ...)))
                       (~optional (~seq #:settle settle-v:expr))
+                      (~optional (~seq #:boulders ((bm:id bf:expr bs:expr bmat:id) ...)))
                       (~optional (~seq #:edges edges:id))
                       (~optional (~seq #:roughness rough:expr))) ...
         s:source-clause ...)
@@ -161,6 +171,8 @@
                  "unknown soil in #:infiltration"
      #:fail-when (for/first ([m (or (attribute cm) '())] #:unless (memq (syntax-e m) known-soils)) m)
                  "unknown soil in #:cohesion"
+     #:fail-when (for/first ([m (append (or (attribute bm) '()) (or (attribute bmat) '()))] #:unless (memq (syntax-e m) known-soils)) m)
+                 "unknown material in #:boulders"
      #:fail-when (let ([c (syntax-e #'cell)]) (and (real? c) (< c 0.5) #'cell))
                  "#:cell must be at least 0.5 m"
      #:fail-when (let ([a (syntax-e #'sx)] [b (syntax-e #'sz)])
@@ -180,6 +192,7 @@
                            (vector (cond [(path? src) (path->string src)] [(string? src) src] [else "?"])
                                    (syntax-line stx) (syntax-column stx)))
                       (list (~? (~@ (list 'cm cv) ...)))
-                      (list (~? (~@ (list 'gm gv ...) ...)))))
+                      (list (~? (~@ (list 'gm gv ...) ...)))
+                      (list (~? (~@ (list 'bm bf bs 'bmat) ...)))))
          (set-ground-map-settle! name (and (~? settle-v #f) #t))
          (register-map! name))]))

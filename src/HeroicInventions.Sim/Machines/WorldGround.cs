@@ -45,6 +45,10 @@ public sealed class WorldGround
         _getters["map.bed-moved"] = () => Water.BedMoved;      // m³ of sand the water has shifted (#53)
         _getters["map.bed-lost"] = () => Water.BedLost;        // m³ of it carried off the map
         _getters["map.settled"] = () => Settled;               // faces that failed as the map settled (#54)
+        _getters["map.collapsed"] = () => Ground.Collapsed;       // m³ failed faces of rocky soil lost (#88)
+        _getters["map.boulders"] = () => Ground.Boulders.Count;   // boulders the slides left
+        _getters["map.boulder-volume"] = () => Ground.BoulderVolume;
+        _getters["map.ground-volume"] = () => Ground.Heights.Sum() * Ground.Cell * Ground.Cell;   // m³ of ground above 0 (below, less)
         _getters["map.probe-x"] = () => _probeX;
         _getters["map.probe-z"] = () => _probeZ;
         _setters["map.probe-x"] = x => _probeX = x;
@@ -82,6 +86,34 @@ public sealed class WorldGround
         // a map that asks to settle lets its too-steep ground go on the world's first tick, onto whatever stands below (#54)
         if (Ground.SettleOnLoad && !_settled) { _settled = true; Settled = Ground.Settle(Water.Gravity).Failures; }
         Water.Step(dt);
+        TraceBoulders();
+    }
+
+    /// <summary>
+    /// Each boulder's readings, for the trace (#88): where it is (x y z, m), how fast it goes (speed, m/s), and how
+    /// steep the ground is under it (slope, degrees). The game writes their poses back every tick.
+    /// </summary>
+    public void TraceBoulders()
+    {
+        for (; _boulderFields < Ground.Boulders.Count; _boulderFields++)
+        {
+            var b = Ground.Boulders[_boulderFields];
+            _getters[$"{b.Id}.x"] = () => b.X;
+            _getters[$"{b.Id}.y"] = () => b.Y;
+            _getters[$"{b.Id}.z"] = () => b.Z;
+            _getters[$"{b.Id}.speed"] = () => b.Speed;
+            _getters[$"{b.Id}.size"] = () => b.Size;
+            _getters[$"{b.Id}.slope"] = () => Ground.SlopeAt(b.X, b.Z);
+        }
+    }
+    [NonSerialized] private int _boulderFields;
+
+    /// <summary>After a save's boulders replace the ground's: their readings start again.</summary>
+    public void RetraceBoulders()
+    {
+        foreach (var k in _getters.Keys.Where(k => k.StartsWith("boulder-")).ToList()) _getters.Remove(k);
+        _boulderFields = 0;
+        TraceBoulders();
     }
     private bool _settled;
     /// <summary>How many faces failed when the map settled (0 if it didn't ask to, or nothing was too steep).</summary>

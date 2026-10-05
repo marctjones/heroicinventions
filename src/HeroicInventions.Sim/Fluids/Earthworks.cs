@@ -75,6 +75,27 @@ public sealed partial class Terrain
     public (int Failures, int Passes) Relax(int i0, int j0, int i1, int j1, double gravity, int maxPasses = 5000)
     {
         i0 = Math.Max(0, i0); j0 = Math.Max(0, j0); i1 = Math.Min(Nx - 1, i1); j1 = Math.Min(Nz - 1, j1);
+        // a soil with rock in it leaves boulders where a face of it fails (#88): note the ground as it stood, and which faces fail
+        if (!Soils.Any(s => s.Boulders is { Fraction: > 0 })) return Passes(i0, j0, i1, j1, gravity, maxPasses, null);
+        var before = (double[])Heights.Clone();
+        var failed = new HashSet<int>();
+        var made = new Dictionary<int, int>();   // boulders made so far in this collapse, by soil
+        var (failures, passes) = Passes(i0, j0, i1, j1, gravity, maxPasses, failed);
+        // the boulders' share comes out of the debris, which then props the face a little less: let it settle again,
+        // and take out the share of anything more that comes down (a few rounds: each takes out less)
+        var toLay = new List<BoulderSpec>();
+        for (int round = 0; round < 4 && failed.Count > 0 && TakeBoulders(before, failed, made, toLay); round++)
+        {
+            var (f, p) = Passes(i0, j0, i1, j1, gravity, maxPasses, failed);
+            failures += f; passes += p;
+        }
+        if (toLay.Count > 0) LayBoulders(before, toLay);   // on the ground as it has settled
+        if (failed.Count > 0) Collapsed += failed.Sum(c => Math.Max(0, before[c] - Heights[c])) * Cell * Cell;
+        return (failures, passes);
+    }
+
+    private (int Failures, int Passes) Passes(int i0, int j0, int i1, int j1, double gravity, int maxPasses, HashSet<int>? failed)
+    {
         int failures = 0, pass = 0;
         var loose = Loose;
         for (; pass < maxPasses; pass++)
@@ -97,6 +118,7 @@ public sealed partial class Terrain
                             if (drop <= soil.CriticalHeight(gravity) + 1e-9) continue;   // the cut face holds
                             loose[a] = true;                                           // it fails
                             failures++;
+                            failed?.Add(a);
                         }
                         double shift = (drop - repose) / 2;
                         Heights[a] -= shift;

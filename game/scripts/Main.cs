@@ -910,6 +910,7 @@ public partial class Main : Node3D
             {
                 Kind = _world is not null ? "world" : "machine", Name = SaveName, Machines = machines, Sleep = sleep,
                 Ground = _groundSim is { } ground ? RuntimeState.CaptureGround(ground) : null,     // the dug earth and the water on it
+                Boulders = _groundSim is { Ground.Boulders.Count: > 0 } rocky ? rocky.Ground.SaveBoulders() : null,   // and the rocks slides left on it (#88)
             };
             string target = path ?? SavePath(auto);
             save.WriteAtomic(target);
@@ -947,6 +948,11 @@ public partial class Main : Node3D
         else { _hudNote.Text = $"The save is of {save.Name}, which is not here."; _hudNote.Visible = true; return; }
         int unmatched = 0;
         if (save.Ground is { } groundState && _groundSim is { } groundSim) unmatched += RuntimeState.RestoreGround(groundSim, groundState).Count;
+        if (save.Boulders is { } boulders && _groundSim is { } rocky)
+        {
+            rocky.Ground.LoadBoulders(boulders);   // the boulders lie (and roll) where they were saved (#88)
+            rocky.RetraceBoulders();
+        }
         foreach (var m in save.Machines)
         {
             var view = _views.Count > 0 ? _views.FirstOrDefault(v => v.Name == m.Label) : _current;

@@ -2140,6 +2140,60 @@
     (check-= (final-of site '(crate y)) -0.75 0.01 "out, resting on the trench's floor")))
 
 
+;; ---------------------------------------------------------------------------
+;; Boulders from terrain collapse (issue #88)
+
+(test-case "Boulders (#88): the talus cliff's collapse of 7.03 m3 leaves 4 granite boulders (0.5 m3) and the ground 0.5 m3 short; they slide down the 35° debris and stop on ground under 31°, 31-35° below where they started"
+  (when (godot-available?)
+    ;; talus.rkt: V = (3 - 1.244) x 0.5 x 8 = 7.03 m3 (3 %); floor(0.08 V / 0.125) = 4 cubes of 0.5 m; granite on the ground holds to atan 0.6 = 31.0°
+    (define g (hash-ref (godot-simulate-world 'talus #:seconds 5 #:sample-dt 1/120) 'links))
+    (define (field f k) (let ([e (assq k (cdr f))]) (and e (cadr e))))
+    (define start (for/first ([f g] #:when (field f 'boulder-1.x)) f))
+    (define end (last g))
+    (check-true (< (car start) 0.02) "the boulders come down with the cliff, on the first tick")
+    (check-= (field (car g) 'map.ground-volume) 120 1e-9 "10 cells of 3 m, 16 rows, 0.25 m2 each")
+    (check-= (field end 'map.collapsed) 7.03 (* 0.03 7.03))
+    (check-= (field end 'map.boulders) 4 0)
+    (check-= (field end 'map.boulders) (floor (/ (* 0.08 (field end 'map.collapsed)) 0.125)) 0)
+    (check-= (field end 'map.boulder-volume) 0.5 1e-12)
+    (check-= (- (field (car g) 'map.ground-volume) (field end 'map.ground-volume)) (field end 'map.boulder-volume) 1e-9
+             "the ground lost exactly what the boulders hold")
+    (for ([i (in-range 1 5)])
+      (define (k s) (string->symbol (format "boulder-~a.~a" i s)))
+      (define-values (x0 y0 z0 x1 y1 z1)
+        (values (field start (k 'x)) (field start (k 'y)) (field start (k 'z)) (field end (k 'x)) (field end (k 'y)) (field end (k 'z))))
+      (check-true (> (field start (k 'slope)) 31.0) (format "boulder ~a laid on ~a°, steeper than it holds on" i (field start (k 'slope))))
+      (check-true (> (- x1 x0) 0.3) (format "boulder ~a slid down the debris, ~a m" i (- x1 x0)))
+      (check-true (< (field end (k 'speed)) 0.005) (format "boulder ~a has stopped" i))
+      (check-true (<= (field end (k 'slope)) 31.0) (format "boulder ~a stopped on ~a°, no steeper than atan 0.6 = 31.0°" i (field end (k 'slope))))
+      (define reach (* (/ 180 pi) (atan (- y0 y1) (sqrt (+ (expt (- x1 x0) 2) (expt (- z1 z0) 2))))))
+      (check-true (<= 30.5 reach 35.0)
+                  (format "boulder ~a: the line from where it started to where it stopped is ~a° below level: friction's 31.0° or steeper (losses), never steeper than the 35° debris" i reach)))))
+
+(test-case "Boulders (#88): saved while sliding and loaded, they lie where they were and come to rest as in a run never stopped"
+  (when (godot-available?)
+    (define dir (make-temporary-directory))
+    (define file (path->string (build-path dir "talus.save")))
+    (define straight (hash-ref (godot-simulate-world 'talus #:seconds 5 #:sample-dt 1) 'links))
+    (godot-simulate-world 'talus #:seconds 1.05 #:sample-dt 1 #:env `(("HEROIC_SAVE" . ,file) ("HEROIC_SAVE_AT" . "1")))
+    (check-true (file-exists? file) "the game wrote the save")
+    (define saved (cdr (assq 'boulders (cddr (call-with-input-file file read)))))
+    (check-equal? (length saved) 4 "the save holds the four boulders")
+    (define resumed (hash-ref (godot-simulate-world 'talus #:seconds 5 #:sample-dt 1/120 #:env `(("HEROIC_LOAD" . ,file))) 'links))
+    (define (field f k) (let ([e (assq k (cdr f))]) (and e (cadr e))))
+    (define first-loaded (for/first ([f resumed] #:when (field f 'boulder-1.x)) f))
+    (for ([b saved] [i (in-naturals 1)])
+      (define (k s) (string->symbol (format "boulder-~a.~a" i s)))
+      (define at (cdr (assq 'at (cddddr b))))
+      (check-equal? (cadr b) (string->symbol (format "boulder-~a" i)))
+      (check-true (> (cadr (assq 'v (cddddr b))) 0.1) (format "boulder ~a was saved sliding" i))
+      ;; within one tick of sliding (under 1 cm) of where the save left it
+      (for ([s '(x y z)] [v at]) (check-= (field first-loaded (k s)) v 0.01 (format "boulder ~a ~a as loaded" i s)))
+      (for ([s '(x y z)]) (check-= (field (last resumed) (k s)) (field (last straight) (k s)) 0.05 (format "boulder ~a ~a at 5 s" i s)))
+      (check-true (< (field (last resumed) (k 'speed)) 0.005) (format "boulder ~a has stopped" i)))
+    (check-= (field (last resumed) 'map.ground-volume) 119.5 1e-9 "the ground as it was left, not collapsed again")
+    (check-= (field (last resumed) 'map.boulders) 4 0 "no more boulders")
+    (delete-directory/files dir)))
 
 ;; ---------------------------------------------------------------------------
 ;; The greenhouse (issue #42). Working in racket/machines/greenhouse.rkt.

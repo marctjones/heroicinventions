@@ -1,5 +1,6 @@
 using Godot;
 using HeroicInventions.Sim.Fluids;
+using HeroicInventions.Sim.Materials;
 
 namespace HeroicInventions;
 
@@ -11,6 +12,11 @@ namespace HeroicInventions;
 /// second mesh, a quad over each wet cell at its surface (the corners
 /// shared with wet neighbours so a pool reads as one sheet), deeper water
 /// darker, rebuilt a few times a second from the solver's depths.
+///
+/// The boulders a slide leaves (issue #88) are rigid bodies here: cubes of the
+/// rock the soil holds, made as the slide makes them and laid on the debris
+/// the ground's collision has just been rebuilt to; every tick their poses
+/// are written back to the simulation, for the trace and the save.
 /// </summary>
 public partial class TerrainView : Node3D
 {
@@ -24,9 +30,16 @@ public partial class TerrainView : Node3D
     private int _shownVersion;
     private double[] _startHeights = [];   // the ground as it was loaded: what was scoured or laid down since shows (#53)
 
-    public void Show(Terrain ground, ShallowWater2D water)
+    private MaterialLibrary? _materials;
+    private readonly Dictionary<Boulder, MaterialBlock> _boulders = [];
+    private int _bouldersReplaced;
+
+    public void Show(Terrain ground, ShallowWater2D water, MaterialLibrary? materials = null)
     {
         _ground = ground;
+        _materials = materials;
+        _boulders.Clear();
+        _bouldersReplaced = ground.BouldersReplaced;
         _water = water;
         _startHeights = (double[])ground.Heights.Clone();
         foreach (var c in GetChildren()) c.QueueFree();
@@ -108,20 +121,63 @@ public partial class TerrainView : Node3D
         return body;
     }
 
-    /// <summary>Redraws the water after a tick, five times a second.</summary>
+    /// <summary>Redraws the water after a tick, five times a second; makes new boulders and reads back where the others are, every tick.</summary>
     public void Refresh(double dt)
     {
+        Boulders();
         if ((_sinceDrawn += dt) < 0.2) return;
         _sinceDrawn = 0;
-        if (_ground.Version != _shownVersion)
-        {
-            // dug or heaped (issue #44): the ground's shape and its collision change with it
-            _shownVersion = _ground.Version;
-            _groundMesh.Mesh = GroundMesh();
-            _body.QueueFree();
-            AddChild(_body = Collision());
-        }
+        Reshape();
         DrawWater();
+    }
+
+    private void Reshape()
+    {
+        if (_ground.Version == _shownVersion) return;
+        // dug or heaped (issue #44): the ground's shape and its collision change with it
+        _shownVersion = _ground.Version;
+        _groundMesh.Mesh = GroundMesh();
+        _body.QueueFree();
+        AddChild(_body = Collision());
+    }
+
+    /// <summary>
+    /// The boulders (issue #88): a body for each one the ground has that has none yet, laid where the slide put it
+    /// (the ground reshaped first, so it lies on the debris and not inside the cliff that was); then every body's pose
+    /// and motion written back to its boulder. A save's boulders, loaded, replace the bodies there were.
+    /// </summary>
+    private void Boulders()
+    {
+        if (_ground.BouldersReplaced != _bouldersReplaced)
+        {
+            _bouldersReplaced = _ground.BouldersReplaced;
+            foreach (var body in _boulders.Values) body.QueueFree();
+            _boulders.Clear();
+        }
+        if (_boulders.Count < _ground.Boulders.Count && _materials is not null)
+        {
+            Reshape();
+            foreach (var b in _ground.Boulders.Where(b => !_boulders.ContainsKey(b)))
+            {
+                var body = new MaterialBlock(_materials[b.Material], Vector3.One * (float)b.Size, Shapes.ColorFor(b.Material)) { Name = b.Id };
+                body.Transform = new Transform3D(new Basis(new Quaternion((float)b.Qx, (float)b.Qy, (float)b.Qz, (float)b.Qw).Normalized()),
+                                                 new Vector3((float)b.X, (float)b.Y, (float)b.Z));
+                body.LinearVelocity = new Vector3((float)b.Vx, (float)b.Vy, (float)b.Vz);
+                body.AngularVelocity = new Vector3((float)b.Wx, (float)b.Wy, (float)b.Wz);
+                AddChild(body);
+                _boulders[b] = body;
+            }
+            return;   // read back from the next tick on, once the engine has them
+        }
+        foreach (var (b, body) in _boulders)
+        {
+            var t = body.GlobalTransform;
+            var q = t.Basis.GetRotationQuaternion();
+            (b.X, b.Y, b.Z) = (t.Origin.X, t.Origin.Y, t.Origin.Z);
+            (b.Qx, b.Qy, b.Qz, b.Qw) = (q.X, q.Y, q.Z, q.W);
+            (b.Vx, b.Vy, b.Vz) = (body.LinearVelocity.X, body.LinearVelocity.Y, body.LinearVelocity.Z);
+            (b.Wx, b.Wy, b.Wz) = (body.AngularVelocity.X, body.AngularVelocity.Y, body.AngularVelocity.Z);
+        }
     }
 
     private void DrawWater()

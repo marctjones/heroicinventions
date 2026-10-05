@@ -61,3 +61,13 @@
   (define-map heavy #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil sand #:grain ((sand 0.001 5200)))
   (check-equal? (assq 'soils (cddr (map->sexp heavy))) '(soils (sand 0.0 0.0 0.62 1600.0 0.001 5200.0)))
   (check-map-error #rx"density of sand must be more than water's" (define-map m #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil sand #:grain ((sand 0.001 900)))))
+
+(test-case "a map's rock (#88): what part of a failed face comes down as boulders, their size and material, written with the soil; checked"
+  (define-map scarp #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil regolith #:cohesion ((regolith 4000))
+    #:boulders ((regolith 0.08 0.5 granite)))
+  (check-equal? (assq 'soils (cddr (map->sexp scarp)))
+                '(soils (regolith 0.0 4000.0 0.7 1500.0 0.0 2650.0 (boulders 0.08 0.5 granite))))
+  (check-exn exn:fail:syntax? (λ () (define-map-form '(define-map m #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil clay #:boulders ((clay 0.1 0.5 obsidian))))))
+  (check-map-error #rx"not a soil of this map" (define-map m #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil clay #:boulders ((sand 0.1 0.5 granite))))
+  (check-map-error #rx"from 0 to 1" (define-map m #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil clay #:boulders ((clay 1.5 0.5 granite))))
+  (check-map-error #rx"more than 0" (define-map m #:cell 1 #:size (2 2) #:heights (λ (x z) 0) #:soil clay #:boulders ((clay 0.1 0 granite)))))

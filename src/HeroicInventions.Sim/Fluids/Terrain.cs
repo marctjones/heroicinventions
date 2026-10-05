@@ -22,7 +22,16 @@ public sealed record SoilSpec(string Material, double Infiltration, double Cohes
     /// </summary>
     public double CriticalHeight(double gravity) =>
         4 * Cohesion / (Density * gravity) * Math.Tan(Math.PI / 4 + Math.Atan(Friction) / 2);
+
+    /// <summary>What part of this soil comes down as boulders when a face of it fails (issue #88), or null: it all comes down as loose soil.</summary>
+    public BoulderSpec? Boulders { get; init; }
 }
+
+/// <summary>
+/// The rock in a soil (issue #88): when a face fails, <see cref="Fraction"/> of the volume that comes down
+/// comes down as cubes <see cref="Size"/> m on a side, of <see cref="Material"/> (a material in the table).
+/// </summary>
+public sealed record BoulderSpec(double Fraction, double Size, string Material);
 
 /// <summary>A spring on open ground: water welling up at a point of the map, m³/s.</summary>
 public sealed record MapSource(string Id, double X, double Z, double Flow);
@@ -104,7 +113,15 @@ public sealed partial class Terrain
                                       s.Items.Count > 3 ? Num(s.Items[3]) : 0.6,
                                       s.Items.Count > 4 ? Num(s.Items[4]) : 1600,
                                       s.Items.Count > 5 ? Num(s.Items[5]) : 0,
-                                      s.Items.Count > 6 ? Num(s.Items[6]) : 2650)).ToList();
+                                      s.Items.Count > 6 && s.Items[6] is SNumber gd ? gd.Value : 2650)
+                          {
+                              // (boulders FRACTION SIZE MATERIAL) after the numbers (#88)
+                              Boulders = s.Items.OfType<SList>().FirstOrDefault(b => b.Head == "boulders") is { } b
+                                  ? (b.Items is [_, SNumber f, SNumber sz, SSymbol bm] && f.Value is >= 0 and <= 1 && sz.Value > 0
+                                        ? new BoulderSpec(f.Value, sz.Value, bm.Name)
+                                        : throw new MachineFormatException($"{file}: a soil's boulders are (boulders FRACTION SIZE MATERIAL), fraction 0 to 1, size over 0"))
+                                  : null,
+                          }).ToList();
         var soilItems = root.Field("soil")?.Items.Skip(1).Select(x => (int)Num(x)).ToArray() ?? [];
         var soil = soilItems.Length == 1 ? Enumerable.Repeat(soilItems[0], nx * nz).ToArray()
                  : soilItems.Length == nx * nz ? soilItems
@@ -136,7 +153,7 @@ public sealed partial class Terrain
         static string N(double v) => SExprWriter.Number(v);
         var sb = new StringBuilder();
         sb.Append($"(map {Name}\n  (origin {N(X0)} {N(Z0)}) (cell {N(Cell)}) (size {Nx} {Nz}) (edges {(OpenEdges ? "open" : "closed")}) (roughness {N(Roughness)}){(SettleOnLoad ? " (settle #t)" : "")}\n");
-        sb.Append("  (soils").Append(string.Concat(Soils.Select(s => $" ({s.Material} {N(s.Infiltration)} {N(s.Cohesion)} {N(s.Friction)} {N(s.Density)} {N(s.GrainSize)} {N(s.GrainDensity)})"))).Append(")\n");
+        sb.Append("  (soils").Append(string.Concat(Soils.Select(s => $" ({s.Material} {N(s.Infiltration)} {N(s.Cohesion)} {N(s.Friction)} {N(s.Density)} {N(s.GrainSize)} {N(s.GrainDensity)}{(s.Boulders is { } b ? $" (boulders {N(b.Fraction)} {N(b.Size)} {b.Material})" : "")})"))).Append(")\n");
         foreach (var s in Sources) sb.Append($"  (source {s.Id} {N(s.X)} {N(s.Z)} {N(s.Flow)})\n");
         sb.Append("  (heights");
         for (int k = 0; k < Heights.Length; k++) sb.Append(k % Nx == 0 ? "\n   " : " ").Append(Heights[k].ToString("0.####", CultureInfo.InvariantCulture));
