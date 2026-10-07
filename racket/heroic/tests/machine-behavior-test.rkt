@@ -1310,6 +1310,14 @@
     (check-= (abs (final-of run '(beam angle))) 10.0 0.3)
     (check-= (- (final-of run '(light y)) (final-of run '(heavy y))) 0.174 0.02)))
 
+(test-case "Shaduf: a counterweight for a half-full bucket balances it; a full bucket sinks and an empty one rises to the 25 degree stops (#121)"
+  ;; counterweight x 1 m = 9.5 kg x 3 m + the 15.84 kg plank x 1 m: 44.34 kg
+  (when (godot-available?)
+    (define run (godot-simulate 'shaduf #:seconds 10 #:sample-dt 0.5))
+    (for ([t '(2 5 10)]) (check-= (value-at run '(half-full angle) t) 0.0 0.3 (format "half full holds level at ~a s" t)))
+    (check-= (final-of run '(full angle)) -25.0 0.3 "full bucket down at its stop")
+    (check-= (final-of run '(empty angle)) 25.0 0.3 "empty bucket up at its stop")))
+
 (test-case "Material samples: all four dropped cubes come to rest on the floor, centres 7.5 cm up"
   (when (godot-available?)
     (define run (godot-simulate 'material-samples #:seconds 5 #:sample-dt 0.1))
