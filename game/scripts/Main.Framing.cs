@@ -49,6 +49,7 @@ public partial class Main
         string verdict = ScreenRect(box) is { } r && r.Area > 0
             ? $"fills {r.Intersection(clear).Area / clear.Area:P0} of the clear area, {1 - r.Intersection(clear).Area / r.Area:P0} of it outside"
             : "part of its bounds is behind the camera (not measured)";
-        GD.Print($"[framing] {name}: {verdict}");
+        var c = box.GetCenter();
+        GD.Print($"[framing] {name}: {verdict}; bounds centre ({c.X:F2} {c.Y:F2} {c.Z:F2}) size ({box.Size.X:F2} {box.Size.Y:F2} {box.Size.Z:F2})");
     }
 }

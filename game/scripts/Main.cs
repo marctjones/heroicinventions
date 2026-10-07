@@ -51,6 +51,23 @@ public partial class Main : Node3D
 
     private static readonly Dictionary<string, CameraProfile> Profiles = new()
     {
+        // #148: machines that had no profile, framed from their bounds and then checked by eye in a shot each
+        ["boulder"] = new(new Vector3(1.19f, 1.69f, 3.39f), new Vector3(0.00f, 0.50f, 0.00f), 45),
+        ["cargo-crate"] = new(new Vector3(1.0f, 1.3f, 2.6f), new Vector3(0, 0.25f, 0), 45),   // the crate with ground round it, not filling the frame
+        ["crate"] = new(new Vector3(1.0f, 1.3f, 2.6f), new Vector3(0, 0.25f, 0), 45),
+        ["cistern"] = new(new Vector3(1.4f, 2.4f, 4.4f), new Vector3(0, 1.0f, 0), 45),
+        ["cistern-and-trough"] = new(new Vector3(4.2f, 3.2f, 7.4f), new Vector3(2.0f, 1.0f, 0), 45),
+        ["cistern-drain"] = new(new Vector3(1.6f, 1.6f, 4.0f), new Vector3(0.75f, -0.4f, 0), 45),   // down through the ground to the buried cistern
+        ["crane-hoist"] = new(new Vector3(5.14f, 7.71f, 13.31f), new Vector3(0.85f, 3.42f, 1.05f), 45),
+        ["dry-mill"] = new(new Vector3(2.84f, 4.62f, 8.69f), new Vector3(-0.08f, 1.70f, 0.35f), 45),
+        ["fall-and-swing"] = new(new Vector3(2.4f, 3.2f, 7.0f), new Vector3(1.0f, 2.3f, 0), 45),
+        ["free-sails"] = new(new Vector3(14.12f, 24.39f, 41.21f), new Vector3(0.00f, 10.27f, 0.87f), 45),
+        ["hillside-pond"] = new(new Vector3(7.56f, 6.61f, 15.36f), new Vector3(2.29f, 1.34f, 0.30f), 45),
+        ["spill-tank"] = new(new Vector3(1.41f, 1.76f, 4.02f), new Vector3(0.00f, 0.35f, 0.00f), 45),
+        ["trench-crew"] = new(new Vector3(4.86f, 3.50f, 7.70f), new Vector3(2.00f, 0.64f, -0.48f), 45),
+        ["trough"] = new(new Vector3(1.0f, 1.6f, 3.0f), new Vector3(0, 0.5f, 0), 45),
+        ["walkers-wheel"] = new(new Vector3(1.57f, 5.59f, 9.05f), new Vector3(-1.60f, 2.42f, 0.00f), 45),
+        ["falling-stones"] = new(new Vector3(0.8f, 2.6f, 6f), new Vector3(0, 0.6f, 0), 50),   // the landing: 10 cm balls over 350 m are too small to follow down
         ["aeolipile"] = new(new Vector3(0, 0.55f, 0.85f), new Vector3(0, 0.32f, 0), 42),
         ["shaduf"] = new(new Vector3(1.0f, 3.2f, 7.5f), new Vector3(1.0f, 1.8f, 0), 50),
         ["baghdad-battery"] = new(new Vector3(0.25f, 1.0f, 2.5f), new Vector3(0.25f, 0.06f, 0.1f), 45),
@@ -73,14 +90,14 @@ public partial class Main : Node3D
         ["lever-demo"] = new(new Vector3(0, 0.75f, 1.5f), new Vector3(0, 0.55f, 0), 42),
         ["inclined-plane-demo"] = new(new Vector3(0, 1.6f, 2.8f), new Vector3(0, 0.3f, -0.6f), 55),
         ["newtons-cradle"] = new(new Vector3(0, 0.75f, 1.0f), new Vector3(0, 0.6f, 0), 38),
-        ["trebuchet"] = new(new Vector3(-1.8f, 2.4f, 7.0f), new Vector3(-2.0f, 1.3f, 0), 60), // wide enough to watch the stone land
-        ["torsion-catapult"] = new(new Vector3(0.2f, 1.8f, 3.6f), new Vector3(0.2f, 1.0f, 0), 55),
+        ["trebuchet"] = new(new Vector3(7.0f, 4.0f, 4.5f), new Vector3(-4.0f, 0.6f, 0), 55), // from behind its shoulder, along the throw (to −x): the flight runs into the clear middle, not under the info panel
+        ["torsion-catapult"] = new(new Vector3(5.0f, 2.8f, 3.2f), new Vector3(-4.0f, 0.5f, 0), 55),   // along the throw, as the trebuchet
         ["antikythera-lunar-train"] = new(new Vector3(0.13f, 0.19f, 0.19f), new Vector3(0.022f, 0.09f, 0.004f), 38),
         ["archimedes-screw"] = new(new Vector3(0.5f, 2.2f, 7.0f), new Vector3(0, 1.4f, 0), 50),
         ["hama-noria"] = new(new Vector3(0.5f, 6.5f, 17.5f), new Vector3(0.3f, 2.0f, -1.5f), 55),
         ["newcomen-engine"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
         ["roman-crane"] = new(new Vector3(3.0f, 3.8f, 10.5f), new Vector3(0.3f, 3.2f, 0.5f), 50),
-        ["vitruvian-catapulta"] = new(new Vector3(1.7f, 1.4f, 2.0f), new Vector3(0, 0.7f, -0.3f), 50),
+        ["vitruvian-catapulta"] = new(new Vector3(2.4f, 2.0f, -3.6f), new Vector3(0, 0.4f, 4.0f), 50),   // from behind, along the bolt's flight (to +z)
         ["component-gallery"] = new(new Vector3(3.5f, 5.5f, 13f), new Vector3(3.5f, 0.6f, 0), 60),
         ["newcomen-hearth"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
         ["hearth-engine"] = new(new Vector3(0, 1.0f, 1.7f), new Vector3(0, 0.75f, 0), 45),
@@ -936,6 +953,7 @@ public partial class Main : Node3D
         _detailsButton.Disabled = false;
         SetMenuCollapsed(true);
         _follow = FollowBody.TryGetValue(name, out var followId) ? view.BodyNamed(followId) : null;
+        StartTrail(view, _follow);   // the flight drawn (Main.Trail.cs)
         _sleep.Refresh();   // this machine's own wake conditions
     }
 
@@ -1481,6 +1499,7 @@ public partial class Main : Node3D
             CallDeferred(MethodName.EditFocused);   // after this physics step, as a click would be
         }
         FollowMissile();
+        DrawTrail(delta);
         ShowSky(_current?.Runtime);
         UpdateInfoPanel();
     }
