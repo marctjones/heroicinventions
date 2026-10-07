@@ -2717,3 +2717,108 @@
     (define last-on (last on)) (define last-off (last off))
     (check-= (/ (field last-off 'mill.wind-power) (field last-on 'mill.wind-power))
              (expt (/ (corridor 160.04) (corridor 0.01)) 3) 0.003 "the same wind weaker by 0.313, a power weaker by its cube, 0.031")))
+
+;; ---- #113: gear trains driven by any shaft, and loaded (geared-brake.rkt)
+;; Worked before the first run, in the machine's header: a flywheel geared
+;; 10:1 up into a 0.1 N m brake, the train 1 kg m^2 seen from the flywheel,
+;; let go at 36 rpm (37.7 rad/s at the brake, under the 47.1 rad/s Jolt in
+;; Godot lets a body spin; the issue's 60 rpm case is GearTrainTests', on the
+;; sim side). Through a perfect mesh the brake reflects 1 N m and the
+;; speed falls in a straight line, 1 rad/s per second, to a stop at
+;; I w0 / tau = 3.770 s; through a mesh of efficiency 0.9 at (eta I_1 + n^2 I_2)
+;; w0 / (n tau), with I_1 and I_2 the two arbors' own inertia read from the
+;; compiled machine. The brake's heat is the energy that reached it: all the
+;; train's spin through the perfect mesh, and only 0.9 of the flywheel arbor's
+;; through the lossy one.
+(require racket/runtime-path)
+(define-runtime-path compiled-machines "../../../game/machines")
+(define (machine-inertia machine part)
+  ;; density x inertia-z of a part, from the compiled .machine file
+  (define form (call-with-input-file (build-path compiled-machines (format "~a.machine" machine)) read))
+  (define p (for/first ([c (cddr form)] #:when (and (pair? c) (eq? (car c) 'part) (eq? (cadr c) part))) c))
+  (define (field l k) (for/first ([x l] #:when (and (pair? x) (eq? (car x) k))) (cadr x)))
+  (define material (field p 'material))
+  (* (material-field (assq material (material-table)) 'density) (field (cdr (assq 'props (cdddr p))) 'inertia-z)))
+
+(test-case "Geared brake (Jolt): a flywheel geared 10:1 into a 0.1 N m brake stops in I w0 / (n tau / eta)"
+  (when (godot-available?)
+    (define run (godot-simulate 'geared-brake #:seconds 5 #:sample-dt 1/120))
+    (define w0 (* 2 pi 36/60))
+    (define I1 (+ (machine-inertia 'geared-brake 'plain-flywheel) (machine-inertia 'geared-brake 'plain-gear)))
+    (define I2 (+ (machine-inertia 'geared-brake 'plain-brake) (machine-inertia 'geared-brake 'plain-pinion)))
+    (check-= (+ I1 (* 100 I2)) 1.0 1e-9 "kg m^2: the train seen from the flywheel")
+    (define (stops eta) (/ (* (+ (* eta I1) (* 100 I2)) w0) (* 10 0.1)))
+    (check-= (stops 1) 3.770 0.001)
+    (check-= (stops 0.9) 3.402 0.001)
+    (for ([name '(plain lossy)] [eta '(1 0.9)])
+      (define fly (string->symbol (format "~a-flywheel" name)))
+      (define brake (string->symbol (format "~a-brake" name)))
+      (define (omega t) (value-at run (list fly 'omega) t))
+      (define T (stops eta))
+      ;; a straight line: the speed at a quarter, half and three quarters of the way
+      (for ([k '(0.25 0.5 0.75)])
+        (check-= (omega (* k T)) (* w0 (- 1 k)) (* 0.005 w0) (format "~a rad/s at ~a s" name (* k T))))
+      ;; stopped within 2% of the predicted time, and stays stopped
+      (define stopped (for/first ([f run] #:when (< (cadr (assq (string->symbol (format "~a.omega" fly)) (cdr f))) 1e-6)) (car f)))
+      (check-true (and stopped (< (abs (- stopped T)) (* 0.02 T))) (format "~a stopped at ~a s, predicted ~a s" name stopped T))
+      (check-= (final-of run (list fly 'omega)) 0 1e-6)
+      ;; the brake shaft turned 10 times as fast as the flywheel, the other way (the trace's omega is a
+      ;; magnitude), less at most what one physics step's braking takes from its own light inertia,
+      ;; tau dt / I_2 = 3.65 rad/s, before the next tick's exchange puts it back on the ratio
+      (check-= (value-at run (list brake 'omega) (/ T 2)) (* 10 (omega (/ T 2))) (/ (* 0.1 1/120) I2))
+      ;; the mesh held the flywheel's arbor back with I_1 x its deceleration: n tau / eta of it (less the brake shaft's share)
+      (check-= (value-at run (list (string->symbol (format "~a-gear" name)) 'load-torque) (/ T 2)) (* I1 (/ w0 T)) 0.01 "N m")
+      ;; the heat: 1/2 (eta I_1 + n^2 I_2) w0^2
+      (check-= (final-of run (list brake 'heat)) (* 1/2 (+ (* eta I1) (* 100 I2)) w0 w0) 0.05 "J"))))
+
+;; ---- #122 on #113: the Hierapolis sawmill (hierapolis-sawmill.rkt)
+;; Worked before the run (the machine's header): an overshot wheel fed
+;; 2.9 L/s gives 42.67 W at any speed; the crank (0.25 m) and 1 m rod draw a
+;; 29.57 kg iron frame over limestone (friction 0.4, the smaller of the two),
+;; and the frame's friction, pressed harder by the rod's lean while the crank
+;; turns clockwise and swung by the frame's own inertia, takes a mean
+;; 20.49 N m at any speed: the wheel settles at 19.89 rpm, the blade at a mean
+;; 2 w r / pi = 0.332 m/s over a 0.5 m stroke.
+(define (saw-power w #:mu [mu 0.4] #:sense [sense -1] #:n [n 20000])
+  ;; W the frame's friction takes, the crank turning steadily at w rad/s
+  (define g 9.81) (define r 0.25) (define l 1.0)
+  (define m-saw (* 7700 0.6 0.08 0.08)) (define m-rod (* 720 1.0 0.04 0.04))
+  (define dth (/ (* 2 pi) n))
+  (define work
+    (for/sum ([i n])
+      (define th (* (+ i 0.5) dth))
+      (define s (sin th)) (define c (cos th))
+      (define root (sqrt (- (* l l) (* r r s s))))
+      (define x (+ (* r c) root))                                   ; the wrist, from the axle
+      (define dx (- (- (* r s)) (/ (* r r s c) root)))              ; dx/dtheta
+      (define d2x (- (- (* r c)) (/ (* r r (- (* c c) (* s s))) root) (/ (* r r r r s s c c) (expt root 3))))
+      (define a (* w w d2x))                                        ; the frame's acceleration
+      (define sg (if (> (* sense dx) 0) 1 -1))                      ; which way it slides
+      (define ux (/ (- (* r c) x) l)) (define uy (/ (* r s) l))     ; the rod, wrist to pin
+      ;; m a = R ux - mu N sg and N = m g + (rod's weight)/2 - R uy, solved for N
+      (define N (/ (- (+ (* m-saw g) (* 0.5 m-rod g)) (* m-saw a (/ uy ux)))
+                   (+ 1 (* mu sg (/ uy ux)))))
+      (* mu N (abs dx) dth)))
+  (/ (* work w) (* 2 pi)))
+
+(test-case "Hierapolis sawmill (Jolt): the water wheel turns the crank and saws at the speed the frame's friction allows"
+  (define water-power (* 1000 9.81 0.0029 1.0 1.5))
+  (check-= water-power 42.67 0.01 "W")
+  (define torque (/ (saw-power 2.0) 2.0))
+  (check-= torque 20.49 0.01 "N m: the same at any speed")
+  (check-= (/ (saw-power 3.0) 3.0) torque 1e-6)
+  (define w (/ water-power torque))
+  (check-= (* w (/ 30 pi)) 19.89 0.01 "rpm")
+  (when (godot-available?)
+    (define run (godot-simulate 'hierapolis-sawmill #:seconds 150 #:sample-dt 0.1))
+    (define late (filter (λ (f) (>= (car f) 110)) run))   ; settled: the spin-up's time constant is about 20 s
+    (define (field f k) (cadr (assq k (cdr f))))
+    (define (mean k) (/ (for/sum ([f late]) (field f k)) (length late)))
+    (define rpm (mean 'wheel.rpm))
+    (check-= rpm (* w (/ 30 pi)) (* 0.02 (* w (/ 30 pi))) "rpm, the wheel")
+    (check-= (* (mean 'crank.omega) (/ 30 pi)) rpm 0.1 "the crank keeps the wheel's speed")
+    (check-= (mean 'wheel.load-torque) torque (* 0.03 torque) "N m the saw takes from the wheel")
+    (define xs (map (λ (f) (field f 'saw-frame.x)) late))
+    (check-= (- (apply max xs) (apply min xs)) 0.5 0.01 "m, the stroke: twice the crank")
+    (define traced-w (* rpm (/ pi 30)))
+    (check-= (/ (for/sum ([f late]) (abs (field f 'saw-frame.vx))) (length late)) (/ (* 2 traced-w 0.25) pi) 0.01 "m/s, the blade's mean speed")))

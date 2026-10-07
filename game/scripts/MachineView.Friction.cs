@@ -49,19 +49,38 @@ public partial class MachineView
         }
     }
 
-    /// <summary>Each bearing slows its part by one tick's friction. Runs before the physics step, as the other drives do.</summary>
+    /// <summary>
+    /// Each bearing slows its part by one tick's friction. Runs before the physics step, as the other drives do.
+    /// A bearing in a driven gear train (#113) is left to <see cref="FrictionDrivenTrains"/>.
+    /// </summary>
     private void FrictionAxles(double dt)
     {
         foreach (var f in _axleFriction)
-        {
-            var axis = f.Hinge.Axis.Normalized();
-            double omega = f.Body.AngularVelocity.Dot(axis);
-            double inertia = InertiaOnAxle(f.Body);
-            // the part's own weight, and any wheels fixed on its arbor
-            double load = (f.Body.Mass + _arborMates.GetValueOrDefault(f.Body, []).Sum(m => m.Mass)) * Runtime.Outside.Gravity;
-            double slowed = f.Bearing.Slow(omega, inertia, load, dt);
-            f.Body.ApplyTorque(axis * (float)(inertia * (slowed - omega) / dt));
-        }
+            if (!_trainOf.ContainsKey(f.Body)) Rub(f, f.Body.AngularVelocity.Dot(f.Hinge.Axis.Normalized()), InertiaOnAxle(f.Body), dt);
+    }
+
+    /// <summary>
+    /// The bearings in driven gear trains (#113), once the trains are coupled for the
+    /// tick: each reads the speed the whole train turns its shaft at
+    /// (<see cref="TrainSpeed"/>; not the one its own wheel was braked to in the last
+    /// step, which a light shaft overshoots, nor its angle pull) and is clamped
+    /// against the inertia of everything geared to it, so dry friction stops the
+    /// whole train, and only stops it, and its heat is the train's energy.
+    /// </summary>
+    private void FrictionDrivenTrains(double dt)
+    {
+        foreach (var f in _axleFriction)
+            if (TrainInertia(f.Body) is { } inertia)
+                Rub(f, TrainSpeed(f.Body)!.Value, inertia, dt);
+    }
+
+    private void Rub(AxleFriction f, double omega, double inertia, double dt)
+    {
+        var axis = f.Hinge.Axis.Normalized();
+        // the part's own weight, and any wheels fixed on its arbor
+        double load = (f.Body.Mass + _arborMates.GetValueOrDefault(f.Body, []).Sum(m => m.Mass)) * Runtime.Outside.Gravity;
+        double slowed = f.Bearing.Slow(omega, inertia, load, dt);
+        f.Body.ApplyTorque(axis * (float)(inertia * (slowed - omega) / dt));
     }
 
     private void DrawAxleFriction()

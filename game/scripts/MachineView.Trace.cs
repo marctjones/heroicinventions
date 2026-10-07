@@ -136,7 +136,8 @@ public partial class MachineView
                 Add($"{r.Spec.Id}.wrap-deg", Mathf.RadToDeg(r.Wrap));
             }
         }
-        foreach (var (key, value) in BurialFields()) Add(key, value);   // blocks held by the ground (#54)
+        foreach (var (key, value) in BurialFields()) Add(key, value);
+        foreach (var (key, value) in GearTraceFields()) Add(key, value);   // what driven gear trains carry (#113)   // blocks held by the ground (#54)
         var e = Energy();
         Add("scene.kinetic", e.KineticJ); Add("scene.potential", e.PotentialJ); Add("scene.mechanical", e.KineticJ + e.PotentialJ);
         sb.Append(')');

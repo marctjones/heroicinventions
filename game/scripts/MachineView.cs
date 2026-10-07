@@ -1106,7 +1106,8 @@ public partial class MachineView : Node3D
 
         // A wheel riding on another's arbor is locked to it (BuildArbors),
         // not hinged to the world, and any drive belongs to the arbor's first.
-        bool rides = Runtime.Def.Arbors.Any(a => a.Parts.Skip(1).Contains(part.Id));
+        // (a water wheel, windmill or jet wheel on an arbor is turned by the sim: the first Jolt wheel leads)
+        bool rides = Runtime.Def.Arbors.Any(a => a.Parts.Contains(part.Id) && ArborLead(a) != part.Id);
         double rpm = rides ? 0 : part.Number("drive-rpm", 0);
         if (!rides)
         {
@@ -1164,7 +1165,8 @@ public partial class MachineView : Node3D
     {
         foreach (var arbor in Runtime.Def.Arbors)
         {
-            var bodies = arbor.Parts.Select(p => _bodiesById[p]).ToList();
+            // a water wheel, windmill or jet wheel on it is turned by the sim, and coupled to the first wheel in BuildGearTrains
+            var bodies = arbor.Parts.Where(p => !IsSimTurned(p)).Select(p => _bodiesById[p]).ToList();
             var lead = bodies[0];
             foreach (var rider in bodies.Skip(1))
             {
@@ -1227,7 +1229,7 @@ public partial class MachineView : Node3D
                 var c = g.First().Body.Position;
                 var across = c - axis * c.Dot(axis);
                 return (Axis: axis, Back: across + axis * lo, Front: across + axis * hi, Radius: g.Max(a => a.Radius),
-                        Label: string.Join("\n", g.Select(a => a.Label)));
+                        Label: string.Join("\n", g.Select(a => a.Label)), Driven: g.Any(a => _trainOf.ContainsKey(a.Body)));
             })
             .ToList();
 
@@ -1238,7 +1240,9 @@ public partial class MachineView : Node3D
             AddLabel(g.Label, middle + Vector3.Up * g.Radius * 1.25f, pixelSize: LabelSizeFor(2 * g.Radius));
         }
 
-        var small = groups.Where(g => g.Radius < 0.1f && Mathf.Abs(g.Axis.Z) > 0.999f).ToList();
+        // small wheels on z axles stand on a clockmaker's plate, unless they are a driven
+        // train's (#113), working machinery that stands on posts like any other axle
+        var small = groups.Where(g => g.Radius < 0.1f && Mathf.Abs(g.Axis.Z) > 0.999f && !g.Driven).ToList();
         if (small.Count > 0)
         {
             float margin = small.Max(g => g.Radius) * 0.3f;
@@ -1398,6 +1402,7 @@ public partial class MachineView : Node3D
         ConstrainChains();
         CheckBurial();
         Runtime.Step(dt);
+        CoupleDrivenTrains(dt);   // after the sim's turning parts have stepped, before Jolt's bodies do (#113)
         Refresh();
         if (trace) TraceTick(dt);
         KeepVelocitiesIntoStep();
@@ -1511,6 +1516,7 @@ public partial class MachineView : Node3D
         DrawTriggers();
         DrawImpacts();
         DrawBelts();
+        DrawGearTrains();
         DrawJoints();
         DrawMillstones();
         DrawAxleFriction();

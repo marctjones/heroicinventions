@@ -401,9 +401,12 @@ public sealed class BuildSession
     private string CreateMesh(SList cmd)
     {
         string a = Id(cmd, 1), b = Id(cmd, 2);
+        // #:efficiency: the share of the power through the mesh that arrives (#113); 1 when left out
+        double efficiency = Kw(cmd, "efficiency") is { } e ? Num(e, "mesh #:efficiency") : 1;
+        if (!(efficiency > 0 && efficiency <= 1)) throw new FormatException("a mesh's #:efficiency is more than 0 and at most 1");
         Snapshot();
-        Document.AddMesh(a, b);
-        return $"meshed {a} with {b}";
+        Document.AddMesh(a, b, efficiency);
+        return efficiency == 1 ? $"meshed {a} with {b}" : $"meshed {a} with {b}, {efficiency:0.##} efficient";
     }
 
     private string Unmesh(SList cmd)

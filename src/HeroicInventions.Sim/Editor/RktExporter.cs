@@ -48,7 +48,7 @@ public static class RktExporter
                       (a.HeatCapacity > 0 ? $" #:heat-capacity {F(a.HeatCapacity)}" : "") + ")\n");
         foreach (var r in m.Ropes) sb.Append(RopeClause(r));
         foreach (var a in m.Arbors) sb.Append($"  (arbor {string.Join(' ', a.Parts)})\n");
-        foreach (var x in m.Meshes) sb.Append($"  (mesh {x.A} {x.B})\n");
+        foreach (var x in m.Meshes) sb.Append(x.Efficiency == 1 ? $"  (mesh {x.A} {x.B})\n" : $"  (mesh {x.A} {x.B} #:efficiency {F(x.Efficiency)})\n");
         foreach (var l in m.Lifts)
             sb.Append($"  (lift {l.Id} #:by {l.By} #:from {l.From} #:to {l.To}" +
                       (l.Current is { } c ? $" #:current {F(c)}" : "") +

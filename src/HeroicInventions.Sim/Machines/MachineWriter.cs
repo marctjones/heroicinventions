@@ -183,7 +183,9 @@ public static class MachineWriter
             new SList([Sym("do"), .. t.Actions.Select(a => (SExpr)List(Sym(a.Target), Sym(a.Field), Num(a.Value)))]),
             SrcLoc(t.Location));
 
-    private static SExpr MeshClause(MeshSpec g) => Tagged("mesh", Sym(g.A), Sym(g.B), SrcLoc(g.Location));
+    private static SExpr MeshClause(MeshSpec g) => g.Efficiency == 1
+        ? Tagged("mesh", Sym(g.A), Sym(g.B), SrcLoc(g.Location))
+        : Tagged("mesh", Sym(g.A), Sym(g.B), Tagged("efficiency", Num(g.Efficiency)), SrcLoc(g.Location));
 
     private static SExpr ArborClause(ArborSpec a) =>
         Tagged("arbor", new SList([Sym("parts"), .. a.Parts.Select(p => (SExpr)Sym(p))]), SrcLoc(a.Location));

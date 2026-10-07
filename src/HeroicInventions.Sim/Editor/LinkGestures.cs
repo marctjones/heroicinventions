@@ -52,8 +52,17 @@ public static class LinkGestures
                 Require(parts, "wheel", "a drum or wheel", "a belt runs on drums");
                 return $"(belt {NextId(doc, "belt")} {picks[0]} {picks[1]} #:tension 100)";
             case Kind.Arbor:
-                Require(parts, "wheel", "a wheel", "an axle carries wheels");
+            {
+                // wheels, and at most one water wheel, windmill or jet wheel whose axle turns them (issue #113)
+                string[] turned = ["waterwheel", "windmill", "jetwheel"];
+                if (parts.FirstOrDefault(p => p.Kind != "wheel" && !turned.Contains(p.Kind)) is { } wrong)
+                    throw new InvalidOperationException($"{wrong.Id} is a {wrong.Kind}, not a wheel; an axle carries wheels");
+                if (parts.Count(p => turned.Contains(p.Kind)) > 1)
+                    throw new InvalidOperationException("an axle takes one water wheel, windmill or jet wheel");
+                if (parts.All(p => turned.Contains(p.Kind)))
+                    throw new InvalidOperationException("an axle needs a wheel to drive");
                 return $"(arbor {string.Join(' ', picks)})";
+            }
             case Kind.SealedAir:
                 Require(parts, "tank", "a tank", "shared air joins tanks");
                 return $"(sealed-air ({string.Join(' ', picks)}) #:tube 0.0005)";

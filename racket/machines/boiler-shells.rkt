@@ -18,7 +18,7 @@
 ;;             t = tau ln(5000 / (5000 - (T - 20)))
 ;;             lead 500.8 s, copper 1016.0 s, bronze 1144.2 s
 ;; So the lead pot bursts at 138.2 C of steam, 3.4 bar absolute, in under nine
-;; minutes; the others are still sound at 900 s and give way a quarter hour on.
+;; minutes; the others are still sound at 900 s: copper gives way at 1016 s, bronze at 1144 s.
 ;; Each pot's outline warms to amber, then red, as its pressure goes from 60% to
 ;; 100% of what it holds. Thinner walls (a 0.5 mm bronze holds 1.17 MPa) are the
 ;; same rule: try #:wall.

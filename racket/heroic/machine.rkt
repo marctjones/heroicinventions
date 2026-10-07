@@ -74,10 +74,12 @@
 ;; fixed bars at the over points, or #f for turning pulleys (no friction);
 ;; mu: a friction coefficient that overrides the materials', or #f.
 (struct rope-spec (id from to length over wind-on release-deg material diameter nocked turns bar mu loc [links #:auto #:mutable]) #:transparent)
-;; parts: wheels fixed on one axle, first one first — they turn as one.
+;; parts: wheels fixed on one axle, first one first — they turn as one. One
+;; of them may be a water wheel, windmill or jet wheel (turned by the sim).
 (struct arbor-spec (parts loc) #:transparent)
-;; a, b: two gears whose teeth engage.
-(struct mesh-spec (a b loc) #:transparent)
+;; a, b: two gears whose teeth engage; efficiency: the share of the power
+;; passing through that arrives (1, a perfect mesh).
+(struct mesh-spec (a b efficiency loc) #:transparent)
 ;; piston: the piston part it drives; boiler: where its steam comes from.
 (struct cylinder-spec (id piston boiler injection-temperature loc [kind #:auto #:mutable] [crank #:auto #:mutable]) #:transparent #:auto-value #f)
 ;; by: the screw or noria that lifts; from, to: tanks; current: a river's
@@ -1896,7 +1898,10 @@
     ;; Wheels fixed on one axle (an arbor): a treadwheel and the drum its
     ;; rope winds on, two gears keyed to one shaft. They turn as one piece,
     ;; so a load on one is felt by all. The first holds the axle's bearing
-    ;; and any drive; the rest ride on it.
+    ;; and any drive; the rest ride on it. One of them may be a part the
+    ;; sim turns -- a waterwheel, windmill or jetwheel -- whose axle then
+    ;; drives the wheels (a crank, a gear) and is loaded by them (issue
+    ;; #113); the first wheel holds the bearing.
     (pattern (arbor w:id ...+)
       #:attr info (arinfo (syntax->list #'(w ...)))
       #:with expr #`(arbor-spec '(w ...) #,(loc-of this-syntax)))
@@ -2072,9 +2077,18 @@
       #:with expr #`(wake-spec 'id (list (list 'wt 'wf 'wmode wv) ...) (~? (eq? 'join 'and) #t) (~? limit-v 3600)
                                (~? (list (list 'et 'ef 'emode ev) ...) '()) #,(loc-of this-syntax)))
 
-    (pattern (mesh a:id b:id)
+    ;; A mesh carries torque both ways (issue #113): a load on the driven
+    ;; gear is felt by the driver, scaled by the inverse of the speed ratio,
+    ;; and #:efficiency (default 1) is the share of the power passing
+    ;; through that arrives -- a load tau at the driven gear costs the
+    ;; driver ratio x tau / efficiency.
+    (pattern (mesh a:id b:id (~optional (~seq #:efficiency eff-v:expr)))
       #:attr info (minfo #'a #'b)
-      #:with expr #`(mesh-spec 'a 'b #,(loc-of this-syntax)))
+      #:with expr #`(mesh-spec 'a 'b (let ([e (~? eff-v 1)])
+                                       (unless (and (real? e) (< 0 e) (<= e 1))
+                                         (raise-user-error 'mesh "#:efficiency is more than 0 and at most 1, not ~a" e))
+                                       e)
+                               #,(loc-of this-syntax)))
 
     ;; A piston sliding up and down in a cylinder of #:bore, over #:stroke.
     ;; #:at is the bottom of its travel; #:start is where along it it
@@ -2239,13 +2253,23 @@
                 drum))))
 
     (define on-arbor (make-hasheq))
+    ;; the parts the sim turns, which may sit on an arbor and drive its wheels (#113); a water wheel is described by a winfo
+    (define water-wheels (for/list ([w infos] #:when (winfo? w)) (syntax-e (winfo-id w))))
+    (define (sim-turned? w)
+      (or (memq (syntax-e w) water-wheels)
+          (let ([p (hash-ref parts (syntax-e w) #f)]) (and p (memq (pinfo-kind p) '(windmill jetwheel)) #t))))
     (for ([a infos] #:when (arinfo? a))
       (when (< (length (arinfo-parts a)) 2)
         (fail "an arbor joins two or more wheels" (car (arinfo-parts a))))
+      (define turned (filter sim-turned? (arinfo-parts a)))
+      (when (> (length turned) 1)
+        (fail "an arbor takes one water wheel, windmill or jet wheel; two would fight over the axle" (cadr turned)))
+      (when (= (length turned) (length (arinfo-parts a)))
+        (fail "an arbor needs a wheel to drive" (car (arinfo-parts a))))
       (for ([w (arinfo-parts a)])
         (define p (hash-ref parts (syntax-e w) #f))
-        (unless (and p (eq? (pinfo-kind p) 'wheel))
-          (fail (format "~a is not a wheel; an arbor fixes wheels together on one axle" (syntax-e w)) w))
+        (unless (or (sim-turned? w) (and p (eq? (pinfo-kind p) 'wheel)))
+          (fail (format "~a is not a wheel; an arbor fixes wheels (and a water wheel, windmill or jet wheel) together on one axle" (syntax-e w)) w))
         (when (hash-ref on-arbor (syntax-e w) #f)
           (fail (format "wheel ~a is already on another arbor" (syntax-e w)) w))
         (hash-set! on-arbor (syntax-e w) #t)))

@@ -16,11 +16,28 @@ public partial class MachineView
     /// one end of a shaft: its speed read from the physics server (a node
     /// shows the previous tick), its inertia about the hinge line from the
     /// engine's own inertia tensor, and an impulse shared among the arbor's
-    /// wheels by their inertia, so the arbor turns as one.
+    /// wheels by their inertia, so the arbor turns as one. Its speed is the
+    /// arbor's angular momentum over its inertia: the lock between an
+    /// arbor's wheels gives a little, and the speed an exchange corrects
+    /// should be the one its impulse, shared by inertia, changes.
     /// </summary>
     private sealed class JoltShaft(RigidBody3D lead, IReadOnlyList<RigidBody3D> bodies, (Vector3 Pivot, Vector3 Axis) hinge) : IShaft
     {
-        public double AngularVelocity => PhysicsServer3D.BodyGetDirectState(lead.GetRid()).AngularVelocity.Dot(hinge.Axis);
+        public double AngularVelocity
+        {
+            get
+            {
+                if (bodies.Count == 1) return PhysicsServer3D.BodyGetDirectState(lead.GetRid()).AngularVelocity.Dot(hinge.Axis);
+                double momentum = 0, inertia = 0;
+                foreach (var b in bodies)
+                {
+                    double i = InertiaAbout(b, hinge);
+                    momentum += i * PhysicsServer3D.BodyGetDirectState(b.GetRid()).AngularVelocity.Dot(hinge.Axis);
+                    inertia += i;
+                }
+                return inertia > 0 ? momentum / inertia : 0;
+            }
+        }
         public double ShaftInertia => bodies.Sum(b => (double)InertiaAbout(b, hinge));
         public void AddAngularImpulse(double impulse)
         {
