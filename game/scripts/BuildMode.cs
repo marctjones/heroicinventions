@@ -357,7 +357,14 @@ public partial class BuildMode : Node3D
             }
         }
         _paletteList.ItemSelected += index => StartPlacing(_paletteList.GetItemMetadata((int)index).AsString());
+        _paletteList.FixedIconSize = new Vector2I(PaletteThumbnails.Size, PaletteThumbnails.Size);
         leftCol.AddChild(_paletteList);
+        // thumbnails render one a frame in the background, offscreen (none when headless: nothing would draw them)
+        if (DisplayServer.GetName() != "headless")
+            AddChild(new PaletteThumbnails(this, Enumerable.Range(0, _paletteList.ItemCount)
+                .Where(i => _paletteList.IsItemSelectable(i))
+                .Select(i => (i, _paletteList.GetItemMetadata(i).AsString())).ToList(),
+                (i, texture) => _paletteList.SetItemIcon(i, texture)));
         _partHelp = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(230, 0), Modulate = new Color(1, 1, 1, 0.75f) };
         leftCol.AddChild(_partHelp);
 
@@ -438,13 +445,18 @@ public partial class BuildMode : Node3D
         // bottom: help and status
         var help = new Label
         {
-            Text = "Right-drag orbit · middle-drag or Shift+right-drag pan · scroll or pinch zoom · arrows/WASD move · Shift+arrows orbit · +/− zoom · F frame · Home all · "
-                 + "click select · drag move (Ctrl: up/down) · T turn 15° (Shift: back) · Del delete · Ctrl+D duplicate · Ctrl+Z undo · G grid · Esc cancel",
+            Text = "Camera: right-drag orbit · middle- or Shift+right-drag pan · scroll or pinch zoom · arrows/WASD move · F frame · Home all\n"
+                 + "Edit: click select · drag move (Ctrl: up/down) · T turn (Shift: back) · Del delete · Ctrl+D duplicate · Ctrl+Z undo · G grid · Esc cancel",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            GrowVertical = Control.GrowDirection.Begin,   // extra wrapped lines push up into the view, never off the bottom
+            ClipText = false,
         };
+        help.AddThemeFontSizeOverride("font_size", 12);
+        help.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.75f));
         help.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
-        help.OffsetLeft = 260; help.OffsetRight = -310; help.OffsetTop = -44; help.OffsetBottom = -6;
+        help.OffsetLeft = 270; help.OffsetRight = -320; help.OffsetTop = -60; help.OffsetBottom = -6;
         layer.AddChild(help);
         _status = new Label { HorizontalAlignment = HorizontalAlignment.Center };
         _status.SetAnchorsPreset(Control.LayoutPreset.TopWide);
@@ -1266,6 +1278,28 @@ public partial class BuildMode : Node3D
     /// </summary>
     private Node3D BuildGhost(string paletteId, out float bottom)
     {
+        var ghost = BuildPartModel(paletteId);
+        AddChild(ghost);   // briefly, to measure it
+        if (ghost is MachineView mv) mv.SetFrozen(true);
+        foreach (var g in Descendants(ghost).OfType<GeometryInstance3D>())
+        {
+            g.Transparency = 0.55f;
+            g.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        }
+        bottom = BoundsOf([ghost]) is { } box ? box.Position.Y : 0;
+        RemoveChild(ghost);
+        return ghost;
+    }
+
+    /// <summary>
+    /// The part a palette entry makes, as the game draws it: a one-part
+    /// MachineView where the part can stand alone, else a placeholder box
+    /// (parts that need something to join, like a mirror's target). Shared
+    /// by the placing ghost and the palette's thumbnails, so both look like
+    /// what will be built.
+    /// </summary>
+    public Node3D BuildPartModel(string paletteId, bool hosted = false)
+    {
         var item = _palette.First(p => p.Id == paletteId);
         var spec = item.Catalogue is { } entry
             ? PartTemplates.Create(entry, "ghost", new Vec3(0, 0, 0), _material)
@@ -1277,21 +1311,41 @@ public partial class BuildMode : Node3D
             var view = new MachineView(new MachineRuntime(def, _materials), _materials) { ProcessMode = ProcessModeEnum.Disabled };
             ghost = view;
         }
+        catch (Exception) when (hosted && Hosted(spec) is { } withHost)
+        {
+            ghost = withHost;
+        }
         catch (Exception)
         {
             ghost = new Node3D();
             ghost.AddChild(FallbackVisual(spec));   // (FallbackVisual no longer parents its box itself)
         }
-        AddChild(ghost);   // briefly, to measure it
-        if (ghost is MachineView mv) mv.SetFrozen(true);
-        foreach (var g in Descendants(ghost).OfType<GeometryInstance3D>())
-        {
-            g.Transparency = 0.55f;
-            g.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
-        }
-        bottom = BoundsOf([ghost]) is { } box ? box.Position.Y : 0;
-        RemoveChild(ghost);
         return ghost;
+    }
+
+    /// <summary>
+    /// A part that can't stand alone (a float, a safety valve, a bellows),
+    /// drawn on the first host that lets it build: the "?" it is waiting for
+    /// pointed at a boiler, tank, hearth, enclosure or wheel set at the same
+    /// place. For thumbnails, where the host shows what the part is for.
+    /// Null when none will do (a steam jet still needs its pipe).
+    /// </summary>
+    private MachineView? Hosted(PartSpec spec)
+    {
+        if (spec.Props.FirstOrDefault(p => p.Value is SSymbol { Name: "?" }) is not { Key: { } key }) return null;
+        foreach (var kind in new[] { "boiler", "tank", "hearth", "enclosure", "wheel" })
+        {
+            try
+            {
+                var host = PartTemplates.Create(kind, "host", spec.At, _material);
+                var props = new Dictionary<string, SExpr>(spec.Props) { [key] = new SSymbol("host") };
+                var part = spec with { Props = props };
+                var def = new MachineDef { Name = "thumb", Parts = [host, part], Pipes = [], Connects = [], SealedAir = [] };
+                return new MachineView(new MachineRuntime(def, _materials), _materials) { ProcessMode = ProcessModeEnum.Disabled };
+            }
+            catch (Exception) { }
+        }
+        return null;
     }
 
     private void MoveGhost(Vector2 screen)
