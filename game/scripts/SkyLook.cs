@@ -24,14 +24,16 @@ namespace HeroicInventions;
 /// </list>
 /// </summary>
 public readonly record struct SkyLook(
-    Color Zenith, Color Horizon, Color GroundHorizon,
+    Color Zenith, Color Horizon, Color GroundHorizon, Color Ground,
     Color Light, float LightEnergy,
     float AmbientEnergy, Color NightAmbient, float NightShare,
     float Fog, float SunSizeDeg,
     Color Halo, float HaloEnergy)
 {
     // Palette, art direction section 3
-    private static readonly Color EarthZenith = Color.FromHtml("#5B7FA8"), EarthHorizon = Color.FromHtml("#C9D6E3");
+    // Earth's sky a clear blue, more saturated than section 3's #5B7FA8 / #C9D6E3, which measured as grey on
+    // screen (owner feedback 2026-10-07: "hard to see many of the machines")
+    private static readonly Color EarthZenith = Color.FromHtml("#3F74B5"), EarthHorizon = Color.FromHtml("#B4CDE6");
     private static readonly Color EarthGround = Color.FromHtml("#B9B4AA");
     private static readonly Color MarsZenith = Color.FromHtml("#B98B67"), MarsHorizon = Color.FromHtml("#D9A57C");
     private static readonly Color MarsLight = Color.FromHtml("#FFE2C0"), MarsHalo = Color.FromHtml("#8FA3B8");
@@ -45,7 +47,9 @@ public readonly record struct SkyLook(
     /// <param name="airMass">Thicknesses of air the beam crosses (the sim's Sun.AirMass; 1 overhead).</param>
     /// <param name="extraDust">Dust optical depth over a clear sky's, from a storm (Sun.ExtraDust).</param>
     /// <param name="airC">The air's temperature, °C: cold thins the light blue, heat yellows it.</param>
-    public static SkyLook Of(Planet planet, double elevationDeg, double airMass, double extraDust, double airC)
+    /// <param name="partsValue">How light the machine's own materials look on average (luminance, 0 to 1), so the
+    /// ground can stand apart from them; see <see cref="GroundFor"/>.</param>
+    public static SkyLook Of(Planet planet, double elevationDeg, double airMass, double extraDust, double airC, double partsValue = 0.5)
     {
         bool earth = planet.IsEarth;
         float el = (float)elevationDeg;
@@ -103,8 +107,26 @@ public readonly record struct SkyLook(
         // Mars's blue aureole round a low sun, gone in a storm (the dust that makes it then hides it)
         float halo = earth ? 0 : sunUp * (1 - Mathf.Clamp((el - 2) / 18, 0, 1)) * (1 - murk);
 
-        return new SkyLook(zenith, horizon, groundHorizon, light, energy,
-                           AmbientEnergy: 0.6f, NightAmbient: new Color(0.16f, 0.2f, 0.3f), NightShare: night,
+        return new SkyLook(zenith, horizon, groundHorizon, GroundFor(planet, partsValue), light, energy,
+                           AmbientEnergy: 0.3f, NightAmbient: new Color(0.16f, 0.2f, 0.3f), NightShare: night,
                            Fog: fog, SunSizeDeg: sunSize, Halo: MarsHalo, HaloEnergy: halo * 1.2f);
+    }
+
+    /// <summary>
+    /// The ground under a machine, chosen to stand apart from it (the figure-ground rule). A machine of mostly
+    /// dark and mid-toned parts (oak, iron, bronze) stands on a light ground; one of mostly pale parts (limestone,
+    /// marble) on a dark one, so whatever the mix, its parts differ from what is behind them by a clear step in
+    /// value. The hue is the planet's, its saturation held down so the parts' warm colours stay their own: Earth's
+    /// studio a cool grey, Mars a dark, greyed rust (Meridiani's plain is basaltic sand, darker than its dust).
+    /// </summary>
+    public static Color GroundFor(Planet planet, double partsValue)
+    {
+        // Light unless the parts are clearly pale: wood, bronze and iron, most machines, are dark to mid-toned
+        bool light = partsValue < 0.66;
+        if (planet.IsEarth) return Color.FromHsv(0.58f, 0.08f, light ? 0.8f : 0.32f);
+        // Mars: always dark, since its butterscotch sky is pale and a light ground would merge with it; the planet's
+        // rust greyed well down, so wood and bronze stand lighter than it and aren't orange on orange
+        var g = new Color((float)planet.GroundColor.X, (float)planet.GroundColor.Y, (float)planet.GroundColor.Z);
+        return Color.FromHsv(g.H, g.S * 0.45f, 0.24f);
     }
 }

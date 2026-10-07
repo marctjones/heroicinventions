@@ -55,7 +55,4 @@ public static class Shapes
     public static readonly Color Copper = new(0.72f, 0.45f, 0.20f);
     public static readonly Color Water = new(0.25f, 0.55f, 0.85f);
     public static readonly Color Stone = Color.FromHtml("#A8A298");   // darker than the old #B8B2A8, so the floor stops clipping white
-    // Darker than any part's stone, so pale parts (limestone, marble, a stone block) stand off the floor in sun:
-    // toon shading lights a sun-facing floor fully, and #A8A298 came out at 0.68 luminance against a 0.45-0.55 target.
-    public static readonly Color StudioFloor = Color.FromHtml("#77726B");
 }

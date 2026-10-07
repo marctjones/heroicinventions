@@ -1205,7 +1205,7 @@ public partial class Main : Node3D
         // between ticks even without its swept test.
         var floor = _floor = new StaticBody3D { Position = new Vector3(0, -1f, 0) };
         floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(2000, 2f, 2000) } });
-        _floorMaterial = Shapes.Mat(Shapes.StudioFloor, roughness: 0.85f, outline: false);
+        _floorMaterial = Shapes.Mat(SkyLook.GroundFor(HeroicInventions.Sim.Planet.Earth, 0.5), roughness: 0.85f, outline: false);   // ShowSky sets it per machine
         floor.AddChild(Shapes.Box(new Vector3(2000, 2f, 2000), _floorMaterial));
         AddChild(floor);
 
@@ -1246,7 +1246,7 @@ public partial class Main : Node3D
         double elevation = sunShown ? sun!.Elevation : SkyLook.StudioElevation;
         double airMass = sunShown ? sun!.AirMass : 1 / Math.Sin(SkyLook.StudioElevation * Math.PI / 180);
         bool earth = planet.IsEarth;
-        var look = SkyLook.Of(planet, elevation, airMass, storm, ambient);
+        var look = SkyLook.Of(planet, elevation, airMass, storm, ambient, PartsValue(run));
 
         if (sunShown)
         {
@@ -1276,11 +1276,24 @@ public partial class Main : Node3D
         _environment.AmbientLightColor = look.NightAmbient;
         _environment.AmbientLightSkyContribution = 1 - 0.6f * look.NightShare;
         float frost = Mathf.Clamp(-(float)ambient / 5, 0, 1);         // none above 0 °C, white by −5 °C
-        var ground = earth ? Shapes.StudioFloor : new Color((float)planet.GroundColor.X, (float)planet.GroundColor.Y, (float)planet.GroundColor.Z);
+        var ground = look.Ground;
         // Mars's frost is thin CO2 and water rime: a pale dusting, not an Earth snowfield
         _floorMaterial.AlbedoColor = ground.Lerp(new Color(0.93f, 0.95f, 0.98f), earth ? frost : frost * 0.25f);
         _floorMaterial.Roughness = 0.8f - 0.25f * frost;
     }
+
+    /// <summary>
+    /// How light a machine's parts look on average (relative luminance, 0 to 1), for <see cref="SkyLook.GroundFor"/>. A part with
+    /// no material, or none at all (an empty scene), counts as mid-toned.
+    /// </summary>
+    private static double PartsValue(MachineRuntime? run)
+    {
+        var values = run?.Def.Parts.Where(p => !string.IsNullOrEmpty(p.Material)).Select(p => Luminance(Skins.ColorOf(p.Material))).ToList();
+        return values is { Count: > 0 } ? values.Average() : 0.5;
+    }
+
+    // as the eye weighs it: bronze #CC8F4A is mid-toned (0.6), though its HSV value says 0.8
+    private static double Luminance(Color c) => 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
 
     // Radians per pixel dragged, and the pitch range that keeps the camera
     // from flipping over the top or bottom of its orbit.
