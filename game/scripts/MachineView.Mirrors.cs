@@ -15,6 +15,10 @@ public partial class MachineView
 {
     private readonly List<(Mirror mirror, Node3D plate, MeshInstance3D beam, StandardMaterial3D beamMat, StandardMaterial3D faceMat)> _mirrorViews = [];
 
+    // A clean mirror drawn bright, pale polished bronze, not the reflection of whatever sky is behind the viewer:
+    // at metallic 0.9 a face showed Mars's pale sky and read as tan on a tan ground (owner rule: readable first).
+    private static readonly Color MirrorFace = Color.FromHtml("#F2CF85");
+
     private void BuildMirrors()
     {
         foreach (var (id, mirror) in Runtime.Mirrors)
@@ -22,12 +26,12 @@ public partial class MachineView
             var part = Runtime.Def.Part(id)!;
             var at = V(part.At);
             float side = Mathf.Sqrt((float)mirror.Area);
-            var wood = Shapes.Mat(new Color(0.45f, 0.33f, 0.2f), roughness: 0.9f);
+            var wood = Surface("oak");
             AddChild(Shapes.Rod(new Vector3(at.X, 0, at.Z), at, 0.04f, wood));
 
             var plate = new Node3D { Position = at };
             AddChild(plate);
-            var faceMat = Shapes.Mat(Shapes.Bronze, metallic: 0.9f, roughness: 0.15f);
+            var faceMat = Shapes.Mat(MirrorFace, metallic: 0.5f, roughness: 0.2f);
             var face = Shapes.Box(new Vector3(side, side, 0.03f), faceMat);
             plate.AddChild(face);
 
@@ -50,8 +54,8 @@ public partial class MachineView
         {
             // dust dulls the plate (issue #69): matt and brown as it stops more of the light
             float dust = (float)mirror.Dust;
-            faceMat.AlbedoColor = Shapes.Bronze.Lerp(new Color(0.55f, 0.38f, 0.25f), dust);
-            faceMat.Metallic = 0.9f * (1 - dust);
+            faceMat.AlbedoColor = MirrorFace.Lerp(new Color(0.55f, 0.38f, 0.25f), dust);
+            faceMat.Metallic = 0.5f * (1 - dust);
             faceMat.Roughness = 0.15f + 0.8f * dust;
             var toTarget = (V(mirror.Target) - plate.Position).Normalized();
             // the face turns to the bisector of sun and target; at night it rests facing its target

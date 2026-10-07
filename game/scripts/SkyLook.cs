@@ -123,10 +123,11 @@ public readonly record struct SkyLook(
     {
         // Light unless the parts are clearly pale: wood, bronze and iron, most machines, are dark to mid-toned
         bool light = partsValue < 0.66;
-        if (planet.IsEarth) return Color.FromHsv(0.58f, 0.08f, light ? 0.8f : 0.32f);
+        // nearly neutral, so blue water and glass stand out from it by hue as well as value
+        if (planet.IsEarth) return Color.FromHsv(0.1f, 0.03f, light ? 0.8f : 0.32f);
         // Mars: always dark, since its butterscotch sky is pale and a light ground would merge with it; the planet's
         // rust greyed well down, so wood and bronze stand lighter than it and aren't orange on orange
         var g = new Color((float)planet.GroundColor.X, (float)planet.GroundColor.Y, (float)planet.GroundColor.Z);
-        return Color.FromHsv(g.H, g.S * 0.45f, 0.24f);
+        return Color.FromHsv(g.H, g.S * 0.45f, 0.18f);
     }
 }
