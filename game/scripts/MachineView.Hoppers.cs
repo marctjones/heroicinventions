@@ -31,7 +31,7 @@ public partial class MachineView
             var part = Runtime.Def.Part(id)!;
             var floor = V(part.At);
             float side = Mathf.Sqrt((float)hopper.Area), start = (float)hopper.Level;
-            var glass = Shapes.Mat(new Color(0.8f, 0.9f, 1f), alpha: 0.18f);
+            var glass = Shapes.Glass();
             glass.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
             var walls = Shapes.Box(new Vector3(side + 0.01f, start * 1.15f + 0.05f, side + 0.01f), glass);
             walls.Position = floor + new Vector3(0, (start * 1.15f + 0.05f) / 2, 0);

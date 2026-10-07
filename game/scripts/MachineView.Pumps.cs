@@ -44,7 +44,7 @@ public partial class MachineView
                 AddChild(Shapes.Rod(new Vector3(at.X - 0.4f, 0, at.Z + dz), new Vector3(at.X - 0.4f, foot - 0.12f, at.Z + dz), 0.05f, wood));
 
             float barrelTop = spout + 0.12f;
-            var barrel = Shapes.Cylinder(r + 0.02f, barrelTop - (foot - 0.1f), Shapes.Mat(new Color(0.85f, 0.92f, 0.95f), roughness: 0.1f, alpha: 0.25f));
+            var barrel = Shapes.Cylinder(r + 0.02f, barrelTop - (foot - 0.1f), Shapes.Glass());
             barrel.Position = new Vector3(at.X, (barrelTop + foot - 0.1f) / 2, at.Z);
             AddChild(barrel);
             var barrelWater = Shapes.Cylinder(r * 0.95f, 1, water);

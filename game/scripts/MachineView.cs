@@ -229,12 +229,13 @@ public partial class MachineView : Node3D
         float side = Mathf.Sqrt((float)part.Number("area"));
         float height = (float)part.Number("height");
         var shell = Shapes.Box(new Vector3(side, height, side),
-                               Shapes.Mat(new Color(0.85f, 0.92f, 0.95f), roughness: 0.1f, alpha: 0.18f));
+                               Shapes.Glass());
         shell.Position = V(part.At) + new Vector3(0, height / 2, 0);
         AddChild(shell);
 
+        // nearly opaque: water held in a vessel must read against a pale sky through its glass (readable first)
         var water = Shapes.Box(new Vector3(side * 0.96f, 1, side * 0.96f),
-                               Shapes.Mat(Shapes.Water, roughness: 0.2f, alpha: 0.8f));
+                               Shapes.Mat(Shapes.Water, roughness: 0.2f, alpha: 0.95f));
         AddChild(water);
         _water.Add((Runtime.Tanks[part.Id], part, water));
         // Ice is opaque and matt where water is clear and glossy: the eye reads the difference as solid

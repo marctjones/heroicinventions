@@ -53,6 +53,16 @@ public static class Shapes
 
     public static readonly Color Bronze = Color.FromHtml("#CC8F4A");
     public static readonly Color Copper = new(0.72f, 0.45f, 0.20f);
-    public static readonly Color Water = new(0.25f, 0.55f, 0.85f);
+    // Water deep and saturated, well below any sky's value, so a vessel's contents read against the sky and the
+    // ground behind (owner rule: readable over realistic). Was #408CD9, the same pale blue as the sky.
+    public static readonly Color Water = Color.FromHtml("#1F5BAA");
+
+    /// <summary>
+    /// The see-through wall of a vessel (a tank's shell, a pump's barrel, a hopper): a slate tint, and opaque
+    /// enough that an empty vessel still reads as a thing against a pale sky. Its contents show through.
+    /// </summary>
+    public static StandardMaterial3D Glass(float alpha = 0.32f) => Mat(GlassTint, roughness: 0.1f, alpha: Mathf.Max(alpha, 0.32f));
+
+    public static readonly Color GlassTint = Color.FromHtml("#5E8696");
     public static readonly Color Stone = Color.FromHtml("#A8A298");   // darker than the old #B8B2A8, so the floor stops clipping white
 }

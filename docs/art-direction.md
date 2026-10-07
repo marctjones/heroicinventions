@@ -222,3 +222,12 @@ Measured on `tools/gui-check.sh` frames (sep = machine against background, sd = 
 | mars-stirling | 15 / +4 | 20 / +40 |
 
 The spread (sd) also depends on how much of the frame the machine fills. Heron's fountain, the water wheels and the Mars engines are framed small; camera framing is #86. Frames: `docs/art/skins/legibility-before-after.png`. To aim a test frame, `tools/gui-check.sh` takes `look YAW PITCH [DISTANCE]`.
+
+### 12.1 Vessels, water, mirrors (2026-10-07, owner rule: readable over realistic)
+
+- **Water** is `#1F5BAA`, deep and saturated, well below any sky's value. It was `#408CD9`, the sky's own pale blue. Water held in a tank is 95% opaque; streams and falls stay translucent.
+- **Vessel walls** (tank shells, pump barrels, the cistern, hoppers) use one helper, `Shapes.Glass()`: slate `#5E8696` at least 32% opaque, so an empty vessel still reads against a pale sky.
+- **Earth's ground** is nearly neutral (saturation 0.03), so blue water and glass differ from it in hue as well as value. **Mars's** ground value is 0.18.
+- **Mirror faces** are drawn bright: pale polished bronze `#F2CF85` at metallic 0.5. At metallic 0.9 they showed Mars's pale sky and read tan on a tan ground. Their posts are oak through `Surface`, so they get grain and the outline. Dust still dulls them toward brown.
+
+Re-measured (sd / sep): herons-fountain 17/−53 → 19/−56 at default framing, 37/−72 framed close. mars-stirling 20/+40 → 23/+48. Others unchanged (antikythera 69/−123, roman-crane 38/−62, newtons-cradle 43/+54, water-wheels 36/+63). Frames: `docs/art/skins/vessels-mirrors-before-after.png`.

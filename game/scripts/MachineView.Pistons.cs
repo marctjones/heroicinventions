@@ -170,7 +170,7 @@ public partial class MachineView
         float bore = (float)piston.Number("bore"), stroke = (float)piston.Number("stroke");
         var bottom = V(piston.At);
         var cistern = bottom + new Vector3(-(bore + 0.5f), stroke + 0.4f, 0);
-        AddChild(Place(Shapes.Box(new Vector3(0.6f, 0.4f, 0.6f), Shapes.Mat(new Color(0.85f, 0.92f, 0.95f), roughness: 0.1f, alpha: 0.25f)), cistern));
+        AddChild(Place(Shapes.Box(new Vector3(0.6f, 0.4f, 0.6f), Shapes.Glass()), cistern));
         AddChild(Place(Shapes.Box(new Vector3(0.56f, 0.28f, 0.56f), Shapes.Mat(Shapes.Water, roughness: 0.2f, alpha: 0.8f)), cistern - new Vector3(0, 0.05f, 0)));
         AddGroundedSupport(cistern - new Vector3(0, 0.2f, 0), 0.04f, 0.3f);
         AddLabel("injection cistern", cistern + new Vector3(0, 0.4f, 0), pixelSize: 0.004f);
