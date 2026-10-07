@@ -51,6 +51,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Mirror> _mirrors = [];
     private readonly Dictionary<string, Enclosure> _enclosures = [];
     private readonly Dictionary<string, Crucible> _crucibles = [];
+    private readonly Dictionary<string, Envelope> _envelopes = [];
     private readonly Dictionary<string, Pane> _panes = [];
     private readonly Dictionary<string, Pond> _ponds = [];
     private readonly Dictionary<string, Plants> _plants = [];
@@ -137,6 +138,9 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Enclosure> Enclosures => _enclosures;
     /// <summary>Crucibles of sand at a focal spot, melting to glass (issue #56).</summary>
     public IReadOnlyDictionary<string, Crucible> Crucibles => _crucibles;
+
+    /// <summary>Hot-air envelopes, each heating its air against the air outside and lifting by the difference (issue #111).</summary>
+    public IReadOnlyDictionary<string, Envelope> Envelopes => _envelopes;
     /// <summary>Glass panes in enclosures' walls (issue #57): the only way light gets in, and they crack past their pressure.</summary>
     public IReadOnlyDictionary<string, Pane> Panes => _panes;
     /// <summary>Warm ponds evaporating into their air (issue #58).</summary>
@@ -390,6 +394,22 @@ public sealed class MachineRuntime
                     _crucibles[part.Id] = new Crucible(part.Id, sand, charge, spot, TemperatureOr(part, "temperature", freezing: false))
                     {
                         Emissivity = part.Number("emissivity", 0.9),
+                    };
+                    break;
+                }
+                case "envelope":
+                {
+                    double volume = part.Number("volume"), skin = part.Number("envelope-mass"), burner = part.Number("burner-mass", 0);
+                    double power = part.Number("burner-power", 0), fuel = part.Number("fuel", 0), ua = part.Number("skin-conductance", 0);
+                    if (volume <= 0 || skin <= 0) throw new MachineFormatException($"envelope {part.Id}: #:volume and #:envelope-mass must be above 0", part.Location);
+                    if (burner < 0 || power < 0 || fuel < 0 || ua < 0 || part.Number("fuel-energy", Envelope.DefaultFuelEnergy) <= 0)
+                        throw new MachineFormatException($"envelope {part.Id}: #:burner-mass, #:burner-power, #:fuel and #:skin-conductance cannot be negative, #:fuel-energy must be above 0", part.Location);
+                    var zone = ZoneOf(part.Id);
+                    _envelopes[part.Id] = new Envelope(part.Id, volume, skin, burner, power, fuel)
+                    {
+                        Height = part.Number("height", Envelope.DefaultHeight(volume)),
+                        SkinConductance = ua, FuelEnergy = part.Number("fuel-energy", Envelope.DefaultFuelEnergy), Zone = zone,
+                        Temperature = part.Props.GetValueOrDefault("temperature") is SNumber t ? t.Value : zone.Temperature,
                     };
                     break;
                 }
@@ -1042,6 +1062,7 @@ public sealed class MachineRuntime
         foreach (var (id, p) in _plants) p.Zone = ZoneOf(id);
         foreach (var (id, e) in _electrolysers) e.Zone = ZoneOf(id);
         foreach (var (id, c) in _crucibles) c.Zone = ZoneOf(id);
+        foreach (var (id, e) in _envelopes) e.Zone = ZoneOf(id);
         foreach (var (id, se) in _stirlings) se.Zone = ZoneOf(id);
         foreach (var (id, b) in _boilers) b.Zone = ZoneOf(id);
         foreach (var (id, h) in _hearths) h.Zone = ZoneOf(id);
@@ -1415,6 +1436,22 @@ public sealed class MachineRuntime
             _getters[$"{id}.transmittance"] = () => c.Sand.Transmittance; // of its glass
             _getters[$"{id}.absorbed"] = () => c.Absorbed / 1e6;         // MJ
         }
+        foreach (var (id, e) in _envelopes)
+        {
+            _getters[$"{id}.temperature"] = () => e.Temperature;               // °C of the air inside
+            _getters[$"{id}.outside-temperature"] = () => e.Zone.Temperature;  // °C of the air round it
+            _getters[$"{id}.inside-density"] = () => e.InsideDensity;          // kg/m³
+            _getters[$"{id}.outside-density"] = () => e.OutsideDensity;        // kg/m³
+            _getters[$"{id}.lift"] = () => e.Lift;                             // N, (ρ_out − ρ_in) g V
+            _getters[$"{id}.weight"] = () => e.Weight;                         // N of skin and burner
+            _getters[$"{id}.lift-limit"] = () => e.LiftLimit;                  // N, ρ_out g V: the most any heating could give
+            _getters[$"{id}.lift-off-temperature"] = () => e.LiftOffTemperature;   // °C inside where lift = weight; NaN where it never is
+            _getters[$"{id}.can-lift"] = () => e.CanLift ? 1 : 0;
+            _getters[$"{id}.fuel"] = () => e.Fuel * 1000;                      // g left
+            _getters[$"{id}.burning"] = () => e.Burning;                       // W the burner gives
+            _getters[$"{id}.burned"] = () => e.Burned / 1000;                  // kJ
+            _setters[$"{id}.burner-power"] = w => e.BurnerPower = Math.Max(0, w);   // open or close the burner
+        }
         foreach (var (id, se) in _stirlings)
         {
             _getters[$"{id}.hot-temperature"] = () => se.HotTemperature;   // °C at the hot end
@@ -1760,6 +1797,7 @@ public sealed class MachineRuntime
         : _crucibles.TryGetValue(id, out var pot) ? (pot, Def.Part(id)!)
         : _ponds.TryGetValue(id, out var pond) ? (pond, Def.Part(pond.Tank.Name)!)
         : _stirlings.TryGetValue(id, out var engine) ? (engine, Def.Part(id)!)
+        : _envelopes.TryGetValue(id, out var balloon) ? (balloon, Def.Part(id)!)
         : _melters.TryGetValue(id, out var melter) ? (melter, Def.Part(id)!)
         : throw new MachineFormatException($"{by.Kind} {by.Id} heats {id}, which is not a boiler, a sealed vessel or an enclosure", by.Location);
 
@@ -1786,6 +1824,7 @@ public sealed class MachineRuntime
         foreach (var (target, sources) in _heatSources) target.HeatInput = _ownHeat[target] + sources.Sum(w => w());
         foreach (var e in _enclosures.Values) e.Step(dt);
         foreach (var c in _crucibles.Values) c.Step(dt);
+        foreach (var e in _envelopes.Values) e.Step(dt);
         foreach (var p in _panes.Values) p.Step(dt);
         foreach (var p in _ponds.Values) p.Step(dt);
         foreach (var r in _roofs.Values) r.Step(dt);

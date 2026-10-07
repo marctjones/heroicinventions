@@ -122,6 +122,7 @@ public partial class BuildMode : Node3D
         ["door"] = ("Door or valve", "Structure", "An opening between two enclosures (or one and outside). Gas rushes through when it is open."),
         ["air-pump"] = ("Air pump", "Structure", "Pumps gas out of one zone into another, as an airlock's chamber is pumped down."),
         ["stirling"] = ("Hot-air engine (Stirling)", "Wheels and power", "Driven by heat, not the air: aim mirrors or a fire at its receiver. Works on Mars."),
+        ["envelope"] = ("Hot-air envelope (sky lantern)", "Fire, water and steam", "A paper envelope open at the foot, with a burner: it rises once the air inside is warm enough to be lighter than the air it displaces. Never on Mars."),
         ["crucible"] = ("Crucible of sand", "Fire, water and steam", "Sand at a focal spot. Mirrors melt it to glass, if they concentrate enough light: flat ones can't."),
         ["burning-mirror"] = ("Burning mirror", "Fire, water and steam", "A curved mirror (or lens) gathering the sun into a small spot. Pick its target in the inspector."),
         ["pane"] = ("Glass panes", "Structure", "Glass in an enclosure's wall or roof: the only way light gets in. Too thin for the pressure, it cracks."),
@@ -1623,6 +1624,14 @@ public partial class BuildMode : Node3D
         }
     }
 
+    /// <summary>The box a hot-air envelope fills: a cylinder of its volume and height (default 1.2 × the cube root of the volume).</summary>
+    private static Vector3 EnvelopeBox(PartSpec part)
+    {
+        double volume = part.Number("volume", 1), height = part.Number("height", 1.2 * Math.Cbrt(volume));
+        float across = 2 * (float)Math.Sqrt(volume / (Math.PI * height));
+        return new Vector3(across, (float)height, across);
+    }
+
     /// <summary>
     /// A plain shape for a part the real view can't draw yet (a fire not yet
     /// given a pot, a wheel with no steam), sized and placed as the real part
@@ -1641,6 +1650,7 @@ public partial class BuildMode : Node3D
             "post" => (new Vector3((float)part.Number("size-x", 0.2), (float)part.Number("size-y", 1), (float)part.Number("size-z", 0.2)), false),
             "block" => (Vector3.One * (float)part.Number("size", 0.1), true),
             "hearth" => (new Vector3(0.3f, 0.08f, 0.3f), false),
+            "envelope" => (EnvelopeBox(part), false),
             "jetwheel" => (new Vector3(r * 2, r * 2, (float)part.Number("width", 0.03) + 0.06f), true),
             "rotor" => (Vector3.One * (float)(part.Number("radius", 0.06) + part.Number("arm", 0.08)) * 2, true),
             _ => (new Vector3(0.3f, 0.3f, 0.3f), false),

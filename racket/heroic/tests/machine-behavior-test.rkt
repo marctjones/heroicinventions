@@ -1998,6 +1998,50 @@
     (check-= (mean '(iron-block y)) 0.100 0.001)))
 
 ;; ---------------------------------------------------------------------------
+;; Air buoyancy: the Kongming sky lantern (#111, #125)
+
+(test-case "Kongming lantern (#111, #125): it leaves the ground when the air inside passes 32.46 C, 33.40 s into the burn, and climbs where drag balances lift less weight"
+  (when (godot-available?)
+    ;; kongming-lantern.rkt's working, done before running: rho_out = 101325 / (287.05 x 288.15)
+    ;; = 1.2250; Delta rho x 1 m3 = 0.070 kg at rho_in = 1.1550, T = 305.61 K = 32.46 C. The heating
+    ;; C(T) dT/dt = 800 - 15 (T - 15 C), C = rho_in V 1005 + 0.05 x 1400, integrated by RK4 at 1 ms
+    ;; with the body (drag 1/2 rho 0.8 (V/h = 0.833 m2) v^2 on its 1.2 m height) gives:
+    ;;   lift passes weight at 33.40 s; 2.007 m off the ground at 40 s; 4.887 m at 45 s, climbing 0.649 m/s.
+    ;; Its centre rests at h / 2 = 0.6 m.
+    (define run (godot-simulate 'kongming-lantern #:seconds 50 #:sample-dt 0.1))
+    (define (field f path)
+      (define key (string->symbol (format "~a.~a" (car path) (cadr path))))
+      (cadr (assq key (cdr f))))
+    (define (lifted? f) (>= (field f '(lantern lift)) (field f '(lantern weight))))
+    (define lift-off (for/first ([f run] #:when (lifted? f)) f))
+    (check-= (car lift-off) 33.40 0.15 "the lift passes the weight when the sim says it does")
+    (check-= (field lift-off '(lantern temperature)) 32.463 0.15 "at the temperature the ideal gas law gives")
+    (check-= (field lift-off '(lantern lift-off-temperature)) 32.463 0.001)
+    (check-= (field lift-off '(lantern weight)) (* 0.070 9.81) 1e-9)
+    ;; until then it sits on the ground, after it it climbs
+    (check-= (value-at run '(lantern y) 33.0) 0.6 0.002 "still on the ground the second before")
+    (check-true (< (value-at run '(lantern y) 33.0) (value-at run '(lantern y) 34.5)) "off it just after")
+    (check-= (- (value-at run '(lantern y) 40) 0.6) 2.007 0.06)
+    (check-= (- (value-at run '(lantern y) 45) 0.6) 4.887 0.1)
+    (check-= (value-at run '(lantern vy) 45) 0.649 0.03 "the climb speed at 37.2 C inside, where drag balances lift less weight")
+    ;; the same lantern with no flame stays cold and on the ground
+    (check-= (value-at run '(control y) 50) 0.6 0.002)
+    (check-= (value-at run '(control temperature) 50) 15 1e-9)))
+
+(test-case "Kongming lantern on Mars (#111, #125): 0.0152 kg/m3 of air can never lift 70 g from a cubic metre"
+  (when (godot-available?)
+    ;; rho_out g V = 0.0152 x 3.71 = 0.0563 N, against a weight of 0.070 x 3.71 = 0.2597 N, whatever the heat;
+    ;; its skin settles at -63 + 800 / 15 = -9.67 C (263.48 K), where the lift is
+    ;; rho_out (1 - 210.15 / 263.48) g V = 0.0152 x 0.2024 x 3.71 = 0.0114 N
+    (define run (godot-simulate 'kongming-lantern-mars #:seconds 120 #:sample-dt 1))
+    (define (all path) (for/list ([f run]) (cadr (assq (string->symbol (format "~a.~a" (car path) (cadr path))) (cdr f)))))
+    (check-true (for/and ([y (all '(lantern y))]) (< (abs (- y 0.6)) 0.002)) "it never leaves the ground")
+    (check-true (for/and ([l (all '(lantern lift))] [w (all '(lantern weight))]) (< l w)))
+    (check-= (final-of run '(lantern weight)) (* 0.070 3.71) 1e-9)
+    (check-= (final-of run '(lantern temperature)) (+ -63 (/ 800 15.0)) 0.01)
+    (check-true (< (final-of run '(lantern lift-limit)) (final-of run '(lantern weight))))))
+
+;; ---------------------------------------------------------------------------
 ;; Chains of pinned links (issue #31)
 
 (test-case "A chain of 40 pinned links (#31) hangs on the catenary for its length and span; the hooks carry w a cosh(S/2a)"

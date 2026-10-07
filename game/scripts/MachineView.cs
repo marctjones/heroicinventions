@@ -129,6 +129,7 @@ public partial class MachineView : Node3D
         BuildEnclosures();
         BuildDoors();
         BuildCrucibles();
+        BuildEnvelopes();
         BuildPanes();
         BuildRainHouse();
         BuildStirlings();
@@ -1392,6 +1393,7 @@ public partial class MachineView : Node3D
         DriveRatchets(dt);
         TestTriggers();
         ApplyBuoyancy();
+        ApplyLift();
         ApplyDrag();
         ConstrainChains();
         CheckBurial();
@@ -1523,6 +1525,7 @@ public partial class MachineView : Node3D
         DrawEnclosures();
         DrawDoors();
         DrawCrucibles();
+        DrawEnvelopes();
         DrawGalvanicJars();
         DrawPanes();
         DrawRainHouse();

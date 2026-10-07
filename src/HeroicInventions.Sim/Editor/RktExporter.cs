@@ -254,6 +254,10 @@ public static class RktExporter
                        $"#:carnot-fraction {F(N("carnot-fraction", 0.35))} #:emissivity {F(N("emissivity", 0.9))} " +
                        $"#:heat-capacity {F(N("heat-capacity", 10000))} #:inertia {F(N("inertia", 0.5))} #:load {F(N("load"))}" +
                        Opt("temperature", "temperature") + $" {Mat()})\n";
+            case "envelope":
+                return $"  (envelope {p.Id} {At()} #:volume {F(N("volume", 1))} #:envelope-mass {F(N("envelope-mass", 0.05))} #:burner-mass {F(N("burner-mass"))} " +
+                       $"#:burner-power {F(N("burner-power"))} #:fuel {F(N("fuel"))} #:fuel-energy {F(N("fuel-energy", 40000000))} #:skin-conductance {F(N("skin-conductance"))}" +
+                       Opt("temperature", "temperature") + Opt("height", "height") + $" #:drag-coefficient {F(N("drag-coefficient", 0.8))} {Mat()})\n";
             case "crucible":
                 return $"  (crucible {p.Id} {At()} #:sand {Sym("sand", "basalt")} #:charge {F(N("charge"))} #:spot {F(N("spot"))} " +
                        $"#:emissivity {F(N("emissivity", 0.9))}" + Opt("temperature", "temperature") + $" {Mat()})\n";

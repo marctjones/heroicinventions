@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "drain", "roof", "stirling", "ball", "plants", "melter", "electrolyser", "galvanic-jar"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "envelope", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "drain", "roof", "stirling", "ball", "plants", "melter", "electrolyser", "galvanic-jar"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -180,6 +180,10 @@ public static class PartTemplates
             },
             [], null),
         // 10 kg of basalt sand at a 50 cm² focal spot, waiting for a mirror
+        // a hot-air envelope (issue #111): a 1 m3 paper lantern with a 20 g, 800 W burner; it floats up when the air inside is light enough
+        "envelope" => new PartSpec(id, "envelope", material, at,
+            Props(("volume", 1.0), ("envelope-mass", 0.05), ("burner-mass", 0.02), ("burner-power", 800), ("fuel", 0.01), ("fuel-energy", 40000000),
+                  ("skin-conductance", 15), ("temperature", false), ("height", false), ("drag-coefficient", 0.8)), [], null),
         "crucible" => new PartSpec(id, "crucible", material, at,
             new Dictionary<string, SExpr>
             {
