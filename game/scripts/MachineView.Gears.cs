@@ -1,20 +1,42 @@
 using Godot;
 using HeroicInventions.Sim.Machines;
+using HeroicInventions.Sim.Mechanics;
 
 namespace HeroicInventions;
 
 /// <summary>
-/// Gear trains. Each wheel turned by a crank (#:drive-rpm) drives every
-/// gear reachable from it through (mesh a b) links and arbors: across a
-/// mesh the speed scales by −(teeth driving / teeth driven), reversing
-/// direction; along an arbor it's shared. Each driven gear's hinge motor
-/// is set every tick to that speed, plus a correction that pulls its angle
-/// back to exactly where the ratio says it should be — so after any
-/// number of turns every tooth still sits in its partner's gap.
+/// Gear trains. Two kinds, by what turns them.
 ///
-/// The driven gears don't load the crank: right for a hand-turned train of
-/// light bronze gears like the Antikythera mechanism's, not for a gear
-/// train carrying real torque.
+/// Cranked: a wheel turned by a crank (#:drive-rpm) drives every gear
+/// reachable from it through (mesh a b) links and arbors: across a mesh the
+/// speed scales by −(teeth driving / teeth driven), reversing direction;
+/// along an arbor it's shared. Each driven gear's hinge motor is set every
+/// tick to that speed, plus a correction that pulls its angle back to
+/// exactly where the ratio says it should be — so after any number of turns
+/// every tooth still sits in its partner's gap. The driven gears don't load
+/// the crank: right for a hand-turned train of light bronze gears like the
+/// Antikythera mechanism's, not for a gear train carrying real torque.
+///
+/// Driven and loaded (issue #113): a train with no crank in it is turned by
+/// whatever turns its gears — a flywheel let go spinning, or a water wheel,
+/// windmill or jet wheel keyed on an arbor with one of its wheels — and its
+/// load slows that driver. Every mesh is a <see cref="ShaftLink"/> between
+/// the two arbors' Jolt bodies (<see cref="JoltShaft"/>), of ratio
+/// −(teeth driving / teeth driven) and the mesh's #:efficiency; a part the
+/// sim turns, on an arbor, is a ShaftLink of ratio ±1 (its own sense of
+/// turning about the axle) to the arbor's first Jolt wheel. That exchange is
+/// the one coupling point between the sim's turning parts and Jolt's bodies.
+/// Each tick, after the sim has stepped its parts under their own drive and
+/// load (water in the buckets, wind on the sails) and before Jolt steps its
+/// bodies under theirs (a brake, a rod pushing a saw), the links trade the
+/// least angular momentum that puts every pair back on its ratio. A load at
+/// the output slows its gear during Jolt's step; the next tick's exchange
+/// takes that much back from the driver, ratio × torque / η. Jolt-to-Jolt
+/// meshes keep the cranked train's angle pull, as a bias on the exchange.
+/// The bodies of a driven train lose the engine's 0.2/s axle damping, so
+/// what slows them is what the machine gives them; a bearing on one of them
+/// (#:bearing-mu) stops the whole train, its friction clamped against the
+/// inertia of everything geared to it, not just its own wheel's.
 /// </summary>
 public partial class MachineView
 {
@@ -31,6 +53,33 @@ public partial class MachineView
         public double LastRaw, LastRootRaw;
     }
 
+    /// <summary>A link of a driven train: a mesh between two arbors, or a sim-turned part keyed on an arbor.</summary>
+    private sealed class DrivenLink
+    {
+        public required ShaftLink Link;
+        public required string FromId, ToId;            // the parts named in the machine: the mesh's gears, or the sim part and the wheel
+        public RigidBody3D? FromBody, ToBody;           // the arbors' first Jolt wheels; null for a sim part
+        public double FromAngle, ToAngle, LastFrom, LastTo;
+        public required Label3D Label;
+    }
+
+    private readonly List<DrivenLink> _drivenLinks = [];
+    private readonly List<ShaftLink> _drivenShaftLinks = [];
+    /// <summary>For each Jolt body in a driven train: every member of its train, with its speed as a multiple of a common reference.</summary>
+    private readonly Dictionary<RigidBody3D, (List<(IShaft Shaft, double Factor)> Train, double Factor)> _trainOf = [];
+
+    /// <summary>A part the sim turns, which can sit on an arbor and drive its wheels.</summary>
+    private bool IsSimTurned(string id) =>
+        Runtime.WaterWheels.ContainsKey(id) || Runtime.Windmills.ContainsKey(id) || Runtime.JetWheels.ContainsKey(id);
+
+    private IShaft SimShaft(string id) =>
+        Runtime.WaterWheels.TryGetValue(id, out var w) ? w
+        : Runtime.Windmills.TryGetValue(id, out var m) ? m
+        : Runtime.JetWheels[id];
+
+    /// <summary>The Jolt wheel that leads an arbor: its first wheel, passing over a part the sim turns.</summary>
+    private string ArborLead(ArborSpec arbor) => arbor.Parts.First(p => !IsSimTurned(p));
+
     /// <summary>Rotation about an axis, from the body's own X direction, in (-π, π].</summary>
     private static double RawAngle(RigidBody3D body, Vector3 axis)
     {
@@ -45,11 +94,11 @@ public partial class MachineView
 
     private void BuildGearTrains()
     {
-        if (Runtime.Def.Meshes.Count == 0) return;
-        // Wheels on one arbor turn together: work in terms of each arbor's first wheel.
+        if (Runtime.Def.Meshes.Count == 0 && !Runtime.Def.Arbors.Any(a => a.Parts.Any(IsSimTurned))) return;
+        // Wheels on one arbor turn together: work in terms of each arbor's first wheel (a sim part on it is coupled to that, below).
         var leader = Runtime.Def.Parts.Where(p => p.Kind == "wheel").ToDictionary(p => p.Id, p => p.Id);
         foreach (var arbor in Runtime.Def.Arbors)
-            foreach (var p in arbor.Parts) leader[p] = arbor.Parts[0];
+            foreach (var p in arbor.Parts.Where(p => !IsSimTurned(p))) leader[p] = ArborLead(arbor);
 
         var edges = new Dictionary<string, List<(string To, double Factor)>>();
         foreach (var m in Runtime.Def.Meshes)
@@ -102,6 +151,151 @@ public partial class MachineView
                 LastRaw = RawAngle(body, axis), LastRootRaw = RawAngle(rootBody, _hinges[rootBody].Axis),
             });
         }
+
+        BuildDrivenTrains(leader, edges, factor.Keys.ToHashSet());
+    }
+
+    /// <summary>The trains no crank turns (issue #113): their meshes, and the sim parts keyed on their arbors, as ShaftLinks.</summary>
+    private void BuildDrivenTrains(Dictionary<string, string> leader, Dictionary<string, List<(string To, double Factor)>> edges, HashSet<string> cranked)
+    {
+        var shafts = new Dictionary<string, IShaft>();
+        IShaft Shaft(string id) => shafts.TryGetValue(id, out var s) ? s
+            : shafts[id] = IsSimTurned(id) ? SimShaft(id) : ShaftEnd(id)!;
+
+        // the sim parts on arbors: each a link of ratio ±1 to its arbor's lead, and a node of that lead's train
+        var simEdges = new List<(string Sim, string Lead, double Sense, ArborSpec Arbor)>();
+        foreach (var arbor in Runtime.Def.Arbors)
+            foreach (var sim in arbor.Parts.Where(IsSimTurned))
+            {
+                string lead = ArborLead(arbor);
+                simEdges.Add((sim, lead, SimSense(sim, lead, arbor.Location), arbor));
+            }
+
+        // each driven train's members, with their speeds as multiples of its first's; a loop of meshes that disagrees locks up
+        var adjacency = new Dictionary<string, List<(string To, double Factor)>>();
+        foreach (var (from, list) in edges.Where(e => !cranked.Contains(e.Key)))
+            adjacency[from] = [.. list];
+        foreach (var (sim, lead, sense, _) in simEdges.Where(e => !cranked.Contains(e.Lead)))
+        {
+            adjacency.TryAdd(lead, []);
+            adjacency.TryAdd(sim, []);
+            adjacency[sim].Add((lead, sense));       // ω_lead = sense · ω_sim
+            adjacency[lead].Add((sim, sense));       // and back: sense is ±1
+        }
+        var factor = new Dictionary<string, double>();
+        foreach (var start in adjacency.Keys)
+        {
+            if (factor.ContainsKey(start)) continue;
+            var members = new List<string> { start };
+            factor[start] = 1;
+            var queue = new Queue<string>([start]);
+            while (queue.Count > 0)
+            {
+                var here = queue.Dequeue();
+                foreach (var (to, f) in adjacency[here])
+                {
+                    double want = factor[here] * f;
+                    if (factor.TryGetValue(to, out var had))
+                    {
+                        if (Math.Abs(had - want) > 1e-9 * Math.Abs(want))
+                            throw new MachineFormatException($"gear {to} is driven two ways at once: the train locks up", Runtime.Def.Part(to)!.Location);
+                        continue;
+                    }
+                    factor[to] = want;
+                    members.Add(to);
+                    queue.Enqueue(to);
+                }
+            }
+            // what each Jolt body in it feels when it is slowed: the train's inertia, seen from it
+            var train = members.Select(id => (Shaft(id), factor[id])).ToList();
+            foreach (var id in members.Where(id => !IsSimTurned(id)))
+            {
+                var lead = _bodiesById[id];
+                foreach (var body in _arborMates.GetValueOrDefault(lead, []).Prepend(lead))
+                {
+                    _trainOf[body] = (train, factor[id]);
+                    Undamped(body);   // nothing slows it but what the machine says
+                }
+            }
+        }
+
+        foreach (var m in Runtime.Def.Meshes)
+        {
+            string a = leader[m.A], b = leader[m.B];
+            if (cranked.Contains(a) || a == b) continue;
+            double ratio = -Runtime.Def.Part(m.A)!.Number("teeth") / Runtime.Def.Part(m.B)!.Number("teeth");
+            RigidBody3D bodyA = _bodiesById[a], bodyB = _bodiesById[b];
+            AddDrivenLink(new ShaftLink(Shaft(a), Shaft(b), ratio, m.Efficiency), m.A, m.B, bodyA, bodyB);
+        }
+        foreach (var (sim, lead, sense, _) in simEdges)
+            AddDrivenLink(new ShaftLink(Shaft(sim), Shaft(lead), sense), sim, lead, null, _bodiesById[lead]);
+    }
+
+    private void AddDrivenLink(ShaftLink link, string fromId, string toId, RigidBody3D? from, RigidBody3D to)
+    {
+        // what the link carries, shown under the wheel it drives
+        float below = (float)(Runtime.Def.Part(toId)?.Number("radius", 0.2) ?? 0.2) + 0.15f;
+        var label = new Label3D
+        {
+            Position = to.GlobalPosition + new Vector3(0, -below, 0), FontSize = 22, OutlineSize = 6, PixelSize = 0.0022f,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
+            Modulate = new Color(1f, 0.85f, 0.55f),
+        };
+        AddChild(label);
+        var d = new DrivenLink { Link = link, FromId = fromId, ToId = toId, FromBody = from, ToBody = to, Label = label };
+        if (from is not null) d.LastFrom = RawAngle(from, _hinges[from].Axis);
+        d.LastTo = RawAngle(to, _hinges[to].Axis);
+        _drivenLinks.Add(d);
+        _drivenShaftLinks.Add(link);
+    }
+
+    /// <summary>
+    /// Which way a sim-turned part turns its arbor's lead wheel, about the lead's
+    /// hinge axis: +1 if the part's forward turn is a positive turn about it. A
+    /// water wheel's and a windmill's axle runs along Z; an overshot wheel turns
+    /// clockwise seen from +Z (its loaded buckets go down the +X side), an
+    /// undershot one, a windmill and a jet wheel anticlockwise. The wheel must sit
+    /// on the part's own axle line.
+    /// </summary>
+    private double SimSense(string sim, string lead, SourceLocation? at)
+    {
+        var part = Runtime.Def.Part(sim)!;
+        var body = _bodiesById[lead];
+        var (pivot, axis) = _hinges[body];
+        if (Math.Abs(axis.Z) < 0.99f)
+            throw new MachineFormatException($"{lead} turns about {axis}; on {sim}'s axle it must turn about Z, as {sim} does", at);
+        var off = pivot - V(part.At);
+        if (new Vector2(off.X, off.Y).Length() > 0.05f)
+            throw new MachineFormatException($"{lead} is {new Vector2(off.X, off.Y).Length():F2} m off {sim}'s axle; an arbor's wheels share one axle line", at);
+        double forward = Runtime.WaterWheels.TryGetValue(sim, out var w) && w.Buckets > 0 ? -1 : 1;
+        return forward * Math.Sign(axis.Z);
+    }
+
+    /// <summary>The inertia a body of a driven train has to stop, kg·m² about its own axle: every member's, scaled by the square of its speed against this one's; null outside a driven train.</summary>
+    private double? TrainInertia(RigidBody3D body)
+    {
+        if (!_trainOf.TryGetValue(body, out var t)) return null;
+        return t.Train.Sum(m => m.Shaft.ShaftInertia * (m.Factor / t.Factor) * (m.Factor / t.Factor));
+    }
+
+    /// <summary>
+    /// How fast the train turns a body of it, rad/s about the body's axle: the
+    /// train's angular momentum over its inertia, both seen from this body, so
+    /// the speed the whole train would share if every pair were exactly on its
+    /// ratio (the angle pull keeps a light wheel a little ahead of it); null
+    /// outside a driven train.
+    /// </summary>
+    private double? TrainSpeed(RigidBody3D body)
+    {
+        if (!_trainOf.TryGetValue(body, out var t)) return null;
+        double momentum = 0, inertia = 0;
+        foreach (var (shaft, f) in t.Train)
+        {
+            double k = f / t.Factor, i = shaft.ShaftInertia;
+            momentum += i * k * shaft.AngularVelocity;
+            inertia += i * k * k;
+        }
+        return inertia > 0 ? momentum / inertia : 0;
     }
 
     /// <summary>Gears only mesh if cut to one module and set their pitch circles' radii apart.</summary>
@@ -137,7 +331,62 @@ public partial class MachineView
         }
     }
 
+    /// <summary>
+    /// Couples the driven trains for one tick: after the sim has stepped its
+    /// turning parts, before Jolt steps its bodies. Meshes between Jolt wheels
+    /// are pulled back onto the ratio's angle as well as its speed.
+    /// </summary>
+    private void CoupleDrivenTrains(double dt)
+    {
+        if (_drivenLinks.Count == 0) return;
+        foreach (var d in _drivenLinks)
+        {
+            double to = RawAngle(d.ToBody!, _hinges[d.ToBody!].Axis);
+            d.ToAngle += Unwrap(to - d.LastTo);
+            d.LastTo = to;
+            if (d.FromBody is null) continue;
+            double from = RawAngle(d.FromBody, _hinges[d.FromBody].Axis);
+            d.FromAngle += Unwrap(from - d.LastFrom);
+            d.LastFrom = from;
+            // a gentle pull, at most a tenth of the speed the ratio asks for: a train
+            // that friction has stopped stays stopped, its teeth a little off true
+            double most = 0.1 * Math.Abs(d.Link.Ratio * d.Link.From.AngularVelocity);
+            d.Link.Bias = Math.Clamp(20 * (d.Link.Ratio * d.FromAngle - d.ToAngle), -most, most);
+        }
+        ShaftLink.StepAll(_drivenShaftLinks, dt, 8);
+        FrictionDrivenTrains(dt);
+    }
+
+    private void DrawGearTrains()
+    {
+        foreach (var d in _drivenLinks)
+        {
+            var l = d.Link;
+            double rpm = l.To.AngularVelocity * 60 / Math.Tau;
+            d.Label.Text = d.FromBody is null
+                ? $"{d.FromId} turns {d.ToId}\n{Math.Abs(rpm):F1} rpm · {-l.DriverTorque:F2} N·m · {l.Power:F1} W"
+                : $"{d.FromId} → {d.ToId}\n{Math.Abs(rpm):F1} rpm · {l.Torque:F2} N·m";
+        }
+    }
+
+    /// <summary>
+    /// For the trace: what each driven link carries. On the driven part,
+    /// drive-torque (N·m it is turned with, forward about its axle) and
+    /// drive-power (W); on the driving part, load-torque (N·m the link holds
+    /// it back with, ratio × torque / η while it drives).
+    /// </summary>
+    private IEnumerable<(string Key, double Value)> GearTraceFields()
+    {
+        foreach (var d in _drivenLinks)
+        {
+            yield return ($"{d.ToId}.drive-torque", d.Link.Torque);
+            yield return ($"{d.ToId}.drive-power", d.Link.Power);            // the driver's own sense: a sim part turns forward positive; a Jolt gear, positive about its axle
+            yield return ($"{d.FromId}.load-torque", -d.Link.DriverTorque * Math.Sign(d.Link.From.AngularVelocity == 0 ? 1 : d.Link.From.AngularVelocity));
+        }
+    }
+
     /// <summary>For telemetry: each driven gear's turns against what its ratio says.</summary>
     private IEnumerable<string> GearReport() =>
-        _gearFollowers.Select(g => $"{g.Body.Name} turned {g.Angle / Math.Tau:F3} (ratio says {g.Factor * g.RootAngle / Math.Tau:F3})");
+        _gearFollowers.Select(g => $"{g.Body.Name} turned {g.Angle / Math.Tau:F3} (ratio says {g.Factor * g.RootAngle / Math.Tau:F3})")
+            .Concat(_drivenLinks.Select(d => $"{d.FromId}->{d.ToId} {d.Link.To.AngularVelocity * 60 / Math.Tau:F2}rpm τ={d.Link.Torque:F3}N·m driver τ={d.Link.DriverTorque:F3}N·m"));
 }

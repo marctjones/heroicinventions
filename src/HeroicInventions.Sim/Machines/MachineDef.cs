@@ -107,9 +107,13 @@ public sealed record CylinderSpec(string Id, string Piston, string Boiler, doubl
 }
 
 /// <summary>Two gears in mesh.</summary>
-public sealed record MeshSpec(string A, string B, SourceLocation? Location);
+public sealed record MeshSpec(string A, string B, SourceLocation? Location)
+{
+    /// <summary>The share of the power passing through that arrives (issue #113): 1 for a perfect mesh.</summary>
+    public double Efficiency { get; init; } = 1;
+}
 
-/// <summary>Wheels fixed on one axle; the first carries the bearing and any drive.</summary>
+/// <summary>Wheels fixed on one axle; the first carries the bearing and any drive. One part may be a water wheel, windmill or jet wheel, which the sim turns: its axle drives the wheels and they load it (issue #113).</summary>
 public sealed record ArborSpec(IReadOnlyList<string> Parts, SourceLocation? Location);
 
 /// <summary>A point on a part, in the part's own frame; Part is "world" for a fixed point in world coordinates.</summary>
@@ -417,7 +421,9 @@ public sealed class MachineDef
             Meshes = clauses.Where(c => c.Head == "mesh").Select(c =>
             {
                 var loc = ParseLoc(c);
-                return new MeshSpec(Sym(c, 1, loc), Sym(c, 2, loc), loc);
+                double eff = c.Field("efficiency") is { } e ? Num(e, 1, loc) : 1;
+                if (!(eff > 0 && eff <= 1)) throw new MachineFormatException($"a mesh's efficiency is more than 0 and at most 1, not {eff}", loc);
+                return new MeshSpec(Sym(c, 1, loc), Sym(c, 2, loc), loc) { Efficiency = eff };
             }).ToList(),
             Arbors = clauses.Where(c => c.Head == "arbor").Select(c =>
             {

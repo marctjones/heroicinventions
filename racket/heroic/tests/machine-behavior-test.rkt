@@ -2647,3 +2647,54 @@
     (define last-on (last on)) (define last-off (last off))
     (check-= (/ (field last-off 'mill.wind-power) (field last-on 'mill.wind-power))
              (expt (/ (corridor 160.04) (corridor 0.01)) 3) 0.003 "the same wind weaker by 0.313, a power weaker by its cube, 0.031")))
+
+;; ---- #113: gear trains driven by any shaft, and loaded (geared-brake.rkt)
+;; Worked before the first run, in the machine's header: a flywheel geared
+;; 10:1 up into a 0.1 N m brake, the train 1 kg m^2 seen from the flywheel,
+;; let go at 60 rpm. Through a perfect mesh the brake reflects 1 N m and the
+;; speed falls in a straight line, 1 rad/s per second, to a stop at
+;; I w0 / tau = 6.283 s; through a mesh of efficiency 0.9 at (eta I_1 + n^2 I_2)
+;; w0 / (n tau), with I_1 and I_2 the two arbors' own inertia read from the
+;; compiled machine. The brake's heat is the energy that reached it: all the
+;; train's spin through the perfect mesh, and only 0.9 of the flywheel arbor's
+;; through the lossy one.
+(require racket/runtime-path)
+(define-runtime-path compiled-machines "../../../game/machines")
+(define (machine-inertia machine part)
+  ;; density x inertia-z of a part, from the compiled .machine file
+  (define form (call-with-input-file (build-path compiled-machines (format "~a.machine" machine)) read))
+  (define p (for/first ([c (cddr form)] #:when (and (pair? c) (eq? (car c) 'part) (eq? (cadr c) part))) c))
+  (define (field l k) (for/first ([x l] #:when (and (pair? x) (eq? (car x) k))) (cadr x)))
+  (define material (field p 'material))
+  (* (material-field (assq material (material-table)) 'density) (field (cdr (assq 'props (cdddr p))) 'inertia-z)))
+
+(test-case "Geared brake (Jolt): a flywheel geared 10:1 into a 0.1 N m brake stops in I w0 / (n tau / eta)"
+  (when (godot-available?)
+    (define run (godot-simulate 'geared-brake #:seconds 7.5 #:sample-dt 1/120))
+    (define w0 (* 2 pi))
+    (define I1 (+ (machine-inertia 'geared-brake 'plain-flywheel) (machine-inertia 'geared-brake 'plain-gear)))
+    (define I2 (+ (machine-inertia 'geared-brake 'plain-brake) (machine-inertia 'geared-brake 'plain-pinion)))
+    (check-= (+ I1 (* 100 I2)) 1.0 1e-9 "kg m^2: the train seen from the flywheel")
+    (define (stops eta) (/ (* (+ (* eta I1) (* 100 I2)) w0) (* 10 0.1)))
+    (check-= (stops 1) 6.283 0.001)
+    (check-= (stops 0.9) 5.669 0.001)
+    (for ([name '(plain lossy)] [eta '(1 0.9)])
+      (define fly (string->symbol (format "~a-flywheel" name)))
+      (define brake (string->symbol (format "~a-brake" name)))
+      (define (omega t) (value-at run (list fly 'omega) t))
+      (define T (stops eta))
+      ;; a straight line: the speed at a quarter, half and three quarters of the way
+      (for ([k '(0.25 0.5 0.75)])
+        (check-= (omega (* k T)) (* w0 (- 1 k)) (* 0.005 w0) (format "~a rad/s at ~a s" name (* k T))))
+      ;; stopped within 2% of the predicted time, and stays stopped
+      (define stopped (for/first ([f run] #:when (< (cadr (assq (string->symbol (format "~a.omega" fly)) (cdr f))) 1e-6)) (car f)))
+      (check-true (and stopped (< (abs (- stopped T)) (* 0.02 T))) (format "~a stopped at ~a s, predicted ~a s" name stopped T))
+      (check-= (final-of run (list fly 'omega)) 0 1e-6)
+      ;; the brake shaft turned 10 times as fast as the flywheel, the other way (the trace's omega is a
+      ;; magnitude), less at most what one physics step's braking takes from its own light inertia,
+      ;; tau dt / I_2 = 3.65 rad/s, before the next tick's exchange puts it back on the ratio
+      (check-= (value-at run (list brake 'omega) (/ T 2)) (* 10 (omega (/ T 2))) (/ (* 0.1 1/120) I2))
+      ;; the mesh held the flywheel's arbor back with I_1 x its deceleration: n tau / eta of it (less the brake shaft's share)
+      (check-= (value-at run (list (string->symbol (format "~a-gear" name)) 'load-torque) (/ T 2)) (* I1 (/ w0 T)) 0.01 "N m")
+      ;; the heat: 1/2 (eta I_1 + n^2 I_2) w0^2
+      (check-= (final-of run (list brake 'heat)) (* 1/2 (+ (* eta I1) (* 100 I2)) w0 w0) 0.1 "J"))))

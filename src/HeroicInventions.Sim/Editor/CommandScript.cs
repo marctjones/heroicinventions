@@ -69,7 +69,7 @@ public static class CommandScript
                 (a.HeatLoss != 0 ? $" #:heat-loss {N(a.HeatLoss)}" : "") +
                 (a.HeatCapacity != 0 ? $" #:heat-capacity {N(a.HeatCapacity)}" : "") + ")");
         foreach (var a in m.Arbors) Add($"(arbor {string.Join(' ', a.Parts)})");
-        foreach (var g in m.Meshes) Add($"(mesh {g.A} {g.B})");
+        foreach (var g in m.Meshes) Add(g.Efficiency == 1 ? $"(mesh {g.A} {g.B})" : $"(mesh {g.A} {g.B} #:efficiency {N(g.Efficiency)})");
         foreach (var c in m.Cylinders)
             Add($"({(c.Kind == "steam" ? "steam-cylinder" : "atmospheric-cylinder")} {c.Id} #:piston {c.Piston} #:steam-from {c.Boiler}" +
                 (c.InjectionTemperature is { } inj ? $" #:injection-temperature {N(inj)}" : "") +

@@ -1103,7 +1103,8 @@ public partial class MachineView : Node3D
 
         // A wheel riding on another's arbor is locked to it (BuildArbors),
         // not hinged to the world, and any drive belongs to the arbor's first.
-        bool rides = Runtime.Def.Arbors.Any(a => a.Parts.Skip(1).Contains(part.Id));
+        // (a water wheel, windmill or jet wheel on an arbor is turned by the sim: the first Jolt wheel leads)
+        bool rides = Runtime.Def.Arbors.Any(a => a.Parts.Contains(part.Id) && ArborLead(a) != part.Id);
         double rpm = rides ? 0 : part.Number("drive-rpm", 0);
         if (!rides)
         {
@@ -1161,7 +1162,8 @@ public partial class MachineView : Node3D
     {
         foreach (var arbor in Runtime.Def.Arbors)
         {
-            var bodies = arbor.Parts.Select(p => _bodiesById[p]).ToList();
+            // a water wheel, windmill or jet wheel on it is turned by the sim, and coupled to the first wheel in BuildGearTrains
+            var bodies = arbor.Parts.Where(p => !IsSimTurned(p)).Select(p => _bodiesById[p]).ToList();
             var lead = bodies[0];
             foreach (var rider in bodies.Skip(1))
             {
@@ -1394,6 +1396,7 @@ public partial class MachineView : Node3D
         ConstrainChains();
         CheckBurial();
         Runtime.Step(dt);
+        CoupleDrivenTrains(dt);   // after the sim's turning parts have stepped, before Jolt's bodies do (#113)
         Refresh();
         if (trace) TraceTick(dt);
         KeepVelocitiesIntoStep();
@@ -1507,6 +1510,7 @@ public partial class MachineView : Node3D
         DrawTriggers();
         DrawImpacts();
         DrawBelts();
+        DrawGearTrains();
         DrawJoints();
         DrawMillstones();
         DrawAxleFriction();
