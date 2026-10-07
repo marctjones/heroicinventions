@@ -44,7 +44,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -412,6 +412,16 @@
     (unless (and (real? (prop 'charge)) (>= (prop 'charge) 0)) (bad (format "#:charge must be 0 kg or more, got ~e" (prop 'charge))))
     (unless (and (real? (prop 'emissivity)) (> (prop 'emissivity) 0) (<= (prop 'emissivity) 1))
       (bad (format "#:emissivity must be in (0, 1], got ~e" (prop 'emissivity)))))
+  (for ([p parts] #:when (eq? (part-kind p) 'envelope))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what) (error 'define-machine "~a:~a:~a: envelope ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (for ([k '(volume envelope-mass fuel-energy)])
+      (unless (and (real? (prop k)) (> (prop k) 0)) (bad (format "#:~a must be above 0, got ~e" (if (eq? k 'volume) 'volume k) (prop k)))))
+    (for ([k '(burner-mass burner-power fuel skin-conductance)])
+      (unless (and (real? (prop k)) (>= (prop k) 0)) (bad (format "#:~a must be 0 or more, got ~e" k (prop k)))))
+    (unless (or (not (prop 'height)) (and (real? (prop 'height)) (> (prop 'height) 0))) (bad (format "#:height must be above 0, got ~e" (prop 'height))))
+    (unless (and (real? (prop 'drag-coefficient)) (>= (prop 'drag-coefficient) 0)) (bad (format "#:drag-coefficient must be 0 or more, got ~e" (prop 'drag-coefficient)))))
   (for ([p parts] #:when (eq? (part-kind p) 'galvanic-jar))
     (define (prop k) (cdr (assq k (part-props p))))
     (define loc (part-loc p))
@@ -498,7 +508,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
   inflow channel off trigger follow belt wake joint)
 
@@ -600,8 +610,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, drain, roof, stirling, ball, plants, melter, electrolyser, galvanic-jar) or link (pipe, connect, sealed-air)"
-    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond drain roof plants melter electrolyser galvanic-jar tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, envelope, burning-mirror, hopper, pane, pond, drain, roof, stirling, ball, plants, melter, electrolyser, galvanic-jar) or link (pipe, connect, sealed-air)"
+    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror pane pond drain roof plants melter electrolyser galvanic-jar tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1276,6 +1286,39 @@
       #:with expr #`(part 'id 'crucible '(~? mat granite) (list at.x at.y at.z)
                           (list (cons 'sand '(~? sand-kind basalt)) (cons 'charge charge-v) (cons 'spot spot-v)
                                 (cons 'emissivity (~? eps-v 0.9)) (cons 'temperature (~? temp-v #f)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A hot-air envelope (issue #111), a sky lantern's skin: #:volume m³ open at
+    ;; its mouth, #:envelope-mass kg of skin, #:burner-mass kg of burner with the
+    ;; #:fuel kg of wax it holds (all of it weight, the few grams burned off
+    ;; neglected), the burner giving #:burner-power W while the fuel lasts
+    ;; (#:fuel-energy J/kg, default 40 MJ). The air inside is at the air's
+    ;; pressure but its own temperature (#:temperature, default the air's), so it
+    ;; lifts (rho_out - rho_in) g V; it warms as C dT/dt = Q - UA (T - T_out), UA
+    ;; being #:skin-conductance W/K. A body in the game: it leaves the ground when
+    ;; the lift passes its weight, #:height m tall (default 1.2 x the cube root of
+    ;; the volume), slowed by #:drag-coefficient (default 0.8) on its footprint.
+    (pattern (envelope id:id
+                       (~alt (~once (~seq #:at at:vec3))
+                             (~once (~seq #:volume volume-v:expr))
+                             (~once (~seq #:envelope-mass skin-v:expr))
+                             (~optional (~seq #:burner-mass burner-v:expr))
+                             (~optional (~seq #:burner-power power-v:expr))
+                             (~optional (~seq #:fuel fuel-v:expr))
+                             (~optional (~seq #:fuel-energy energy-v:expr))
+                             (~optional (~seq #:skin-conductance ua-v:expr))
+                             (~optional (~seq #:temperature temp-v:expr))
+                             (~optional (~seq #:height height-v:expr))
+                             (~optional (~seq #:drag-coefficient drag-v:expr))
+                             (~optional (~seq #:material mat:id))) ...)
+      #:attr info (pinfo #'id 'envelope (attribute mat) '())
+      #:with expr #`(part 'id 'envelope '(~? mat hemp) (list at.x at.y at.z)
+                          (list (cons 'volume volume-v) (cons 'envelope-mass skin-v)
+                                (cons 'burner-mass (~? burner-v 0)) (cons 'burner-power (~? power-v 0))
+                                (cons 'fuel (~? fuel-v 0)) (cons 'fuel-energy (~? energy-v 40000000))
+                                (cons 'skin-conductance (~? ua-v 0)) (cons 'temperature (~? temp-v #f))
+                                (cons 'height (~? height-v #f)) (cons 'drag-coefficient (~? drag-v 0.8)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -2381,11 +2424,11 @@
     (for ([m infos] #:when (mrinfo? m))
       (define onto (syntax-e (mrinfo-onto m)))
       (define b (hash-ref parts onto #f))
-      (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure crucible stirling)))
+      (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure crucible stirling envelope)))
                   (for/or ([r infos]) (and (rfinfo? r) (eq? (rfinfo-kind r) 'pond) (eq? (syntax-e (rfinfo-id r)) onto)))
                   (for/or ([g infos]) (and (gninfo? g) (eq? (syntax-e (gninfo-id g)) onto)))
                   (for/or ([a infos]) (and (ainfo? a) (memq onto (map syntax-e (ainfo-tanks a))))))
-        (fail (format "~a is not a boiler, a tank in a sealed-air, an enclosure, a crucible or a hot-air engine; a mirror heats one of those" onto) (mrinfo-onto m))))
+        (fail (format "~a is not a boiler, a tank in a sealed-air, an enclosure, a crucible, a hot-air engine or a hot-air envelope; a mirror heats one of those" onto) (mrinfo-onto m))))
     (for ([c infos] #:when (cpinfo? c))
       (define v (hash-ref parts (syntax-e (cpinfo-vessel c)) #f))
       (unless (and v (eq? (pinfo-kind v) 'tank))

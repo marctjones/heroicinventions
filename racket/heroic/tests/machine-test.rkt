@@ -320,6 +320,15 @@
     (post p #:at (0 0 0) #:size (1 1 1) #:material oak)
     (float f #:in p #:mass 1 #:area 0.01)))
 
+(test-case "a hot-air envelope (#111) needs a volume and skin, and sane numbers"
+  (define (build . clauses)
+    (parameterize ([current-namespace (make-base-namespace)])
+      (eval `(module lanterns heroic (define-machine lanterns ,@clauses)))
+      (dynamic-require ''lanterns #f)))
+  (check-not-exn (λ () (build '(envelope e #:at (0 0 0) #:volume 1 #:envelope-mass 0.05 #:burner-power 800 #:skin-conductance 15))))
+  (check-exn #rx"envelope e: #:volume must be above 0" (λ () (build '(envelope e #:at (0 0 0) #:volume 0 #:envelope-mass 0.05))))
+  (check-exn #rx"envelope e: #:burner-power must be 0 or more" (λ () (build '(envelope e #:at (0 0 0) #:volume 1 #:envelope-mass 0.05 #:burner-power -5)))))
+
 (test-case "a drain (#90) runs into a tank"
   (check-not-exn
    (λ () (expand-machine '(tank cistern #:at (0 -1 0) #:area 1 #:height 1) '(drain grate #:at (0 0 0) #:into cistern #:perimeter 0.4))))
