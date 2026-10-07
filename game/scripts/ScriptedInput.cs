@@ -18,6 +18,7 @@ namespace HeroicInventions;
 ///   drag X1 Y1 X2 Y2    press, move in ten steps, release (rdrag: right button, mdrag: middle)
 ///   key NAME            press and release a key; modifiers join with +: ctrl+z, shift+t, meta+s
 ///   hold NAME SECONDS   keep a key down, then print how long it really was (shift+up works)
+///   press NAME · release NAME   hold a key down across the steps between
 ///   camera              print where the camera is
 ///   shot PATH           save what the window shows as a PNG
 ///   quit                end the run
@@ -96,6 +97,13 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
                 if (ev.ShiftPressed) Input.ParseInputEvent(new InputEventKey { Pressed = true, Keycode = Key.Shift });
                 Input.ParseInputEvent(ev);
                 _holding = (ev, N(w, 2), 0);
+                return Step.Next;
+            }
+            case "press" or "release":   // a key held down across other steps: "press r; drag ...; release r"
+            {
+                var ev = KeyEvent(w[1]);
+                ev.Pressed = w[0] == "press";
+                Input.ParseInputEvent(ev);
                 return Step.Next;
             }
             case "camera":

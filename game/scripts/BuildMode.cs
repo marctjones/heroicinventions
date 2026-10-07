@@ -241,7 +241,8 @@ public partial class BuildMode : Node3D
     /// HEROIC_EDITOR_INPUT="palette tank; move 700 450; down 700 450; up 700 450; key delete; wait 5; ..."
     /// runs a <see cref="ScriptedInput"/> script (mouse, keys, holds, camera,
     /// shots) with the editor's own steps added: "palette NAME" picks a palette
-    /// entry as a click in the list would; "click-part ID" and "click-port
+    /// entry as a click in the list would; "palette-drag ID X Y" drags an entry
+    /// out of the list and lets go over the scene at X Y; "click-part ID" and "click-port
     /// PART.PORT" click whatever is on screen there; "link KIND" starts a join;
     /// "cmd ..." runs a console command; "save PATH" saves the design; "log"
     /// prints the parts; "focus console" / "focus none" give or take the
@@ -249,7 +250,45 @@ public partial class BuildMode : Node3D
     /// </summary>
     private ScriptedInput? _inputScript;
 
-    public override void _Input(InputEvent @event) => OrbitCamera.ClaimNavigationKeys(@event, GetViewport());
+    /// <summary>
+    /// Runs before the GUI: claims the camera's keys, and lets a part be
+    /// dragged straight out of the palette. A press on a palette entry starts
+    /// placing it (the list's own selection does that); while the button is
+    /// held outside the list the ghost follows the mouse, and letting go over
+    /// the scene puts it there. A plain click on an entry still works as
+    /// before: release over the list, then click in the scene.
+    /// </summary>
+    public override void _Input(InputEvent @event)
+    {
+        OrbitCamera.ClaimNavigationKeys(@event, GetViewport());
+        switch (@event)
+        {
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } down
+                when _paletteList.GetGlobalRect().HasPoint(down.Position):
+                _paletteDrag = true;
+                break;
+            case InputEventMouseMotion motion when _paletteDrag && !_paletteList.GetGlobalRect().HasPoint(motion.Position):
+                MoveGhost(motion.Position);
+                break;
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false } up when _paletteDrag:
+                _paletteDrag = false;
+                if (_placingPaletteId is { } id && !OverPanel(up.Position))
+                {
+                    MoveGhost(up.Position);
+                    PlaceGhost(id, up.ShiftPressed);
+                    // not marked handled: the list took the press, so it must see the release too,
+                    // or the GUI keeps sending it every mouse event as if the button were still down
+                }
+                break;
+        }
+    }
+
+    private bool _paletteDrag;
+
+    /// <summary>Whether a window point is over one of build mode's panels rather than the scene.</summary>
+    private bool OverPanel(Vector2 at) => _leftPanel.GetGlobalRect().HasPoint(at) || _rightPanel.GetGlobalRect().HasPoint(at);
+
+    private PanelContainer _leftPanel = null!, _rightPanel = null!;
 
     public override void _Process(double delta)
     {
@@ -266,6 +305,24 @@ public partial class BuildMode : Node3D
                     if (_paletteList.GetItemMetadata(i).AsString() == w[1]) _paletteList.Select(i);
                 StartPlacing(w[1]);
                 return ScriptedInput.Step.Next;
+            case "palette-drag":   // "palette-drag ID X Y": press on the entry in the list, drag it out over the scene, let go at X Y
+            {
+                int i = Enumerable.Range(0, _paletteList.ItemCount).FirstOrDefault(k => _paletteList.GetItemMetadata(k).AsString() == w[1], -1);
+                if (i < 0) { GD.Print($"[BuildMode] no palette entry {w[1]}"); return ScriptedInput.Step.Next; }
+                // the item's rect leaves out the list's own margin and scroll; step down its column until the list itself says the point is on it
+                var rect = _paletteList.GetItemRect(i);
+                var local = rect.GetCenter();
+                for (int dy = -40; dy <= 40 && _paletteList.GetItemAtPosition(local, exact: true) != i; dy += 2)
+                    local = rect.GetCenter() + new Vector2(0, dy);
+                if (_paletteList.GetItemAtPosition(local, exact: true) != i) { GD.Print($"[BuildMode] palette entry {w[1]} is scrolled out of sight"); return ScriptedInput.Step.Next; }
+                var from = GetViewport().GetScreenTransform() * (_paletteList.GetGlobalTransform() * local);   // injected events are in window pixels
+                var to = new Vector2(float.Parse(w[2], System.Globalization.CultureInfo.InvariantCulture), float.Parse(w[3], System.Globalization.CultureInfo.InvariantCulture));
+                _inputScript!.Mouse(from);
+                _inputScript.Mouse(from, MouseButton.Left, true);
+                for (int k = 1; k <= 10; k++) _inputScript.Mouse(from.Lerp(to, k / 10f), MouseButton.Left);
+                _inputScript.Mouse(to, MouseButton.Left, false);
+                return ScriptedInput.Step.Next;
+            }
             case "cmd": RunCommand(string.Join(' ', w.Skip(1))); return ScriptedInput.Step.Next;
             case "save": _session.SaveFile(w[1]); GD.Print($"[BuildMode] saved {w[1]}"); return ScriptedInput.Step.Next;
             case "click-port":
@@ -288,7 +345,7 @@ public partial class BuildMode : Node3D
                 return ScriptedInput.Step.Next;
             }
             case "log":
-                GD.Print($"[BuildMode] state: selected={_selectedId ?? "none"} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})"))}");
+                GD.Print($"[BuildMode] state: px={F(1 / GetViewport().GetScreenTransform().Scale.X)} selected={_selectedId ?? "none"} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})" + (p.Props.GetValueOrDefault("heading-deg") is SNumber h ? $"^{F(h.Value)}" : "")))}");
                 return ScriptedInput.Step.Continue;
             case "focus":
                 if (w[1] == "console") _consoleInput.GrabFocus(); else GetViewport().GuiReleaseFocus();
@@ -316,7 +373,7 @@ public partial class BuildMode : Node3D
         AddChild(layer);
 
         // left: palette, material, file and run
-        var left = new PanelContainer { CustomMinimumSize = new Vector2(250, 0) };
+        var left = _leftPanel = new PanelContainer { CustomMinimumSize = new Vector2(250, 0) };
         left.SetAnchorsPreset(Control.LayoutPreset.LeftWide);
         layer.AddChild(left);
         var leftCol = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
@@ -421,7 +478,7 @@ public partial class BuildMode : Node3D
         leftCol.AddChild(exitButton);
 
         // right: inspector and console
-        var right = new PanelContainer { CustomMinimumSize = new Vector2(300, 0) };
+        var right = _rightPanel = new PanelContainer { CustomMinimumSize = new Vector2(300, 0) };
         right.SetAnchorsPreset(Control.LayoutPreset.RightWide);
         right.OffsetLeft = -300;
         layer.AddChild(right);
@@ -446,7 +503,7 @@ public partial class BuildMode : Node3D
         var help = new Label
         {
             Text = "Camera: right-drag orbit · middle- or Shift+right-drag pan · scroll or pinch zoom · arrows/WASD move · F frame · Home all\n"
-                 + "Edit: click select · drag move (Ctrl: up/down) · T turn (Shift: back) · Del delete · Ctrl+D duplicate · Ctrl+Z undo · G grid · Esc cancel",
+                 + "Edit: click select · drag move (Ctrl: up/down) · R+drag or T turn · Del delete · Ctrl+D duplicate · Ctrl+Z undo · G grid · Esc cancel",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Bottom,
@@ -1015,6 +1072,11 @@ public partial class BuildMode : Node3D
             _status.Text = $"{hovered.Part}: {hovered.Kind} point \"{hovered.Port}\". Click it, then another, to connect them";
         if (_pressedId is { } id)
         {
+            // R held: turn the part about its upright through #:at instead of moving it
+            if (!_dragging && _turning is null && Input.IsKeyPressed(Key.R) && id == _selectedId
+                && MachineDef.TurnableKinds.Contains(_session.Document.Parts[id].Kind) && mm.Position.DistanceTo(_pressPos) > DragThreshold)
+                _turning = 0;
+            if (_turning is not null) { TurnPreview(id, mm.Position); return; }
             if (!_dragging && mm.Position.DistanceTo(_pressPos) > DragThreshold) BeginDrag(id, _pressPos);
             if (_dragging) Drag(id, mm.Position, Input.IsKeyPressed(Key.Ctrl) || Input.IsKeyPressed(Key.Meta), mm.Relative);
             return;
@@ -1193,6 +1255,14 @@ public partial class BuildMode : Node3D
 
     private void OnLeftUp()
     {
+        if (_turning is { } turned && _pressedId is { } turnedId)
+        {
+            _turning = null;
+            _pressedId = null;
+            if (turned != 0) RunCommand($"(turn {turnedId} {F(turned)})");   // one command, one undo, for the whole turn
+            else Redraw();
+            return;
+        }
         if (_dragging && _pressedId is { } id)
         {
             var at = _session.Document.Parts[id].At;
@@ -1375,6 +1445,31 @@ public partial class BuildMode : Node3D
     // -------------------------------------------------------- edit actions
 
     /// <summary>Turns the selected part about the vertical through its pivot by <paramref name="degrees"/> (its #:heading-deg); a part built along the axes says so.</summary>
+    // --------------------------------------------------------------- turn
+
+    private float? _turning;   // degrees the part has been turned so far in an R-drag, as previewed
+
+    /// <summary>
+    /// R-drag: half a degree a pixel across the screen, dragging right turning
+    /// it clockwise seen from above; in 15° steps while grid snap is on, as T
+    /// turns it. The part's drawn nodes turn about the upright through its
+    /// #:at as a preview; letting go makes it one (turn) command.
+    /// </summary>
+    private void TurnPreview(string id, Vector2 mouse)
+    {
+        float wanted = -(mouse.X - _pressPos.X) * 0.5f;
+        if (_gridSnap) wanted = Mathf.Snapped(wanted, 15f);
+        float step = wanted - _turning!.Value;
+        if (step == 0) return;
+        var part = _session.Document.Parts[id];
+        var pivot = new Vector3((float)part.At.X, (float)part.At.Y, (float)part.At.Z);
+        var spin = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(step)), Vector3.Zero);
+        foreach (var node in NodesOf(id))
+            node.GlobalTransform = new Transform3D(Basis.Identity, pivot) * spin * new Transform3D(Basis.Identity, -pivot) * node.GlobalTransform;
+        _turning = wanted;
+        _status.Text = $"Turning {id} by {F(wanted)}°{(_gridSnap ? " (15° steps; G for free)" : "")}";
+    }
+
     private void TurnSelected(double degrees)
     {
         if (_selectedId is { } id) RunCommand($"(turn {id} {F(degrees)})");

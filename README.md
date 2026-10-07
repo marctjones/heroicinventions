@@ -77,6 +77,8 @@ Open `game/project.godot` in the Godot .NET editor and press Play. You get a men
 
 **Camera (the same in run view and build mode):** drag to orbit (right-drag in build mode), **Shift**+drag or middle-drag to pan, scroll or pinch to zoom (two-finger trackpad scrolling zooms too, and pans with **Shift**). From the keyboard: **arrow keys** move over the ground (also **W A S D** in build mode), **Shift**+arrows orbit, **+**/**−** or **Page Up**/**Page Down** zoom, **Home** goes back to the starting view (build mode: frames the whole design). Taking the camera while a trebuchet's stone is in flight stops the camera following it.
 
+**Building with the mouse (build mode):** each part in the palette shows a thumbnail of itself. Drag a part out of the palette and let go over the scene to place it there, or click it in the palette and then click in the scene (hold **Shift** to keep placing). Drag a placed part to move it (**Ctrl** to raise or lower it). Hold **R** and drag a part to turn it: half a degree a pixel, in 15° steps while grid snap is on (**G** turns snapping off for any angle); each turn is one undo. **T** / **Shift+T** turn it by 15°.
+
 **The HUD is deliberately small.** By default it shows a curated energy summary, not a dump of every raw number: total mechanical energy and its kinetic/potential split, a single headline speed, and — depending on the machine — either an **efficiency** figure (heat-driven machines: how much of the delivered heat became motion; the aeolipile's is a genuinely tiny fraction, which is real and part of the point) or an **energy retained** figure (gravity-driven machines: how much of the starting mechanical energy is still in the system, which drops as friction and bearing damping dissipate it). Click **Show details** (or press **D**) for the full per-part numbers — temperatures, pressures, litres, rpm — when you want them.
 
 Set `HEROIC_DEBUG_PHYSICS=1` to print each dynamic body's rotation/height and the energy summary to the console twice a second — useful for checking a new machine's physics without needing to look at the screen.
@@ -111,6 +113,8 @@ racket -e '(require "racket/heroic/live.rkt") (live-connect)
 tools/gui-check.sh HEROIC_AUTOSELECT=pendulum-demo -- "wait 40; pause; hold right 1; camera; shot /tmp/after.png; quit"
 ```
 
-Pass `HEROIC_EDITOR=1` to script build mode instead, which adds steps such as `palette tank` and `click-part tank_1`.
+Pass `HEROIC_EDITOR=1` to script build mode instead, which adds steps such as `palette tank`, `palette-drag tank 640 400` and `click-part tank_1`; `press r` / `release r` hold a key across a drag. `racket/heroic/tests/editor-gestures-test.rkt` runs these headless.
+
+If you add a part keyword to `machine.rkt` and `#lang heroic` doesn't know it, recompile the language: `raco make racket/heroic/main.rkt`. Its `all-from-out` export list is fixed when `main.rkt` compiles, and the old `.zo` stays in use while `main.rkt` itself is unchanged.
 
 When exporting the game, add `*.machine` to the export preset's "Filters to export non-resource files" so the machine files are included.
