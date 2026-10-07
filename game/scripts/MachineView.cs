@@ -101,6 +101,7 @@ public partial class MachineView : Node3D
                 case "digger": BuildDigger(part); break;
                 case "float": BuildFloat(part); break;
                 case "sluice-box": BuildSluiceBox(part); break;
+                case "galvanic-jar": BuildGalvanicJar(part); break;
             }
             _partNodes[part.Id] = Enumerable.Range(before, GetChildCount() - before)
                 .Select(i => GetChild(i)).OfType<Node3D>().ToList();
@@ -1552,6 +1553,7 @@ public partial class MachineView : Node3D
         DrawEnclosures();
         DrawDoors();
         DrawCrucibles();
+        DrawGalvanicJars();
         DrawPanes();
         DrawRainHouse();
         DrawStirlings();

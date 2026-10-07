@@ -1,3 +1,4 @@
+using HeroicInventions.Sim.Electrics;
 using HeroicInventions.Sim.Fluids;
 using HeroicInventions.Sim.Materials;
 using HeroicInventions.Sim.Mechanics;
@@ -55,6 +56,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Plants> _plants = [];
     private readonly Dictionary<string, Melter> _melters = [];
     private readonly Dictionary<string, Electrolyser> _electrolysers = [];
+    private readonly Dictionary<string, GalvanicJar> _galvanicJars = [];
     private readonly Dictionary<string, Roof> _roofs = [];
     private readonly Dictionary<string, StirlingEngine> _stirlings = [];
     private readonly Dictionary<string, Door> _doors = [];
@@ -145,6 +147,8 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Melter> Melters => _melters;
     /// <summary>Electrolysers splitting water into O₂ and H₂ (issue #42).</summary>
     public IReadOnlyDictionary<string, Electrolyser> Electrolysers => _electrolysers;
+    /// <summary>Galvanic jars, the "Baghdad battery": a steady trickle of electricity until the vinegar is spent.</summary>
+    public IReadOnlyDictionary<string, GalvanicJar> GalvanicJars => _galvanicJars;
     /// <summary>Cold roofs condensing their room's vapour into gutters (issue #58).</summary>
     public IReadOnlyDictionary<string, Roof> Roofs => _roofs;
     public IReadOnlyDictionary<string, StirlingEngine> Stirlings => _stirlings;
@@ -364,6 +368,17 @@ public sealed class MachineRuntime
                 case "electrolyser":
                     _electrolysers[part.Id] = new Electrolyser(part.Id, TankNamed(part.Symbol("water", ""), part.Location),
                                                                part.Number("power", 0), part.Number("efficiency", 0.7));
+                    break;
+                case "galvanic-jar":
+                    try
+                    {
+                        _galvanicJars[part.Id] = new GalvanicJar(part.Id, (int)part.Number("cells", 1), part.Number("volts", 0.5),
+                                                                 part.Number("milliamps", 0.15), part.Number("electrolyte", 4.5e-5))
+                        {
+                            On = part.Number("on", 1) != 0,
+                        };
+                    }
+                    catch (ArgumentException e) { throw new MachineFormatException($"galvanic-jar {part.Id}: {e.Message}", part.Location); }
                     break;
                 case "crucible":
                 {
@@ -1344,6 +1359,18 @@ public sealed class MachineRuntime
             _getters[$"{id}.power"] = () => e.Power;                       // W
             _setters[$"{id}.power"] = w => e.Power = Math.Max(0, w);
         }
+        foreach (var (id, j) in _galvanicJars)
+        {
+            _getters[$"{id}.voltage"] = () => j.Voltage;                   // V across the stack
+            _getters[$"{id}.current"] = () => j.Current * 1000;            // mA
+            _getters[$"{id}.power"] = () => j.Power * 1e6;                 // µW
+            _getters[$"{id}.spent"] = () => j.SpentFraction * 100;         // % of the acid used
+            _getters[$"{id}.delivered"] = () => j.Delivered;               // J given out
+            _getters[$"{id}.days-left"] = () => j.TimeLeft / 86400;        // at this current
+            _getters[$"{id}.on"] = () => j.On ? 1 : 0;
+            _setters[$"{id}.on"] = v => j.On = v != 0;
+            _setters[$"{id}.milliamps"] = ma => j.Milliamps = Math.Max(0, ma);
+        }
         foreach (var (id, p) in _ponds)
         {
             _getters[$"{id}.temperature"] = () => p.Temperature;          // °C of the water
@@ -1766,6 +1793,7 @@ public sealed class MachineRuntime
         foreach (var p in _plants.Values) p.Step(dt);
         foreach (var m in _melters.Values) m.Step(dt);
         foreach (var e in _electrolysers.Values) e.Step(dt);
+        foreach (var j in _galvanicJars.Values) j.Step(dt);
         foreach (var d in _doors.Values) d.Step(dt);
         foreach (var p in _gasPumps.Values) p.Step(dt);
         if (_zoneOfPart.Count > 0) SyncZones();

@@ -278,6 +278,9 @@ public static class RktExporter
                 return $"  (melter {p.Id} {At()} #:into {Sym("into", "?")} #:power {F(N("power"))}" + Opt("ice-temperature", "ice-temperature") + $" {Mat()})\n";
             case "electrolyser":
                 return $"  (electrolyser {p.Id} {At()} #:water {Sym("water", "?")} #:power {F(N("power"))} #:efficiency {F(N("efficiency", 0.7))} {Mat()})\n";
+            case "galvanic-jar":
+                return $"  (galvanic-jar {p.Id} {At()} #:cells {F(N("cells", 1))} #:volts {F(N("volts", 0.5))} #:milliamps {F(N("milliamps", 0.15))} " +
+                       $"#:electrolyte {F(N("electrolyte", 4.5e-5))} #:on {(N("on", 1) != 0 ? "#t" : "#f")} {Mat()})\n";
             case "counterpoise":
                 return $"  (counterpoise {p.Id} {At()} #:vessel {Sym("vessel", "?")} #:vessel-mass {F(N("vessel-mass"))} " +
                        $"#:counterweight {F(N("counterweight"))} #:radius {F(N("radius"))} #:turn-deg {F(N("turn-deg"))} " +

@@ -44,7 +44,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -412,6 +412,14 @@
     (unless (and (real? (prop 'charge)) (>= (prop 'charge) 0)) (bad (format "#:charge must be 0 kg or more, got ~e" (prop 'charge))))
     (unless (and (real? (prop 'emissivity)) (> (prop 'emissivity) 0) (<= (prop 'emissivity) 1))
       (bad (format "#:emissivity must be in (0, 1], got ~e" (prop 'emissivity)))))
+  (for ([p parts] #:when (eq? (part-kind p) 'galvanic-jar))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what) (error 'define-machine "~a:~a:~a: galvanic-jar ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (unless (exact-positive-integer? (prop 'cells)) (bad (format "#:cells must be a whole number of jars, 1 or more, got ~e" (prop 'cells))))
+    (unless (and (real? (prop 'volts)) (> (prop 'volts) 0)) (bad (format "#:volts must be above 0 V, got ~e" (prop 'volts))))
+    (unless (and (real? (prop 'milliamps)) (>= (prop 'milliamps) 0)) (bad (format "#:milliamps must be 0 mA or more, got ~e" (prop 'milliamps))))
+    (unless (and (real? (prop 'electrolyte)) (> (prop 'electrolyte) 0)) (bad (format "#:electrolyte must be above 0 m³ (try (L 0.045)), got ~e" (prop 'electrolyte)))))
   (for ([p parts] #:when (eq? (part-kind p) 'mirror))
     (define (prop k) (cdr (assq k (part-props p))))
     (define loc (part-loc p))
@@ -490,7 +498,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
   inflow channel off trigger follow belt wake joint)
 
@@ -592,8 +600,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, drain, roof, stirling, ball, plants, melter, electrolyser) or link (pipe, connect, sealed-air)"
-    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond drain roof plants melter electrolyser tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, burning-mirror, hopper, pane, pond, drain, roof, stirling, ball, plants, melter, electrolyser, galvanic-jar) or link (pipe, connect, sealed-air)"
+    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible burning-mirror pane pond drain roof plants melter electrolyser galvanic-jar tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1418,6 +1426,31 @@
       #:attr info (gninfo #'id #'water-id #f)
       #:with expr #`(part 'id 'electrolyser '(~? mat iron) (list at.x at.y at.z)
                           (list (cons 'water 'water-id) (cons 'power (~? power-v 0)) (cons 'efficiency (~? eff-v 0.7)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A galvanic jar, the "Baghdad battery": a clay pot with a copper tube
+    ;; round an iron rod, filled with vinegar. Whether the Parthian/Sasanian
+    ;; jars from Khujut Rabu were batteries is doubted (no wires, a sealed
+    ;; top, no plated work of the period); this is the replicas' battery.
+    ;; No chemistry and no circuit: each of #:cells jars in series gives
+    ;; #:volts at #:milliamps while it is on, until the acid in its
+    ;; #:electrolyte m³ of 5% vinegar is spent (one electron per acid
+    ;; molecule, 3,615 C in the replicas' 45 mL). Defaults are Eggebrecht's
+    ;; replica in 5% vinegar: 0.5 V at 0.15 mA, 75 µW a jar. A 5 kWh bank
+    ;; would take one jar about 7,600 years, and some 10,000 jars' vinegar.
+    (pattern (galvanic-jar id:id
+                           (~alt (~once (~seq #:at at:vec3))
+                                 (~optional (~seq #:cells cells-v:expr))
+                                 (~optional (~seq #:volts volts-v:expr))
+                                 (~optional (~seq #:milliamps ma-v:expr))
+                                 (~optional (~seq #:electrolyte elec-v:expr))
+                                 (~optional (~seq #:on on-v:expr))
+                                 (~optional (~seq #:material mat:id))) ...)
+      #:attr info (pinfo #'id 'galvanic-jar (attribute mat) '())
+      #:with expr #`(part 'id 'galvanic-jar '(~? mat clay) (list at.x at.y at.z)
+                          (list (cons 'cells (~? cells-v 1)) (cons 'volts (~? volts-v 0.5)) (cons 'milliamps (~? ma-v 0.15))
+                                (cons 'electrolyte (~? elec-v 4.5e-5)) (cons 'on (if (~? on-v #t) 1 0)))
                           '()
                           #,(loc-of this-syntax)))
 

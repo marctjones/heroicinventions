@@ -121,6 +121,17 @@
   (check-exn #rx"leaks nothing" (λ () (build cask '(leak hole #:on cask #:height 0.1))))
   (check-not-exn (λ () (build cask '(leak hole #:on cask #:height 0.1 #:evaporation 0.00005)))))
 
+;; a galvanic jar's numbers too: whole cells, volts above 0, some vinegar
+(test-case "a galvanic jar needs whole cells, a voltage and some electrolyte"
+  (define (build . clauses)
+    (parameterize ([current-namespace (make-base-namespace)])
+      (eval `(module jars heroic (define-machine jars ,@clauses)))
+      (dynamic-require ''jars #f)))
+  (check-exn #rx"#:cells must be a whole number of jars" (λ () (build '(galvanic-jar j #:at (0 0 0) #:cells 2.5))))
+  (check-exn #rx"#:volts must be above 0 V" (λ () (build '(galvanic-jar j #:at (0 0 0) #:volts 0))))
+  (check-exn #rx"#:electrolyte must be above 0" (λ () (build '(galvanic-jar j #:at (0 0 0) #:electrolyte 0))))
+  (check-not-exn (λ () (build '(galvanic-jar j #:at (0 0 0) #:cells 10 #:volts 0.433 #:on #f)))))
+
 (test-case "a safety valve sits in a boiler's lid"
   (check-compile-error #rx"cask is not a boiler; a safety valve sits in a boiler's lid"
     (tank cask #:at (0 0 0) #:area 0.25 #:height 1)

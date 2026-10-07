@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "drain", "roof", "stirling", "ball", "plants", "melter", "electrolyser"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "drain", "roof", "stirling", "ball", "plants", "melter", "electrolyser", "galvanic-jar"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -229,6 +229,14 @@ public static class PartTemplates
         // an electrolyser, 500 W at 70%, splitting the water of the tank it is set #:water
         "electrolyser" => new PartSpec(id, "electrolyser", material, at,
             new Dictionary<string, SExpr> { ["water"] = new SSymbol("?"), ["power"] = new SNumber(500), ["efficiency"] = new SNumber(0.7) },
+            [], null),
+        // one jar of 45 mL of 5% vinegar, as Eggebrecht's replica: 0.5 V at 0.15 mA
+        "galvanic-jar" => new PartSpec(id, "galvanic-jar", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["cells"] = new SNumber(1), ["volts"] = new SNumber(0.5), ["milliamps"] = new SNumber(0.15),
+                ["electrolyte"] = new SNumber(4.5e-5), ["on"] = new SNumber(1),
+            },
             [], null),
         "mirror" => new PartSpec(id, "mirror", material, at,
             new Dictionary<string, SExpr> { ["onto"] = new SSymbol("?"), ["area"] = new SNumber(0.5), ["reflectivity"] = new SNumber(0.85) },

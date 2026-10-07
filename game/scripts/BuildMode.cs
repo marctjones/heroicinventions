@@ -130,6 +130,7 @@ public partial class BuildMode : Node3D
         ["roof"] = ("Cold roof", "Structure", "An enclosure's roof chilled by the outside: its air's vapour condenses on it and rains into a gutter."),
         ["plants"] = ("Trees", "Water", "Fast trees in a bed: under light through glass they grow wood from CO2 and water and give off O2."),
         ["melter"] = ("Ice melter", "Water", "An ice drill and melter: 466 kJ a kilogram of Mars ice, into a tank."),
+        ["galvanic-jar"] = ("Galvanic jar (Baghdad battery)", "Fire, water and steam", "Clay jar, copper tube, iron rod, vinegar: 0.5 V at 0.15 mA, as the replicas give. Whether the ancient jars were batteries is doubted. A 5 kWh bank would take one about 7,600 years."),
         ["electrolyser"] = ("Electrolyser", "Fire, water and steam", "Splits water into oxygen (for fire) and hydrogen, at 17.9 MJ a kilogram of O2: usually a poor trade."),
         ["enclosure"] = ("Enclosure", "Structure", "A room with its own air: set its pressure, gases (o2, n2 …) and walls. Parts inside read its air instead of the planet's."),
         ["ball"] = ("Ball", "Weights and levers", "A solid ball: it rolls where a block slides. Set it on a ramp, or drop it on something."),
