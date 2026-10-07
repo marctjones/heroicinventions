@@ -27,7 +27,9 @@ public partial class MachineView
         }
         foreach (var b in _freezable)
         {
-            var (start, moved, turned) = _audit[b];
+            // pieces a fracture makes (#43) are new bodies: start tracking them where they appear
+            if (!_audit.TryGetValue(b, out var seen)) _audit[b] = seen = (b.GlobalTransform, 0f, 0f);
+            var (start, moved, turned) = seen;
             float m = b.GlobalPosition.DistanceTo(start.Origin);
             float t = Mathf.RadToDeg((start.Basis.Inverse() * b.GlobalTransform.Basis).GetRotationQuaternion().GetAngle());
             _audit[b] = (start, Mathf.Max(moved, m), Mathf.Max(turned, t));
