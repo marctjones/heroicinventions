@@ -20,6 +20,7 @@ namespace HeroicInventions;
 ///   hold NAME SECONDS   keep a key down, then print how long it really was (shift+up works)
 ///   press NAME · release NAME   hold a key down across the steps between
 ///   camera              print where the camera is
+///   look YAW PITCH [DISTANCE]   aim the camera: degrees round and up (pitch is camera height), metres out
 ///   shot PATH           save what the window shows as a PNG
 ///   quit                end the run
 ///
@@ -106,6 +107,15 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
                 Input.ParseInputEvent(ev);
                 return Step.Next;
             }
+            case "look":   // a fixed frame for screenshots: no dragging blind
+                if (camera() is { } l)
+                {
+                    l.Yaw = Mathf.DegToRad(N(w, 1));
+                    l.Pitch = Mathf.DegToRad(N(w, 2));
+                    if (w.Length > 3) l.Distance = N(w, 3);
+                    l.Apply();
+                }
+                return Step.Next;
             case "camera":
                 if (camera() is { } c)
                     GD.Print($"[{tag}] camera: pivot=({F(c.Pivot.X)} {F(c.Pivot.Y)} {F(c.Pivot.Z)}) distance={F(c.Distance)} " +
