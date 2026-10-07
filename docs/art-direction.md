@@ -244,3 +244,29 @@ Re-measured (sd / sep): herons-fountain 17/−53 → 19/−56 at default framing
 - `HEROIC_DEBUG_PHYSICS=1` logs each fitting: kind, material, pin size, host body.
 
 Frames: `docs/art/skins/joint-fittings.png`. Still to do for #102: bands on tanks, spokes and rims on generated wheels, plank seams.
+
+### 12.3 Terrain and haze (2026-10-07, #103; readable over realistic)
+
+- **Haze follows the view.** Depth fog begins at `SkyLook.Fog` camera-distances beyond the orbit's pivot and is full by six times that: 3 on Earth, 2.2 on Mars, nearer in a storm (÷ (1 + τ/4)). `Main._Process` updates it every frame. The old fixed 0.004/m hid the 850 m crater almost entirely (frame stdev 6).
+- **Ground shader** (`TerrainView.GroundMaterial`):
+  - Toon diffuse, no specular.
+  - **Contour lines** at a round interval (1, 2 or 5 × 10ⁿ m, about a dozen over the map's relief), every fifth heavier. Their width is set on screen, and the fine ones fade where they would crowd together.
+  - **Soil colours converted from sRGB.** Vertex colours had been taken as linear, which made every soil pale and grey. That was true of the old terrain too.
+- **Hillshade** baked into the vertex colour: 0.45 to 1.0 from a fixed high light, cartographic rather than the sun's, so slopes read under any light.
+- **Soils** are drawn at 85% of their table saturation, each keeping its hue so the crater's layers stay distinct. Water vertex colours are marked sRGB as well.
+- **Mars light** is floored at 0.75 of Earth's (was 0.45), with ambient 0.45, because the crater went murky.
+- `look YAW PITCH DIST X Y Z` in `tools/gui-check.sh` also sets the pivot.
+
+| World | before sd / sep | after sd / sep |
+|---|---|---|
+| lonely-rover-opening | 6 / −58 (all haze) | 30 / +79 |
+| crater-wind | 6 / −60 | 31 / +77 |
+| talus | 26 / −43 | 57 / −109 |
+| flood-plain | 19 / −35 | 51 / −100 |
+
+Also mars-stirling 23/+48 → 29/+60, mars-sols +73. Crater frame rate in a 1280x800 window is 113 fps steady (123 on the old terrain).
+
+Frames: `docs/art/skins/terrain-before-after.png`, `terrain-crater-cargo.png`. Not done:
+- the opening world's camera pivots on the map's origin, not the cargo (framing, #86);
+- vertex colour steps show as stair-steps on the slide's debris fan at 5 m cells;
+- no dust, ice sheen or wet-sand darkening yet beyond the existing scour and deposit cues.

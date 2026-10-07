@@ -16,7 +16,8 @@ namespace HeroicInventions;
 /// <item>Its strength falls the same way, and in a storm by a further e^(−Δτ·AM) (the sim's own law), while
 /// the sky's diffuse light stays: so in a storm shadows fade out and the scene is lit flat from the sky.</item>
 /// <item>Daylight runs from civil twilight (sun 6° below the horizon) to full at 10° above.</item>
-/// <item>The haze is the horizon's colour and thickens with dust.</item>
+/// <item>The haze is the horizon's colour, starts a few times the camera's distance out (<see cref="Fog"/>), and
+/// comes nearer with dust.</item>
 /// <item>The sun's disc is 0.53° across at Earth's distance and shrinks as the light weakens with distance
 /// (angular size ∝ √ of the solar constant): 0.35° on Mars.</item>
 /// <item>Mars's sky is butterscotch by day, and blue only round a low sun (dust scatters blue forward):
@@ -74,7 +75,8 @@ public readonly record struct SkyLook(
 
         // Mars's sun is weaker by the ratio of solar constants (586 W/m² against 1,361), floored so Mars reads
         // dim, not murky (art direction section 6)
-        float planetScale = earth ? 1 : Mathf.Clamp((float)(0.4 + 0.6 * planet.SolarConstant / Sim.Thermo.Sun.EarthSolarConstant), 0.45f, 1.2f);
+        // floored at 0.75 (readable over realistic, owner 2026-10-07): at the physical 0.45 the crater went murky
+        float planetScale = earth ? 1 : Mathf.Clamp((float)(0.4 + 0.6 * planet.SolarConstant / Sim.Thermo.Sun.EarthSolarConstant), 0.75f, 1.2f);
         float beam = t.Y * Mathf.Exp(-dust * am);
         float energy = planetScale * sunUp * Mathf.Max(beam, 0) * (1 - 0.2f * cold);
 
@@ -99,8 +101,10 @@ public readonly record struct SkyLook(
         // a faint cool fill keeps machines silhouetted rather than gone (art direction section 6).
         float night = 1 - day;
 
-        // haze: Mars's air carries dust even when clear; a storm closes the view to tens of metres
-        float fog = (earth ? 0.0025f : 0.004f) + 0.003f * Mathf.Min(dust, 12);
+        // Haze is measured against the view, not in metres (readable first): it starts some multiple of the camera's
+        // distance beyond the thing it looks at, so a bench machine and an 800 m crater are both clear and both fade
+        // behind. Mars's dusty air brings it nearer; a storm nearer still, though never over the subject itself.
+        float fog = (earth ? 3f : 2.2f) / (1 + Mathf.Min(dust, 12) / 4);
 
         float sunSize = 0.53f * Mathf.Sqrt((float)(planet.SolarConstant / Sim.Thermo.Sun.EarthSolarConstant));
 
@@ -108,7 +112,7 @@ public readonly record struct SkyLook(
         float halo = earth ? 0 : sunUp * (1 - Mathf.Clamp((el - 2) / 18, 0, 1)) * (1 - murk);
 
         return new SkyLook(zenith, horizon, groundHorizon, GroundFor(planet, partsValue), light, energy,
-                           AmbientEnergy: 0.3f, NightAmbient: new Color(0.16f, 0.2f, 0.3f), NightShare: night,
+                           AmbientEnergy: earth ? 0.3f : 0.45f, NightAmbient: new Color(0.16f, 0.2f, 0.3f), NightShare: night,
                            Fog: fog, SunSizeDeg: sunSize, Halo: MarsHalo, HaloEnergy: halo * 1.2f);
     }
 

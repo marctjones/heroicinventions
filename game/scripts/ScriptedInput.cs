@@ -20,7 +20,8 @@ namespace HeroicInventions;
 ///   hold NAME SECONDS   keep a key down, then print how long it really was (shift+up works)
 ///   press NAME · release NAME   hold a key down across the steps between
 ///   camera              print where the camera is
-///   look YAW PITCH [DISTANCE]   aim the camera: degrees round and up (pitch is camera height), metres out
+///   look YAW PITCH [DISTANCE [X Y Z]]   aim the camera: degrees round and up (pitch is camera height), metres
+///                       out, and optionally the point it looks at
 ///   shot PATH           save what the window shows as a PNG
 ///   quit                end the run
 ///
@@ -113,6 +114,7 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
                     l.Yaw = Mathf.DegToRad(N(w, 1));
                     l.Pitch = Mathf.DegToRad(N(w, 2));
                     if (w.Length > 3) l.Distance = N(w, 3);
+                    if (w.Length > 6) l.Pivot = new Vector3(N(w, 4), N(w, 5), N(w, 6));
                     l.Apply();
                 }
                 return Step.Next;
