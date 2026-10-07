@@ -41,22 +41,12 @@ public partial class MachineView
     }
 
     /// <summary>The colour and strength of a surface glowing at <paramref name="celsius"/>: nothing below 500 °C.</summary>
-    private static (Color Color, float Energy) Incandescence(double celsius)
-    {
-        float t = Mathf.Clamp(((float)celsius - 500) / 1000, 0, 1);
-        var color = new Color(0.8f, 0.1f, 0.02f).Lerp(new Color(1f, 0.55f, 0.15f), Mathf.Min(1, t * 2)).Lerp(new Color(1f, 0.95f, 0.8f), Mathf.Max(0, t * 2 - 1));
-        return (color, t * t * 4);
-    }
-
     private void DrawCrucibles()
     {
         foreach (var (pot, sandMat, glass, glassMat, radius) in _crucibleViews)
         {
-            var (glow, energy) = Incandescence(pot.Temperature);
-            sandMat.Emission = glow;
-            sandMat.EmissionEnergyMultiplier = energy;
-            glassMat.Emission = glow;
-            glassMat.EmissionEnergyMultiplier = energy;
+            Skins.Glow(sandMat, pot.Temperature);
+            Skins.Glow(glassMat, pot.Temperature);
             double share = pot.Charge > 0 ? pot.Melted / pot.Charge : 0;
             glass.Visible = share > 0;
             float r = radius * Mathf.Sqrt((float)share);                 // the melt spreads from the middle out

@@ -23,6 +23,15 @@ public sealed record MaterialDef(
     double Friction,
     double Restitution)
 {
+    /// <summary>How it looks: an sRGB hex colour such as "#CC8F4A", or null for the game's fallback.</summary>
+    public string? Color { get; init; }
+
+    /// <summary>
+    /// The surface the game draws on it (grain, cast, wrought, veined, …), or null to take the one
+    /// its category implies — so a material added without a look still gets a fitting one.
+    /// </summary>
+    public string? Finish { get; init; }
+
     /// <summary>Mass in kg of a solid of this material with the given volume in m³.</summary>
     public double MassOf(double volumeM3) => Density * volumeM3;
 

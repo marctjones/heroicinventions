@@ -1152,7 +1152,7 @@ public partial class Main : Node3D
         var sky = new Sky { SkyMaterial = _skyMaterial };
         AddChild(new WorldEnvironment
         {
-            Environment = new Godot.Environment
+            Environment = _environment = new Godot.Environment
             {
                 BackgroundMode = Godot.Environment.BGMode.Sky,
                 Sky = sky,
@@ -1164,6 +1164,22 @@ public partial class Main : Node3D
                 SsaoEnabled = true,
                 SsaoRadius = 0.5f,
                 SsaoIntensity = 2.5f,
+                // Filmic tonemap (art direction, owner decision 3): sunlit ground and marble roll off
+                // gently instead of clipping to flat white, so they keep their shading.
+                TonemapMode = Godot.Environment.ToneMapper.Filmic,
+                TonemapWhite = 6,
+                // the shadow side of a part about half its lit value: never black, never flat
+                AmbientLightSource = Godot.Environment.AmbientSource.Sky,
+                AmbientLightSkyContribution = 1,
+                AmbientLightEnergy = 0.6f,
+                ReflectedLightSource = Godot.Environment.ReflectionSource.Sky,
+                // Haze toward the horizon: the 2 km floor fades out instead of ending at a seam, and a far
+                // machine sits back behind a near one. Thin enough that a bench-sized scene shows none.
+                FogEnabled = true,
+                FogMode = Godot.Environment.FogModeEnum.Exponential,
+                FogDensity = 0.0025f,
+                FogSkyAffect = 0,
+                FogAerialPerspective = 0.3f,
             },
         });
 
@@ -1178,7 +1194,7 @@ public partial class Main : Node3D
         // between ticks even without its swept test.
         var floor = _floor = new StaticBody3D { Position = new Vector3(0, -1f, 0) };
         floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(2000, 2f, 2000) } });
-        _floorMaterial = Shapes.Mat(Shapes.Stone);
+        _floorMaterial = Shapes.Mat(Shapes.StudioFloor, roughness: 0.85f, outline: false);
         floor.AddChild(Shapes.Box(new Vector3(2000, 2f, 2000), _floorMaterial));
         AddChild(floor);
 
@@ -1189,6 +1205,7 @@ public partial class Main : Node3D
     }
 
     private DirectionalLight3D _sun = null!;
+    private Godot.Environment _environment = null!;
     private ProceduralSkyMaterial _skyMaterial = null!;
     private StandardMaterial3D _floorMaterial = null!;
     private StaticBody3D? _floor;   // sunk beneath a world's map (Main.Ground.cs)
@@ -1265,8 +1282,9 @@ public partial class Main : Node3D
         _sun.Visible = energy > 0.001f;
         _skyMaterial.SkyTopColor = top;
         _skyMaterial.SkyHorizonColor = horizon;
+        _environment.FogLightColor = horizon;   // the haze is the horizon's colour, on Mars and at dusk too
         float frost = Mathf.Clamp(-(float)ambient / 5, 0, 1);         // none above 0 °C, white by −5 °C
-        var ground = earth ? Shapes.Stone : new Color((float)planet.GroundColor.X, (float)planet.GroundColor.Y, (float)planet.GroundColor.Z);
+        var ground = earth ? Shapes.StudioFloor : new Color((float)planet.GroundColor.X, (float)planet.GroundColor.Y, (float)planet.GroundColor.Z);
         // Mars's frost is thin CO2 and water rime: a pale dusting, not an Earth snowfield
         _floorMaterial.AlbedoColor = ground.Lerp(new Color(0.93f, 0.95f, 0.98f), earth ? frost : frost * 0.25f);
         _floorMaterial.Roughness = 0.8f - 0.25f * frost;
