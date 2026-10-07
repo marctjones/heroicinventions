@@ -53,7 +53,7 @@ public partial class Main : Node3D
         ["aeolipile"] = new(new Vector3(0, 0.55f, 0.85f), new Vector3(0, 0.32f, 0), 42),
         ["shaduf"] = new(new Vector3(1.0f, 3.2f, 7.5f), new Vector3(1.0f, 1.8f, 0), 50),
         ["baghdad-battery"] = new(new Vector3(0.25f, 1.0f, 2.5f), new Vector3(0.25f, 0.06f, 0.1f), 45),
-        ["herons-fountain"] = new(new Vector3(0, 1.3f, 2.2f), new Vector3(0, 0.6f, 0), 45),
+        ["herons-fountain"] = new(new Vector3(0.3f, 1.5f, 3.4f), new Vector3(0.1f, 0.9f, 0), 45),
         ["material-samples"] = new(new Vector3(0, 0.7f, 1.6f), new Vector3(0, 0.3f, 0.3f), 45),
         ["branca-steam-wheel"] = new(new Vector3(0.35f, 0.95f, 1.35f), new Vector3(0.15f, 0.5f, 0), 45),
         ["kitchen-smoke-jack"] = new(new Vector3(0.9f, 1.75f, 1.3f), new Vector3(0, 1.2f, 0), 50),
@@ -91,7 +91,8 @@ public partial class Main : Node3D
         ["bearing-friction"] = new(new Vector3(0.1f, 1.1f, 4.0f), new Vector3(0.1f, 0.85f, 0), 45),
         ["axle-friction"] = new(new Vector3(6.5f, 3.2f, 17f), new Vector3(6.5f, 1.2f, 0), 55),
         ["heading-rig"] = new(new Vector3(-1f, 3.5f, 9f), new Vector3(-1f, 0.5f, 0), 60),
-        ["water-wheels"] = new(new Vector3(4.5f, 5f, 17f), new Vector3(5.5f, 1.3f, 0), 55),
+        ["field-windmill"] = new(new Vector3(-1.0f, 17.0f, 32.0f), new Vector3(-1.0f, 9.0f, -1.9f), 50),
+        ["water-wheels"] = new(new Vector3(7.0f, 4.8f, 15.5f), new Vector3(7.0f, 1.4f, 0), 55),
         ["fire-and-water"] = new(new Vector3(0.9f, 2.4f, 6.0f), new Vector3(0.9f, 0.4f, 0), 50),
         ["sluice-demo"] = new(new Vector3(4.5f, 3.2f, 9.5f), new Vector3(4.2f, 0.8f, -0.5f), 55),
         ["dam-break"] = new(new Vector3(18f, 7f, 15f), new Vector3(22f, 1f, 0), 55),
@@ -904,6 +905,7 @@ public partial class Main : Node3D
         _byName[name] = view;
 
         ApplyCamera(Profiles.GetValueOrDefault(name, MenuCamera with { Eye = new Vector3(0, 1, 2) }));
+        CheckFraming(name, view);
         SetRunning(true);
         // A real aeolipile doesn't spin until its water boils (~30s of
         // simulated time for 0.3kg at 3kW) — accurate, but a bad first
