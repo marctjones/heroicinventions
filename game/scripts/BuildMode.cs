@@ -25,7 +25,8 @@ namespace HeroicInventions;
 ///
 /// Controls follow common 3D editors:
 ///   camera   right-drag orbit · middle-drag or Shift+right-drag pan ·
-///            scroll zoom · F frame the selection (or everything)
+///            scroll or pinch zoom · arrows or W A S D move · Shift+arrows
+///            orbit · + − zoom · F frame the selection · Home everything
 ///   select   click a part (hover shows what a click would pick) ·
 ///            click empty ground or Esc to deselect
 ///   place    pick a palette entry; a translucent ghost follows the mouse
@@ -68,10 +69,9 @@ public partial class BuildMode : Node3D
     private (string Part, string Port, Vector3 At)? _connectFrom;
     private MeshInstance3D? _connectLine;
 
-    // camera: spherical coordinates around a pivot
+    // camera: spherical coordinates around a pivot (OrbitCamera.cs, shared with run view)
     private Camera3D _camera = null!;
-    private Vector3 _pivot = new(0, 0.4f, 0);
-    private float _distance = 2.5f, _yaw = 0.5f, _pitch = 0.55f;
+    private OrbitCamera _orbit = null!;
     private bool _orbiting, _panning;
 
     // selection and tools
@@ -206,7 +206,8 @@ public partial class BuildMode : Node3D
         _camera = new Camera3D { Fov = 50 };
         AddChild(_camera);
         _camera.MakeCurrent();
-        UpdateCamera();
+        _orbit = new OrbitCamera(_camera, 0.3f, 80f, -0.1f, 1.5f) { Wasd = true };
+        StartingView();
 
         string autoLoad = OS.GetEnvironment("HEROIC_EDITOR_LOAD");
         if (!string.IsNullOrEmpty(autoLoad))
@@ -230,116 +231,80 @@ public partial class BuildMode : Node3D
         if (Live) FrameAll();
 
         string script = OS.GetEnvironment("HEROIC_EDITOR_INPUT");
-        if (!string.IsNullOrEmpty(script)) _inputScript = new Queue<string>(script.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+        if (!string.IsNullOrEmpty(script)) _inputScript = new ScriptedInput("BuildMode", script, this, () => _orbit, EditorStep);
     }
 
     // ------------------------------------------------------- scripted input
 
     /// <summary>
     /// HEROIC_EDITOR_INPUT="palette tank; move 700 450; down 700 450; up 700 450; key delete; wait 5; ..."
-    /// feeds mouse and key events through Godot's own input pipeline
-    /// (Input.ParseInputEvent), the same path real clicks take, one step
-    /// every few frames, so a headless or recorded run exercises the editor's
-    /// actual handling. Positions are viewport pixels. "palette NAME" picks
-    /// a palette entry as a click in the list would; "drag X1 Y1 X2 Y2"
-    /// presses, moves in steps and releases; "rdrag" and "mdrag" orbit and
-    /// pan; "key NAME" accepts delete, escape, f, g, ctrl+z, ctrl+d.
+    /// runs a <see cref="ScriptedInput"/> script (mouse, keys, holds, camera,
+    /// shots) with the editor's own steps added: "palette NAME" picks a palette
+    /// entry as a click in the list would; "click-part ID" and "click-port
+    /// PART.PORT" click whatever is on screen there; "link KIND" starts a join;
+    /// "cmd ..." runs a console command; "save PATH" saves the design; "log"
+    /// prints the parts; "focus console" / "focus none" give or take the
+    /// keyboard from the console.
     /// </summary>
-    private Queue<string>? _inputScript;
-    private int _inputWait;
+    private ScriptedInput? _inputScript;
+
+    public override void _Input(InputEvent @event) => OrbitCamera.ClaimNavigationKeys(@event, GetViewport());
 
     public override void _Process(double delta)
     {
-        if (_inputScript is null) return;
-        if (_inputWait-- > 0) return;
-        _inputWait = 3;
-        while (_inputScript.TryDequeue(out var step))
-        {
-            GD.Print($"[BuildMode] input: {step}");
-            var w = step.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            float N(int i) => float.Parse(w[i], System.Globalization.CultureInfo.InvariantCulture);
-            switch (w[0])
-            {
-                case "palette":
-                    for (int i = 0; i < _paletteList.ItemCount; i++)
-                        if (_paletteList.GetItemMetadata(i).AsString() == w[1]) _paletteList.Select(i);
-                    StartPlacing(w[1]);
-                    return;
-                case "move": Mouse(new Vector2(N(1), N(2))); return;
-                case "down": Mouse(new Vector2(N(1), N(2)), MouseButton.Left, true); return;
-                case "up": Mouse(new Vector2(N(1), N(2)), MouseButton.Left, false); return;
-                case "shiftdown": Mouse(new Vector2(N(1), N(2)), MouseButton.Left, true, shift: true); return;
-                case "drag" or "rdrag" or "mdrag":
-                {
-                    var button = w[0] == "drag" ? MouseButton.Left : w[0] == "rdrag" ? MouseButton.Right : MouseButton.Middle;
-                    var a = new Vector2(N(1), N(2)); var b = new Vector2(N(3), N(4));
-                    Mouse(a, button, true);
-                    for (int k = 1; k <= 10; k++) Mouse(a.Lerp(b, k / 10f));
-                    Mouse(b, button, false);
-                    return;
-                }
-                case "key":
-                {
-                    var ev = new InputEventKey { Pressed = true };
-                    foreach (var part in w[1].Split('+'))
-                        switch (part)
-                        {
-                            case "ctrl": ev.CtrlPressed = true; break;
-                            case "shift": ev.ShiftPressed = true; break;
-                            default: ev.Keycode = OS.FindKeycodeFromString(part); break;
-                        }
-                    Input.ParseInputEvent(ev);
-                    return;
-                }
-                case "wait": _inputWait = (int)N(1); return;
-                case "cmd": RunCommand(string.Join(' ', w.Skip(1))); return;
-                case "save": _session.SaveFile(w[1]); GD.Print($"[BuildMode] saved {w[1]}"); return;
-                case "click-port":
-                {
-                    // click a named connection point wherever it is on screen: "click-port pot_2.steam"
-                    var parts = w[1].Split('.');
-                    var port = _ports.FirstOrDefault(p => p.Part == parts[0] && p.Port == parts[1]);
-                    if (port.Node is null) { GD.Print($"[BuildMode] no port {w[1]}"); return; }
-                    // injected events are in window pixels; the camera projects to the
-                    // 3D viewport's, which the window's content scale stretches
-                    var at = GetViewport().GetScreenTransform() * _camera.UnprojectPosition(port.At);
-                    Mouse(at);
-                    Mouse(at, MouseButton.Left, true);
-                    Mouse(at, MouseButton.Left, false);
-                    return;
-                }
-                case "link":
-                    StartLink(Enum.Parse<LinkGestures.Kind>(w[1], ignoreCase: true));
-                    return;
-                case "click-part":
-                {
-                    // click a part wherever it is on screen: "click-part gear-1"
-                    if (BoundsOf(NodesOf(w[1])) is not { } box) { GD.Print($"[BuildMode] no part {w[1]}"); return; }
-                    var at = GetViewport().GetScreenTransform() * _camera.UnprojectPosition(box.GetCenter());
-                    Mouse(at);
-                    Mouse(at, MouseButton.Left, true);
-                    Mouse(at, MouseButton.Left, false);
-                    return;
-                }
-                case "log":
-                    GD.Print($"[BuildMode] state: selected={_selectedId ?? "none"} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})"))}");
-                    continue;
-            }
-        }
-        _inputScript = null;
+        _orbit.ProcessKeys(delta, GetViewport());
+        _inputScript?.Process(delta);
     }
 
-    private Vector2 _lastMouse;
-
-    private void Mouse(Vector2 at, MouseButton button = MouseButton.None, bool pressed = false, bool shift = false)
+    private ScriptedInput.Step? EditorStep(string[] w)
     {
-        if (at != _lastMouse)
+        switch (w[0])
         {
-            Input.ParseInputEvent(new InputEventMouseMotion { Position = at, GlobalPosition = at, Relative = at - _lastMouse, ShiftPressed = shift });
-            _lastMouse = at;
+            case "palette":
+                for (int i = 0; i < _paletteList.ItemCount; i++)
+                    if (_paletteList.GetItemMetadata(i).AsString() == w[1]) _paletteList.Select(i);
+                StartPlacing(w[1]);
+                return ScriptedInput.Step.Next;
+            case "cmd": RunCommand(string.Join(' ', w.Skip(1))); return ScriptedInput.Step.Next;
+            case "save": _session.SaveFile(w[1]); GD.Print($"[BuildMode] saved {w[1]}"); return ScriptedInput.Step.Next;
+            case "click-port":
+            {
+                // click a named connection point wherever it is on screen: "click-port pot_2.steam"
+                var parts = w[1].Split('.');
+                var port = _ports.FirstOrDefault(p => p.Part == parts[0] && p.Port == parts[1]);
+                if (port.Node is null) { GD.Print($"[BuildMode] no port {w[1]}"); return ScriptedInput.Step.Next; }
+                ClickAt(port.At);
+                return ScriptedInput.Step.Next;
+            }
+            case "link":
+                StartLink(Enum.Parse<LinkGestures.Kind>(w[1], ignoreCase: true));
+                return ScriptedInput.Step.Next;
+            case "click-part":
+            {
+                // click a part wherever it is on screen: "click-part gear-1"
+                if (BoundsOf(NodesOf(w[1])) is not { } box) { GD.Print($"[BuildMode] no part {w[1]}"); return ScriptedInput.Step.Next; }
+                ClickAt(box.GetCenter());
+                return ScriptedInput.Step.Next;
+            }
+            case "log":
+                GD.Print($"[BuildMode] state: selected={_selectedId ?? "none"} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})"))}");
+                return ScriptedInput.Step.Continue;
+            case "focus":
+                if (w[1] == "console") _consoleInput.GrabFocus(); else GetViewport().GuiReleaseFocus();
+                return ScriptedInput.Step.Continue;
         }
-        if (button != MouseButton.None)
-            Input.ParseInputEvent(new InputEventMouseButton { Position = at, GlobalPosition = at, ButtonIndex = button, Pressed = pressed, ShiftPressed = shift });
+        return null;
+    }
+
+    /// <summary>A scripted click on whatever is drawn at <paramref name="world"/>.</summary>
+    private void ClickAt(Vector3 world)
+    {
+        // injected events are in window pixels; the camera projects to the
+        // 3D viewport's, which the window's content scale stretches
+        var at = GetViewport().GetScreenTransform() * _camera.UnprojectPosition(world);
+        _inputScript!.Mouse(at);
+        _inputScript.Mouse(at, MouseButton.Left, true);
+        _inputScript.Mouse(at, MouseButton.Left, false);
     }
 
     // ------------------------------------------------------------------ UI
@@ -472,7 +437,7 @@ public partial class BuildMode : Node3D
         // bottom: help and status
         var help = new Label
         {
-            Text = "Right-drag orbit · middle-drag or Shift+right-drag pan · scroll zoom · F frame · "
+            Text = "Right-drag orbit · middle-drag or Shift+right-drag pan · scroll or pinch zoom · arrows/WASD move · Shift+arrows orbit · +/− zoom · F frame · Home all · "
                  + "click select · drag move (Ctrl: up/down) · T turn 15° (Shift: back) · Del delete · Ctrl+D duplicate · Ctrl+Z undo · G grid · Esc cancel",
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -960,16 +925,6 @@ public partial class BuildMode : Node3D
 
     // -------------------------------------------------------------- camera
 
-    private void UpdateCamera()
-    {
-        var offset = new Vector3(
-            _distance * Mathf.Cos(_pitch) * Mathf.Sin(_yaw),
-            _distance * Mathf.Sin(_pitch),
-            _distance * Mathf.Cos(_pitch) * Mathf.Cos(_yaw));
-        _camera.Position = _pivot + offset;
-        _camera.LookAt(_pivot, Vector3.Up);
-    }
-
     /// <summary>F: point the camera at the selection, or at the whole machine.</summary>
     private void Frame(IEnumerable<string> ids)
     {
@@ -977,12 +932,19 @@ public partial class BuildMode : Node3D
         foreach (var id in ids)
             if (BoundsOf(NodesOf(id)) is { } b) box = box is { } a ? a.Merge(b) : b;
         if (box is not { } bb) return;
-        _pivot = bb.GetCenter();
-        _distance = Mathf.Clamp(bb.Size.Length() * 1.4f + 0.5f, 1f, 60f);
-        UpdateCamera();
+        _orbit.Pivot = bb.GetCenter();
+        _orbit.Distance = Mathf.Clamp(bb.Size.Length() * 1.4f + 0.5f, 1f, 60f);
+        _orbit.Apply();
     }
 
     private void FrameAll() => Frame(_session.Document.Parts.Keys);
+
+    /// <summary>Where the camera starts: a workbench's view of the middle of the grid.</summary>
+    private void StartingView()
+    {
+        (_orbit.Pivot, _orbit.Distance, _orbit.Yaw, _orbit.Pitch) = (new Vector3(0, 0.4f, 0), 2.5f, 0.5f, 0.55f);
+        _orbit.Apply();
+    }
 
     // --------------------------------------------------------------- input
 
@@ -990,10 +952,8 @@ public partial class BuildMode : Node3D
     {
         switch (@event)
         {
-            case InputEventMouseButton { ButtonIndex: MouseButton.WheelUp, Pressed: true }:
-                _distance = Mathf.Max(0.3f, _distance * 0.9f); UpdateCamera(); break;
-            case InputEventMouseButton { ButtonIndex: MouseButton.WheelDown, Pressed: true }:
-                _distance = Mathf.Min(80f, _distance / 0.9f); UpdateCamera(); break;
+            case InputEventMouseButton { ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } or InputEventMagnifyGesture or InputEventPanGesture:
+                _orbit.HandleGesture(@event); break;   // wheel, pinch and trackpad scrolling
             case InputEventMouseButton { ButtonIndex: MouseButton.Right } rb:
                 if (rb.Pressed && _placingPaletteId is not null) { CancelPlacing(); break; }
                 _orbiting = rb.Pressed && !rb.ShiftPressed;
@@ -1021,18 +981,12 @@ public partial class BuildMode : Node3D
     {
         if (_orbiting)
         {
-            _yaw -= mm.Relative.X * 0.008f;
-            _pitch = Mathf.Clamp(_pitch + mm.Relative.Y * 0.008f, -0.1f, 1.5f);
-            UpdateCamera();
+            _orbit.Orbit(mm.Relative);
             return;
         }
         if (_panning)
         {
-            float scale = _distance * 0.0015f;
-            var right = _camera.GlobalBasis.X;
-            var forward = new Vector3(_camera.GlobalBasis.Z.X, 0, _camera.GlobalBasis.Z.Z).Normalized();
-            _pivot += (-right * mm.Relative.X + forward * -mm.Relative.Y) * scale;
-            UpdateCamera();
+            _orbit.Pan(mm.Relative);
             return;
         }
         if (_placingPaletteId is not null) { MoveGhost(mm.Position); return; }
@@ -1085,6 +1039,9 @@ public partial class BuildMode : Node3D
                 RunCommand("(redo)"); break;
             case Key.F:
                 if (_selectedId is { } s) Frame([s]); else FrameAll();
+                break;
+            case Key.Home:
+                if (_session.Document.Parts.Count > 0) FrameAll(); else StartingView();
                 break;
             case Key.G:
                 _gridSnap = !_gridSnap;
@@ -1260,7 +1217,7 @@ public partial class BuildMode : Node3D
         Vector3 target;
         if (vertical)
         {
-            float dy = -relative.Y * _distance * 0.0015f;
+            float dy = -relative.Y * _orbit.Distance * OrbitCamera.PanPerPixel;
             target = current with { Y = Mathf.Max(0, current.Y + dy) };
         }
         else

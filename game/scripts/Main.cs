@@ -364,6 +364,9 @@ public partial class Main : Node3D
 
     public override void _Ready()
     {
+        // HEROIC_BACKGROUND=1 (tools/gui-check.sh): a window that never takes
+        // the keyboard, for scripted runs while someone works in other apps
+        if (OS.GetEnvironment("HEROIC_BACKGROUND") == "1") GetWindow().Unfocusable = true;
         // One gravity for both layers: Godot's default is 9.8, the sim core's 9.81.
         PhysicsServer3D.AreaSetParam(GetWorld3D().Space, PhysicsServer3D.AreaParameter.Gravity, (float)HeroicInventions.Sim.Physics.Gravity);
         _materials = MaterialLibrary.LoadDefault();
@@ -387,6 +390,12 @@ public partial class Main : Node3D
         if (OS.GetEnvironment("HEROIC_EDITOR") == "1") SelectBuildMode();
         if (double.TryParse(OS.GetEnvironment("HEROIC_EDITOR_QUIT_AFTER_SECONDS"), System.Globalization.CultureInfo.InvariantCulture, out double editorQuit))
             _editorQuitAfterSeconds = editorQuit;
+
+        // HEROIC_INPUT="wait 30; hold right 1; camera; shot /tmp/a.png; quit": scripted
+        // mouse and keys for run view (ScriptedInput.cs), plus "select NAME",
+        // "run" and "pause"; build mode has its own (HEROIC_EDITOR_INPUT)
+        string inputScript = OS.GetEnvironment("HEROIC_INPUT");
+        if (!string.IsNullOrEmpty(inputScript)) _inputScript = new ScriptedInput("Main", inputScript, this, () => _orbit, RunViewStep);
 
         if (double.TryParse(OS.GetEnvironment("HEROIC_SPEED"), System.Globalization.CultureInfo.InvariantCulture, out double speed))
             SetSpeed(speed);
@@ -625,7 +634,9 @@ public partial class Main : Node3D
         _hudControls = new Label
         {
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            Text = "Space pause/run · F fire · R restart · D details · H hide this panel · Esc menu · 1-9 pick a machine\nDrag to orbit · scroll to zoom",
+            Text = "Space pause/run · F fire · R restart · D details · H hide this panel · Esc menu · 1-9 pick a machine\n"
+                 + "Drag to orbit · Shift+drag or middle-drag to pan · scroll or pinch to zoom\n"
+                 + "Arrows move · Shift+arrows orbit · + / − or Page Up/Down zoom · Home resets the view",
         };
         _hudControls.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.6f));
         _hudControls.AddThemeFontSizeOverride("font_size", 13);
@@ -822,9 +833,9 @@ public partial class Main : Node3D
         _current = best;
         _currentName = _viewMachine[best];
         var b = _viewBounds[best];
-        _orbitPivot = b.GetCenter();
-        _orbitDistance = Mathf.Clamp(b.Size.Length() * 1.3f + 1f, 2f, 60f);
-        UpdateOrbitCamera();
+        _orbit.Pivot = b.GetCenter();
+        _orbit.Distance = Mathf.Clamp(b.Size.Length() * 1.3f + 1f, 2f, 60f);
+        _orbit.Apply();
         UpdateInfoPanel();
     }
 
@@ -1091,40 +1102,29 @@ public partial class Main : Node3D
 
     private static float ParseSpeed(string label) => float.Parse(label.TrimEnd('×'), System.Globalization.CultureInfo.InvariantCulture);
 
-    // Orbit state, in spherical coordinates around the current profile's
-    // LookAt point — drag to orbit, scroll to zoom. Reset to the profile's
-    // own framing every time a machine is (re)selected.
-    private Vector3 _orbitPivot;
-    private float _orbitDistance, _orbitYaw, _orbitPitch, _orbitFov;
-    private bool _dragging;
+    // The camera orbits the current profile's LookAt point (OrbitCamera.cs:
+    // drag to orbit, middle- or Shift-drag to pan, scroll to zoom, arrows to
+    // move). Reset to the profile's own framing every time a machine is
+    // (re)selected, and by Home or View > Reset Camera.
+    private OrbitCamera _orbit = null!;
+    private bool _dragging, _panning;
+    private CameraProfile _homeProfile = MenuCamera;
 
     private void ApplyCamera(CameraProfile profile)
     {
-        _orbitPivot = _homePivot = profile.LookAt;
-        _orbitFov = profile.FovDegrees;
-        var offset = profile.Eye - profile.LookAt;
-        _orbitDistance = _homeDistance = offset.Length();
-        _orbitYaw = Mathf.Atan2(offset.X, offset.Z);
-        _orbitPitch = Mathf.Asin(Mathf.Clamp(offset.Y / Mathf.Max(_orbitDistance, 0.001f), -1, 1));
+        _homeProfile = profile;
+        _homePivot = profile.LookAt;
+        _homeDistance = (profile.Eye - profile.LookAt).Length();
+        _camera.Fov = profile.FovDegrees;
+        _orbit.LookFrom(profile.Eye, profile.LookAt);
         // HEROIC_ORBIT="yaw pitch" (degrees) swings the camera round from the
         // machine's usual view — for checking a machine from another side.
         if (OS.GetEnvironment("HEROIC_ORBIT").Split(' ', StringSplitOptions.RemoveEmptyEntries) is [var yaw, var pitch])
         {
-            _orbitYaw += Mathf.DegToRad(float.Parse(yaw, System.Globalization.CultureInfo.InvariantCulture));
-            _orbitPitch = Mathf.Clamp(_orbitPitch + Mathf.DegToRad(float.Parse(pitch, System.Globalization.CultureInfo.InvariantCulture)), MinPitch, MaxPitch);
+            _orbit.Yaw += Mathf.DegToRad(float.Parse(yaw, System.Globalization.CultureInfo.InvariantCulture));
+            _orbit.Pitch = Mathf.Clamp(_orbit.Pitch + Mathf.DegToRad(float.Parse(pitch, System.Globalization.CultureInfo.InvariantCulture)), MinPitch, MaxPitch);
+            _orbit.Apply();
         }
-        UpdateOrbitCamera();
-    }
-
-    private void UpdateOrbitCamera()
-    {
-        var offset = new Vector3(
-            _orbitDistance * Mathf.Cos(_orbitPitch) * Mathf.Sin(_orbitYaw),
-            _orbitDistance * Mathf.Sin(_orbitPitch),
-            _orbitDistance * Mathf.Cos(_orbitPitch) * Mathf.Cos(_orbitYaw));
-        _camera.Position = _orbitPivot + offset;
-        _camera.LookAt(_orbitPivot, Vector3.Up);
-        _camera.Fov = _orbitFov;
     }
 
     // --------------------------------------------------------------- scene
@@ -1169,6 +1169,8 @@ public partial class Main : Node3D
 
         _camera = new Camera3D();
         AddChild(_camera);
+        _orbit = new OrbitCamera(_camera, 0.2f, 200f, MinPitch, MaxPitch);
+        _orbit.MovedByPlayer += () => _follow = null;   // the player has taken the camera: stop chasing the missile
     }
 
     private DirectionalLight3D _sun = null!;
@@ -1257,7 +1259,6 @@ public partial class Main : Node3D
 
     // Radians per pixel dragged, and the pitch range that keeps the camera
     // from flipping over the top or bottom of its orbit.
-    private const float OrbitSensitivity = 0.008f;
     private const float MinPitch = -1.4f, MaxPitch = 1.4f; // ≈ ±80°
 
     public override void _UnhandledInput(InputEvent @event)
@@ -1271,8 +1272,10 @@ public partial class Main : Node3D
 
             // Drag with the left or right mouse button to orbit — right
             // works too since the left often lands on a UI button instead.
+            // Shift+drag or the middle button pans, as in build mode.
             case InputEventMouseButton { ButtonIndex: MouseButton.Left or MouseButton.Right } mb:
                 _dragging = mb.Pressed;
+                _panning = mb.Pressed && mb.ShiftPressed;
                 if (mb.ButtonIndex == MouseButton.Left && mb.Pressed) _pressAt = mb.Position;
                 else if (mb.ButtonIndex == MouseButton.Left && mb.Position.DistanceTo(_pressAt) < 4)
                 {
@@ -1280,18 +1283,15 @@ public partial class Main : Node3D
                     else FocusMachineAt(mb.Position);
                 }
                 break;
-            case InputEventMouseButton { ButtonIndex: MouseButton.WheelUp }:
-                _orbitDistance = Mathf.Max(0.2f, _orbitDistance * 0.9f);
-                UpdateOrbitCamera();
-                break;
-            case InputEventMouseButton { ButtonIndex: MouseButton.WheelDown }:
-                _orbitDistance = Mathf.Min(200f, _orbitDistance / 0.9f);
-                UpdateOrbitCamera();
+            case InputEventMouseButton { ButtonIndex: MouseButton.Middle } mb:
+                _dragging = _panning = mb.Pressed;
                 break;
             case InputEventMouseMotion motion when _dragging:
-                _orbitYaw -= motion.Relative.X * OrbitSensitivity;
-                _orbitPitch = Mathf.Clamp(_orbitPitch - motion.Relative.Y * OrbitSensitivity, MinPitch, MaxPitch);
-                UpdateOrbitCamera();
+                if (_panning) _orbit.Pan(motion.Relative);
+                else _orbit.Orbit(motion.Relative);
+                break;
+            default:
+                _orbit.HandleGesture(@event);   // wheel, pinch and trackpad scrolling
                 break;
         }
     }
@@ -1324,6 +1324,9 @@ public partial class Main : Node3D
             case Key.E when _views.Count > 0:
                 EditFocused();
                 break;
+            case Key.Home:
+                ResetCamera();
+                break;
             case Key.H:
                 _hudHidden = !_hudHidden;
                 _infoPanel.Visible = !_hudHidden;
@@ -1342,8 +1345,28 @@ public partial class Main : Node3D
     private readonly bool _fpsReport = OS.GetEnvironment("HEROIC_FPS_REPORT") == "1";
     private double _fpsTimer;
 
+    public override void _Input(InputEvent @event)
+    {
+        if (_buildMode is null) OrbitCamera.ClaimNavigationKeys(@event, GetViewport());
+    }
+
+    private ScriptedInput? _inputScript;
+
+    private ScriptedInput.Step? RunViewStep(string[] w)
+    {
+        switch (w[0])
+        {
+            case "select": SelectMachine(w[1]); return ScriptedInput.Step.Next;
+            case "run": SetRunning(true); return ScriptedInput.Step.Next;
+            case "pause": SetRunning(false); return ScriptedInput.Step.Next;
+        }
+        return null;
+    }
+
     public override void _Process(double delta)
     {
+        if (_buildMode is null) _orbit.ProcessKeys(delta, GetViewport());
+        _inputScript?.Process(delta);
         if (!_fpsReport || (_fpsTimer += delta) < 2) return;
         _fpsTimer = 0;
         GD.Print($"[fps] {Performance.GetMonitor(Performance.Monitor.TimeFps):F0} fps · frame {Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000:F1} ms process, " +
@@ -1414,9 +1437,9 @@ public partial class Main : Node3D
         if (separation < 1f) return;
         var wantPivot = (_homePivot + target) / 2;
         float wantDistance = Mathf.Max(_homeDistance, separation * 0.6f + 1.5f);
-        _orbitPivot = _orbitPivot.Lerp(wantPivot, 0.06f);
-        _orbitDistance = Mathf.Lerp(_orbitDistance, wantDistance, 0.06f);
-        UpdateOrbitCamera();
+        _orbit.Pivot = _orbit.Pivot.Lerp(wantPivot, 0.06f);
+        _orbit.Distance = Mathf.Lerp(_orbit.Distance, wantDistance, 0.06f);
+        _orbit.Apply();
     }
 
     private void UpdateInfoPanel()

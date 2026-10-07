@@ -75,6 +75,8 @@ Open `game/project.godot` in the Godot .NET editor and press Play. You get a men
 
 **Controls:** click a machine to run it. **Restart** reloads it fresh from its `.machine` file — a true reset, not a rewind. **Run/Pause** and the speed row (0.1×–20×) control simulated time directly: the aeolipile needs real time to boil (~30s at 1×, hence its 5× default), while the gravity-driven demos are easiest to watch at 1×. The **Window size** row and **Fullscreen** toggle resize the game window without leaving it. Keyboard shortcuts mirror the buttons: **Space** pause/run, **F** fire on/off, **R** restart, **D** toggle details, **Esc** back to the menu, **1**–**9** pick a machine by its menu position.
 
+**Camera (the same in run view and build mode):** drag to orbit (right-drag in build mode), **Shift**+drag or middle-drag to pan, scroll or pinch to zoom (two-finger trackpad scrolling zooms too, and pans with **Shift**). From the keyboard: **arrow keys** move over the ground (also **W A S D** in build mode), **Shift**+arrows orbit, **+**/**−** or **Page Up**/**Page Down** zoom, **Home** goes back to the starting view (build mode: frames the whole design). Taking the camera while a trebuchet's stone is in flight stops the camera following it.
+
 **The HUD is deliberately small.** By default it shows a curated energy summary, not a dump of every raw number: total mechanical energy and its kinetic/potential split, a single headline speed, and — depending on the machine — either an **efficiency** figure (heat-driven machines: how much of the delivered heat became motion; the aeolipile's is a genuinely tiny fraction, which is real and part of the point) or an **energy retained** figure (gravity-driven machines: how much of the starting mechanical energy is still in the system, which drops as friction and bearing damping dissipate it). Click **Show details** (or press **D**) for the full per-part numbers — temperatures, pressures, litres, rpm — when you want them.
 
 Set `HEROIC_DEBUG_PHYSICS=1` to print each dynamic body's rotation/height and the energy summary to the console twice a second — useful for checking a new machine's physics without needing to look at the screen.
@@ -100,5 +102,15 @@ racket -e '(require "racket/heroic/live.rkt") (live-connect)
            (live-get (quote aeolipile) (quote kettle) (quote temperature))
            (live-set! (quote aeolipile) (quote kettle) (quote fire) 6000)'
 ```
+
+### Checking the game window without losing your desktop
+
+`tools/gui-check.sh` runs the real game window with a scripted sequence of mouse and key steps (see `game/scripts/ScriptedInput.cs`) and prints its log. It opens the window behind your other apps (`open -g`) and the window never takes the keyboard (`HEROIC_BACKGROUND=1`); the steps go through Godot's own input pipeline, not your mouse and keyboard, so you can keep working while it runs. `shot PATH` saves what the window shows.
+
+```bash
+tools/gui-check.sh HEROIC_AUTOSELECT=pendulum-demo -- "wait 40; pause; hold right 1; camera; shot /tmp/after.png; quit"
+```
+
+Pass `HEROIC_EDITOR=1` to script build mode instead, which adds steps such as `palette tank` and `click-part tank_1`.
 
 When exporting the game, add `*.machine` to the export preset's "Filters to export non-resource files" so the machine files are included.

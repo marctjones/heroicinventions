@@ -188,7 +188,9 @@ public partial class Main
         });
         int side = m.AddCheck("Control Panel", () => _leftPanel.Visible = !_leftPanel.Visible && _buildMode is null);
         m.Popup.AddSeparator();
-        int reset = m.Add("Reset Camera", ResetCamera);
+        // Home resets too (HandleKey), but not as this item's shortcut: a menu
+        // shortcut fires before build mode's own keys, where Home frames the design
+        int reset = m.Add("Reset Camera (Home)", ResetCamera);
         m.Popup.AddSeparator();
 
         var size = NewMenu("Window Size", m.Popup);
@@ -211,12 +213,8 @@ public partial class Main
         };
     }
 
-    /// <summary>Back to the framing the machine (or the menu) first opened with.</summary>
-    private void ResetCamera()
-    {
-        var fallback = MenuCamera with { Eye = new Vector3(0, 1, 2) };
-        ApplyCamera(_currentName is { } name && _views.Count == 0 ? Profiles.GetValueOrDefault(name, fallback) : MachineOnScreen ? fallback : MenuCamera);
-    }
+    /// <summary>Back to the framing the machine, world (or the menu) first opened with.</summary>
+    private void ResetCamera() => ApplyCamera(_homeProfile);
 
     // ----------------------------------------------------------------- Help
 
