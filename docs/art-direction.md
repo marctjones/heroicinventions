@@ -231,3 +231,16 @@ The spread (sd) also depends on how much of the frame the machine fills. Heron's
 - **Mirror faces** are drawn bright: pale polished bronze `#F2CF85` at metallic 0.5. At metallic 0.9 they showed Mars's pale sky and read tan on a tan ground. Their posts are oak through `Surface`, so they get grain and the outline. Dust still dulls them toward brown.
 
 Re-measured (sd / sep): herons-fountain 17/−53 → 19/−56 at default framing, 37/−72 framed close. mars-stirling 20/+40 → 23/+48. Others unchanged (antikythera 69/−123, roman-crane 38/−62, newtons-cradle 43/+54, water-wheels 36/+63). Frames: `docs/art/skins/vessels-mirrors-before-after.png`.
+
+### 12.2 Joint fittings: the combination rule (2026-10-07, #102)
+
+`Skins.FitJoints` runs once after a view is built. Wherever the physics joins two bodies, it draws what a workshop would put there. It reads only the scene tree, so it covers joints in builders it has never seen.
+
+- **Hinges** (`HingeJoint3D`: axles, pivots, pins) get a collar along the hinge axis with a cap at each end. **Ball joints** (`ConeTwistJoint3D`, and `PinJoint3D`s the machine declares by name) get a ball.
+- **Size** comes from the thinner of the two bodies (the smallest extent of its own opaque meshes, not counting other fittings), clamped 6 mm to 120 mm.
+- **Material** is the harder of the two parts' materials if either is a metal (steel on Newton's cradle, bronze on the Antikythera arbors), else iron.
+- **Not fitted:** chain links (their pins are unnamed, one per link), welds (`Generic6DofJoint3D`, made at run time by grips) and slides (pistons draw their own cylinder).
+- The fitting rides on one of the bodies, so it turns and swings with it.
+- `HEROIC_DEBUG_PHYSICS=1` logs each fitting: kind, material, pin size, host body.
+
+Frames: `docs/art/skins/joint-fittings.png`. Still to do for #102: bands on tanks, spokes and rims on generated wheels, plank seams.
