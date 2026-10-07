@@ -321,6 +321,10 @@ public sealed class MachineRuntime
                     _boilers[part.Id] = new Boiler(part.Number("water"), TemperatureOr(part, "temperature"), heatInputW: part.Number("fire", 0))
                     {
                         BurstPressure = part.Number("burst", 0),
+                        Wall = part.Number("wall", 0),
+                        ShellRadius = part.Number("radius"),
+                        ShellStrength = materials[part.Material].TensileStrength * 1e6,
+                        ShellMelting = materials[part.Material].MeltingPoint,
                     };
                     break;
                 case "waterwheel": break; // built once the channels that drive it exist
@@ -1109,8 +1113,8 @@ public sealed class MachineRuntime
         double lift = part.Number("lift"), bore = part.Number("bore");
         if (lift <= 0 || bore <= 0)
             throw new MachineFormatException($"safety valve {part.Id}: lift and bore must be more than 0", part.Location);
-        if (boiler.BurstPressure > 0 && lift >= boiler.BurstPressure)
-            throw new MachineFormatException($"safety valve {part.Id} lifts at {lift} Pa, but {on} bursts at {boiler.BurstPressure} Pa", part.Location);
+        if (boiler.Rating > 0 && lift >= boiler.Rating)
+            throw new MachineFormatException($"safety valve {part.Id} lifts at {lift} Pa, but {on} bursts at {boiler.Rating} Pa", part.Location);
         var valve = new SafetyValve(lift, bore)
         {
             Cd = part.Number("coefficient", SafetyValve.DefaultCoefficient),
@@ -1529,6 +1533,7 @@ public sealed class MachineRuntime
                 if (_ownHeat.ContainsKey(boiler)) _ownHeat[boiler] = boiler.HeatInput;
             };
             _getters[$"{id}.burst"] = () => boiler.Burst ? 1 : 0;
+            _getters[$"{id}.limit"] = () => boiler.BurstLimit / 1000;      // kPa it would burst at now (a shell weakens as it heats)
             _getters[$"{id}.burst-time"] = () => boiler.BurstTime;          // s
             _getters[$"{id}.burst-pressure"] = () => boiler.BurstGauge / 1000; // kPa it gave way at
             _getters[$"{id}.flashed"] = () => boiler.Flashed;              // kg flashed to steam as it burst

@@ -27,7 +27,7 @@ public partial class MachineView
         foreach (var (id, boiler) in Runtime.Boilers)
         {
             // a boiler with a safety valve or a burst rating is a sealed pressure vessel: nothing breathes out of its lid
-            if (busy.Contains(id) || boiler.Valves.Count > 0 || boiler.BurstPressure > 0) continue;
+            if (busy.Contains(id) || boiler.Valves.Count > 0 || boiler.Rating > 0) continue;
             var part = Runtime.Def.Part(id)!;
             float r = (float)part.Number("radius"), h = (float)part.Number("height");
             var wisps = SteamCloud(V(part.At) + new Vector3(0, h + 0.02f, 0), amount: 24, radius: r * 0.6f, lifetime: 2.5f);

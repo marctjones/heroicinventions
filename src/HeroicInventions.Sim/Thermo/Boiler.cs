@@ -12,6 +12,18 @@ namespace HeroicInventions.Sim.Thermo;
 /// gives way, the water over 100 °C flashes to steam at once,
 /// M·c·(T − 100)/L of it, the blast throws out the rest, and the boiler is
 /// open and empty from then on.
+///
+/// The rating is either given (<see cref="BurstPressure"/>) or the shell's
+/// own: a boiler with a wall (<see cref="Wall"/>, m) of a material with
+/// tensile strength σ_t and a radius r bursts, by the thin-wall hoop stress
+/// σ = P·r/t, at P = σ_t·t/r (<see cref="ShellPressure"/>). The shell is at
+/// the water's temperature, and a metal loses strength towards its melting
+/// point T_m (°C): none up to T_m/2, then falling linearly to nothing at T_m
+/// (<see cref="Derating"/>). A lead pot at 138 °C is still below its onset
+/// (164 °C), so it holds what it holds cold; one fired on to 250 °C holds
+/// about a third of that. Linear from half the melting point is a simple,
+/// stated rule, not a fit to any one alloy's curve. Bronze and copper are in
+/// truth already weaker above ~200 °C, which this rule leaves out.
 /// </summary>
 public sealed class Boiler(double waterMassKg, double temperatureC = 20, double heatInputW = 2000) : IHeated
 {
@@ -29,7 +41,24 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
     public double GaugePressure => Math.Max(0, AbsolutePressure - Zone.Pressure);
 
     public List<SafetyValve> Valves { get; } = [];
-    public double BurstPressure { get; init; }                      // gauge Pa it is rated to; 0 never bursts
+    public double BurstPressure { get; init; }                      // gauge Pa it is explicitly rated to; wins over the shell; 0 means "not given"
+    public double Wall { get; init; }                               // m of shell thickness; 0 means no wall given
+    public double ShellRadius { get; init; }                        // m, the hoop radius
+    public double ShellStrength { get; init; }                      // Pa, tensile strength of the shell's material
+    public double? ShellMelting { get; init; }                      // °C, melting point of the shell's metal, or null if it does not soften
+
+    /// <summary>The cold gauge pressure the shell holds: σ_t·t/r (0 with no wall).</summary>
+    public double ShellPressure => Wall > 0 && ShellRadius > 0 ? ShellStrength * Wall / ShellRadius : 0;
+
+    /// <summary>The share of cold strength a shell at <paramref name="celsius"/> keeps: 1 up to half its melting point, then linearly to 0 at it.</summary>
+    public double Derating(double celsius) =>
+        ShellMelting is not { } tm || tm <= 0 ? 1 : Math.Clamp((tm - celsius) / (tm / 2), 0, 1);
+
+    /// <summary>The gauge pressure it is rated to when cold: the explicit rating if given, else the shell's; 0 is unrated and never bursts.</summary>
+    public double Rating => BurstPressure > 0 ? BurstPressure : ShellPressure;
+
+    /// <summary>The gauge pressure it bursts at now: an explicit rating is fixed; a shell's is derated by its temperature.</summary>
+    public double BurstLimit => BurstPressure > 0 ? BurstPressure : ShellPressure * Derating(Temperature);
     public double Time { get; private set; }                        // s this boiler has been stepped
     public bool Burst { get; private set; }
     public double BurstTime { get; private set; }                   // s, when it burst
@@ -62,7 +91,7 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
         WaterMass -= steamOut;
         if (WaterMass > 0)
             Temperature = Math.Max(0, Temperature + netHeat / (WaterMass * Physics.WaterSpecificHeat)); // freezing a boiler isn't modelled: in a frost it stops at 0 °C
-        if (BurstPressure > 0 && GaugePressure >= BurstPressure) BurstNow();
+        if (Rating > 0 && GaugePressure >= BurstLimit) BurstNow();
     }
 
     /// <summary>

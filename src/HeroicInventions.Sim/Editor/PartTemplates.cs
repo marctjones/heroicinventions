@@ -29,7 +29,7 @@ public static class PartTemplates
             null),
         "boiler" => new PartSpec(id, "boiler", material, at,
             // a litre of water, heated by a hearth or a mirror aimed at it (or its own #:fire)
-            Props(("radius", 0.15), ("height", 0.3), ("water", 1.0), ("fire", 0), ("temperature", 20), ("burst", 0)),
+            Props(("radius", 0.15), ("height", 0.3), ("water", 1.0), ("fire", 0), ("temperature", 20), ("burst", 0), ("wall", 0)),
             [new PortSpec("steam", "steam", 0.3)],
             null),
         // a wood fire; #:heats names the pot it sits under

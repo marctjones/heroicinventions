@@ -14,10 +14,17 @@
 (limestone (name "Limestone")    (category stone) (density 2500) (youngs-modulus 40.0)  (tension 5)   (across-grain 5)   (compression 60)  (friction 0.60) (restitution 0.50) (color "#D3C8AE"))
 (marble    (name "Marble")       (category stone) (density 2700) (youngs-modulus 55.0)  (tension 8)   (across-grain 8)   (compression 100) (friction 0.55) (restitution 0.60) (color "#E4E0D6") (finish veined))
 (granite   (name "Granite")      (category stone) (density 2700) (youngs-modulus 60.0)  (tension 10)  (across-grain 10)  (compression 180) (friction 0.60) (restitution 0.60) (color "#7D7672") (finish crystalline))
-(bronze    (name "Bronze")       (category metal) (density 8800) (youngs-modulus 110.0) (tension 350) (across-grain 350) (compression 350) (friction 0.30) (restitution 0.60) (color "#CC8F4A"))
-(iron      (name "Wrought iron") (category metal) (density 7700) (youngs-modulus 190.0) (tension 330) (across-grain 330) (compression 330) (friction 0.40) (restitution 0.55) (color "#4A4A52") (finish wrought))
+(bronze    (name "Bronze")       (category metal) (density 8800) (youngs-modulus 110.0) (tension 350) (across-grain 350) (compression 350) (friction 0.30) (restitution 0.60) (color "#CC8F4A") (melting 950))
+(iron      (name "Wrought iron") (category metal) (density 7700) (youngs-modulus 190.0) (tension 330) (across-grain 330) (compression 330) (friction 0.40) (restitution 0.55) (color "#4A4A52") (finish wrought) (melting 1500))
 (hemp      (name "Hemp rope")    (category fiber) (density 1100) (youngs-modulus 2.0)   (tension 60)  (across-grain 0)   (compression 0)   (friction 0.50) (restitution 0.10) (color "#C7B285"))
-(steel     (name "Hardened steel") (category metal) (density 7850) (youngs-modulus 200.0) (tension 1000) (across-grain 1000) (compression 1000) (friction 0.35) (restitution 0.95) (color "#B8BDC4") (finish polished))
+(steel     (name "Hardened steel") (category metal) (density 7850) (youngs-modulus 200.0) (tension 1000) (across-grain 1000) (compression 1000) (friction 0.35) (restitution 0.95) (color "#B8BDC4") (finish polished) (melting 1450))
+
+;; Soft metals for pressure shells (#139), handbook values. Lead: pure Pb, tensile ~12 MPa, melts 327.5 C, dead in a
+;; collision. Tin: cast pure Sn, ~14 MPa, melts 231.9 C. Copper: annealed, ~220 MPa, melts 1085 C. Bronze (above) is
+;; a 88/12 Cu-Sn alloy whose solidus and liquidus straddle 950 C.
+(copper    (name "Copper")       (category metal) (density 8960) (youngs-modulus 117.0) (tension 220) (across-grain 220) (compression 220) (friction 0.30) (restitution 0.55) (color "#B8693D") (melting 1085))
+(lead      (name "Lead")         (category metal) (density 11340) (youngs-modulus 16.0) (tension 12)  (across-grain 12)  (compression 12)  (friction 0.40) (restitution 0.20) (color "#5F6670") (melting 327.5))
+(tin       (name "Tin")          (category metal) (density 7265) (youngs-modulus 50.0)  (tension 14)  (across-grain 14)  (compression 14)  (friction 0.35) (restitution 0.30) (color "#C9CED3") (melting 231.9))
 
 ;; Soils: the ground of a map (issue #37). Loose and weak, so their
 ;; strengths are nominal; friction is the tangent of the angle of repose

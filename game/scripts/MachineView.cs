@@ -1609,7 +1609,7 @@ public partial class MachineView : Node3D
                 bits.Add(b.Burst
                     ? $"{id} BURST at {b.BurstGauge / 1000:F1} kPa, {b.BurstTime:F1} s: {b.Flashed:F3} kg flashed to steam"
                     : $"{id} {b.Temperature:F1} °C {b.GaugePressure / 1000:F1} kPa, fire {(b.HeatInput > 0 ? "on" : "off")}" +
-                      (b.BurstPressure > 0 ? $", rated {b.BurstPressure / 1000:0.#} kPa" : ""));
+                      (b.Rating > 0 ? $", rated {b.Rating / 1000:0.#} kPa" + (b.BurstLimit < b.Rating ? $", holds {b.BurstLimit / 1000:0.#} kPa at this heat" : "") : ""));
             foreach (var (id, (v, _)) in Runtime.SafetyValves)
                 bits.Add($"{id} {v.Opening * 100:F0}% open, venting {v.Flow * 1000:F2} g/s, {v.Vented:F3} kg out (lifts at {v.LiftPressure / 1000:0.#} kPa)");
             foreach (var (id, p) in Runtime.Pumps)
