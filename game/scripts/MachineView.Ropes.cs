@@ -433,6 +433,7 @@ public partial class MachineView
             if (r.Tension > r.Strength)
             {
                 r.Broken = true;
+                foreach (var seg in r.Segments) seg.Visible = false;   // it's gone: drawn on, it looked whole and still holding
                 GD.Print($"rope {r.Spec.Id} broke: {r.Tension:F0} N exceeds its {r.Strength:F0} N breaking load");
                 continue;
             }
@@ -534,6 +535,9 @@ public partial class MachineView
                 $"\nmost e^(μθ) = {Mathf.Exp(r.Mu * r.Wrap):F1}";
         }
         if (!r.Active) return;
+        // how near it is to parting: the line warms amber then red from 60% of its breaking load (#105)
+        if (r.Strength > 0 && r.Segments.Count > 0 && r.Segments[0].MaterialOverride is StandardMaterial3D ropeLook)
+            Skins.Rim(ropeLook, r.Tension / r.Strength);
         var path = RopePath(r);
         for (int i = 0; i < r.Segments.Count; i++)
         {
