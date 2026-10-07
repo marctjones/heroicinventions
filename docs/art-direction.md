@@ -270,3 +270,14 @@ Frames: `docs/art/skins/terrain-before-after.png`, `terrain-crater-cargo.png`. N
 - the opening world's camera pivots on the map's origin, not the cargo (framing, #86);
 - vertex colour steps show as stair-steps on the slide's debris fan at 5 m cells;
 - no dust, ice sheen or wet-sand darkening yet beyond the existing scour and deposit cues.
+
+### 12.4 Terrain cues (2026-10-07, #103 follow-ups)
+
+- **No stair-steps.** Each cell's look (soil colour, the loose, scour and deposit cues, and roughness in alpha) goes into an `nx × nz` texture the ground shader samples bilinearly by world position. Before the texture is made, the finished colours get two passes of a 3×3 blur. Soils and cues change cell by cell (a slide lays its rubble down as its own soil), so their edges were 5 m staircases in the data. Smoothed, they read as lines.
+- **Shading from smoothed heights.** Shading normals come from a smoothed copy of the heights. Mesh positions stay the true heights, so what is seen is still what bodies land on. The stepped scar left by a slide stays visible where it is real geometry.
+- **Wet ground.** A second `R8` mask marks cells with water deeper than 0.5 mm. It's updated only when some cell changes. Wet ground draws 40% darker and glossy (roughness 0.25), so seeping shows before water pools.
+- **Ice sheen.** Ice-cemented soils have roughness 0.3 against 0.95, and the shader uses `specular_toon`, so they glint in the sun.
+- **Terrain water** uses the palette's `Shapes.Water`: lighter where shallow, darker where deep.
+- **Speed.** The ground mesh is built from arrays in one `AddSurfaceFromArrays` call, with soil looks computed once per soil and the index buffer cached. A rebuild on the 170×170 crater takes about 17 ms, down from about 65 ms. That matters because rebuilds repeat while the ground settles. Steady frame time matches `main`.
+
+Measured (sd / sep): lonely-rover-opening 33/+88, crater-wind 33/+85, talus 53/−98, flood-plain 49/−96. Frames: `docs/art/skins/terrain-cues-before-after.png`; top row is the debris fan before and after colour smoothing. Not done: settled-dust look after a storm.
