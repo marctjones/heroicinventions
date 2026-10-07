@@ -51,6 +51,23 @@ public partial class Main : Node3D
 
     private static readonly Dictionary<string, CameraProfile> Profiles = new()
     {
+        // #148: machines that had no profile, framed from their bounds and then checked by eye in a shot each
+        ["boulder"] = new(new Vector3(1.19f, 1.69f, 3.39f), new Vector3(0.00f, 0.50f, 0.00f), 45),
+        ["cargo-crate"] = new(new Vector3(1.0f, 1.3f, 2.6f), new Vector3(0, 0.25f, 0), 45),   // the crate with ground round it, not filling the frame
+        ["crate"] = new(new Vector3(1.0f, 1.3f, 2.6f), new Vector3(0, 0.25f, 0), 45),
+        ["cistern"] = new(new Vector3(1.4f, 2.4f, 4.4f), new Vector3(0, 1.0f, 0), 45),
+        ["cistern-and-trough"] = new(new Vector3(4.2f, 3.2f, 7.4f), new Vector3(2.0f, 1.0f, 0), 45),
+        ["cistern-drain"] = new(new Vector3(1.6f, 1.6f, 4.0f), new Vector3(0.75f, -0.4f, 0), 45),   // down through the ground to the buried cistern
+        ["crane-hoist"] = new(new Vector3(5.14f, 7.71f, 13.31f), new Vector3(0.85f, 3.42f, 1.05f), 45),
+        ["dry-mill"] = new(new Vector3(2.84f, 4.62f, 8.69f), new Vector3(-0.08f, 1.70f, 0.35f), 45),
+        ["fall-and-swing"] = new(new Vector3(2.4f, 3.2f, 7.0f), new Vector3(1.0f, 2.3f, 0), 45),
+        ["free-sails"] = new(new Vector3(14.12f, 24.39f, 41.21f), new Vector3(0.00f, 10.27f, 0.87f), 45),
+        ["hillside-pond"] = new(new Vector3(7.56f, 6.61f, 15.36f), new Vector3(2.29f, 1.34f, 0.30f), 45),
+        ["spill-tank"] = new(new Vector3(1.41f, 1.76f, 4.02f), new Vector3(0.00f, 0.35f, 0.00f), 45),
+        ["trench-crew"] = new(new Vector3(4.86f, 3.50f, 7.70f), new Vector3(2.00f, 0.64f, -0.48f), 45),
+        ["trough"] = new(new Vector3(1.0f, 1.6f, 3.0f), new Vector3(0, 0.5f, 0), 45),
+        ["walkers-wheel"] = new(new Vector3(1.57f, 5.59f, 9.05f), new Vector3(-1.60f, 2.42f, 0.00f), 45),
+        ["falling-stones"] = new(new Vector3(0.8f, 2.6f, 6f), new Vector3(0, 0.6f, 0), 50),   // the landing: 10 cm balls over 350 m are too small to follow down
         ["aeolipile"] = new(new Vector3(0, 0.55f, 0.85f), new Vector3(0, 0.32f, 0), 42),
         ["shaduf"] = new(new Vector3(1.0f, 3.2f, 7.5f), new Vector3(1.0f, 1.8f, 0), 50),
         ["baghdad-battery"] = new(new Vector3(0.25f, 1.0f, 2.5f), new Vector3(0.25f, 0.06f, 0.1f), 45),
