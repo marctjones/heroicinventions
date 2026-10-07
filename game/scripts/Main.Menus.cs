@@ -191,6 +191,7 @@ public partial class Main
         // Home resets too (HandleKey), but not as this item's shortcut: a menu
         // shortcut fires before build mode's own keys, where Home frames the design
         int reset = m.Add("Reset Camera (Home)", ResetCamera);
+        int hints = m.AddCheck("Show Hints", () => _hints.SetEnabled(!_hints.Enabled));
         m.Popup.AddSeparator();
 
         var size = NewMenu("Window Size", m.Popup);
@@ -209,6 +210,7 @@ public partial class Main
             m.Check(hud, !_hudHidden);
             m.Check(side, _leftPanel.Visible);
             m.Enable(reset, _buildMode is null);
+            m.Check(hints, _hints.Enabled);
             m.Check(full, GetWindow().Mode == Window.ModeEnum.Fullscreen);
         };
     }

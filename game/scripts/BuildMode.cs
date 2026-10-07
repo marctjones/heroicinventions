@@ -1655,6 +1655,9 @@ public partial class BuildMode : Node3D
     /// <summary>The machine currently on the bench, for "Run this machine".</summary>
     public MachineDef CurrentMachineDef() => _session.Document.ToMachineDef();
 
+    /// <summary>How many parts the design has (for the first-run hints).</summary>
+    public int PartCount => _session.Document.Parts.Count;
+
     /// <summary>
     /// Drives the editor through the console command path instead of the
     /// mouse: places two tanks and snaps a pipe between them. Used by

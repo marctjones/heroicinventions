@@ -330,6 +330,9 @@ public partial class Main : Node3D
     // headless run drive it the same way HEROIC_AUTOSELECT/HEROIC_AUTORUN
     // drive machine selection, for scripted screenshots and save/load checks.
     private BuildMode? _buildMode;
+    private Hints _hints = null!;
+    private bool _cameraMoved;
+    private int _machinesWatched;
     private double? _editorQuitAfterSeconds; // wall-clock: the editor has no simulated time of its own
     private double _editorTimer;
     private PanelContainer _leftPanel = null!; // hidden while build mode's own panel is up, so the two don't overlap
@@ -579,6 +582,11 @@ public partial class Main : Node3D
 
         BuildInfoPanel(layer);
         BuildMenuBar(layer);
+
+        // first-run hints (#98), above the panels
+        _hints = new Hints(() => new Hints.State(MachineOnScreen, _running, _timeScale, _buildMode is not null, _cameraMoved,
+                                                 _machinesWatched, _buildMode?.PartCount ?? 0));
+        layer.AddChild(_hints);
     }
 
     /// <summary>
@@ -883,6 +891,7 @@ public partial class Main : Node3D
 
     private void SelectMachine(string name)
     {
+        _machinesWatched++;
         ClearWorld();
         _current?.QueueFree();
         _byName.Clear();
@@ -1176,7 +1185,7 @@ public partial class Main : Node3D
         _camera = new Camera3D();
         AddChild(_camera);
         _orbit = new OrbitCamera(_camera, 0.2f, 200f, MinPitch, MaxPitch);
-        _orbit.MovedByPlayer += () => _follow = null;   // the player has taken the camera: stop chasing the missile
+        _orbit.MovedByPlayer += () => { _follow = null; _cameraMoved = true; };   // the player has taken the camera: stop chasing the missile
     }
 
     private DirectionalLight3D _sun = null!;
