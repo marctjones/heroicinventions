@@ -142,6 +142,7 @@ public partial class MachineView : Node3D
         BuildJoints();
         BuildImpacts();
         BuildFracture();
+        Skins.OrientGrain(this);   // after every part is built: each piece of wood's grain along its length
         Refresh();
 
         // Baseline for "energy retained": mechanical energy before anything
@@ -172,55 +173,22 @@ public partial class MachineView : Node3D
             };
     }
 
-    /// <summary>
-    /// Roughness driven by the material's real friction coefficient
-    /// (0.30 bronze to 0.60 granite across the table) rather than a fixed
-    /// per-category value — a low-friction surface reads as polished, a
-    /// high-friction one as coarse, so the difference the μ label states
-    /// is also something you can just look at. Metals additionally get
-    /// metallic reflectance, since that's a real property of metal, not
-    /// of friction.
-    /// </summary>
-    private StandardMaterial3D Surface(string materialId)
-    {
-        var mat = _materials[materialId];
-        float roughness = Mathf.Clamp(0.12f + (float)(mat.Friction - 0.30) / 0.30f * 0.83f, 0.1f, 0.95f);
-        return Shapes.Mat(Shapes.ColorFor(materialId),
-                          metallic: mat.Category == MaterialCategory.Metal ? 0.8f : 0,
-                          roughness: roughness);
-    }
+    /// <summary>The surface of anything made of <paramref name="materialId"/>: see <see cref="Skins.For"/>.</summary>
+    private StandardMaterial3D Surface(string materialId) => Skins.For(_materials[materialId]);
 
     /// <summary>How a part's material behaves in contact: its friction and how much a collision gives back.</summary>
     private PhysicsMaterial ContactFor(string materialId) =>
         new() { Friction = (float)_materials[materialId].Friction, Bounce = (float)_materials[materialId].Restitution };
 
     /// <summary>
-    /// A part's own surface: <see cref="Surface"/> for its material, then
-    /// two things so neighbouring parts of the same material don't merge
-    /// into one shape. Its brightness is nudged up to ±6%, fixed by its
-    /// name so it's the same every run — real castings and timbers vary
-    /// that much anyway. And it gets a thin dark outline: a second pass
-    /// drawing the part's back faces pushed slightly outward along their
-    /// normals, unlit, so only a rim shows past the silhouette (the
-    /// "inverted hull" technique). The rim's width scales with the part,
-    /// from under a millimetre on a clock gear to ~1 cm on a big wheel.
+    /// A part's own surface: <see cref="Surface"/> for its material, its brightness nudged by its name
+    /// (<see cref="Skins.Vary"/>) so neighbouring parts of one material don't merge into one shape.
+    /// <paramref name="size"/> is no longer needed now the outline sizes itself on screen.
     /// </summary>
     private StandardMaterial3D PartSurface(PartSpec part, float size)
     {
         var mat = Surface(part.Material);
-        uint hash = 2166136261; // FNV-1a: string.GetHashCode changes from run to run
-        foreach (char c in part.Id) hash = (hash ^ c) * 16777619;
-        float shade = 0.94f + 0.12f * (hash % 1000) / 999f;
-        var c0 = mat.AlbedoColor;
-        mat.AlbedoColor = new Color(c0.R * shade, c0.G * shade, c0.B * shade, c0.A);
-        mat.NextPass = new StandardMaterial3D
-        {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            CullMode = BaseMaterial3D.CullModeEnum.Front,
-            Grow = true,
-            GrowAmount = Mathf.Clamp(size * 0.012f, 0.0002f, 0.012f),
-            AlbedoColor = new Color(0.08f, 0.06f, 0.05f),
-        };
+        Skins.Vary(mat, part.Id);
         return mat;
     }
 

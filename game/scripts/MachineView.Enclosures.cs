@@ -98,10 +98,7 @@ public partial class MachineView
             if (room.Flow > 0) v.Hiss.AmountRatio = (float)Math.Clamp(room.Flow / v.FullFlow, 0.1, 1);
             if (v.Heater?.MaterialOverride is StandardMaterial3D hm)
             {
-                bool on = room.Heater > 0;
-                hm.EmissionEnabled = on;
-                hm.Emission = new Color(1f, 0.35f, 0.1f);
-                hm.EmissionEnergyMultiplier = on ? 1.5f : 0;
+                Skins.Glow(hm, room.Heater > 0 ? 800 : room.Temperature);   // a lit heater glows orange, as hot iron does
             }
             string o2 = room.TotalMoles > 0 ? $"{room.Moles[0] / room.TotalMoles * 100:0.#}% O₂" : "empty";
             if (room.TotalMoles > 0 && room.Moles[2] / room.TotalMoles > 0.01) o2 += $", {room.Moles[2] / room.TotalMoles * 100:0.#}% CO₂";

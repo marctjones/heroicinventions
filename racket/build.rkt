@@ -36,7 +36,11 @@
               'tensileStrengthAcrossGrain (f 'across-grain)
               'compressiveStrength (f 'compression)
               'friction (f 'friction)
-              'restitution (f 'restitution))))
+              'restitution (f 'restitution)
+              ;; the look (docs/art-direction.md): an sRGB hex colour, and a finish the game turns
+              ;; into a procedural surface; a material without a finish takes its category's
+              'color (material-field/default entry 'color (json-null))
+              'finish (let ([v (material-field/default entry 'finish #f)]) (if v (symbol->string v) (json-null))))))
   (call-with-output-file materials-json #:exists 'truncate/replace
     (λ (out)
       (write-json (hasheq '_note "Generated from racket/heroic/materials.rktd by racket/build.rkt. Edit that file, not this one."
