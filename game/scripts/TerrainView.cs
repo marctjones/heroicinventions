@@ -37,6 +37,7 @@ public partial class TerrainView : Node3D
     public void Show(Terrain ground, ShallowWater2D water, MaterialLibrary? materials = null)
     {
         _ground = ground;
+        _groundMaterial = null;   // a new map: its own size, cells and wet mask
         _materials = materials;
         _boulders.Clear();
         _bouldersReplaced = ground.BouldersReplaced;
@@ -67,6 +68,10 @@ public partial class TerrainView : Node3D
         var st = new SurfaceTool();
         st.Begin(Mesh.PrimitiveType.Triangles);
         var light = new Vector3(0.4f, 1, 0.3f).Normalized();
+        // each cell's ground colour (and in alpha its roughness) goes to a texture the shader samples smoothly by
+        // position: as vertex colours, a cue that changed from cell to cell showed as stair-steps along the mesh's
+        // diagonals (the slide's debris fan). The vertex colour keeps only the hillshade.
+        var cells = Image.CreateEmpty(nx, nz, false, Image.Format.Rgba8);
         for (int j = 0; j < nz; j++)
             for (int i = 0; i < nx; i++)
             {
@@ -87,7 +92,10 @@ public partial class TerrainView : Node3D
                 double moved = _ground.Heights[i + j * nx] - _startHeights[i + j * nx];
                 if (Math.Abs(moved) > 0.002)
                     c = moved < 0 ? c.Darkened(Mathf.Clamp((float)(-moved / 0.05), 0, 0.45f)) : c.Lerp(new Color(0.98f, 0.95f, 0.85f), Mathf.Clamp((float)(moved / 0.05), 0, 0.6f));
-                st.SetColor(new Color(c.R * shade, c.G * shade, c.B * shade));
+                // ice-cemented ground glints where dry soil is matt: the one soil with a sheen
+                float roughness = soil.Contains("ice") ? 0.3f : 0.95f;
+                cells.SetPixel(i, j, new Color(c.R, c.G, c.B, roughness));
+                st.SetColor(new Color(shade, shade, shade));
                 st.SetNormal(normal);
                 st.AddVertex(Centre(i, j));
             }
@@ -99,11 +107,16 @@ public partial class TerrainView : Node3D
                 st.AddIndex(b); st.AddIndex(d); st.AddIndex(c);
             }
         var mesh = st.Commit();
-        mesh.SurfaceSetMaterial(0, GroundMaterial());
+        _groundMaterial ??= GroundMaterial();
+        _groundMaterial.SetShaderParameter("cells", ImageTexture.CreateFromImage(cells));
+        mesh.SurfaceSetMaterial(0, _groundMaterial);
         return mesh;
     }
 
     private static Shader? _groundShader;
+    private ShaderMaterial? _groundMaterial;
+    private Image? _wetImage;
+    private ImageTexture? _wetTexture;
 
     /// <summary>
     /// The ground's surface (issue #103; readable over realistic): its soils' colours, toon-lit so a slope facing
@@ -117,11 +130,18 @@ public partial class TerrainView : Node3D
         {
             Code = """
                 shader_type spatial;
-                render_mode diffuse_toon, specular_disabled, cull_disabled;
+                render_mode diffuse_toon, specular_toon, cull_disabled;
                 uniform float interval = 1.0;
+                uniform sampler2D cells : source_color, filter_linear, repeat_disable;   // a cell's colour, roughness in alpha
+                uniform sampler2D wet : filter_linear, repeat_disable;                   // 1 where water stands
+                uniform vec2 origin;   // the map's corner (X0, Z0)
+                uniform vec2 size;     // and its width and depth
                 varying float height;
+                varying vec2 at;
                 void vertex() {
-                    height = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y;
+                    vec3 world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+                    height = world.y;
+                    at = (world.xz - origin) / size;
                 }
                 float line(float h, float px) {
                     // 1 on a contour, 0 away from it, about px pixels wide whatever the distance
@@ -133,15 +153,23 @@ public partial class TerrainView : Node3D
                     // fine lines fade once they come closer than ~6 pixels apart; heavy ones once closer than ~4
                     float fine = line(h, 1.0) * clamp(1.0 - (fwidth(h) - 0.12) / 0.1, 0.0, 1.0);
                     float heavy = line(h / 5.0, 1.6) * clamp(1.0 - (fwidth(h / 5.0) - 0.2) / 0.1, 0.0, 1.0);
-                    // vertex colours are authored in sRGB (the palette's hex); taken as linear they came out pale and grey
-                    vec3 soil = pow(COLOR.rgb, vec3(2.2));
-                    ALBEDO = soil * (1.0 - 0.16 * fine - 0.32 * heavy);
-                    ROUGHNESS = 0.95;
+                    vec4 cell = texture(cells, at);
+                    // wet ground darker and glossy, as wet sand is: water seeping shows before it pools
+                    float damp = texture(wet, at).r;
+                    vec3 soil = cell.rgb * (1.0 - 0.4 * damp);
+                    ALBEDO = soil * COLOR.r * (1.0 - 0.16 * fine - 0.32 * heavy);   // COLOR.r: the hillshade
+                    ROUGHNESS = mix(cell.a, 0.25, damp);
+                    SPECULAR = 0.5 * (1.0 - ROUGHNESS);
                 }
                 """,
         };
         var mat = new ShaderMaterial { Shader = _groundShader };
         mat.SetShaderParameter("interval", ContourInterval());
+        mat.SetShaderParameter("origin", new Vector2((float)_ground.X0, (float)_ground.Z0));
+        mat.SetShaderParameter("size", new Vector2((float)_ground.Width, (float)_ground.Depth));
+        _wetImage = Image.CreateEmpty(_ground.Nx, _ground.Nz, false, Image.Format.R8);
+        _wetTexture = ImageTexture.CreateFromImage(_wetImage);
+        mat.SetShaderParameter("wet", _wetTexture);
         return mat;
     }
 
@@ -250,10 +278,18 @@ public partial class TerrainView : Node3D
             double y = Wet(c) ? _water.SurfaceAt(c) + 0.01 : _ground.Heights[c] - 0.03;
             return new Vector3((float)_ground.CellX(i), (float)y, (float)_ground.CellZ(j));
         }
+        // the palette's water (Shapes.Water), paler where shallow and darker where deep, never the sky's pale blue
         Color Colour(int c)
         {
             float deep = Mathf.Clamp((float)depths[c] / 0.6f, 0, 1);
-            return new Color(0.30f - 0.15f * deep, 0.55f - 0.2f * deep, 0.85f - 0.15f * deep, Wet(c) ? 0.6f + 0.3f * deep : 0);
+            var water = Shapes.Water.Lightened(0.3f).Lerp(Shapes.Water.Darkened(0.3f), deep);
+            return water with { A = Wet(c) ? 0.65f + 0.3f * deep : 0 };
+        }
+        if (_wetImage is not null && _wetTexture is not null)
+        {
+            for (int c = 0; c < depths.Count; c++)
+                _wetImage.SetPixel(c % nx, c / nx, new Color(depths[c] > 0.0005 ? 1 : 0, 0, 0));
+            _wetTexture.Update(_wetImage);
         }
         var st = new SurfaceTool();
         st.Begin(Mesh.PrimitiveType.Triangles);
