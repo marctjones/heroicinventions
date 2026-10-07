@@ -76,13 +76,11 @@ public partial class MachineView
 
     private void Rub(AxleFriction f, double omega, double inertia, double dt)
     {
-        {
-            var axis = f.Hinge.Axis.Normalized();
-            // the part's own weight, and any wheels fixed on its arbor
-            double load = (f.Body.Mass + _arborMates.GetValueOrDefault(f.Body, []).Sum(m => m.Mass)) * Runtime.Outside.Gravity;
-            double slowed = f.Bearing.Slow(omega, inertia, load, dt);
-            f.Body.ApplyTorque(axis * (float)(inertia * (slowed - omega) / dt));
-        }
+        var axis = f.Hinge.Axis.Normalized();
+        // the part's own weight, and any wheels fixed on its arbor
+        double load = (f.Body.Mass + _arborMates.GetValueOrDefault(f.Body, []).Sum(m => m.Mass)) * Runtime.Outside.Gravity;
+        double slowed = f.Bearing.Slow(omega, inertia, load, dt);
+        f.Body.ApplyTorque(axis * (float)(inertia * (slowed - omega) / dt));
     }
 
     private void DrawAxleFriction()

@@ -2651,9 +2651,11 @@
 ;; ---- #113: gear trains driven by any shaft, and loaded (geared-brake.rkt)
 ;; Worked before the first run, in the machine's header: a flywheel geared
 ;; 10:1 up into a 0.1 N m brake, the train 1 kg m^2 seen from the flywheel,
-;; let go at 60 rpm. Through a perfect mesh the brake reflects 1 N m and the
+;; let go at 36 rpm (37.7 rad/s at the brake, under the 47.1 rad/s Jolt in
+;; Godot lets a body spin; the issue's 60 rpm case is GearTrainTests', on the
+;; sim side). Through a perfect mesh the brake reflects 1 N m and the
 ;; speed falls in a straight line, 1 rad/s per second, to a stop at
-;; I w0 / tau = 6.283 s; through a mesh of efficiency 0.9 at (eta I_1 + n^2 I_2)
+;; I w0 / tau = 3.770 s; through a mesh of efficiency 0.9 at (eta I_1 + n^2 I_2)
 ;; w0 / (n tau), with I_1 and I_2 the two arbors' own inertia read from the
 ;; compiled machine. The brake's heat is the energy that reached it: all the
 ;; train's spin through the perfect mesh, and only 0.9 of the flywheel arbor's
@@ -2670,14 +2672,14 @@
 
 (test-case "Geared brake (Jolt): a flywheel geared 10:1 into a 0.1 N m brake stops in I w0 / (n tau / eta)"
   (when (godot-available?)
-    (define run (godot-simulate 'geared-brake #:seconds 7.5 #:sample-dt 1/120))
-    (define w0 (* 2 pi))
+    (define run (godot-simulate 'geared-brake #:seconds 5 #:sample-dt 1/120))
+    (define w0 (* 2 pi 36/60))
     (define I1 (+ (machine-inertia 'geared-brake 'plain-flywheel) (machine-inertia 'geared-brake 'plain-gear)))
     (define I2 (+ (machine-inertia 'geared-brake 'plain-brake) (machine-inertia 'geared-brake 'plain-pinion)))
     (check-= (+ I1 (* 100 I2)) 1.0 1e-9 "kg m^2: the train seen from the flywheel")
     (define (stops eta) (/ (* (+ (* eta I1) (* 100 I2)) w0) (* 10 0.1)))
-    (check-= (stops 1) 6.283 0.001)
-    (check-= (stops 0.9) 5.669 0.001)
+    (check-= (stops 1) 3.770 0.001)
+    (check-= (stops 0.9) 3.402 0.001)
     (for ([name '(plain lossy)] [eta '(1 0.9)])
       (define fly (string->symbol (format "~a-flywheel" name)))
       (define brake (string->symbol (format "~a-brake" name)))
@@ -2697,7 +2699,7 @@
       ;; the mesh held the flywheel's arbor back with I_1 x its deceleration: n tau / eta of it (less the brake shaft's share)
       (check-= (value-at run (list (string->symbol (format "~a-gear" name)) 'load-torque) (/ T 2)) (* I1 (/ w0 T)) 0.01 "N m")
       ;; the heat: 1/2 (eta I_1 + n^2 I_2) w0^2
-      (check-= (final-of run (list brake 'heat)) (* 1/2 (+ (* eta I1) (* 100 I2)) w0 w0) 0.1 "J"))))
+      (check-= (final-of run (list brake 'heat)) (* 1/2 (+ (* eta I1) (* 100 I2)) w0 w0) 0.05 "J"))))
 
 ;; ---- #122 on #113: the Hierapolis sawmill (hierapolis-sawmill.rkt)
 ;; Worked before the run (the machine's header): an overshot wheel fed

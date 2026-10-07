@@ -169,7 +169,10 @@ public partial class MachineView
     {
         var shafts = new Dictionary<string, IShaft>();
         IShaft Shaft(string id) => shafts.TryGetValue(id, out var s) ? s
-            : shafts[id] = IsSimTurned(id) ? SimShaft(id) : ShaftEnd(id)!;
+            : shafts[id] = IsSimTurned(id) ? SimShaft(id)
+                : ShaftEnd(id) ?? throw new MachineFormatException(
+                    // a cart's wheel rides on its chassis, not on an axle fixed in the world (the hodometer, #127, needs that)
+                    $"{id} doesn't turn on an axle fixed in the world, so it can't drive or be driven by a gear train yet", Runtime.Def.Part(id)?.Location);
 
         // the sim parts on arbors: each a link of ratio ±1 to its arbor's lead, and a node of that lead's train
         var simEdges = new List<(string Sim, string Lead, double Sense, ArborSpec Arbor)>();
