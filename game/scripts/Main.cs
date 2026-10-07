@@ -44,6 +44,7 @@ public partial class Main : Node3D
     private static readonly Dictionary<string, string> FollowBody = new()
     {
         ["trebuchet"] = "stone",
+        ["kongming-lantern"] = "lantern",
         ["torsion-catapult"] = "stone",
         ["vitruvian-catapulta"] = "bolt",
     };
@@ -1470,7 +1471,7 @@ public partial class Main : Node3D
     }
 
     /// <summary>
-    /// Once a thrown stone or bolt is clear of the machine, eases the camera
+    /// Once a thrown stone or bolt (or a rising lantern) is clear of the machine, eases the camera
     /// to look between the two and pulls back far enough to keep both in
     /// view, so the flight and the landing are on screen.
     /// </summary>
@@ -1479,10 +1480,15 @@ public partial class Main : Node3D
         if (_follow is null || !IsInstanceValid(_follow)) return;
         var target = _follow.GlobalPosition;
         var home = _homePivot with { Y = 0 };
-        float separation = new Vector2(target.X - home.X, target.Z - home.Z).Length();
+        // how far it has gone: across the ground (a thrown stone) or up (a lantern rising), whichever is more
+        float across = new Vector2(target.X - home.X, target.Z - home.Z).Length(), up = target.Y - _homePivot.Y;
+        float separation = Mathf.Max(across, up);
+        // a flight across the screen fits in its width; one going up must fit in its height, which is shorter:
+        // half the separation over tan(fov/2) is about 1.2 x it at 45 degrees
+        float pullBack = up > across ? 1 / (2 * Mathf.Tan(Mathf.DegToRad(_camera.Fov / 2))) * 1.5f : 0.6f;
         if (separation < 1f) return;
         var wantPivot = (_homePivot + target) / 2;
-        float wantDistance = Mathf.Max(_homeDistance, separation * 0.6f + 1.5f);
+        float wantDistance = Mathf.Max(_homeDistance, separation * pullBack + 1.5f);
         _orbit.Pivot = _orbit.Pivot.Lerp(wantPivot, 0.06f);
         _orbit.Distance = Mathf.Lerp(_orbit.Distance, wantDistance, 0.06f);
         _orbit.Apply();
