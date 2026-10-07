@@ -59,6 +59,7 @@ public static class Skins
         // as dark as oak beside it. At 0.5 the table's colour carries and the toon highlight still says metal.
         var mat = Shapes.Mat(ColorOf(m.Id), metallic: m.Category == MaterialCategory.Metal ? 0.5f : 0, roughness: roughness);
         ApplyFinish(mat, FinishOf(m));
+        mat.SetMeta(MaterialMeta, m.Id);
         return mat;
     }
 
@@ -112,6 +113,7 @@ public static class Skins
     }
 
     private const string FinishMeta = "skin_finish";
+    private const string MaterialMeta = "skin_material";
 
     private static NoiseTexture2D NoiseTexture(Recipe r, float[] ramp)
     {
@@ -217,6 +219,81 @@ public static class Skins
             mat.Uv1Scale = new Vector3(axis == 0 ? along : across, axis == 1 ? along : across, axis == 2 ? along : across);
         }
     }
+
+    /// <summary>
+    /// Where the physics joins two bodies, draw what would join them in a workshop (issue #102): a hinge gets a
+    /// collar through both parts with a cap at each end, a ball joint a ball. The fitting is sized from the thinner
+    /// of the two parts (a thicker beam gets a thicker pin), and made of the harder of their materials if either
+    /// is a metal, else of iron, as a millwright would. It rides on one of the bodies, so it turns and swings with
+    /// it. Only joints the machine declares are fitted: chain links (unnamed pins, one per link), welds and
+    /// slides draw themselves. Run once after a view is built.
+    /// </summary>
+    public static void FitJoints(Node root, Func<string, StandardMaterial3D> surface)
+    {
+        foreach (var joint in Joints(root).ToList())
+        {
+            bool hinge = joint is HingeJoint3D;
+            bool ball = joint is ConeTwistJoint3D || joint is PinJoint3D && !joint.Name.ToString().StartsWith('@');
+            if (!hinge && !ball) continue;
+            var a = joint.NodeA.IsEmpty ? null : joint.GetNodeOrNull<Node3D>(joint.NodeA);
+            var b = joint.NodeB.IsEmpty ? null : joint.GetNodeOrNull<Node3D>(joint.NodeB);
+            var bodies = new[] { a, b }.Where(n => n is not null).Select(n => n!).ToList();
+            if (bodies.Count == 0) continue;
+            // the thinner part sets the pin: the smallest extent of each body's own meshes
+            float thick = bodies.Select(Thickness).Where(t => t > 0).DefaultIfEmpty(0.02f).Min();
+            float s = Mathf.Clamp(thick, 0.006f, 0.12f);   // a millwright's pin, not the whole width of a one-piece wheel
+            string metal = bodies.Select(MaterialOf).FirstOrDefault(id => id is not null && Library.TryGet(id, out var m) && m.Category == MaterialCategory.Metal) ?? "iron";
+            var mat = surface(metal);
+            var fitting = new Node3D { Name = $"fitting-{joint.Name}" };
+            if (hinge)
+            {
+                // the hinge turns about the joint's own Z: the collar lies along it, a cap at each end
+                var along = new Basis(Vector3.Right, Mathf.Pi / 2);
+                var collar = Shapes.Cylinder(s * 0.45f, s * 1.8f, mat);
+                collar.Basis = along;
+                fitting.AddChild(collar);
+                foreach (float end in new[] { -0.9f, 0.9f })
+                {
+                    var cap = Shapes.Cylinder(s * 0.7f, s * 0.25f, mat);
+                    cap.Basis = along;
+                    cap.Position = new Vector3(0, 0, end * s);
+                    fitting.AddChild(cap);
+                }
+            }
+            else fitting.AddChild(Shapes.Sphere(s * 0.6f, mat));
+            var host = bodies[0];
+            host.AddChild(fitting);
+            fitting.GlobalTransform = joint.GlobalTransform;
+            if (OS.GetEnvironment("HEROIC_DEBUG_PHYSICS") == "1")
+                GD.Print($"fitting {joint.Name}: {(hinge ? "collar" : "ball")} of {metal}, pin {s * 1000:0} mm, on {host.Name}");
+        }
+    }
+
+    private static IEnumerable<Joint3D> Joints(Node root)
+    {
+        foreach (var child in root.GetChildren())
+        {
+            if (child is Joint3D j) yield return j;
+            foreach (var deeper in Joints(child)) yield return deeper;
+        }
+    }
+
+    private static float Thickness(Node3D body)
+    {
+        float least = float.MaxValue;
+        foreach (var mesh in Meshes(body))
+        {
+            if (mesh.MaterialOverride is BaseMaterial3D { Transparency: not BaseMaterial3D.TransparencyEnum.Disabled }) continue;
+            if (mesh.GetParent().Name.ToString().StartsWith("fitting-")) continue;   // another joint's fitting, not the part
+            var size = mesh.GetAabb().Size * mesh.Scale.Abs();
+            least = Mathf.Min(least, Mathf.Min(size.X, Mathf.Min(size.Y, size.Z)));
+        }
+        return least == float.MaxValue ? 0 : least;
+    }
+
+    private static string? MaterialOf(Node3D body) =>
+        Meshes(body).Select(m => m.MaterialOverride).OfType<StandardMaterial3D>()
+            .Where(m => m.HasMeta(MaterialMeta)).Select(m => (string)m.GetMeta(MaterialMeta)).FirstOrDefault();
 
     /// <summary>
     /// A part's own shade: its brightness nudged up to ±6%, fixed by its name so it's the same every run

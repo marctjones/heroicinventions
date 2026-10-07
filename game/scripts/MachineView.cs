@@ -142,6 +142,7 @@ public partial class MachineView : Node3D
         BuildJoints();
         BuildImpacts();
         BuildFracture();
+        Skins.FitJoints(this, Surface);   // a collar or ball wherever the physics joins two parts
         Skins.OrientGrain(this);   // after every part is built: each piece of wood's grain along its length
         Refresh();
 
