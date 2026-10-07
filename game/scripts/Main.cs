@@ -90,14 +90,14 @@ public partial class Main : Node3D
         ["lever-demo"] = new(new Vector3(0, 0.75f, 1.5f), new Vector3(0, 0.55f, 0), 42),
         ["inclined-plane-demo"] = new(new Vector3(0, 1.6f, 2.8f), new Vector3(0, 0.3f, -0.6f), 55),
         ["newtons-cradle"] = new(new Vector3(0, 0.75f, 1.0f), new Vector3(0, 0.6f, 0), 38),
-        ["trebuchet"] = new(new Vector3(-1.8f, 2.4f, 7.0f), new Vector3(-2.0f, 1.3f, 0), 60), // wide enough to watch the stone land
-        ["torsion-catapult"] = new(new Vector3(0.2f, 1.8f, 3.6f), new Vector3(0.2f, 1.0f, 0), 55),
+        ["trebuchet"] = new(new Vector3(7.0f, 4.0f, 4.5f), new Vector3(-4.0f, 0.6f, 0), 55), // from behind its shoulder, along the throw (to −x): the flight runs into the clear middle, not under the info panel
+        ["torsion-catapult"] = new(new Vector3(5.0f, 2.8f, 3.2f), new Vector3(-4.0f, 0.5f, 0), 55),   // along the throw, as the trebuchet
         ["antikythera-lunar-train"] = new(new Vector3(0.13f, 0.19f, 0.19f), new Vector3(0.022f, 0.09f, 0.004f), 38),
         ["archimedes-screw"] = new(new Vector3(0.5f, 2.2f, 7.0f), new Vector3(0, 1.4f, 0), 50),
         ["hama-noria"] = new(new Vector3(0.5f, 6.5f, 17.5f), new Vector3(0.3f, 2.0f, -1.5f), 55),
         ["newcomen-engine"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
         ["roman-crane"] = new(new Vector3(3.0f, 3.8f, 10.5f), new Vector3(0.3f, 3.2f, 0.5f), 50),
-        ["vitruvian-catapulta"] = new(new Vector3(1.7f, 1.4f, 2.0f), new Vector3(0, 0.7f, -0.3f), 50),
+        ["vitruvian-catapulta"] = new(new Vector3(2.4f, 2.0f, -3.6f), new Vector3(0, 0.4f, 4.0f), 50),   // from behind, along the bolt's flight (to +z)
         ["component-gallery"] = new(new Vector3(3.5f, 5.5f, 13f), new Vector3(3.5f, 0.6f, 0), 60),
         ["newcomen-hearth"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
         ["hearth-engine"] = new(new Vector3(0, 1.0f, 1.7f), new Vector3(0, 0.75f, 0), 45),
@@ -953,6 +953,7 @@ public partial class Main : Node3D
         _detailsButton.Disabled = false;
         SetMenuCollapsed(true);
         _follow = FollowBody.TryGetValue(name, out var followId) ? view.BodyNamed(followId) : null;
+        StartTrail(view, _follow);   // the flight drawn (Main.Trail.cs)
         _sleep.Refresh();   // this machine's own wake conditions
     }
 
@@ -1498,6 +1499,7 @@ public partial class Main : Node3D
             CallDeferred(MethodName.EditFocused);   // after this physics step, as a click would be
         }
         FollowMissile();
+        DrawTrail(delta);
         ShowSky(_current?.Runtime);
         UpdateInfoPanel();
     }
