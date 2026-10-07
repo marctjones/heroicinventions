@@ -31,8 +31,11 @@ namespace HeroicInventions;
 /// bodies under theirs (a brake, a rod pushing a saw), the links trade the
 /// least angular momentum that puts every pair back on its ratio. A load at
 /// the output slows its gear during Jolt's step; the next tick's exchange
-/// takes that much back from the driver, ratio × torque / η. Jolt-to-Jolt
-/// meshes keep the cranked train's angle pull, as a bias on the exchange.
+/// takes that much back from the driver, ratio × torque / η. Each link also
+/// keeps the cranked train's angle pull, as a bias on the exchange (at most
+/// a tenth of the speed, so a train friction has stopped stays stopped):
+/// meshed teeth stay in each other's gaps, and a crank keeps its water
+/// wheel's angle though its load slows it within every step.
 /// The bodies of a driven train lose the engine's 0.2/s axle damping, so
 /// what slows them is what the machine gives them; a bearing on one of them
 /// (#:bearing-mu) stops the whole train, its friction clamped against the
@@ -76,6 +79,12 @@ public partial class MachineView
         Runtime.WaterWheels.TryGetValue(id, out var w) ? w
         : Runtime.Windmills.TryGetValue(id, out var m) ? m
         : Runtime.JetWheels[id];
+
+    /// <summary>How far a sim-turned part has turned, rad forward, wrapped (each is kept within a turn).</summary>
+    private double SimAngle(string id) =>
+        Runtime.WaterWheels.TryGetValue(id, out var w) ? w.Angle
+        : Runtime.Windmills.TryGetValue(id, out var m) ? m.Angle
+        : Runtime.JetWheels[id].Angle;
 
     /// <summary>The Jolt wheel that leads an arbor: its first wheel, passing over a part the sim turns.</summary>
     private string ArborLead(ArborSpec arbor) => arbor.Parts.First(p => !IsSimTurned(p));
@@ -243,7 +252,7 @@ public partial class MachineView
         };
         AddChild(label);
         var d = new DrivenLink { Link = link, FromId = fromId, ToId = toId, FromBody = from, ToBody = to, Label = label };
-        if (from is not null) d.LastFrom = RawAngle(from, _hinges[from].Axis);
+        d.LastFrom = from is not null ? RawAngle(from, _hinges[from].Axis) : SimAngle(fromId);
         d.LastTo = RawAngle(to, _hinges[to].Axis);
         _drivenLinks.Add(d);
         _drivenShaftLinks.Add(link);
@@ -344,12 +353,13 @@ public partial class MachineView
             double to = RawAngle(d.ToBody!, _hinges[d.ToBody!].Axis);
             d.ToAngle += Unwrap(to - d.LastTo);
             d.LastTo = to;
-            if (d.FromBody is null) continue;
-            double from = RawAngle(d.FromBody, _hinges[d.FromBody].Axis);
+            double from = d.FromBody is null ? SimAngle(d.FromId) : RawAngle(d.FromBody, _hinges[d.FromBody].Axis);
             d.FromAngle += Unwrap(from - d.LastFrom);
             d.LastFrom = from;
             // a gentle pull, at most a tenth of the speed the ratio asks for: a train
-            // that friction has stopped stays stopped, its teeth a little off true
+            // that friction has stopped stays stopped, its teeth a little off true; a
+            // crank on a water wheel's axle keeps the wheel's angle, so its pin's mean
+            // speed is the wheel's, though its load slows it within every step
             double most = 0.1 * Math.Abs(d.Link.Ratio * d.Link.From.AngularVelocity);
             d.Link.Bias = Math.Clamp(20 * (d.Link.Ratio * d.FromAngle - d.ToAngle), -most, most);
         }

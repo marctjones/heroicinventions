@@ -1226,7 +1226,7 @@ public partial class MachineView : Node3D
                 var c = g.First().Body.Position;
                 var across = c - axis * c.Dot(axis);
                 return (Axis: axis, Back: across + axis * lo, Front: across + axis * hi, Radius: g.Max(a => a.Radius),
-                        Label: string.Join("\n", g.Select(a => a.Label)));
+                        Label: string.Join("\n", g.Select(a => a.Label)), Driven: g.Any(a => _trainOf.ContainsKey(a.Body)));
             })
             .ToList();
 
@@ -1237,7 +1237,9 @@ public partial class MachineView : Node3D
             AddLabel(g.Label, middle + Vector3.Up * g.Radius * 1.25f, pixelSize: LabelSizeFor(2 * g.Radius));
         }
 
-        var small = groups.Where(g => g.Radius < 0.1f && Mathf.Abs(g.Axis.Z) > 0.999f).ToList();
+        // small wheels on z axles stand on a clockmaker's plate, unless they are a driven
+        // train's (#113), working machinery that stands on posts like any other axle
+        var small = groups.Where(g => g.Radius < 0.1f && Mathf.Abs(g.Axis.Z) > 0.999f && !g.Driven).ToList();
         if (small.Count > 0)
         {
             float margin = small.Max(g => g.Radius) * 0.3f;

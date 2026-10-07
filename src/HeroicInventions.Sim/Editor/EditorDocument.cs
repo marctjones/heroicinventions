@@ -353,10 +353,13 @@ public sealed class EditorDocument
     }
 
     /// <summary>Puts two gears in mesh (the same pair twice is a no-op).</summary>
-    public MeshSpec AddMesh(string a, string b)
+    public MeshSpec AddMesh(string a, string b, double efficiency = 1)
     {
-        var spec = new MeshSpec(a, b, null);
-        if (!_meshes.Any(m => m.A == a && m.B == b || m.A == b && m.B == a)) _meshes = [.. _meshes, spec];
+        var spec = new MeshSpec(a, b, null) { Efficiency = efficiency };
+        if (_meshes.Any(m => m.A == a && m.B == b || m.A == b && m.B == a))
+            // meshing them again sets the efficiency
+            _meshes = _meshes.Select(m => m.A == a && m.B == b || m.A == b && m.B == a ? m with { Efficiency = efficiency } : m).ToList();
+        else _meshes = [.. _meshes, spec];
         return spec;
     }
 

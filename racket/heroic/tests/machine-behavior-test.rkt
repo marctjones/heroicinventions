@@ -2698,3 +2698,55 @@
       (check-= (value-at run (list (string->symbol (format "~a-gear" name)) 'load-torque) (/ T 2)) (* I1 (/ w0 T)) 0.01 "N m")
       ;; the heat: 1/2 (eta I_1 + n^2 I_2) w0^2
       (check-= (final-of run (list brake 'heat)) (* 1/2 (+ (* eta I1) (* 100 I2)) w0 w0) 0.1 "J"))))
+
+;; ---- #122 on #113: the Hierapolis sawmill (hierapolis-sawmill.rkt)
+;; Worked before the run (the machine's header): an overshot wheel fed
+;; 2.9 L/s gives 42.67 W at any speed; the crank (0.25 m) and 1 m rod draw a
+;; 29.57 kg iron frame over limestone (friction 0.4, the smaller of the two),
+;; and the frame's friction, pressed harder by the rod's lean while the crank
+;; turns clockwise and swung by the frame's own inertia, takes a mean
+;; 20.49 N m at any speed: the wheel settles at 19.89 rpm, the blade at a mean
+;; 2 w r / pi = 0.332 m/s over a 0.5 m stroke.
+(define (saw-power w #:mu [mu 0.4] #:sense [sense -1] #:n [n 20000])
+  ;; W the frame's friction takes, the crank turning steadily at w rad/s
+  (define g 9.81) (define r 0.25) (define l 1.0)
+  (define m-saw (* 7700 0.6 0.08 0.08)) (define m-rod (* 720 1.0 0.04 0.04))
+  (define dth (/ (* 2 pi) n))
+  (define work
+    (for/sum ([i n])
+      (define th (* (+ i 0.5) dth))
+      (define s (sin th)) (define c (cos th))
+      (define root (sqrt (- (* l l) (* r r s s))))
+      (define x (+ (* r c) root))                                   ; the wrist, from the axle
+      (define dx (- (- (* r s)) (/ (* r r s c) root)))              ; dx/dtheta
+      (define d2x (- (- (* r c)) (/ (* r r (- (* c c) (* s s))) root) (/ (* r r r r s s c c) (expt root 3))))
+      (define a (* w w d2x))                                        ; the frame's acceleration
+      (define sg (if (> (* sense dx) 0) 1 -1))                      ; which way it slides
+      (define ux (/ (- (* r c) x) l)) (define uy (/ (* r s) l))     ; the rod, wrist to pin
+      ;; m a = R ux - mu N sg and N = m g + (rod's weight)/2 - R uy, solved for N
+      (define N (/ (- (+ (* m-saw g) (* 0.5 m-rod g)) (* m-saw a (/ uy ux)))
+                   (+ 1 (* mu sg (/ uy ux)))))
+      (* mu N (abs dx) dth)))
+  (/ (* work w) (* 2 pi)))
+
+(test-case "Hierapolis sawmill (Jolt): the water wheel turns the crank and saws at the speed the frame's friction allows"
+  (define water-power (* 1000 9.81 0.0029 1.0 1.5))
+  (check-= water-power 42.67 0.01 "W")
+  (define torque (/ (saw-power 2.0) 2.0))
+  (check-= torque 20.49 0.01 "N m: the same at any speed")
+  (check-= (/ (saw-power 3.0) 3.0) torque 1e-6)
+  (define w (/ water-power torque))
+  (check-= (* w (/ 30 pi)) 19.89 0.01 "rpm")
+  (when (godot-available?)
+    (define run (godot-simulate 'hierapolis-sawmill #:seconds 150 #:sample-dt 0.1))
+    (define late (filter (λ (f) (>= (car f) 110)) run))   ; settled: the spin-up's time constant is about 20 s
+    (define (field f k) (cadr (assq k (cdr f))))
+    (define (mean k) (/ (for/sum ([f late]) (field f k)) (length late)))
+    (define rpm (mean 'wheel.rpm))
+    (check-= rpm (* w (/ 30 pi)) (* 0.02 (* w (/ 30 pi))) "rpm, the wheel")
+    (check-= (* (mean 'crank.omega) (/ 30 pi)) rpm 0.1 "the crank keeps the wheel's speed")
+    (check-= (mean 'wheel.load-torque) torque (* 0.03 torque) "N m the saw takes from the wheel")
+    (define xs (map (λ (f) (field f 'saw-frame.x)) late))
+    (check-= (- (apply max xs) (apply min xs)) 0.5 0.01 "m, the stroke: twice the crank")
+    (define traced-w (* rpm (/ pi 30)))
+    (check-= (/ (for/sum ([f late]) (abs (field f 'saw-frame.vx))) (length late)) (/ (* 2 traced-w 0.25) pi) 0.01 "m/s, the blade's mean speed")))
