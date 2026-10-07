@@ -281,3 +281,26 @@ Frames: `docs/art/skins/terrain-before-after.png`, `terrain-crater-cargo.png`. N
 - **Speed.** The ground mesh is built from arrays in one `AddSurfaceFromArrays` call, with soil looks computed once per soil and the index buffer cached. A rebuild on the 170×170 crater takes about 17 ms, down from about 65 ms. That matters because rebuilds repeat while the ground settles. Steady frame time matches `main`.
 
 Measured (sd / sep): lonely-rover-opening 33/+88, crater-wind 33/+85, talus 53/−98, flood-plain 49/−96. Frames: `docs/art/skins/terrain-cues-before-after.png`; top row is the debris fan before and after colour smoothing. Not done: settled-dust look after a storm.
+
+### 12.5 State legibility checklist (2026-10-07, #105)
+
+The design promises "the state is shown in the scene: a cold bank frosts, a stalled generator stops, a leaky lid glows". Each state the sim holds is listed here with how it shows and the frame that checks it. Strain uses `Skins.Rim` (amber from 60% of a limit, red at 100%, thickening to 3.5×; on glass no plain line, only the warning). Heat uses `Skins.Glow`.
+
+| State | Cue | Frame check |
+|---|---|---|
+| Boiler pressure toward burst | Rim on the shell (#139) | boiler-shells: lead pot black at 0.58, amber ~0.73, red 0.99 (t 450 to 500 s), then wreck and steam cloud |
+| Boiler burst | Shell hidden, wreck and cloud | same run, t > 505 s |
+| Boiler dry and overheating | `Skins.Glow` on the shell | none yet: no blueprint boils a pot dry over a fire |
+| Glass pane load toward cracking | Rim on the glass | glass-rooms: glazed and dark roofs at 85% of their crack load read orange |
+| Pane cracked | Glass hidden, frame shown | glass-rooms: thin roof |
+| Rope tension toward breaking | Rim on the rope | roman-crane with a 13 mm rope (scratch copy): amber while lifting |
+| Rope broken | Segments hidden (**bug fix**: a broken rope used to stay drawn, looking whole) | roman-crane with an 11 mm rope: logged hidden after "rope hoist broke: 5730 N exceeds its 5702 N" |
+| Tank ice / frozen solid | Ice slab, whiter when solid | existing |
+| Cold room | Skin frosts white from 0 to −5 °C | existing (Enclosures) |
+| Room leaking air | Hiss particles by flow | existing |
+| Mirror dust | Face browns, beam dims | existing |
+| Crucible, heater hot | `Skins.Glow` | existing |
+| Galvanic jar spent | Iron rusts | existing |
+| Windmill, Stirling stalled | Motion stops | implicit only |
+
+**Not drawable yet, because the sim has no state for them:** a battery bank and its 0–45 °C charging window ("a cold bank frosts"), a generator ("a stalled generator stops"), heat leaking through a lid ("a leaky lid glows"), and pipes freezing. These need model work before any look.
