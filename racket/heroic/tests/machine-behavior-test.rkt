@@ -853,6 +853,32 @@
   (check-= (final-of run '(guarded burst-pressure)) 200 0.05)
   (check-= (final-of run '(guarded flashed)) (/ (* m-tied bs-c (- bs-t-burst 100)) bs-l) 0.002))
 
+;; boiler-shells.rkt (#139): the same boiler and fire as boiler-safety, three shells of 3 mm over a 15 cm
+;; radius. Thin-wall hoop stress: a pot bursts at P = sigma_t t / r, sigma_t from the material table.
+(test-case "Boiler shells: lead bursts at 0.24 MPa, 138.2 C, 500.8 s; copper and bronze hold on, and give way when their strength says"
+  (define run (simulate 'boiler-shells #:seconds 1200 #:step 0.01 #:sample-dt 1))
+  (define (hoop sigma-mpa) (/ (* sigma-mpa 1e6 0.003) 0.15))                ; Pa gauge
+  (define (burst-time sigma-mpa) (bs-warm-time bs-m 20 (bs-tsat (+ bs-atm (hoop sigma-mpa)))))
+  (check-= (hoop 12) 240e3 1e-6) (check-= (hoop 220) 4.4e6 1e-6) (check-= (hoop 350) 7.0e6 1e-6)
+  (check-= (bs-tsat (+ bs-atm (hoop 12))) 138.22 0.01)
+  (check-= (burst-time 12) 500.8 0.05) (check-= (burst-time 220) 1016.0 0.05) (check-= (burst-time 350) 1144.2 0.05)
+  (check-= (value-at run '(lead-pot limit) 100) 240 1e-6 "a lead pot holds 240 kPa")
+  (check-= (value-at run '(bronze-pot limit) 100) 7000 1e-6 "a bronze one 7000")
+  ;; before the lead pot's time all three are whole, alongside; the outline margin is the pressure over the limit
+  (check-= (value-at run '(lead-pot burst) 499) 0 0)
+  (check-= (final-of run '(lead-pot burst)) 1 0)
+  (check-= (final-of run '(lead-pot burst-time)) (burst-time 12) 0.05 "lead bursts at 500.8 s")
+  (check-= (final-of run '(lead-pot burst-pressure)) 240 0.1 "at 240 kPa")
+  (check-= (value-at run '(lead-pot temperature) 400) (bs-sealed-temp 400) 0.01)
+  (check-= (value-at run '(copper-pot burst) 900) 0 0 "copper is whole at 900 s")
+  (check-= (value-at run '(bronze-pot burst) 900) 0 0 "and bronze")
+  (check-= (value-at run '(copper-pot burst) 1000) 0 0)
+  (check-= (final-of run '(copper-pot burst-time)) (burst-time 220) 0.05 "copper at 1016.0 s")
+  (check-= (final-of run '(copper-pot burst-pressure)) 4400 1 "at 4.4 MPa")
+  (check-= (value-at run '(bronze-pot burst) 1140) 0 0 "bronze holds to 1144 s")
+  (check-= (final-of run '(bronze-pot burst-time)) (burst-time 350) 0.05 "bronze at 1144.2 s")
+  (check-= (final-of run '(bronze-pot burst-pressure)) 7000 2 "at 7.0 MPa"))
+
 ;; suction-limit.rkt: three lift pumps, each a 15 cm bucket over a 50 cm
 ;; stroke at 20 strokes a minute (a stroke every 3 s, upstroke first),
 ;; efficiency 0.8, drawing 20 C water. The limit is where the pressure

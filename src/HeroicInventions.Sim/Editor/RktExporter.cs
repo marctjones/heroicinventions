@@ -148,7 +148,8 @@ public static class RktExporter
             case "boiler":
                 return $"  (boiler {p.Id} {At()} #:radius {F(N("radius"))} #:height {F(N("height"))} #:water {F(N("water"))} " +
                        $"#:fire {F(N("fire"))} #:temperature {F(N("temperature", 20))}" +
-                       (N("burst") > 0 ? $" #:burst {F(N("burst"))}" : "") + $" {Mat()})\n";
+                       (N("burst") > 0 ? $" #:burst {F(N("burst"))}" : "") +
+                       (N("wall") > 0 ? $" #:wall {F(N("wall"))}" : "") + $" {Mat()})\n";
             case "rotor":
                 return $"  (rotor {p.Id} {At()} #:radius {F(N("radius"))} {Mat()} #:bore {F(N("bore"))} #:arm {F(N("arm"))} " +
                        $"#:wall {F(N("wall", 0.001))} #:nozzles {F(N("nozzles", 2))})\n";

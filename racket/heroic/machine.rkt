@@ -249,10 +249,14 @@
          [else
           (define-values (bx by bz) (apply values (part-at b)))
           (struct-copy part p [at (list (+ bx (/ (boiler-prop 'radius) 2)) (+ by (boiler-prop 'height)) bz)])])]
-      [(and (eq? (part-kind p) 'boiler) (assq 'burst (part-props p)))
-       (define rating (cdr (assq 'burst (part-props p))))
+      [(eq? (part-kind p) 'boiler)
+       (define rating (cond [(assq 'burst (part-props p)) => cdr] [else 0]))
        (unless (and (real? rating) (>= rating 0))
          (error 'define-machine "boiler ~a: #:burst must be a gauge pressure, 0 or more, got ~e" (part-id p) rating))
+       (define wall (cond [(assq 'wall (part-props p)) => cdr] [else #f]))
+       (when wall
+         (unless (and (real? wall) (> wall 0) (< wall (cdr (assq 'radius (part-props p)))))
+           (error 'define-machine "boiler ~a: #:wall must be a thickness above 0 and under the radius, got ~e" (part-id p) wall)))
        p]
       [else p])))
 
@@ -625,14 +629,16 @@
                            (~once (~seq #:water water-v:expr))
                            (~optional (~seq #:fire fire-v:expr))
                            (~optional (~seq #:temperature temp-v:expr))
-                           (~optional (~seq #:burst burst-v:expr))
+                           (~optional (~seq (~or #:burst #:burst-pressure) burst-v:expr))
+                           (~optional (~seq #:wall wall-v:expr))
                            (~optional (~seq #:material mat:id))) ...)
       #:attr info (pinfo #'id 'boiler (attribute mat) (list (cons 'steam 'steam)))
       #:with expr #`(part 'id 'boiler '(~? mat bronze) (list at.x at.y at.z)
                           (list* (cons 'radius radius-v) (cons 'height height-v)
                                  (cons 'water water-v) (cons 'fire (~? fire-v 0))
                                  (cons 'temperature (~? temp-v #f))
-                                 (~? (list (cons 'burst burst-v)) '()))
+                                 (append (~? (list (cons 'burst burst-v)) '())
+                                         (~? (list (cons 'wall wall-v)) '())))
                           (list (port-spec 'steam 'steam height-v))
                           #,(loc-of this-syntax)))
 

@@ -52,7 +52,7 @@ public partial class MachineView
         }
         foreach (var (id, boiler) in Runtime.Boilers)
         {
-            if (boiler.BurstPressure <= 0 || !_boilerBodies.TryGetValue(id, out var body)) continue;
+            if (boiler.Rating <= 0 || !_boilerBodies.TryGetValue(id, out var body)) continue;
             var part = Runtime.Def.Part(id)!;
             float r = (float)part.Number("radius"), h = (float)part.Number("height");
             var wreck = new Node3D { Visible = false };
@@ -71,7 +71,7 @@ public partial class MachineView
             wreck.AddChild(floor);
             var cloud = SteamCloud(V(part.At) + new Vector3(0, h / 2, 0), amount: 120, radius: r, lifetime: 4f);
             _burstViews.Add((boiler, body, wreck, cloud));
-            AddLabel($"{id} rated to {boiler.BurstPressure / 1000:0.#} kPa", V(part.At) + new Vector3(0, h + 0.3f, 0));
+            AddLabel($"{id} rated to {boiler.Rating / 1000:0.#} kPa" + (boiler.Wall > 0 && boiler.BurstPressure <= 0 ? $" ({boiler.Wall * 1000:0.#} mm {part.Material})" : ""), V(part.At) + new Vector3(0, h + 0.3f, 0));
         }
     }
 
@@ -127,6 +127,9 @@ public partial class MachineView
         foreach (var (boiler, body, wreck, cloud) in _burstViews)
         {
             body.Visible = !boiler.Burst;
+            // the margin on the shell: the outline warms to amber and reddens as the pressure goes from 60% to 100% of what it holds now (art direction 4.7)
+            if (!boiler.Burst && body.MaterialOverride is StandardMaterial3D shell)
+                Skins.Rim(shell, boiler.GaugePressure / Math.Max(1.0, boiler.BurstLimit));
             wreck.Visible = boiler.Burst;
             double since = boiler.Time - boiler.BurstTime;
             cloud.Emitting = boiler.Burst && since < 3;
