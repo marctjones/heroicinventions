@@ -349,10 +349,12 @@ public static class Skins
     public static void Rim(StandardMaterial3D mat, double share)
     {
         float t = Mathf.Clamp(((float)share - 0.6f) / 0.4f, 0, 1);
-        if (t <= 0) { mat.NextPass = Outline; return; }
+        bool seeThrough = mat.Transparency != BaseMaterial3D.TransparencyEnum.Disabled;
+        // at rest: the plain line, or none on glass (a hull behind glass would show through it)
+        if (t <= 0) { mat.NextPass = seeThrough ? null : Outline; return; }
         var color = new Color(1f, 0.7f, 0.1f).Lerp(new Color(0.9f, 0.05f, 0.02f), t);
         if (mat.NextPass == Outline || mat.NextPass is not ShaderMaterial own) mat.NextPass = own = OutlineIn(color);
         own.SetShaderParameter("color", color);
-        own.SetShaderParameter("width", 0.003f * (1 + t));   // and thickens as it reddens
+        own.SetShaderParameter("width", 0.003f * (1.5f + 2f * t));   // and thickens as it reddens, to 3.5 times the plain line
     }
 }

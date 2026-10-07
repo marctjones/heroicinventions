@@ -12,7 +12,7 @@ namespace HeroicInventions;
 /// </summary>
 public partial class MachineView
 {
-    private readonly List<(Pane Pane, List<MeshInstance3D> Glass, MeshInstance3D Pool, StandardMaterial3D PoolMat)> _paneViews = [];
+    private readonly List<(Pane Pane, List<MeshInstance3D> Glass, MeshInstance3D Pool, StandardMaterial3D PoolMat, StandardMaterial3D GlassMat)> _paneViews = [];
 
     private void BuildPanes()
     {
@@ -56,14 +56,16 @@ public partial class MachineView
             pool.Visible = false;
             AddChild(pool);
             AddLabel(id, at + normal * 0.2f);
-            _paneViews.Add((pane, glass, pool, poolMat));
+            _paneViews.Add((pane, glass, pool, poolMat, glassMat));
         }
     }
 
     private void DrawPanes()
     {
-        foreach (var (pane, glass, pool, poolMat) in _paneViews)
+        foreach (var (pane, glass, pool, poolMat, glassMat) in _paneViews)
         {
+            // how near the glass is to cracking: an amber then red edge from 60% of its strength (#105)
+            if (!pane.Cracked && pane.Strength > 0) Skins.Rim(glassMat, pane.Stress / pane.Strength);
             for (int i = 0; i < glass.Count; i += 2)
             {
                 glass[i].Visible = !pane.Cracked;

@@ -129,7 +129,10 @@ public partial class MachineView
             body.Visible = !boiler.Burst;
             // the margin on the shell: the outline warms to amber and reddens as the pressure goes from 60% to 100% of what it holds now (art direction 4.7)
             if (!boiler.Burst && body.MaterialOverride is StandardMaterial3D shell)
+            {
                 Skins.Rim(shell, boiler.GaugePressure / Math.Max(1.0, boiler.BurstLimit));
+                Skins.Glow(shell, boiler.Temperature);   // boiled dry over a fire, the shell itself glows (#105)
+            }
             wreck.Visible = boiler.Burst;
             double since = boiler.Time - boiler.BurstTime;
             cloud.Emitting = boiler.Burst && since < 3;
