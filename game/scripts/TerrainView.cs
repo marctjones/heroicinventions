@@ -51,7 +51,7 @@ public partial class TerrainView : Node3D
             Name = "Water",
             MaterialOverride = new StandardMaterial3D
             {
-                VertexColorUseAsAlbedo = true, Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                VertexColorUseAsAlbedo = true, VertexColorIsSrgb = true, Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                 Roughness = 0.15f, CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             },
         };
@@ -75,8 +75,13 @@ public partial class TerrainView : Node3D
                 var dx = Centre(Math.Min(i + 1, nx - 1), j) - Centre(Math.Max(i - 1, 0), j);
                 var dz = Centre(i, Math.Min(j + 1, nz - 1)) - Centre(i, Math.Max(j - 1, 0));
                 var normal = dz.Cross(dx).Normalized();
-                float shade = 0.65f + 0.35f * Mathf.Max(0, normal.Dot(light));
-                var c = Shapes.ColorFor(soil);
+                // hillshade, as on a map: lit from one high fixed side whatever the sun, strong enough that every
+                // slope reads (readable over realistic; the sun's own light and shadows come on top)
+                float shade = 0.45f + 0.55f * Mathf.Max(0, normal.Dot(light));
+                // soils a little greyer than their table colours, so crates, a rover and machines keep their own
+                // colour against what they stand on, each layer keeping its hue so the crater's bands tell apart
+                var raw = Shapes.ColorFor(soil);
+                var c = Color.FromHsv(raw.H, raw.S * 0.85f, raw.V);
                 if (_ground.Loose[i + j * nx]) c = c.Lightened(0.18f);   // spoil and slumped ground: loose, paler (#44)
                 // ground the water has cut away shows darker and wetter, ground it has laid down paler (#53); a 5 cm change at full strength
                 double moved = _ground.Heights[i + j * nx] - _startHeights[i + j * nx];
@@ -94,8 +99,59 @@ public partial class TerrainView : Node3D
                 st.AddIndex(b); st.AddIndex(d); st.AddIndex(c);
             }
         var mesh = st.Commit();
-        mesh.SurfaceSetMaterial(0, new StandardMaterial3D { VertexColorUseAsAlbedo = true, Roughness = 0.95f, CullMode = BaseMaterial3D.CullModeEnum.Disabled });
+        mesh.SurfaceSetMaterial(0, GroundMaterial());
         return mesh;
+    }
+
+    private static Shader? _groundShader;
+
+    /// <summary>
+    /// The ground's surface (issue #103; readable over realistic): its soils' colours, toon-lit so a slope facing
+    /// the sun steps clearly lighter than one facing away, and contour lines, the map-maker's way to make a shape
+    /// legible at any distance. Lines fall every <see cref="ContourInterval"/> metres of height, every fifth one
+    /// heavier, their width fixed on screen, and the fine ones fade where they would crowd into a smudge.
+    /// </summary>
+    private ShaderMaterial GroundMaterial()
+    {
+        _groundShader ??= new Shader
+        {
+            Code = """
+                shader_type spatial;
+                render_mode diffuse_toon, specular_disabled, cull_disabled;
+                uniform float interval = 1.0;
+                varying float height;
+                void vertex() {
+                    height = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y;
+                }
+                float line(float h, float px) {
+                    // 1 on a contour, 0 away from it, about px pixels wide whatever the distance
+                    float w = fwidth(h);
+                    return 1.0 - smoothstep(0.0, w * px, abs(fract(h - 0.5) - 0.5));
+                }
+                void fragment() {
+                    float h = height / interval;
+                    // fine lines fade once they come closer than ~6 pixels apart; heavy ones once closer than ~4
+                    float fine = line(h, 1.0) * clamp(1.0 - (fwidth(h) - 0.12) / 0.1, 0.0, 1.0);
+                    float heavy = line(h / 5.0, 1.6) * clamp(1.0 - (fwidth(h / 5.0) - 0.2) / 0.1, 0.0, 1.0);
+                    // vertex colours are authored in sRGB (the palette's hex); taken as linear they came out pale and grey
+                    vec3 soil = pow(COLOR.rgb, vec3(2.2));
+                    ALBEDO = soil * (1.0 - 0.16 * fine - 0.32 * heavy);
+                    ROUGHNESS = 0.95;
+                }
+                """,
+        };
+        var mat = new ShaderMaterial { Shader = _groundShader };
+        mat.SetShaderParameter("interval", ContourInterval());
+        return mat;
+    }
+
+    /// <summary>A round contour interval, 1, 2 or 5 times a power of ten, giving about a dozen lines over the map's relief.</summary>
+    private float ContourInterval()
+    {
+        double relief = Math.Max(_ground.Heights.Max() - _ground.Heights.Min(), 0.5);
+        double raw = relief / 12, power = Math.Pow(10, Math.Floor(Math.Log10(raw)));
+        double step = raw / power < 1.5 ? 1 : raw / power < 3.5 ? 2 : 5;
+        return (float)(step * power);
     }
 
     /// <summary>

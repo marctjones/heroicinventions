@@ -1178,8 +1178,9 @@ public partial class Main : Node3D
                 // Haze toward the horizon: the 2 km floor fades out instead of ending at a seam, and a far
                 // machine sits back behind a near one. Thin enough that a bench-sized scene shows none.
                 FogEnabled = true,
-                FogMode = Godot.Environment.FogModeEnum.Exponential,
-                FogDensity = 0.0025f,
+                FogMode = Godot.Environment.FogModeEnum.Depth,   // begin and end follow the camera (_Process)
+                FogDensity = 1,
+                FogDepthCurve = 1.6f,
                 FogSkyAffect = 0,
                 FogAerialPerspective = 0.3f,
             },
@@ -1219,6 +1220,7 @@ public partial class Main : Node3D
 
     private DirectionalLight3D _sun = null!, _halo = null!;
     private Godot.Environment _environment = null!;
+    private float _hazeReach = 3;   // the haze begins this many camera distances out (SkyLook.Fog)
     private ProceduralSkyMaterial _skyMaterial = null!;
     private StandardMaterial3D _floorMaterial = null!;
     private StaticBody3D? _floor;   // sunk beneath a world's map (Main.Ground.cs)
@@ -1272,7 +1274,7 @@ public partial class Main : Node3D
         _skyMaterial.GroundHorizonColor = look.GroundHorizon;
         _skyMaterial.GroundBottomColor = look.GroundHorizon * 0.8f;
         _environment.FogLightColor = look.Horizon;   // the haze is the horizon's colour, on Mars and at dusk too
-        _environment.FogDensity = look.Fog;
+        _hazeReach = look.Fog;
         _environment.AmbientLightEnergy = look.AmbientEnergy;
         // at night the sky gives almost nothing, so a faint cool fill takes over and keeps machines in silhouette
         _environment.AmbientLightColor = look.NightAmbient;
@@ -1406,6 +1408,10 @@ public partial class Main : Node3D
     public override void _Process(double delta)
     {
         if (_buildMode is null) _orbit.ProcessKeys(delta, GetViewport());
+        // the haze stays behind whatever the camera is looking at, at any scale
+        float d = Mathf.Max(_orbit.Distance, 2);
+        _environment.FogDepthBegin = d * _hazeReach;
+        _environment.FogDepthEnd = d * _hazeReach * 6;
         _inputScript?.Process(delta);
         if (!_fpsReport || (_fpsTimer += delta) < 2) return;
         _fpsTimer = 0;
