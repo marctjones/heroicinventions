@@ -1149,8 +1149,8 @@ public partial class Main : Node3D
     private void BuildEnvironment()
     {
         _skyMaterial = new ProceduralSkyMaterial();
-        _skyTop = _skyMaterial.SkyTopColor;
-        _skyHorizon = _skyMaterial.SkyHorizonColor;
+        _skyMaterial.SunAngleMax = 25;   // the glow round the sun's disc fades out by 25°
+        _skyMaterial.SunCurve = 0.08f;
         var sky = new Sky { SkyMaterial = _skyMaterial };
         AddChild(new WorldEnvironment
         {
@@ -1185,8 +1185,19 @@ public partial class Main : Node3D
             },
         });
 
-        _sun = new DirectionalLight3D { ShadowEnabled = true };
+        _sun = new DirectionalLight3D
+        {
+            ShadowEnabled = true,
+            // shadows for scenes from a bench to a crater: four cascades out to 250 m, blended at the seams
+            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
+            DirectionalShadowMaxDistance = 250,
+            DirectionalShadowBlendSplits = true,
+            ShadowBlur = 1.5f,
+        };
         AddChild(_sun);
+        // Mars's blue aureole round a low sun: a light that only draws in the sky, along the sun's own line
+        _halo = new DirectionalLight3D { SkyMode = DirectionalLight3D.SkyModeEnum.SkyOnly, LightAngularDistance = 0.3f, Visible = false };
+        AddChild(_halo);
         _sun.RotationDegrees = new Vector3(-50, 30, 0);
 
         // 2 km across: a catapulta's bolt lands ~11 m out at 25 m/s and then
@@ -1196,7 +1207,7 @@ public partial class Main : Node3D
         // between ticks even without its swept test.
         var floor = _floor = new StaticBody3D { Position = new Vector3(0, -1f, 0) };
         floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(2000, 2f, 2000) } });
-        _floorMaterial = Shapes.Mat(Shapes.StudioFloor, roughness: 0.85f, outline: false);
+        _floorMaterial = Shapes.Mat(SkyLook.GroundFor(HeroicInventions.Sim.Planet.Earth, 0.5), roughness: 0.85f, outline: false);   // ShowSky sets it per machine
         floor.AddChild(Shapes.Box(new Vector3(2000, 2f, 2000), _floorMaterial));
         AddChild(floor);
 
@@ -1206,12 +1217,11 @@ public partial class Main : Node3D
         _orbit.MovedByPlayer += () => { _follow = null; _cameraMoved = true; };   // the player has taken the camera: stop chasing the missile
     }
 
-    private DirectionalLight3D _sun = null!;
+    private DirectionalLight3D _sun = null!, _halo = null!;
     private Godot.Environment _environment = null!;
     private ProceduralSkyMaterial _skyMaterial = null!;
     private StandardMaterial3D _floorMaterial = null!;
     private StaticBody3D? _floor;   // sunk beneath a world's map (Main.Ground.cs)
-    private Color _skyTop, _skyHorizon;
     private (double ambient, bool sunShown, int elevation, int azimuth, HeroicInventions.Sim.Planet? planet, double storm) _shownSky = (double.NaN, false, 0, 0, null, 0);
 
     /// <summary>
@@ -1234,63 +1244,58 @@ public partial class Main : Node3D
         if (key == _shownSky) return;
         _shownSky = key;
 
-        float cold = Mathf.Clamp((20 - (float)ambient) / 30, 0, 1);   // 0 at 20 °C, 1 at −10 °C and below
-        float hot = Mathf.Clamp(((float)ambient - 20) / 15, 0, 1);    // 0 at 20 °C, 1 at 35 °C and above
-        var light = Colors.White.Lerp(new Color(0.88f, 0.92f, 1f), cold).Lerp(new Color(1f, 0.9f, 0.74f), hot);
-        var top = _skyTop.Lerp(new Color(0.55f, 0.62f, 0.72f), cold * 0.7f).Lerp(new Color(0.42f, 0.6f, 0.85f), hot * 0.5f);
-        var horizon = _skyHorizon.Lerp(new Color(0.82f, 0.85f, 0.9f), cold * 0.7f).Lerp(new Color(0.9f, 0.82f, 0.68f), hot * 0.5f);
-        float energy = 1 - 0.2f * cold;
-        // Another planet's sky and ground (issue #38): Mars's butterscotch
-        // dust-lit sky over rust-red regolith, its sunlight weaker by the
-        // ratio of solar constants (586 W/m² against Earth's 1361).
+        // the sky is a function of the conditions (SkyLook): the studio's fixed sun stands 50° up in clear air
+        double elevation = sunShown ? sun!.Elevation : SkyLook.StudioElevation;
+        double airMass = sunShown ? sun!.AirMass : 1 / Math.Sin(SkyLook.StudioElevation * Math.PI / 180);
         bool earth = planet.IsEarth;
-        if (!earth)
-        {
-            Color C(HeroicInventions.Sim.Machines.Vec3 v) => new((float)v.X, (float)v.Y, (float)v.Z);
-            top = top.Lerp(C(planet.SkyColor), 0.85f);
-            horizon = horizon.Lerp(C(planet.SkyColor).Lightened(0.25f), 0.85f);
-            light = light.Lerp(new Color(1f, 0.88f, 0.75f), 0.5f);
-            energy *= Mathf.Clamp((float)(0.4 + 0.6 * planet.SolarConstant / HeroicInventions.Sim.Thermo.Sun.EarthSolarConstant), 0.2f, 1.2f);
-        }
+        var look = SkyLook.Of(planet, elevation, airMass, storm, ambient, PartsValue(run));
 
         if (sunShown)
         {
-            float el = (float)sun!.Elevation;
-            float day = Mathf.Clamp(el / 10, 0, 1);                   // full daylight above 10°
-            float low = 1 - Mathf.Clamp(el / 25, 0, 1);               // a low sun reddens
-            light = light.Lerp(new Color(1f, 0.62f, 0.35f), low * day);
-            energy *= day;
-            top = top.Lerp(new Color(0.02f, 0.03f, 0.08f), 1 - day);
-            horizon = horizon.Lerp(new Color(0.95f, 0.55f, 0.35f), low * day * 0.6f).Lerp(new Color(0.07f, 0.08f, 0.13f), 1 - day);
-            // a dust storm (issue #69): the beam through the dust falls as e^(−Δτ·AM), and the sky thickens to a dim brown
-            if (storm > 0)
-            {
-                float murk = 1 - Mathf.Exp(-(float)storm);
-                energy *= Mathf.Max(0.08f, Mathf.Exp(-(float)storm * 0.35f));
-                var dust = new Color(0.45f, 0.3f, 0.2f);
-                top = top.Lerp(dust, murk * 0.8f);
-                horizon = horizon.Lerp(dust.Lightened(0.15f), murk * 0.8f);
-                light = light.Lerp(new Color(0.8f, 0.55f, 0.35f), murk * 0.6f);
-            }
-            var d = sun.Direction;
+            var d = sun!.Direction;
             var toSun = new Vector3((float)d.X, (float)d.Y, (float)d.Z);
             var up = Mathf.Abs(toSun.Dot(Vector3.Up)) > 0.99f ? Vector3.Forward : Vector3.Up;
             _sun.LookAtFromPosition(Vector3.Zero, -toSun, up);        // shine from the sun, towards the scene
         }
         else _sun.RotationDegrees = new Vector3(-50, 30, 0);
+        _halo.Transform = _sun.Transform;
 
-        _sun.LightColor = light;
-        _sun.LightEnergy = energy;
-        _sun.Visible = energy > 0.001f;
-        _skyMaterial.SkyTopColor = top;
-        _skyMaterial.SkyHorizonColor = horizon;
-        _environment.FogLightColor = horizon;   // the haze is the horizon's colour, on Mars and at dusk too
+        _sun.LightColor = look.Light;
+        _sun.LightEnergy = look.LightEnergy;
+        _sun.Visible = look.LightEnergy > 0.001f;
+        _sun.LightAngularDistance = look.SunSizeDeg;
+        _halo.LightColor = look.Halo;
+        _halo.LightEnergy = look.HaloEnergy;
+        _halo.Visible = look.HaloEnergy > 0.001f;
+        _skyMaterial.SkyTopColor = look.Zenith;
+        _skyMaterial.SkyHorizonColor = look.Horizon;
+        _skyMaterial.GroundHorizonColor = look.GroundHorizon;
+        _skyMaterial.GroundBottomColor = look.GroundHorizon * 0.8f;
+        _environment.FogLightColor = look.Horizon;   // the haze is the horizon's colour, on Mars and at dusk too
+        _environment.FogDensity = look.Fog;
+        _environment.AmbientLightEnergy = look.AmbientEnergy;
+        // at night the sky gives almost nothing, so a faint cool fill takes over and keeps machines in silhouette
+        _environment.AmbientLightColor = look.NightAmbient;
+        _environment.AmbientLightSkyContribution = 1 - 0.6f * look.NightShare;
         float frost = Mathf.Clamp(-(float)ambient / 5, 0, 1);         // none above 0 °C, white by −5 °C
-        var ground = earth ? Shapes.StudioFloor : new Color((float)planet.GroundColor.X, (float)planet.GroundColor.Y, (float)planet.GroundColor.Z);
+        var ground = look.Ground;
         // Mars's frost is thin CO2 and water rime: a pale dusting, not an Earth snowfield
         _floorMaterial.AlbedoColor = ground.Lerp(new Color(0.93f, 0.95f, 0.98f), earth ? frost : frost * 0.25f);
         _floorMaterial.Roughness = 0.8f - 0.25f * frost;
     }
+
+    /// <summary>
+    /// How light a machine's parts look on average (relative luminance, 0 to 1), for <see cref="SkyLook.GroundFor"/>. A part with
+    /// no material, or none at all (an empty scene), counts as mid-toned.
+    /// </summary>
+    private static double PartsValue(MachineRuntime? run)
+    {
+        var values = run?.Def.Parts.Where(p => !string.IsNullOrEmpty(p.Material)).Select(p => Luminance(Skins.ColorOf(p.Material))).ToList();
+        return values is { Count: > 0 } ? values.Average() : 0.5;
+    }
+
+    // as the eye weighs it: bronze #CC8F4A is mid-toned (0.6), though its HSV value says 0.8
+    private static double Luminance(Color c) => 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
 
     // Radians per pixel dragged, and the pitch range that keeps the camera
     // from flipping over the top or bottom of its orbit.

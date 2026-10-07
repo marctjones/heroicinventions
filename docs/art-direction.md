@@ -194,3 +194,31 @@ Notes: the build needs the .NET 10 SDK (the csproj rolls net8.0 forward); `dotne
 Environment: filmic tonemap (white 6), sky ambient 0.6, exponential haze 0.0025/m whose colour follows the sky's horizon (Mars, dusk and storm included). The studio floor has its own colour, `Shapes.StudioFloor` `#77726B`, darker than section 3's `#A8A298`. Toon shading lights a sun-facing floor fully, so `#A8A298` measured 0.68 luminance in sun. `#77726B` measures 0.52, inside the 0.45 to 0.55 target, with a stone block on it at 0.62 and iron in shadow at 0.24 (newcomen-engine, gui-check shot, 1280x800). `Shapes.Stone` stays the fallback for a material with no colour.
 
 Gotcha: on Metal and Vulkan, `PROJECTION_MATRIX[1][1]` is negative (y flip), so any screen-space width in a shader needs `abs()`.
+
+## 12. Sky, light and legibility (2026-10-07, #104 and owner feedback)
+
+The owner found the first skins pass hard to read: "the coloring and the light levels are not better. It is hard to see many of the machines." Measured with `tools/legibility.py` (scene region of a 1280x800 frame), sky, horizon, floor and the wooden and bronze parts all sat at luminance 130 to 150. This section replaces section 3's sky and studio-floor values and section 6's floor target.
+
+- **Figure-ground rule** (`SkyLook.GroundFor`): the ground stands apart from the machine on it. The game averages the luminance of the machine's materials. Mostly dark to mid-toned parts (wood, bronze, iron) get a light cool-grey ground (HSV 0.58/0.08/0.80). Clearly pale parts (average above 0.66: steel, limestone, marble) get a dark one (value 0.32). Mars is always dark (its rust greyed to 45% saturation, value 0.24), because its pale sky leaves no room for a light ground. Meridiani's plain is dark basaltic sand anyway.
+- **Earth's sky** is a saturated blue, zenith `#3F74B5`, horizon `#B4CDE6`. Section 3's `#5B7FA8` measured as grey on screen.
+- **Sky from conditions** (`SkyLook.Of`, a pure function):
+  - The sun's colour is per-channel extinction e^(−k·AM), so a low sun reddens.
+  - Its strength falls by a further e^(−Δτ·AM) in a storm while the sky's light remains, so storm shadows vanish.
+  - Daylight runs from 6° below the horizon to 10° above. At night a cool fill (`#29334D`) keeps machines in silhouette.
+  - Haze thickens with dust: 0.0025/m on Earth, 0.004/m on Mars, plus 0.003/m per unit of storm optical depth.
+  - The sun disc is 0.53° on Earth, scaled by the square root of the solar constant (0.35° on Mars).
+  - Mars's blue aureole round a low sun is a sky-only `DirectionalLight3D` (a 0.3° disc, the glow fading out by 25°), gone in a storm. It met the owner's condition: a few lines, no custom sky shader.
+- **Ambient** 0.3, sun 1.0 at noon. Shadows: four cascades out to 250 m, blended at the seams.
+
+Measured on `tools/gui-check.sh` frames (sep = machine against background, sd = scene spread):
+
+| Machine | before sd / sep | after sd / sep |
+|---|---|---|
+| antikythera-lunar-train | 43 / −91 | 68 / −123 |
+| roman-crane | 29 / −34 | 37 / −62 |
+| newtons-cradle | 34 / −25 | 45 / +62 |
+| water-wheels | 10 / +26 | 38 / +64 |
+| herons-fountain | 17 / −7 | 23 / −93 |
+| mars-stirling | 15 / +4 | 20 / +40 |
+
+The spread (sd) also depends on how much of the frame the machine fills. Heron's fountain, the water wheels and the Mars engines are framed small; camera framing is #86. Frames: `docs/art/skins/legibility-before-after.png`. To aim a test frame, `tools/gui-check.sh` takes `look YAW PITCH [DISTANCE]`.
