@@ -1182,7 +1182,7 @@ public partial class Main : Node3D
         // between ticks even without its swept test.
         var floor = _floor = new StaticBody3D { Position = new Vector3(0, -1f, 0) };
         floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(2000, 2f, 2000) } });
-        _floorMaterial = Shapes.Mat(Shapes.Stone, roughness: 0.85f, outline: false);
+        _floorMaterial = Shapes.Mat(Shapes.StudioFloor, roughness: 0.85f, outline: false);
         floor.AddChild(Shapes.Box(new Vector3(2000, 2f, 2000), _floorMaterial));
         AddChild(floor);
 
@@ -1272,7 +1272,7 @@ public partial class Main : Node3D
         _skyMaterial.SkyHorizonColor = horizon;
         _environment.FogLightColor = horizon;   // the haze is the horizon's colour, on Mars and at dusk too
         float frost = Mathf.Clamp(-(float)ambient / 5, 0, 1);         // none above 0 °C, white by −5 °C
-        var ground = earth ? Shapes.Stone : new Color((float)planet.GroundColor.X, (float)planet.GroundColor.Y, (float)planet.GroundColor.Z);
+        var ground = earth ? Shapes.StudioFloor : new Color((float)planet.GroundColor.X, (float)planet.GroundColor.Y, (float)planet.GroundColor.Z);
         // Mars's frost is thin CO2 and water rime: a pale dusting, not an Earth snowfield
         _floorMaterial.AlbedoColor = ground.Lerp(new Color(0.93f, 0.95f, 0.98f), earth ? frost : frost * 0.25f);
         _floorMaterial.Roughness = 0.8f - 0.25f * frost;
