@@ -64,58 +64,114 @@ public partial class TerrainView : Node3D
 
     private ArrayMesh GroundMesh()
     {
-        int nx = _ground.Nx, nz = _ground.Nz;
-        var st = new SurfaceTool();
-        st.Begin(Mesh.PrimitiveType.Triangles);
+        int nx = _ground.Nx, nz = _ground.Nz, n = nx * nz;
         var light = new Vector3(0.4f, 1, 0.3f).Normalized();
-        // each cell's ground colour (and in alpha its roughness) goes to a texture the shader samples smoothly by
-        // position: as vertex colours, a cue that changed from cell to cell showed as stair-steps along the mesh's
-        // diagonals (the slide's debris fan). The vertex colour keeps only the hillshade.
-        var cells = Image.CreateEmpty(nx, nz, false, Image.Format.Rgba8);
+        // Each soil's look worked out once, not once per cell: a little greyer than its table colour, so crates, a
+        // rover and machines keep their own colour against what they stand on, each layer keeping its hue so the
+        // crater's bands tell apart; ice-cemented ground glints where dry soil is matt.
+        var soilLook = _ground.Soils.Select(s =>
+        {
+            var raw = Shapes.ColorFor(s.Material);
+            return (Colour: Color.FromHsv(raw.H, raw.S * 0.85f, raw.V), Roughness: s.Material.Contains("ice") ? 0.3f : 0.95f);
+        }).ToArray();
+        // The light falls on a smoothed copy of the ground: a slide's scar is cut cell by cell, a stair of 5 m treads,
+        // and shaded from the true heights every tread lit up as a step. The mesh's points stay the true heights, so
+        // what is seen is still what bodies land on; only the shading is smoothed.
+        var soft = Smooth(_ground.Heights.ToArray(), nx, nz);
+        Vector3 Soft(int i, int j) => new((float)_ground.CellX(i), (float)soft[i + j * nx], (float)_ground.CellZ(j));
+        var vertices = new Vector3[n];
+        var normals = new Vector3[n];
+        var shades = new Color[n];
+        // Each cell's ground colour (roughness in alpha) goes to a texture the shader samples smoothly by position;
+        // as vertex colours, anything that changed from cell to cell showed as stair-steps along the mesh's diagonals.
+        var colours = new double[4][];
+        for (int ch = 0; ch < 4; ch++) colours[ch] = new double[n];
         for (int j = 0; j < nz; j++)
             for (int i = 0; i < nx; i++)
             {
-                var soil = _ground.Soils[_ground.Soil[i + j * nx]].Material;
-                // shade by slope so the lie of the land shows even in flat light
-                var dx = Centre(Math.Min(i + 1, nx - 1), j) - Centre(Math.Max(i - 1, 0), j);
-                var dz = Centre(i, Math.Min(j + 1, nz - 1)) - Centre(i, Math.Max(j - 1, 0));
+                int k = i + j * nx;
+                var dx = Soft(Math.Min(i + 1, nx - 1), j) - Soft(Math.Max(i - 1, 0), j);
+                var dz = Soft(i, Math.Min(j + 1, nz - 1)) - Soft(i, Math.Max(j - 1, 0));
                 var normal = dz.Cross(dx).Normalized();
                 // hillshade, as on a map: lit from one high fixed side whatever the sun, strong enough that every
                 // slope reads (readable over realistic; the sun's own light and shadows come on top)
                 float shade = 0.45f + 0.55f * Mathf.Max(0, normal.Dot(light));
-                // soils a little greyer than their table colours, so crates, a rover and machines keep their own
-                // colour against what they stand on, each layer keeping its hue so the crater's bands tell apart
-                var raw = Shapes.ColorFor(soil);
-                var c = Color.FromHsv(raw.H, raw.S * 0.85f, raw.V);
-                if (_ground.Loose[i + j * nx]) c = c.Lightened(0.18f);   // spoil and slumped ground: loose, paler (#44)
+                var (c, roughness) = soilLook[_ground.Soil[k]];
+                if (_ground.Loose[k]) c = c.Lightened(0.18f);   // spoil and slumped ground: loose, paler (#44)
                 // ground the water has cut away shows darker and wetter, ground it has laid down paler (#53); a 5 cm change at full strength
-                double moved = _ground.Heights[i + j * nx] - _startHeights[i + j * nx];
-                if (Math.Abs(moved) > 0.002)
-                    c = moved < 0 ? c.Darkened(Mathf.Clamp((float)(-moved / 0.05), 0, 0.45f)) : c.Lerp(new Color(0.98f, 0.95f, 0.85f), Mathf.Clamp((float)(moved / 0.05), 0, 0.6f));
-                // ice-cemented ground glints where dry soil is matt: the one soil with a sheen
-                float roughness = soil.Contains("ice") ? 0.3f : 0.95f;
-                cells.SetPixel(i, j, new Color(c.R, c.G, c.B, roughness));
-                st.SetColor(new Color(shade, shade, shade));
-                st.SetNormal(normal);
-                st.AddVertex(Centre(i, j));
+                double m = _ground.Heights[k] - _startHeights[k];
+                if (Math.Abs(m) > 0.002)
+                    c = m < 0 ? c.Darkened(Mathf.Clamp((float)(-m / 0.05), 0, 0.45f)) : c.Lerp(new Color(0.98f, 0.95f, 0.85f), Mathf.Clamp((float)(m / 0.05), 0, 0.6f));
+                colours[0][k] = c.R; colours[1][k] = c.G; colours[2][k] = c.B; colours[3][k] = roughness;
+                vertices[k] = Centre(i, j);
+                normals[k] = normal;
+                shades[k] = new Color(shade, shade, shade);
             }
-        for (int j = 0; j + 1 < nz; j++)
-            for (int i = 0; i + 1 < nx; i++)
-            {
-                int a = i + j * nx, b = a + 1, c = a + nx, d = c + 1;
-                st.AddIndex(a); st.AddIndex(b); st.AddIndex(c);
-                st.AddIndex(b); st.AddIndex(d); st.AddIndex(c);
-            }
-        var mesh = st.Commit();
+        // The colours are smoothed over their neighbours before they're drawn: soils and the scour and deposit cues
+        // change cell by cell (a slide lays its rubble down as its own soil), so their edges are 5 m staircases in the
+        // data. Smoothed, an edge reads as the line it is. Two passes soften it over about two cells.
+        var bytes = new byte[n * 4];
+        for (int ch = 0; ch < 4; ch++)
+        {
+            var smooth = Smooth(colours[ch], nx, nz);
+            for (int k = 0; k < n; k++) bytes[k * 4 + ch] = (byte)Math.Clamp((int)Math.Round(smooth[k] * 255), 0, 255);
+        }
+        // the mesh in one call from arrays (SurfaceTool's per-vertex calls cost tens of ms on a 170 x 170 crater)
+        if (_indices is null || _indices.Length != (nx - 1) * (nz - 1) * 6)
+        {
+            _indices = new int[(nx - 1) * (nz - 1) * 6];
+            int t = 0;
+            for (int j = 0; j + 1 < nz; j++)
+                for (int i = 0; i + 1 < nx; i++)
+                {
+                    int a = i + j * nx, b = a + 1, c = a + nx, d = c + 1;
+                    _indices[t++] = a; _indices[t++] = b; _indices[t++] = c;
+                    _indices[t++] = b; _indices[t++] = d; _indices[t++] = c;
+                }
+        }
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = vertices;
+        arrays[(int)Mesh.ArrayType.Normal] = normals;
+        arrays[(int)Mesh.ArrayType.Color] = shades;
+        arrays[(int)Mesh.ArrayType.Index] = _indices;
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         _groundMaterial ??= GroundMaterial();
-        _groundMaterial.SetShaderParameter("cells", ImageTexture.CreateFromImage(cells));
+        _groundMaterial.SetShaderParameter("cells", ImageTexture.CreateFromImage(Image.CreateFromData(nx, nz, false, Image.Format.Rgba8, bytes)));
         mesh.SurfaceSetMaterial(0, _groundMaterial);
         return mesh;
     }
 
+    private int[]? _indices;
+
+    /// <summary>
+    /// Two passes of a 3×3 box blur over a cell field, edges clamped: a staircase edge becomes a smooth one. It uses
+    /// <paramref name="field"/> as scratch space, so pass it an array of its own.
+    /// </summary>
+    private static double[] Smooth(double[] field, int nx, int nz)
+    {
+        double[] from = field, to = new double[field.Length];
+        for (int pass = 0; pass < 2; pass++)
+        {
+            for (int j = 0; j < nz; j++)
+            {
+                int jm = Math.Max(j - 1, 0) * nx, j0 = j * nx, jp = Math.Min(j + 1, nz - 1) * nx;
+                for (int i = 0; i < nx; i++)
+                {
+                    int im = Math.Max(i - 1, 0), ip = Math.Min(i + 1, nx - 1);
+                    to[j0 + i] = (from[jm + im] + from[jm + i] + from[jm + ip] + from[j0 + im] + from[j0 + i] + from[j0 + ip]
+                                  + from[jp + im] + from[jp + i] + from[jp + ip]) / 9;
+                }
+            }
+            (from, to) = (to, from);
+        }
+        return from;
+    }
+
     private static Shader? _groundShader;
     private ShaderMaterial? _groundMaterial;
-    private Image? _wetImage;
+    private byte[]? _wetBytes;
     private ImageTexture? _wetTexture;
 
     /// <summary>
@@ -167,8 +223,8 @@ public partial class TerrainView : Node3D
         mat.SetShaderParameter("interval", ContourInterval());
         mat.SetShaderParameter("origin", new Vector2((float)_ground.X0, (float)_ground.Z0));
         mat.SetShaderParameter("size", new Vector2((float)_ground.Width, (float)_ground.Depth));
-        _wetImage = Image.CreateEmpty(_ground.Nx, _ground.Nz, false, Image.Format.R8);
-        _wetTexture = ImageTexture.CreateFromImage(_wetImage);
+        _wetBytes = null;
+        _wetTexture = ImageTexture.CreateFromImage(Image.CreateEmpty(_ground.Nx, _ground.Nz, false, Image.Format.R8));
         mat.SetShaderParameter("wet", _wetTexture);
         return mat;
     }
@@ -285,11 +341,16 @@ public partial class TerrainView : Node3D
             var water = Shapes.Water.Lightened(0.3f).Lerp(Shapes.Water.Darkened(0.3f), deep);
             return water with { A = Wet(c) ? 0.65f + 0.3f * deep : 0 };
         }
-        if (_wetImage is not null && _wetTexture is not null)
+        if (_wetTexture is not null)
         {
-            for (int c = 0; c < depths.Count; c++)
-                _wetImage.SetPixel(c % nx, c / nx, new Color(depths[c] > 0.0005 ? 1 : 0, 0, 0));
-            _wetTexture.Update(_wetImage);
+            // built as bytes and sent once, and only when some cell's wetness changed: per-cell SetPixel cost ~10 ms a frame on the crater
+            var wet = new byte[depths.Count];
+            for (int c = 0; c < wet.Length; c++) wet[c] = depths[c] > 0.0005 ? (byte)255 : (byte)0;
+            if (_wetBytes is null || !wet.AsSpan().SequenceEqual(_wetBytes))
+            {
+                _wetBytes = wet;
+                _wetTexture.Update(Image.CreateFromData(nx, nz, false, Image.Format.R8, wet));
+            }
         }
         var st = new SurfaceTool();
         st.Begin(Mesh.PrimitiveType.Triangles);
