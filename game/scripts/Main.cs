@@ -53,7 +53,7 @@ public partial class Main : Node3D
         ["aeolipile"] = new(new Vector3(0, 0.55f, 0.85f), new Vector3(0, 0.32f, 0), 42),
         ["shaduf"] = new(new Vector3(1.0f, 3.2f, 7.5f), new Vector3(1.0f, 1.8f, 0), 50),
         ["baghdad-battery"] = new(new Vector3(0.25f, 1.0f, 2.5f), new Vector3(0.25f, 0.06f, 0.1f), 45),
-        ["herons-fountain"] = new(new Vector3(0.3f, 1.5f, 3.4f), new Vector3(0.1f, 0.9f, 0), 45),
+        ["herons-fountain"] = new(new Vector3(0.25f, 1.25f, 2.3f), new Vector3(0.1f, 0.85f, 0), 45),
         ["material-samples"] = new(new Vector3(0, 0.7f, 1.6f), new Vector3(0, 0.3f, 0.3f), 45),
         ["branca-steam-wheel"] = new(new Vector3(0.35f, 0.95f, 1.35f), new Vector3(0.15f, 0.5f, 0), 45),
         ["kitchen-smoke-jack"] = new(new Vector3(0.9f, 1.75f, 1.3f), new Vector3(0, 1.2f, 0), 50),
