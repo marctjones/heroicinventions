@@ -51,8 +51,32 @@
                  (- (- (cadr t)) (sqrt (- (sqr string-len) (sqr (car t)) (sqr dy))))))
 (define bolt-z (+ nock-z (/ bolt-length 2)))
 
+;; The shot, worked (#187). Loosed, the skeins have 938 - 55 = 883 J to give
+;; between the catches and the stops (the trace's potential energy). Each arm,
+;; 0.056 kg.m2, is turned by 523.6 N.m: 9,350 rad/s2, 78 rad/s after one 8.3 ms
+;; tick (traced 78.2), so the whole shot is four ticks and no per-tick number in
+;; it is a prediction. The string drives the bolt to 44.5 m/s; at the peak the
+;; bolt has 1/2 x 0.312 x 44.5^2 = 309 J and the arms 248 J, 557 J of the 883
+;; (the rest goes into the strings' stretch and the arms' damping). The arms
+;; hit their stops, the string comes taut across them and checks the bolt, and
+;; it flies on at 33.2 m/s. Until #187 the engine capped every body's spin at
+;; 47.1 rad/s; that clamp took the arms' speed back every tick, the shot
+;; peaked at 137 J, and the bolt left at 17.6 m/s.
+;;
+;; The range, worked (#148, again for #187). It leaves level at 33.3 m/s, 0.686
+;; m up (the channel top), from 0.9 m out. Level, so no v^2 sin 2 theta / g: it
+;; falls 0.686 - 0.012 = 0.674 m in sqrt(2 x 0.674 / 9.81) = 0.371 s, 33.3 x
+;; 0.371 = 12.4 m on: 13.3 m (traced 13.1 m: the 69 cm bolt noses down and its
+;; tip lands first). It skips twice, at 31.1 and then 30.2 m/s (traced), and
+;; from 22.4 m out slides on at mu g = 0.45 x 9.81 = 4.41 m/s^2 (oak on the
+;; floor; traced 4.41): 30.2^2 / (2 x 4.41) = 103.3 m, so it rests 125.7 m out
+;; (traced 126.7). A flat-ground range is the 13 m, not the 127.
+;;
 ;; The windlass at the back of the stock that draws it again (issue #161): a
 ;; 6 cm drum across the channel's far end, a rope from it to each arm's tip.
+;; Until the crew wind it, it is held (its pawl: the crank at 0 rpm, up to 400
+;; N.m): left free, the arms' tips, at 42 m/s, take up the span ropes' slack
+;; in the shot and spin the drum to 30 rad/s, and it pays out 5 m of rope.
 ;; Wound in at 15 rpm it hauls both arms back past their catches, which drop
 ;; in behind them (one-way catches, #:catch-side); paid out, the ropes lie
 ;; slack, 1.95 m against the 1.65 m the arms reach at their stops (with 1.75
@@ -60,26 +84,15 @@
 ;; its skein from 20 to 102 degrees of twist: 150 (1.780^2 - 0.349^2) =
 ;; 457 J an arm, 914 J for the two, up to 1220 N in each rope (523.6 N.m on
 ;; a 0.43 m lever) at the catch, 146 N.m at the 6 cm drum, well within its
-;; 400. (Traced the ropes read only ~300 N and stretch 0.35 m: the arms are
-;; light, 0.056 kg.m2, under a stiff skein, and the rope solver leaves most
-;; of the hold to its stretch correction, so wind 15.6 s rather than the
-;; 10.7 s the rope's length alone asks.) Laid on the trough again
-;; ((string-right load 1) nocks it on both strings), the bolt is shot as the
-;; first was, four times traced alike: 19.8 m/s, at rest 35.9 m out.
-;;
-;; The range, worked (#148). The bolt is driven along the channel by the
-;; string to 22-24 m/s (traced 22.1 at the sampling used here, 23.8 at the
-;; finest) and, when the arms hit their stops and the string goes slack,
-;; flies on at 17.6 m/s, level, 0.686 m up (the channel top). The 19.8 m/s
-;; above is a spike read off sampled frames, not the speed it flies at.
-;; Level, so no v^2 sin 2 theta / g: it falls 0.686 - 0.012 = 0.674 m in
-;; sqrt(2 x 0.674 / 9.81) = 0.371 s, 17.6 x 0.371 = 6.5 m on, from the 0.96 m
-;; where it leaves the trough: 7.5 m (traced 7.0 m, the 69 cm bolt noses down
-;; and its tip lands first). It runs on along the floor, at 15.4 m/s after
-;; the first bounce, and slides on at mu g = 0.45 x 9.81 = 4.41 m/s^2
-;; (oak on the floor): 15.4^2 / (2 x 4.41) = 26.9 m, so it rests 7.6 + 26.9
-;; = 34.5 m out, against the traced 35.9 m (the slide begins as the bolt
-;; tumbles and drags, 4% more). A flat-ground range is the 7 m, not the 36.
+;; 400. The rope's length alone asks 10.7 s of winding, 1.0 m at 0.094 m/s;
+;; traced, the catches drop in after 24 s, 2.26 m wound, because the rope
+;; solver lets these two ropes on one light drum held by its crank stretch
+;; 1.3 m at the 1,458 N they read there (hemp would stretch a few cm), so
+;; wind 24 s and pay out at 30 rpm for 12 s. (With the spin capped at 47.1
+;; rad/s the solver's stretch correction on the drum was clipped and the same
+;; winding took 15.6 s.) Laid on the trough again ((string-right load 1) nocks
+;; it on both strings), the bolt is shot as the first was, four times traced
+;; alike: 33.2 m/s as it leaves, at rest 126.7 m out.
 (define drum-r (cm 6))
 (define drum-z (- (g 'channel-back) (cm 18)))
 (define span-length (m 1.95))
@@ -107,7 +120,8 @@
          #:drive-rpm 15 #:drive-torque 0)
   (rope span-right #:wind-on windlass #:to (right-arm L 0 0) #:length span-length #:diameter (cm 1.5))
   (rope span-left #:wind-on windlass #:to (left-arm (- L) 0 0) #:length span-length #:diameter (cm 1.5))
-  ;; one full cycle (#161): shot at 2 s; set both catches and wind the arms back, pay the ropes out, nock a bolt, shoot
-  (operator (at 5 (right-arm catch 1)) (at 5 (left-arm catch 1)) (at 5 (windlass drive-torque 400))
-            (at 20.6 (windlass drive-rpm -30)) (at 28.4 (windlass drive-rpm 0))
-            (at 29 (string-right load 1)) (at 30 (right-arm catch 0)) (at 30 (left-arm catch 0))))
+  ;; one full cycle (#161): the windlass held; shot at 2 s; set both catches and wind the arms back, pay the ropes out, nock a bolt, shoot
+  (operator (at 0 (windlass drive-rpm 0)) (at 0 (windlass drive-torque 400))
+            (at 5 (right-arm catch 1)) (at 5 (left-arm catch 1)) (at 5 (windlass drive-rpm 15))
+            (at 29 (windlass drive-rpm -30)) (at 41 (windlass drive-rpm 0))
+            (at 41.5 (string-right load 1)) (at 42.5 (right-arm catch 0)) (at 42.5 (left-arm catch 0))))

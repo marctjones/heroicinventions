@@ -14,9 +14,10 @@
 ;;             sqrt(2 g h) = 2.76).
 ;;   turning   it does not slip: w = v / r at every moment: 38.9 rad/s for the big
 ;;             ball at the foot of the ramp. The little bronze ball is started only
-;;             0.5 m up, because the engine caps any body at 47.1 rad/s and a 3 cm
-;;             ball rolling 1.5 m would want 58: it arrives after sqrt(2 (0.5) / a) =
-;;             0.742 s at sqrt(2 (1.8136)(0.5)) = 1.347 m/s, w = 44.9 rad/s.
+;;             0.5 m up (set when the engine capped any body at 47.1 rad/s, and a 3 cm
+;;             ball rolling 1.5 m would want 58; since #187 the cap is 314): it
+;;             arrives after sqrt(2 (0.5) / a) = 0.742 s at sqrt(2 (1.8136)(0.5)) =
+;;             1.347 m/s, w = 44.9 rad/s.
 ;;   energy    at every point v^2 = (10/7) g (y0 - y), the rolling law that a
 ;;             sliding block would break with 2 g (y0 - y).
 (require racket/math)

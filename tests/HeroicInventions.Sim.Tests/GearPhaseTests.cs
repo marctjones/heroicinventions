@@ -68,7 +68,10 @@ public class GearPhaseTests
     {
         // antikythera-lunar-train and geared-brake phase their gears with mate-angle; turned to any heading they still do
         var def = Shipped(name);
-        foreach (var turned in new[] { def, def.Turned(53) })
+        // a machine with a part built along the axes (generator-train's windmill) can't stand at a heading at all
+        MachineDef? atHeading;
+        try { atHeading = def.Turned(53); } catch (MachineFormatException) { atHeading = null; }
+        foreach (var turned in atHeading is null ? new[] { def } : new[] { def, atHeading })
             foreach (var m in turned.Meshes)
                 Assert.True(Math.Abs(Error(turned, m)) < 1e-6, $"{name}: {m.B} stands {Error(turned, m):F4}° off {m.A}'s gaps");
         // and the editor's phasing leaves them as they are

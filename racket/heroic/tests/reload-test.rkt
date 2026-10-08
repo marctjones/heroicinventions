@@ -22,7 +22,7 @@
     (check-= (value-at run '(right-arm catch) 1.9) 1 0)
     (check-= (value-at run '(right-arm catch) 2.1) 0 0 "let go at 2 s")
     (check-true (> (max-of run '(bolt speed)) 15) "shot")
-    (check-true (< 10 (final-of run '(bolt z)) 100) (format "at rest at z = ~a" (final-of run '(bolt z))))))
+    (check-= (final-of run '(bolt z)) 125.7 (* 0.05 125.7) (format "at rest at z = ~a, the header's 125.7" (final-of run '(bolt z))))))
 
 ;; ---------------------------------------------------------------------------
 ;; #161: span, load, loose, three times. The working is in each blueprint's header.
@@ -109,17 +109,20 @@
 
 (test-case "Catapulta (#161): drawn by its windlass and a bolt nocked three times, it shoots alike every time"
   (when (godot-available?)
+    ;; the windlass held by its pawl from the start (the demo operator's first step, off under #:set); each cycle winds
+    ;; 24 s, pays out at 30 rpm for 12 s, nocks and looses (#187: the header's working)
     (define (cycle t0)
       `((right-arm catch 1 ,t0) (left-arm catch 1 ,t0) (windlass drive-torque 400 ,t0) (windlass drive-rpm 15 ,t0)
-        (windlass drive-rpm -30 ,(+ t0 15.6)) (windlass drive-rpm 0 ,(+ t0 23.4))
-        (string-right load 1 ,(+ t0 24)) (right-arm catch 0 ,(+ t0 25)) (left-arm catch 0 ,(+ t0 25))))
-    (define run (godot-simulate 'vitruvian-catapulta #:seconds 95 #:sample-dt 1/120 #:set (append (cycle 5) (cycle 35) (cycle 65))))
-    (for ([t '(29.9 59.9 89.9)])
+        (windlass drive-rpm -30 ,(+ t0 24)) (windlass drive-rpm 0 ,(+ t0 36))
+        (string-right load 1 ,(+ t0 36.5)) (right-arm catch 0 ,(+ t0 37.5)) (left-arm catch 0 ,(+ t0 37.5))))
+    (define run (godot-simulate 'vitruvian-catapulta #:seconds 126 #:sample-dt 1/120
+                                #:set (append '((windlass drive-rpm 0) (windlass drive-torque 400)) (cycle 5) (cycle 45) (cycle 85))))
+    (for ([t '(42.4 82.4 122.4)])
       (check-= (field (frame-at run t) 'bolt.y) 0.68625 0.001 (format "a bolt on the trough at ~a s" t))
       (check-= (field (frame-at run t) 'right-arm.catch-load) 523.6 5.0 "the arms drawn back on their catches"))
-    (define speeds (for/list ([t '(2 30 60 90)]) (peak-speed run 'bolt t (+ t 1))))
+    (define speeds (for/list ([t '(2 42.5 82.5 122.5)]) (peak-speed run 'bolt t (+ t 1))))
     (for ([v speeds]) (check-= v (car speeds) (* 0.02 (car speeds)) (format "bolt speeds ~a" speeds)))
-    (define out (for/list ([t '(5 33 63 93)]) (field (frame-at run t) 'bolt.z)))
+    (define out (for/list ([t '(5 45.5 85.5 125.5)]) (field (frame-at run t) 'bolt.z)))
     (for ([z out]) (check-= z (car out) (* 0.02 (car out)) (format "3 s after each shot the bolt is at z ~a" out)))))
 
 (test-case "Catapulta (#161): a bolt can't be nocked while the arms are forward: its strings don't reach"
