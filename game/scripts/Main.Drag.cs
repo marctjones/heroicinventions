@@ -74,6 +74,12 @@ public partial class Main
     /// </summary>
     public Func<MachineView, string, RigidBody3D, bool> CanGrab { get; set; } = (_, _, _) => true;
 
+    /// <summary>
+    /// Why a person may not take hold of this body at this point, in plain words, or null when they may (the capability check of #163: the
+    /// game installs the rover's, Main.RoverHands.cs). A machine run says null for everything.
+    /// </summary>
+    public Func<MachineView, string, RigidBody3D, Vector3, string?> GrabRefusal { get; set; } = (_, _, _, _) => null;
+
     /// <summary>Where grabs and hooks are noted (see <see cref="IHandActions"/>).</summary>
     public IHandActions HandActions { get; set; } = new PrintedHandActions();
 
@@ -86,6 +92,8 @@ public partial class Main
         public Vector2 Screen, PressedAt;
         public bool Moved, Vertical, First = true;
         public Vector3 PlanePoint;
+        public double SaidAt = -100;   // when the rover last said why its hand was held back (Main.RoverHands.cs)
+        public Vector3? Placed;        // a scripted check puts the cursor here instead of on a plane ("rover hand")
     }
 
     private ActiveHand? _hand;
@@ -121,15 +129,36 @@ public partial class Main
             }
             return false;
         }
-        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press && !_joining && _hand is null
-            && DraggableAt(press.Position) is { } found
-            && CanGrab(found.View, found.PartId, found.Body))
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press && !_joining && _hand is null)
         {
+            if (!TryPress(_camera.ProjectRayOrigin(press.Position), _camera.ProjectRayNormal(press.Position), press.Position, press.ShiftPressed)) return false;
             _pressAt = press.Position;
-            BeginInteractiveHand(found, press);
             return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// A press along a ray: takes hold of the body it meets, or says why the hand may not (in the game, #163). True when the press is
+    /// used up (a hand has hold); false when nothing draggable is there, or the rover refused and said why, and the camera should orbit as usual.
+    /// </summary>
+    private bool TryPress(Vector3 from, Vector3 dir, Vector2 screen, bool shift)
+    {
+        var (part, boulder) = GrabTargetAt(from, dir);
+        if (boulder is not null)
+        {
+            // a body the ground owns can't be held by a spring here (it has no machine): the rover says why it couldn't and the press goes on to the camera
+            if (RoverBoulderRefusal(boulder) is { } why) RoverRefuse(why);
+            return false;
+        }
+        if (part is not { } found || !CanGrab(found.View, found.PartId, found.Body)) return false;
+        if (GrabRefusal(found.View, found.PartId, found.Body, found.Point) is { } refusal)
+        {
+            RoverRefuse(refusal);   // said, and the press orbits as it always did: a refused hand never took hold
+            return false;
+        }
+        BeginInteractiveHand(found, screen, shift);
+        return true;
     }
 
     private Vector3 ViewForward() => -_camera.GlobalBasis.Z;
@@ -166,34 +195,44 @@ public partial class Main
     /// the ray meets decides: a dynamic body is grabbed, a part that doesn't move is not (the camera orbits instead);
     /// the ground and the scale figure belong to no part and are looked through.
     /// </summary>
-    private (MachineView View, string PartId, RigidBody3D Body, Vector3 Point)? DraggableAt(Vector2 screen)
+    private (MachineView View, string PartId, RigidBody3D Body, Vector3 Point)? DraggableAt(Vector2 screen) =>
+        GrabTargetAt(_camera.ProjectRayOrigin(screen), _camera.ProjectRayNormal(screen)).Part;
+
+    /// <summary>
+    /// What a hand along a ray would take hold of: the body of a part, or (in the game only) a boulder a slide left, which belongs to
+    /// the ground, not to a machine; either is null when the nearest thing the ray meets is neither.
+    /// </summary>
+    private ((MachineView View, string PartId, RigidBody3D Body, Vector3 Point)? Part, MaterialBlock? Boulder) GrabTargetAt(Vector3 from, Vector3 dir)
     {
-        var from = _camera.ProjectRayOrigin(screen);
-        var dir = _camera.ProjectRayNormal(screen);
         var space = _camera.GetWorld3D().DirectSpaceState;
         var skip = new Godot.Collections.Array<Rid>();
         for (int tries = 0; tries < 32; tries++)
         {
             var hit = space.IntersectRay(new PhysicsRayQueryParameters3D { From = from, To = from + dir * 2000f, Exclude = skip });
-            if (hit.Count == 0) return null;
+            if (hit.Count == 0) return (null, null);
             var collider = (CollisionObject3D)hit["collider"].AsGodotObject();
-            if (PartOf(collider) is not { } part) { skip.Add(collider.GetRid()); continue; }
-            if (collider is not RigidBody3D body || body.Freeze) return null;
-            return (part.View, part.PartId, body, hit["position"].AsVector3());
+            if (PartOf(collider) is not { } part)
+            {
+                if (RoverIsPlayer && collider is MaterialBlock rock && rock.GetParent() == _terrainView) return (null, rock);
+                skip.Add(collider.GetRid());
+                continue;
+            }
+            if (collider is not RigidBody3D body || body.Freeze) return (null, null);
+            return ((part.View, part.PartId, body, hit["position"].AsVector3()), null);
         }
-        return null;
+        return (null, null);
     }
 
-    private void BeginInteractiveHand((MachineView View, string PartId, RigidBody3D Body, Vector3 Point) found, InputEventMouseButton press)
+    private void BeginInteractiveHand((MachineView View, string PartId, RigidBody3D Body, Vector3 Point) found, Vector2 screen, bool shift)
     {
         double now = found.View.Runtime.Time;
         var record = new DragRecord { PartId = found.PartId, GrabLocal = found.Body.ToLocal(found.Point), GrabAt = now };
         record.Keys.Add((now, found.Point));
-        var spring = new HandSpring { Body = found.Body, GrabLocal = record.GrabLocal, Target = found.Point };
+        var spring = new HandSpring { Body = found.Body, GrabLocal = record.GrabLocal, Target = found.Point, MaxForce = HandForceLimit() };
         _hand = new ActiveHand
         {
             View = found.View, Spring = spring, Record = record, Interactive = true,
-            Screen = press.Position, PressedAt = press.Position, Vertical = press.ShiftPressed, PlanePoint = found.Point,
+            Screen = screen, PressedAt = screen, Vertical = shift, PlanePoint = found.Point,
         };
         found.View.Hand = spring;
     }
@@ -264,11 +303,15 @@ public partial class Main
             {
                 _pendingDrags.RemoveAt(0);
                 var body = view.HandBody(rec.PartId);
-                if (body is null || body.Freeze || !CanGrab(view, rec.PartId, body))
+                string? refusal = null;
+                if (body is not null && !body.Freeze && CanGrab(view, rec.PartId, body))
+                    refusal = GrabRefusal(view, rec.PartId, body, body.GlobalTransform * rec.GrabLocal);
+                if (refusal is not null) RoverRefuse(refusal);   // the rover's refusal is the game working, not a setting that failed
+                else if (body is null || body.Freeze || !CanGrab(view, rec.PartId, body))
                     SettingFailed($"HEROIC_DRAG: cannot take hold of '{rec.PartId}' at {rec.GrabAt}");
                 else
                 {
-                    var spring = new HandSpring { Body = body, GrabLocal = rec.GrabLocal };
+                    var spring = new HandSpring { Body = body, GrabLocal = rec.GrabLocal, MaxForce = HandForceLimit() };
                     spring.Target = spring.GrabWorld;
                     rec.Keys.Insert(0, (rec.GrabAt, spring.GrabWorld));   // the hand starts where it takes hold
                     _hand = new ActiveHand { View = view, Spring = spring, Record = rec };
@@ -282,7 +325,8 @@ public partial class Main
         Vector3 target;
         if (h.Interactive)
         {
-            target = CursorOnPlane(h) ?? h.Spring.Target;
+            target = h.Placed ?? CursorOnPlane(h) ?? h.Spring.Target;
+            if (RoverIsPlayer) target = RoverHandTarget(h, target);   // within the arm's reach, and never up
             if (target.DistanceTo(h.Spring.Target) > 0.001f)
             {
                 // the hand stood still until now: say so, or a replay would drift toward this key from the last one
@@ -294,6 +338,7 @@ public partial class Main
         {
             if (now + 1e-9 >= (h.Record.ReleaseAt ?? now)) { EndHand(); return; }
             target = h.Record.TargetAt(now);
+            if (RoverIsPlayer) target = RoverHandTarget(h, target);
         }
         var velocity = h.First ? Vector3.Zero : (target - h.Spring.Target) / (float)dt;
         h.Spring.TargetVelocity = h.Spring.TargetVelocity.Lerp(velocity, 0.3f);   // smoothed the same way in a replay as in the live drag, so they agree

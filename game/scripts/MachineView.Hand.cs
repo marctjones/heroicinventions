@@ -15,6 +15,7 @@ public sealed class HandSpring
     public Vector3 Target;                  // where the hand wants it, in the world
     public Vector3 TargetVelocity;          // how fast that is moving, so a steady push doesn't lag behind the hand
     public float Force;                     // last tick's pull, N
+    public float MaxForce = float.PositiveInfinity;   // the most the hand can pull with, N: a machine run's hand is unlimited, the rover's is what its wheels push (RoverSpec.PushForce, #163)
     public Vector3 GrabWorld => Body.GlobalTransform * GrabLocal;
 }
 
@@ -48,6 +49,7 @@ public partial class MachineView
         float mass = w > 1e-6f ? Mathf.Min(1 / w, 10 * body.Mass) : body.Mass;
         var force = mass * (HandOmega * HandOmega * error - 2 * HandOmega * relative);
         hand.Force = force.Length();
+        if (hand.Force > hand.MaxForce) { force *= hand.MaxForce / hand.Force; hand.Force = hand.MaxForce; }   // stalls: a pull beyond it only pulls as hard as it can
         body.ApplyForce(force, at - body.GlobalPosition);
     }
 }

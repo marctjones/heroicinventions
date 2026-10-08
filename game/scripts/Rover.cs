@@ -31,6 +31,22 @@ public static class RoverSpec
     public const double WheelTorque = 42;                // N·m each of the six wheels, at most (the cap on the hinge motors; see the grade note above)
     public const double Gravity = 9.81;                  // m/s², what the game's physics runs under (Main sets Jolt's area gravity)
 
+    // ---- the rover's hands (#163): what its arm and wheels can do to the world, as numbers ----
+    /// <summary>
+    /// N the wheels can pull or push with, from what was measured, not from the ideal 6 T / r = 1680 N: Jolt's hinge motors give
+    /// about half of that (see the grade note above), the rover stalls at 30 degrees, and there the wheels' pull is the weight's
+    /// share along the slope, m g sin 30° = 185 x 9.81 x 0.5 = 907 N.
+    /// </summary>
+    public static readonly double WheelPull = TotalMass * Gravity * Math.Sin(30 * Math.PI / 180);
+    /// <summary>Friction of the tyres on the ground (the "rough" tyre material of Rover.cs uses its own 1.0). Grip caps the push at μ m g, which on Mars (3.72 m/s²) is 685 N, below <see cref="WheelPull"/>.</summary>
+    public const double TyreFriction = 1.0;
+    /// <summary>N the rover can push or drag a load sideways with, under gravity <paramref name="g"/>: the lesser of the wheels' pull and the tyres' grip.</summary>
+    public static double PushForce(double g) => Math.Min(WheelPull, TyreFriction * TotalMass * g);
+    /// <summary>m above where a load was taken that its hand may go: the backhoe's own tolerance, not lifting (#72, Rover.Backhoe.cs dumps no more than 5 cm above where it dug).</summary>
+    public const double LiftSlack = 0.05;
+    /// <summary>The arm's pivot, in the chassis frame (the turntable of Rover.Backhoe.cs).</summary>
+    public static readonly Vector3 ArmBaseLocal = new(0, 0.34f, -0.7f);
+
     /// <summary>The wheels' speed, rad/s, for the rover to roll at <paramref name="speed"/> m/s.</summary>
     public static double WheelOmega(double speed) => speed / WheelRadius;
 }
@@ -48,6 +64,12 @@ public sealed partial class Rover : Node3D
 {
     public RigidBody3D Chassis { get; private set; } = null!;
     public IReadOnlyList<RigidBody3D> Wheels => _wheels;
+
+    /// <summary>m the arm reaches from its pivot with boom, stick and bucket straight out (Rover.Backhoe.cs's lengths).</summary>
+    public const float ArmReach = BoomLength + StickLength + BucketLength;
+
+    /// <summary>The arm's pivot in the world now.</summary>
+    public Vector3 ArmBase => Chassis.GlobalTransform * RoverSpec.ArmBaseLocal;
     private readonly List<RigidBody3D> _wheels = [];
     private readonly List<HingeJoint3D> _hinges = [];
     private readonly List<bool> _left = [];

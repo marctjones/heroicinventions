@@ -54,27 +54,34 @@ public partial class Main
         }
     }
 
-    /// <summary>The part of the current machine drawn at a pixel, null for anything else (another machine in a world is focused by a click, not operated).</summary>
+    /// <summary>The part of the current machine drawn at a pixel, null for anything else (another machine in a world is focused by a click, not operated; in the game the rover's hand reaches any machine's part).</summary>
     private (MachineView View, string Id)? OperablePartAt(Vector2 screen) =>
-        PartAt(screen) is { } p && p.View == _current ? (p.View, p.PartId) : null;
+        PartAt(screen) is { } p && (p.View == _current || RoverIsPlayer) ? (p.View, p.PartId) : null;
 
     private void ClickAt(Vector2 screen, bool second)
     {
         if (OperablePartAt(screen) is not { } part) return;
+        ClickPart(part, screen, second);
+    }
+
+    /// <summary>What a click (or Shift+click) on a part does: its control through <see cref="Operate"/>, or in the game the reason the rover can't.</summary>
+    private void ClickPart((MachineView View, string Id) part, Vector2 screen, bool second)
+    {
+        if (RoverIsPlayer && part.View != _current) RoverFocus(part.View);   // the log and the panels follow the machine the rover's hand is on
         var actions = Controls.For(part.View, part.Id);
         if (actions.Count > (second ? 1 : 0))
         {
             var a = actions[second ? 1 : 0];
-            Operate(part.View, part.Id, a.Field, a.Value);
-            Toast($"{part.Id}: {a.Label.ToLowerInvariant()}");
+            if (Operate(part.View, part.Id, a.Field, a.Value)) Toast($"{part.Id}: {a.Label.ToLowerInvariant()}");
         }
+        else if (RoverIsPlayer && Controls.Refusals(part.View, part.Id) is { Count: > 0 } why) RoverRefuse(why[0]);
         if (Controls.Ranges(part.View, part.Id).Count > 0) ShowPanel(part, screen, listAll: false);
     }
 
     private void ContextAt(Vector2 screen)
     {
         ClosePanel();
-        if (OperablePartAt(screen) is { } part && Controls.Fields(part.View, part.Id).Count > 0) ShowPanel(part, screen, listAll: true);
+        if (OperablePartAt(screen) is { } part && (Controls.For(part.View, part.Id).Count > 0 || Controls.Fields(part.View, part.Id).Count > 0)) ShowPanel(part, screen, listAll: true);
     }
 
     private void Toast(string text)
@@ -137,7 +144,11 @@ public partial class Main
         var lines = new List<string> { $"{id} ({Controls.KindOf(view, id) ?? "part"})" };
         if (actions.Count > 0) lines.Add($"Click: {actions[0].Label}");
         if (actions.Count > 1) lines.Add($"Shift+click: {actions[1].Label}");
-        if (Controls.Fields(view, id).Count > 0) lines.Add("Right-click: all fields");
+        if (Controls.ByRover)   // the game: no field list (a rover has no keyboard); a part it can't work says why
+        {
+            if (actions.Count == 0) lines.Add(Controls.Refusals(view, id) is { Count: > 0 } why ? why[0] : "(nothing to operate)");
+        }
+        else if (Controls.Fields(view, id).Count > 0) lines.Add("Right-click: all fields");
         else if (actions.Count == 0) lines.Add("(nothing to operate)");
         return string.Join('\n', lines);
     }
@@ -191,7 +202,7 @@ public partial class Main
             ranged.Add(c.Field);
             col.AddChild(SliderRow(view, id, c, max));
         }
-        if (listAll)
+        if (listAll && !Controls.ByRover)   // the game offers the named controls and sliders only: a rover can't type a value into a part
         {
             col.AddChild(new HSeparator());
             var grid = new GridContainer { Columns = 2 };

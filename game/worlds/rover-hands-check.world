@@ -1,0 +1,10 @@
+;; The rover's hands (issue #163): a rover on the flood plain among a few machines, for checking what its arm may do. Two crates
+;; (90 kg each, loose), a cistern with a tap (a valve the rover can work), and the treadwheel of walkers-wheel (which it can't turn).
+;; Used by racket/heroic/tests/rover-hands-test.rkt; the rover is placed by the script, not by the world.
+(world rover-hands-check
+  (map flood-plain)
+  (rover (at 0.0 8.0) (heading 0))
+  (place crate-a crate (at 0 0 0))
+  (place crate-b crate (at 12 0 0))
+  (place tank cistern (at 0 0 -10))
+  (place walkers walkers-wheel (at 25 0 0)))
