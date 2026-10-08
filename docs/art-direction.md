@@ -377,3 +377,39 @@ Used wherever the sim has a temperature for a part: every boiler's shell (`Boile
 - `PlankSeams`: wooden boxes wider than 0.3 m get dark seams along their length on their two broad faces, one plank to about 0.2 m of width (2 to 6 planks); a beam or post is one piece and gets none. Runs once after a view is built, so any wooden box qualifies, a crate, cart bed or platform.
 - Shared-material hazard respected: every detail uses its own material instance (made for the part), none replaces a builder's `MaterialOverride`, and seams carry no outline. The Kongming lantern envelope was done by another agent.
 - Frames: `docs/art/skins/detail-before-after.png` (crate, Heron's fountain, Newcomen's boiler, carts' wheels).
+
+### 12.12 Water you can see moving, and what a machine produces (2026-10-07, #171 and #173)
+
+Each cue is drawn from a number the sim already holds, or not drawn (see the last list). All of it is new meshes or per-mesh materials; no builder's material was touched. Code: `MachineView.Flow.cs`, `MachineView.Products.cs`, and `Skins.FlowDashes` (the shader, appended to Skins).
+
+**Flow along a pipe (one rule for every `pipe`).**
+- The sim's `Pipe` has a conductance and no diameter, so every pipe is drawn with one bore: 30 mm radius (it was a 6 mm rod, under a pixel at any distance). The pipe is now iron, not bronze: bronze with pale dashes measured Heron's fountain at sep -61 (before -83), bronze with blue dashes -80, iron with pale blue dashes -87.
+- A sleeve of dashes (15 cm to a dash and its gap) rides each pipe. They move at the speed the water would: flow ÷ the bore's cross-section (π·0.03² = 2.83 L per metre), signed by the flow's direction, advanced by the sim clock (so they pause with it and follow the speed buttons). No flow, no sleeve.
+- Above 15 dashes a second, where a dash would alias at 60 frames, they fade into an even band, complete by 30 (the turn marks' rule).
+- Channels already carried foam flecks at the water's own speed (Channels); constant-head has channels, not pipes, so it is covered by those.
+- Check, cistern-and-trough (`HEROIC_FLOW_REPORT=1` prints it every 5 s): trace `feed.flow` 3.333 L/s at 5 s → 3.333 ÷ 2.827 = 1.179 m/s = 7.86 dashes/s; 2.235 L/s at 60 s → 0.791 m/s = 5.27 dashes/s. The report prints the same, from the pipe's flow: 7.86 and 5.27. Frames: `flow-pipes-noria.png`.
+
+**The pour where lifted water arrives.**
+- A noria's pour comes once per bucket. A bucket tips when its angle (read from the wheel's body) reaches the angle of the trough's lip; the stream is drawn from that bucket's lip down to the trough's water, for 35% of the time between buckets, thickness from the bucketful over that time. The sim lifts continuously; the pulses are the same water in bucketfuls.
+- Check, hama-noria: 30 pours between 1.08 s and 59.44 s = 0.49692 a second. The trace's mean `raise.rpm` over the same time is 1.2423, × 24 buckets ÷ 60 = 0.49691. Ratio 1.00002. water-mill-race (12 buckets) 1.014 over 41 s, since its speed is still settling.
+- Screws and pumps pour continuously, as their water moves (Lifts, Pumps): checked on archimedes-screw (`levels-oxygen-screw.png`).
+
+**Water held in a bucket.** Each of a noria's 24 pockets fills across the river's surface (the angles where the circle the buckets ride crosses the water's surface, from the river tank's level), stays full up the rising side, and empties across the pour window. Drawn as a blue slab a hair proud of the bucket's side walls, so its level reads from the side (readable over realistic), against the back wall, as long as the water is deep. Own material for each pocket, parented to the view, not the wheel. **Hazard:** any mesh parented to a `RigidBody3D` changes the box `BoxSize()` measures for its buoyancy and drag. The first build parented them to the wheel and hama-noria settled at 1.1776 rpm instead of 1.2335. Keep added meshes on the view and set `GlobalTransform` from the body each frame.
+
+**Heaps, levels, piles.**
+- A heap's volume is mass ÷ density, exactly: a flattened box 1.6 : 0.4 : 1.6 whose scale's product is that volume. Gold 19,300 kg/m³ (the sluice's heavy density), sand 2,650, flour 600 (loose-poured; gristmill's header gives no bulk density, so the stated 600 in `Mills` stays). It was gold at 1.7× and flour in a cone cut off at the top; both are exact now.
+- Check, placer-sluice (mesh scale read back, `HEROIC_FLOW_REPORT=1`): 10 s, 20 g kept (trace `riffles.kept-heavy` 0.02) → 1.0363 cm³ = 0.02 ÷ 19,300; 60 s, 120 g → 6.2185 cm³ = 0.12 ÷ 19,300. A cube of that is 1.0 and 1.8 cm, so a gold-yellow, unshaded disc (14 cm to the channel's width, as the cube root of the heap) floats on the water over it while any gold is kept. It is a marker; the heap is the quantity.
+- Check, gristmill (sharp stone, 120 rpm): trace `sharp.flour` 0.5908 kg at 20 s → 0.5908/600 = 0.985 L, a cone as high as a third of its radius: 4.71 cm; 2.604 kg at 60 s → 4.34 L, 7.72 cm. The mesh reads back the same.
+- A tank that holds 5 mL or more draws its water at least 4 mm deep (below that, the true level, from 1 mm). Rain-house's gutter holds 17.7 mL at 60 s (true level 0.07 mm); holy-water's basin 0.195 L (1 mm true). Drawn thicker than life, as the ice sheet is.
+- Hearths shrink with their fuel (`Fuel ÷ initial`) as before (bellows-forge, blown hearth: 0.92 at 60 s, 0.84 at 120 s); plants grow as the cube root of wood per square metre as before.
+- Oxygen: pale green-white motes rise from a plant bed while its growth beats its respiration, which is when the sim adds oxygen (`Plants.OxygenMade`).
+
+**Legibility** (`tools/legibility.py`, six references, 1280×800, `--hidden`, 6 s of sim; sd / sep, before → after): antikythera 71 / -127 → same; roman-crane 46 / -71 → same; newtons-cradle 43 / -83 → same; water-wheels 34 / -61 → same; mars-stirling 29 / +55 → same; herons-fountain 33 / -83 → 34 / -87.
+
+**Not drawable yet, because the sim has no state for them:**
+- **hierapolis-sawmill's kerf:** nothing models stone removed; the stone is a fixed post and the saw a moving block.
+- **shaduf's water:** the buckets are granite blocks, sized by what they carry; there is no water in them.
+- **greenhouse growth at trace values:** 1.9e-5 kg of wood at 60 s over 10 m² puts the crown scale (cube root) under its 0.08 floor. It grows once time runs on (#168).
+- **trench-crew and dig-out spoil:** the heap is the ground's own (loose cells, paler), drawn by `TerrainView`.
+
+Frames (`docs/art/skins/`): `flow-pipes-noria.png`, `products-heaps.png`, `levels-oxygen-screw.png`.
