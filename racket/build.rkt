@@ -41,6 +41,9 @@
               ;; into a procedural surface; a material without a finish takes its category's
               ;; melting point in °C, for the metals a pressure shell derates towards (#139); null for the rest
               'meltingPoint (material-field/default entry 'melting (json-null))
+              ;; thermal properties (#71), J/(kg K) and W/(m K); null where a material has none
+              'specificHeat (material-field/default entry 'specific-heat (json-null))
+              'conductivity (material-field/default entry 'conductivity (json-null))
               'color (material-field/default entry 'color (json-null))
               'finish (let ([v (material-field/default entry 'finish #f)]) (if v (symbol->string v) (json-null))))))
   (call-with-output-file materials-json #:exists 'truncate/replace

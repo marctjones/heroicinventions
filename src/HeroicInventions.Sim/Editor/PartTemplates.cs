@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "envelope", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "drain", "roof", "stirling", "ball", "plants", "melter", "electrolyser", "galvanic-jar"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "envelope", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "drain", "roof", "stirling", "ball", "plants", "melter", "electrolyser", "galvanic-jar", "heat-store", "heat-bin"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -152,6 +152,7 @@ public static class PartTemplates
                 ["pressure"] = new SBool(false), ["temperature"] = new SBool(false),
                 ["insulation"] = new SNumber(2), ["heat-capacity"] = new SNumber(0), ["heater"] = new SNumber(0),
                 ["leak"] = new SNumber(0), ["supply"] = new SNumber(0), ["coefficient"] = new SNumber(0.6),
+                ["wall"] = new SBool(false), ["wall-thickness"] = new SNumber(0.5), ["ground"] = new SBool(false),   // a #:wall of regolith, say, that heat soaks into (#71)
                 ["o2"] = new SBool(false), ["n2"] = new SBool(false), ["co2"] = new SBool(false), ["h2o"] = new SBool(false), ["ar"] = new SBool(false),
             },
             [], null),
@@ -208,6 +209,22 @@ public static class PartTemplates
             new Dictionary<string, SExpr>
             {
                 ["on"] = new SSymbol("?"), ["heater"] = new SNumber(0), ["temperature"] = new SBool(false), ["coefficient"] = new SNumber(3.6e-8),
+            },
+            [], null),
+        // 10 kg of basalt, a block that stores heat (#71): set #:contents water or any material, #:mass, #:temperature; aim a mirror at it
+        "heat-store" => new PartSpec(id, "heat-store", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["mass"] = new SNumber(10), ["contents"] = new SSymbol("basalt"), ["temperature"] = new SBool(false),
+                ["area"] = new SBool(false), ["emissivity"] = new SNumber(0.9), ["conductance"] = new SNumber(0),
+            },
+            [], null),
+        // an insulated bin round the heat store #:holds, its lid leaking 0.1 W/K shut; #:open 1 raises the lid, #:sense a store gives it a thermostat (#71)
+        "heat-bin" => new PartSpec(id, "heat-bin", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["holds"] = new SSymbol("?"), ["leak"] = new SNumber(0.1), ["open"] = new SNumber(0), ["sense"] = new SBool(false),
+                ["open-below"] = new SNumber(5), ["close-above"] = new SNumber(40),
             },
             [], null),
         // a 10 cm square grate in the ground over a pipe into a tank (#90): set #:into to the tank

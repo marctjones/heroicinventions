@@ -227,7 +227,7 @@ public sealed class BuildSession
                 props[key] = new SNumber(Num(cmd.Items[i + 1], context));
             else if (existing is SSymbol && cmd.Items[i + 1] is SSymbol sym)
                 props[key] = sym;                          // a name, such as a sluice's #:on channel
-            else if (existing is SBool { Value: false } && key is "tail" or "race" or "into" or "gutter" or "store" && cmd.Items[i + 1] is SSymbol named)
+            else if (existing is SBool { Value: false } && key is "tail" or "race" or "into" or "gutter" or "store" or "sense" or "wall" && cmd.Items[i + 1] is SSymbol named)
                 props[key] = named;                        // an optional name, such as a water wheel's #:race
             else if (existing is SBool { Value: false } && cmd.Items[i + 1] is SNumber or SSymbol)
                 props[key] = new SNumber(Num(cmd.Items[i + 1], context)); // an optional number, such as a sluice's #:width
@@ -796,7 +796,7 @@ public sealed class BuildSession
     }
 
     /// <summary>Props whose value names another part, checked against the document when set.</summary>
-    private static readonly HashSet<string> PartReferenceKeys = ["on", "onto", "heats", "over", "from", "to", "vessel", "into", "tail", "race", "gutter", "water", "store"];
+    private static readonly HashSet<string> PartReferenceKeys = ["on", "onto", "heats", "over", "from", "to", "vessel", "into", "tail", "race", "gutter", "water", "store", "holds", "sense"];
 
     private string Remove(SList cmd)
     {

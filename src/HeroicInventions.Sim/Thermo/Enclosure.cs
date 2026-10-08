@@ -26,6 +26,15 @@ namespace HeroicInventions.Sim.Thermo;
 /// exponentially, P = P₀·e^(−t/τ), τ = V / (Cd·A·√(γ·R·T)·(2/(γ+1))^((γ+1)/(2(γ−1)))).
 /// What leaks out goes into the zone outside if that is an enclosure too;
 /// what leaks in comes from it, its mixture at its temperature.
+///
+/// Heat stores and a transient wall (issue #71). Given a <see cref="Wall"/> (a <see cref="HeatSlab"/>: the
+/// ground's regolith, soaking up heat) and/or <see cref="Stores"/> (<see cref="HeatStore"/>s: a rock bed, the bank,
+/// a tank of hot water), the room's temperature is the inner surface's. It is solved together with the stores and
+/// the wall as one network, a step at a time, backward-Euler: the node is joined to each store by its conductance
+/// (radiation inside the room, in the thin air: the two-surface exchange with <see cref="InnerArea"/> and
+/// <see cref="WallEmissivity"/>), to the wall's first cell by its conduction, and to the zone outside by
+/// <see cref="Insulation"/> if that is not 0; the energy the stores lose is exactly what the node and wall gain.
+/// With neither, the room is the single-node exponential above, unchanged.
 /// </summary>
 public sealed class Enclosure : Zone, IHeated
 {
@@ -57,6 +66,17 @@ public sealed class Enclosure : Zone, IHeated
     public double TotalMoles => Moles.Sum();
 
     public double Insulation { get; set; } = 2;                      // W/K through the walls (UA)
+    /// <summary>The wall heat soaks into (a regolith vault), or null for a wall that only has a UA.</summary>
+    public HeatSlab? Wall { get; set; }
+    private readonly List<HeatStore> _stores = [];
+    /// <summary>The heat stores standing in the room.</summary>
+    public IReadOnlyList<HeatStore> Stores => _stores;
+    public void AddStore(HeatStore store) => _stores.Add(store);
+    /// <summary>m² of inner surface the stores radiate to. Default a cube of this volume's six faces.</summary>
+    public double InnerArea { get => _innerArea > 0 ? _innerArea : 6 * Math.Pow(Volume, 2.0 / 3); set => _innerArea = value; }
+    private double _innerArea;
+    public double WallEmissivity { get; set; } = 0.9;                // of the inner surface, for radiation
+    private double _pendingHeat;                                      // J from fires and the like, handed to the next solve
     public double WallHeatCapacity { get; set; }                     // J/K of the walls themselves
     public double Heater { get; set; }                               // W, a steady heat source inside
     public double HeatInput { get; set; }                            // W from fires and mirrors, set each step
@@ -71,7 +91,11 @@ public sealed class Enclosure : Zone, IHeated
     public override Planet Planet { get => Outside.Planet; set => Outside.Planet = value; }
 
     private double _temperature;
-    public override double Temperature { get => _temperature; set => _temperature = value; }
+    public override double Temperature
+    {
+        get => _temperature;
+        set { _temperature = value; if (Wall is not null) Wall.SurfaceTemperature = value; }
+    }
 
     /// <summary>Pa: Σnᵢ·R·T/V. Set, the gas is pumped in or bled out at the same mixture and temperature.</summary>
     public override double Pressure
@@ -152,6 +176,7 @@ public sealed class Enclosure : Zone, IHeated
     /// <summary>Heat from inside another zone (a boiler losing warmth into this room), J.</summary>
     public void AddHeat(double joules)
     {
+        if (Wall is not null || _stores.Count > 0) { _pendingHeat += joules; return; }   // a spike on a node of ~1 J/K is the network's to spread
         double c = HeatCapacity;
         if (c > 0) _temperature += joules / c;
     }
@@ -160,7 +185,39 @@ public sealed class Enclosure : Zone, IHeated
     {
         StepSupply(dt);
         StepLeak(dt);
-        StepHeat(dt);
+        if (Wall is null && _stores.Count == 0) StepHeat(dt); else StepNetwork(dt);
+    }
+
+    /// <summary>Longest share of a store's time constant a sub-step may take.</summary>
+    private const double NetworkAccuracy = 0.25;
+
+    private void StepNetwork(double dt)
+    {
+        double rate = 0;
+        foreach (var s in _stores)
+            if (s.HeatCapacity > 0) rate = Math.Max(rate, s.CouplingTo(_temperature, InnerArea, WallEmissivity) / s.HeatCapacity);
+        int sub = Math.Clamp((int)Math.Ceiling(dt * rate / NetworkAccuracy), 1, 400);
+        double extra = _pendingHeat / dt;
+        _pendingHeat = 0;
+        for (int i = 0; i < sub; i++) SolveNetwork(dt / sub, extra);
+    }
+
+    private void SolveNetwork(double h, double extraW)
+    {
+        Span<double> g = stackalloc double[Math.Max(1, _stores.Count)];
+        double sumG = 0, sumGT = 0;
+        for (int i = 0; i < _stores.Count; i++)
+        {
+            g[i] = _stores[i].CouplingTo(_temperature, InnerArea, WallEmissivity);
+            sumG += g[i];
+            sumGT += g[i] * _stores[i].Temperature;
+        }
+        if (Insulation > 0) { sumG += Insulation; sumGT += Insulation * Outside.Temperature; }
+        double q = Heater + HeatInput + extraW, c = HeatCapacity, before = _temperature;
+        if (Wall is { } wall) _temperature = wall.Step(h, c, sumG, sumGT, q);
+        else if (c / h + sumG > 0) _temperature = (c / h * _temperature + sumGT + q) / (c / h + sumG);
+        for (int i = 0; i < _stores.Count; i++) _stores[i].Exchanged(g[i] * (_temperature - _stores[i].Temperature) * h, h);
+        if (Insulation > 0 && Outside is Enclosure parent) parent.AddHeat(Insulation * (_temperature - Outside.Temperature) * h);
     }
 
     private void StepLeak(double dt)
