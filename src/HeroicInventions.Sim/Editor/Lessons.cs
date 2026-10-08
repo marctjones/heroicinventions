@@ -104,6 +104,8 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
     public void Restore(int index, IReadOnlyDictionary<string, string> roles)
     {
         Index = Math.Clamp(index, 0, Lesson.Steps.Count - 1);
+        _baseline = null;
+        Nudge = null;
         Roles.Clear();
         foreach (var (k, v) in roles) Roles[k] = v;
     }
@@ -118,6 +120,8 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
             if (Lesson.Steps[i].Check is { Type: "place", As: { } role } && (!Roles.TryGetValue(role, out var id) || !doc.Parts.ContainsKey(id)))
             {
                 Index = i;
+                _baseline = null;
+                Nudge = null;
                 foreach (var later in Lesson.Steps.Skip(i).Select(s => s.Check.As).OfType<string>()) Roles.Remove(later);
                 return;
             }
@@ -126,6 +130,8 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
     private void Advance()
     {
         Failure = null;
+        Nudge = null;
+        _baseline = null;
         Index++;
         if (Index >= Lesson.Steps.Count) { Index = Lesson.Steps.Count - 1; Finished = true; }
     }
@@ -185,27 +191,99 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
     // --------------------------------------------------------- checks
 
     /// <summary>
+    /// Why the last placement did not count, in plain words (null when there is
+    /// nothing to say: nothing has been placed or moved since the step began, or
+    /// the step is done). Cleared when the step is done or the design changes
+    /// back.
+    /// </summary>
+    public string? Nudge { get; private set; }
+
+    /// <summary>The design as it was when the step was first looked at: only a part placed or moved since then is nudged about.</summary>
+    private Dictionary<string, string>? _baseline;
+
+    /// <summary>A step has just been shown (after any settle command): what is on the bench now is not the player's doing, so it is not nudged about.</summary>
+    public void Rebase(EditorDocument doc)
+    {
+        _baseline = doc.Parts.ToDictionary(kv => kv.Key, kv => Signature(kv.Value));
+        Nudge = null;
+    }
+
+    private static string Signature(PartSpec p) => $"{p.Kind}|{N(p.At.X)} {N(p.At.Y)} {N(p.At.Z)}|{p.Material}";
+
+    private static string KindName(string kind) => kind == "lever" ? "beam" : kind;
+
+    /// <summary>
     /// Whether the design now does what the current "place" step asks. When
     /// it does, the step is done; the returned command, if any, sets the
-    /// part exactly on the target (any close placement counts).
+    /// part exactly on the target (any close placement counts). When it does
+    /// not, and the player has just placed or moved a part, the reason says
+    /// why that part did not count: the wrong kind of part, the wrong
+    /// material, or off the target (how far, which way).
     /// </summary>
-    public (bool Done, string? Settle) CheckDesign(EditorDocument doc)
+    public (bool Done, string? Settle, string? Reason) CheckDesign(EditorDocument doc)
     {
-        if (Finished || Current is not { Check.Type: "place" } step) return (false, null);
+        Nudge = null;
+        if (Finished || Current is not { Check.Type: "place" } step) return (false, null, null);
         var c = step.Check;
         var bound = Roles.Values.ToHashSet();
-        IEnumerable<PartSpec> candidates = c.Part is { } role
+        _baseline ??= doc.Parts.ToDictionary(kv => kv.Key, kv => Signature(kv.Value));
+        IEnumerable<PartSpec> pool = c.Part is { } role
             ? Roles.TryGetValue(role, out var known) && doc.Parts.TryGetValue(known, out var p) ? [p] : []
             : doc.Parts.Values.Where(x => !bound.Contains(x.Id));
-        candidates = candidates.Where(x => (c.Kind is null || x.Kind == c.Kind)
-                                           && (c.Category is null || materials.TryGet(x.Material, out var m) && m.Category.ToString().Equals(c.Category, StringComparison.OrdinalIgnoreCase)));
+        var changed = pool.Where(x => !_baseline.TryGetValue(x.Id, out var sig) || sig != Signature(x)).ToList();
+        string? CategoryOf(PartSpec x) => materials.TryGet(x.Material, out var m) ? m.Category.ToString() : null;
+        bool KindOk(PartSpec x) => c.Kind is null || x.Kind == c.Kind;
+        bool CategoryOk(PartSpec x) => c.Category is null || CategoryOf(x)?.Equals(c.Category, StringComparison.OrdinalIgnoreCase) == true;
+        var candidates = pool.Where(x => KindOk(x) && CategoryOk(x)).ToList();
         var target = TargetAt(doc);
+
+        if (c.Part is { } r && (!Roles.TryGetValue(r, out var gone) || !doc.Parts.ContainsKey(gone)))
+        {
+            Nudge = $"The {r} part is not on the bench any more. Undo your last change, or press Start over.";
+            return (false, null, Nudge);
+        }
+
+        if (step.Target is not null && target is null)
+        {
+            // what the part goes on is gone (a resumed lesson normally goes back a step; this is an edit made since)
+            if (candidates.Count > 0 || changed.Count > 0)
+                Nudge = $"This step puts the {KindName(step.Target.Kind)} {(step.Target.On is { } on ? $"on the {on}" : "in place")}, but there is no {step.Target.On ?? "target"} on the bench any more. Press Start over to begin again.";
+            return (false, null, Nudge);
+        }
+
         var best = candidates.Select(x => (Part: x, Off: target is { } t ? Distance(x.At, t) : 0)).OrderBy(x => x.Off).FirstOrDefault();
-        if (best.Part is null || target is { } && best.Off > step.Target!.Within) return (false, null);
-        if (c.As is { } name) Roles[name] = best.Part.Id;
-        string? settle = target is { } to && best.Off > 1e-4 ? $"(move {best.Part.Id} ({N(to.X)} {N(to.Y)} {N(to.Z)}))" : null;
-        Advance();
-        return (true, settle);
+        if (best.Part is not null && !(target is { } && best.Off > step.Target!.Within))
+        {
+            if (c.As is { } name) Roles[name] = best.Part.Id;
+            string? settle = target is { } to && best.Off > 1e-4 ? $"(move {best.Part.Id} ({N(to.X)} {N(to.Y)} {N(to.Z)}))" : null;
+            Advance();
+            return (true, settle, null);
+        }
+
+        if (changed.Count == 0) return (false, null, null);
+
+        // the part that came nearest to counting is the one to talk about: right kind and material but off, then the wrong material, then the wrong part
+        int Rank(PartSpec x) => KindOk(x) ? (CategoryOk(x) ? 0 : 1) : 2;
+        var about = changed.OrderBy(Rank).ThenBy(x => target is { } t ? Distance(x.At, t) : 0).First();
+        string used = KindName(about.Kind), asked = KindName(c.Kind ?? about.Kind);
+        string matName = materials.TryGet(about.Material, out var mat) ? mat.Name.ToLowerInvariant() : about.Material;
+        if (!KindOk(about))
+            Nudge = $"That is a {used}, but this step needs a {asked}. Take the {used} away and pick {char.ToUpperInvariant(asked[0])}{asked[1..]} in the parts list.";
+        else if (!CategoryOk(about))
+            Nudge = $"That {used} is {matName}, {(CategoryOf(about) is { } cat ? $"a {cat.ToLowerInvariant()}" : "not the right stuff")}, but this step asks for a {c.Category!.ToLowerInvariant()} one"
+                  + (step.Material is { } want ? $", such as {want}" : "")
+                  + $". Take it away and pick {char.ToUpperInvariant(asked[0])}{asked[1..]} again: the lesson picks the material on its card.";
+        else if (target is { } tg)
+        {
+            var d = new Vec3(tg.X - about.At.X, tg.Y - about.At.Y, tg.Z - about.At.Z);
+            var moves = new List<string>();
+            if (Math.Abs(d.X) >= 0.02) moves.Add($"{N(Math.Round(Math.Abs(d.X), 2))} m to the {(d.X > 0 ? "right" : "left")}");
+            if (Math.Abs(d.Y) >= 0.02) moves.Add($"{N(Math.Round(Math.Abs(d.Y), 2))} m {(d.Y > 0 ? "up" : "down")}");
+            if (Math.Abs(d.Z) >= 0.02) moves.Add($"{N(Math.Round(Math.Abs(d.Z), 2))} m {(d.Z > 0 ? "nearer to you" : "farther from you")}");
+            Nudge = $"Not on the green {KindName(step.Target!.Kind)} yet: that {used} is {N(Math.Round(Distance(about.At, tg), 2))} m from it, and it has to be within {N(step.Target.Within)} m. "
+                  + (moves.Count > 0 ? $"Move it {string.Join(" and ", moves)}." : "Move it a little closer.");
+        }
+        return (false, null, Nudge);
     }
 
     /// <summary>
