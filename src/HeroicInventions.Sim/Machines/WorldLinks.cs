@@ -12,7 +12,13 @@ namespace HeroicInventions.Sim.Machines;
 /// the other gives up, so power in equals power out and, for a plain shaft
 /// (Ratio 1), the torque is the same on both sides. Between ticks each
 /// machine turns its own end under its own drive and load; the next tick's
-/// exchange is the torque the shaft carried.
+/// exchange is the torque the shaft carried. What acts on one end inside the
+/// physics engine's step (a hinge motor holding its speed) reaches the other
+/// only at that next exchange, a tick late: the split crane's drum ran a
+/// tick of the shaft's torque behind the walkers' wheel. So in the game a
+/// shaft between two Jolt bodies on one axle line is locked within the step
+/// as well (<see cref="Locked"/>, #191). Between sim parts, whose drives and
+/// loads are torques worked between exchanges, no such lag arises.
 ///
 /// The same exchange couples the parts of one machine's gear train (issue
 /// #113): each pair of gears in mesh is a link of Ratio −(teeth driving /
@@ -34,15 +40,43 @@ public sealed class ShaftLink(IShaft from, IShaft to, double ratio, double effic
     public double Efficiency { get; } = efficiency is > 0 and <= 1 ? efficiency : throw new ArgumentOutOfRangeException(nameof(efficiency), "an efficiency is more than 0 and at most 1");
     /// <summary>rad/s the driven end is to run ahead of Ratio × the driving end's speed this tick: a pull back onto the ratio's angle, so meshed teeth stay in each other's gaps. 0 for a plain shaft.</summary>
     public double Bias { get; set; }
-    /// <summary>N·m the shaft turns the driven end with, forward positive (the last tick's exchange over its length).</summary>
+    /// <summary>N·m the shaft turns the driven end with, forward positive (the last tick's exchange over its length; for a <see cref="Locked"/> shaft, with what the lock gave it in the step).</summary>
     public double Torque { get; private set; }
     /// <summary>N·m the driving end was turned with, forward positive: −Ratio·Torque/η while the link drives forward.</summary>
     public double DriverTorque { get; private set; }
-    /// <summary>rad/s of the driving end.</summary>
-    public double AngularVelocity => From.AngularVelocity;
+    /// <summary>
+    /// The physics engine also holds the two ends on the ratio inside its step (#191): in the game, a shaft
+    /// between two Jolt bodies on one axle line is a lock between them as well as this exchange. The exchange
+    /// still runs before the step; the lock carries what acts on either end within it (a motor holding one
+    /// end at its speed). Its torque and speeds are then read after the step: see <see cref="ReadLocked"/>.
+    /// </summary>
+    public bool Locked { get; set; }
+    private double _toAfterExchange = double.NaN, _exchanged, _dt, _fromAfterStep = double.NaN, _toAfterStep = double.NaN;
+    /// <summary>rad/s of the driving end (a <see cref="Locked"/> shaft: as the last physics step left it).</summary>
+    public double AngularVelocity => Locked && double.IsFinite(_fromAfterStep) ? _fromAfterStep : From.AngularVelocity;
+    /// <summary>rad/s of the driven end, read as <see cref="AngularVelocity"/> is.</summary>
+    public double DrivenAngularVelocity => Locked && double.IsFinite(_toAfterStep) ? _toAfterStep : To.AngularVelocity;
     public double Rpm => AngularVelocity * 60 / (2 * Math.PI);
     /// <summary>W delivered to the driven end.</summary>
-    public double Power => Torque * To.AngularVelocity;
+    public double Power => Torque * DrivenAngularVelocity;
+
+    /// <summary>
+    /// For a <see cref="Locked"/> shaft, after the physics step and before anything else acts on its ends:
+    /// the torque the shaft carried over the last tick is the exchange's impulse plus what the lock gave the
+    /// driven end within the step, read as the change in its speed since the exchange (any drag of the driven
+    /// end's own in the step is counted against it, so it reads that much low: the split crane's drum, 0.3 N·m
+    /// of 1430). The speeds are the ones the step left, as a machine's own trace shows its bodies.
+    /// </summary>
+    public void ReadLocked()
+    {
+        if (!Locked || !double.IsFinite(_toAfterExchange) || !(_dt > 0)) return;
+        double lockImpulse = To.ShaftInertia * (To.AngularVelocity - _toAfterExchange);
+        Torque = (_exchanged + lockImpulse) / _dt;
+        double k = Torque * Ratio * From.AngularVelocity >= 0 ? 1 / Efficiency : Efficiency;
+        DriverTorque = -k * Ratio * Torque;
+        _fromAfterStep = From.AngularVelocity;
+        _toAfterStep = To.AngularVelocity;
+    }
 
     public void Step(double dt) => StepAll([this], dt, 1);
 
@@ -92,8 +126,15 @@ public sealed class ShaftLink(IShaft from, IShaft to, double ratio, double effic
             if (j != 0) end.AddAngularImpulse(j);
         for (int i = 0; i < links.Count; i++)
         {
-            links[i].Torque = dt > 0 ? given[i] / dt : 0;
-            links[i].DriverTorque = dt > 0 ? taken[i] / dt : 0;
+            var l = links[i];
+            if (l.Locked)
+            {
+                // the step still to come adds the lock's share: the torque is read after it (ReadLocked)
+                (l._toAfterExchange, l._exchanged, l._dt) = (omega[l.To], given[i], dt);
+                continue;
+            }
+            l.Torque = dt > 0 ? given[i] / dt : 0;
+            l.DriverTorque = dt > 0 ? taken[i] / dt : 0;
         }
     }
 }
@@ -106,7 +147,8 @@ public sealed class ShaftLink(IShaft from, IShaft to, double ratio, double effic
 /// new machine's tanks and wheels, which have already taken over the old
 /// ones' water and speed. A link whose machine, part or port has gone is
 /// kept, unfinished, with the reason, and does nothing until it is mended.
-/// Each tick: StepPipes, then the machines, then StepShafts.
+/// Each tick: StepPipes, then the machines, then StepShafts; in the game,
+/// ReadLockedShafts after the physics step (at the next tick's start).
 /// </summary>
 public sealed class WorldLinks
 {
@@ -207,7 +249,7 @@ public sealed class WorldLinks
         if (link.Shaft is { } s)
         {
             _getters[$"{id}.rpm"] = () => s.Rpm;                            // the driving end
-            _getters[$"{id}.driven-rpm"] = () => s.To.AngularVelocity * 60 / (2 * Math.PI);
+            _getters[$"{id}.driven-rpm"] = () => s.DrivenAngularVelocity * 60 / (2 * Math.PI);
             _getters[$"{id}.torque"] = () => s.Torque;                      // N·m into the driven end
             _getters[$"{id}.power"] = () => s.Power;                        // W
         }
@@ -232,5 +274,15 @@ public sealed class WorldLinks
     public void StepShafts(double dt)
     {
         foreach (var l in _links) l.Shaft?.Step(dt);
+    }
+
+    /// <summary>
+    /// After the physics engine's step, before the machines act on anything: what each shaft the engine
+    /// also locks (<see cref="ShaftLink.Locked"/>, #191) carried over the last tick. Nothing for a shaft the
+    /// exchange alone couples.
+    /// </summary>
+    public void ReadLockedShafts()
+    {
+        foreach (var l in _links) l.Shaft?.ReadLocked();
     }
 }

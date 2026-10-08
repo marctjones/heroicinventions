@@ -1772,22 +1772,39 @@
     (check-= (value-at links '(drive torque) 120) 8171 5)
     (check-= (value-at links '(drive power) 120) 12260 10)))
 
-(test-case "A shaft between two Jolt machines (#78): the treadwheel turns the separate hoist's drum and lifts the stone"
+(test-case "A shaft between two Jolt machines (#78): the treadwheel turns the separate hoist's drum and lifts the stone, as the one-machine crane does (#191)"
   (when (godot-available?)
-    ;; crane-hoist.rkt: the shaft carries the stone's 583 x 9.81 x 0.25 = 1430 N·m; the
-    ;; walkers' 1545 N·m leaves 115 N·m against the bodies' damping (0.2/s set; Godot's
-    ;; default 0.1/s went with #30/#33) on 1818 + 4.5 kg·m², so the pair heads for
-    ;; 115/(0.2 x 1822) = 0.316 rad/s (the walkers' 3 rpm, 0.314, is the ceiling), with
-    ;; a time constant of 1/0.2 = 5 s: 0.316 (1 - e^-4) = 0.3103 rad/s at 20 s, and the
-    ;; rope comes in at that times the drum's 25 cm.
+    ;; crane-hoist.rkt: the shaft carries the stone's 583.2 x 9.81 x 0.25 = 1430.3 N·m. The
+    ;; shaft is locked within Jolt's step (#191), so the pair spins up as the one-machine
+    ;; crane's arbor does: wheel 1818.3 + drum 4.5 kg·m², and the stone's m r² = 36.5 felt
+    ;; through the rope, 1859.3 kg·m² against the bodies' 0.2/s damping on 1822.8 (Godot's
+    ;; default 0.1/s went with #30/#33), a time constant of 1859.3 / (0.2 x 1822.8) = 5.10 s.
+    ;; The walkers' surplus over the stone heads the pair past their 3 rpm (0.31416): fitted
+    ;; to the one machine's trace (w(5) 0.2007, w(10) 0.2762), for 0.3216 rad/s, which
+    ;; reaches the cap at 19.3 s, so at 20 s the shaft turns at 3 rpm and the rope comes in at
+    ;; 0.25 x 0.31416 = 7.854 cm/s. (The fit's 117.2 N·m surplus is 2.4 more than 1545.1 -
+    ;; 1430.3 leaves, the one machine's as much as the split's; on 114.8 alone the cap would
+    ;; come past 30 s, so the surplus is too fine a margin to work by hand: the test compares
+    ;; the split with the one machine instead.)
+    ;; (Coupled only once a tick, before Jolt's step, the drum ran a tick of the shaft's
+    ;; torque behind the walkers' wheel: 2.937 rpm at 20 s and the rope 2.25% slow.)
     (define world (godot-simulate-world 'split-crane #:seconds 20 #:sample-dt 1))
-    (define-values (links hoist) (values (hash-ref world 'links) (hash-ref world 'hoist)))
-    (check-= (value-at links '(axle torque) 20) 1430 15)
+    (define one (godot-simulate 'roman-crane #:seconds 20 #:sample-dt 1 #:actions '()))
+    (define-values (links hoist walkers) (values (hash-ref world 'links) (hash-ref world 'hoist) (hash-ref world 'walkers)))
+    (check-= (value-at links '(axle torque) 20) 1430.3 1.0)
     (define omega (* (value-at links '(axle rpm) 20) 2 pi 1/60))
-    (check-= omega (* 115/1822 5 (- 1 (exp -4))) 0.004)
-    (check-= (value-at links '(axle driven-rpm) 20) (value-at links '(axle rpm) 20) 1e-4 "one speed both sides")
+    (define cap (* 3 2 pi 1/60))
+    (check-= omega cap 1e-5 "at 20 s, the walkers' 3 rpm")
+    (check-= (value-at links '(axle driven-rpm) 20) (value-at links '(axle rpm) 20) 1e-9 "one speed both sides")
+    ;; the spin-up's time constant: w(10) / w(5) = 1 + e^(-5/tau)
+    (define tau (/ 1859.3 (* 0.2 1822.8)))
+    (check-= (/ (value-at walkers '(tympanus omega) 10) (value-at walkers '(tympanus omega) 5)) (+ 1 (exp (/ -5 tau))) 0.01)
+    ;; and the same spin-up as the one machine's, second by second
+    (for ([t (in-range 1 21)])
+      (check-= (value-at walkers '(tympanus omega) t) (value-at one '(tympanus omega) t) 1e-5
+               (format "the treadwheel at ~a s, split as one" t)))
     (define rise-rate (/ (- (value-at hoist '(stone y) 20) (value-at hoist '(stone y) 10)) 10))
-    (check-= rise-rate (* omega 0.25) 0.001 "the stone rises at the drum's rim speed")))
+    (check-= rise-rate (/ (- (value-at one '(stone y) 20) (value-at one '(stone y) 10)) 10) 1e-5 "the stone rises as in the one machine")))
 
 (test-case "A live edit of a linked machine (#78): the pipe takes hold of the rebuilt cistern and the flow runs on unbroken"
   (when (godot-available?)
