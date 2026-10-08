@@ -37,6 +37,15 @@
 ;; another matter: a cube's first bounce goes as it lands, and held 3 s it
 ;; bounces nearly straight up and stops 9.1 m from the axle, where let go at
 ;; once it skids on to the 13.1 m above.
+;;
+;; The range, worked (#148). Traced, the sling lets go at 4.00 s with the
+;; stone 3.55 m up, 3.05 m out from where it lay, at 6.58 m/s: 6.37 m/s
+;; across and 1.67 m/s up, 14.6 degrees above level. Thrown from height the
+;; flat-ground range v^2 sin 2 theta / g (2.2 m here) is not the answer; the
+;; stone falls t = (vy + sqrt(vy^2 + 2 g (3.55 - 0.04))) / g = 1.033 s, going
+;; 6.37 x 1.033 = 6.58 m on, so it first touches down 3.05 + 6.58 = 9.63 m
+;; from where it lay. Traced 9.53 m: the 1% short is air drag on the 8 cm
+;; cube. The 13.1 m is the same throw plus the skid, 3.6 m of it.
 (require racket/math)
 
 (define arm-length (m 1.8))
