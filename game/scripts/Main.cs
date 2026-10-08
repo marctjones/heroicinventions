@@ -675,11 +675,12 @@ public partial class Main : Node3D
         detailsScroll.AddChild(_hudDetails);
         _detailsSection.Visible = false;
 
+        BuildOperatorSection(col);
         col.AddChild(new HSeparator());
         _hudControls = new Label
         {
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            Text = "Space pause/run · F fire · R restart · D details · H hide this panel · P person for scale · L all labels · Esc menu · 1-9 pick a machine\n"
+            Text = "Space pause/run · F fire · O operator log · R restart · D details · H hide this panel · P person for scale · L all labels · Esc menu · 1-9 pick a machine\n"
                  + "Drag to orbit · Shift+drag or middle-drag to pan · scroll or pinch to zoom\n"
                  + "Arrows move · Shift+arrows orbit · + / − or Page Up/Down zoom · Home resets the view",
         };
@@ -953,6 +954,7 @@ public partial class Main : Node3D
         _follow = FollowBody.TryGetValue(name, out var followId) ? view.BodyNamed(followId) : null;
         StartTrail(view, _follow);   // the flight drawn (Main.Trail.cs)
         _sleep.Refresh();   // this machine's own wake conditions
+        StartOperatorRun(view);   // a fresh operator log, and a replay or the blueprint's demo operator (Main.Operator.cs)
     }
 
     // ---------------------------------------------------------------- save and load (issue #67)
@@ -982,6 +984,7 @@ public partial class Main : Node3D
                 Kind = _world is not null ? "world" : "machine", Name = SaveName, Machines = machines, Sleep = sleep,
                 Ground = _groundSim is { } ground ? RuntimeState.CaptureGround(ground) : null,     // the dug earth and the water on it
                 Boulders = _groundSim is { Ground.Boulders.Count: > 0 } rocky ? rocky.Ground.SaveBoulders() : null,   // and the rocks slides left on it (#88)
+                Operated = _operatorLog.ToList(), OperatorTaken = _operatorTaken,   // what was done to the machine, in order (Main.Operator.cs)
             };
             string target = path ?? SavePath(auto);
             save.WriteAtomic(target);
@@ -1032,6 +1035,7 @@ public partial class Main : Node3D
             if (m.View is not null) unmatched += view.RestoreView(m.View);
             view.ShowState();
         }
+        if (_views.Count == 0 && _current is not null) RestoreOperator(save, _current);   // the operator log goes back with the machine (Main.Operator.cs)
         if (save.Sleep is { } s && (_views.Count > 0 ? _views.FirstOrDefault(v => v.Name == s.Label) : _current) is { } sleeper) _sleep.Resume(sleeper, s);
         GD.Print($"[save] loaded {save.Name} from {path}{(unmatched > 0 ? $" ({unmatched} entries found nothing to set)" : "")}");
         _hudNote.Text = $"Loaded {save.Name}." + (unmatched > 0 ? $" ({unmatched} entries no longer fit the machine.)" : "");
@@ -1378,7 +1382,10 @@ public partial class Main : Node3D
                 SetRunning(!_running);
                 break;
             case Key.F:
-                _current?.ToggleFire();
+                OperateFire();   // sets each fire and logs it (Main.Operator.cs)
+                break;
+            case Key.O:
+                ToggleOperatorLog();
                 break;
             case Key.R when _current is not null:
                 RestartCurrent();
@@ -1440,7 +1447,7 @@ public partial class Main : Node3D
             case "run": SetRunning(true); return ScriptedInput.Step.Next;
             case "pause": SetRunning(false); return ScriptedInput.Step.Next;
         }
-        return null;
+        return OperatorStep(w);   // operate / waitsim (Main.Operator.cs)
     }
 
     public override void _Process(double delta)
@@ -1483,6 +1490,7 @@ public partial class Main : Node3D
             foreach (var v in _views) v.StopTrace();
             _linksView?.StopTrace();
             ReportUnappliedSettings();
+            WriteOperatorOutputs();
             GetTree().Quit(_heroicSetFailed ? 1 : 0);
         }
 

@@ -125,6 +125,7 @@ public sealed class BuildSession
         "follow" => CreateFollow(cmd),
         "belt" => CreateBelt(cmd),
         "wake" => CreateWake(cmd),
+        "operator" => SetOperator(cmd),
         "set-belt" => SetBelt(cmd),
         "joint" => CreateJoint(cmd),
         "port" => SetPort(cmd),
@@ -488,6 +489,15 @@ public sealed class BuildSession
         Snapshot();
         Document.AddWake(new WakeSpec(id, Terms("when"), all, limit, Terms("events")));
         return $"wake {id}: {Document.Wakes.Last().Describe()}";
+    }
+
+    /// <summary>(operator (at t (part field value)) …): the demo operator a blueprint carries, replacing any it had (issue #153).</summary>
+    private string SetOperator(SList cmd)
+    {
+        var actions = cmd.Items.Skip(1).Select(e => OperatorLog.FromForm(e) ?? throw new FormatException("operator: expected (at seconds (part field value)) actions")).ToList();
+        Snapshot();
+        Document.SetOperator(actions);
+        return $"operator: {actions.Count} actions";
     }
 
     private string CreateBelt(SList cmd)

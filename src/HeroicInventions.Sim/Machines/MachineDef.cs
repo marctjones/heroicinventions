@@ -225,6 +225,8 @@ public sealed class MachineDef
     /// <summary>Named things to sleep until (issue #59), offered as presets by the game's sleep control.</summary>
     public IReadOnlyList<WakeSpec> Wakes { get; init; } = [];
     public IReadOnlyList<JointSpec> Joints { get; init; } = [];
+    /// <summary>A demo operator's actions (issue #153), in time order: what a person's hand does when nobody else acts.</summary>
+    public IReadOnlyList<OperatorAction> Operator { get; init; } = [];
 
     public PartSpec? Part(string id) => Parts.FirstOrDefault(p => p.Id == id);
 
@@ -268,6 +270,7 @@ public sealed class MachineDef
             Belts = Belts,
             Wakes = Wakes,
             Joints = Joints.Select(j => j with { At = Move(j.At) }).ToList(),
+            Operator = Operator,
         };
     }
 
@@ -334,6 +337,7 @@ public sealed class MachineDef
             Belts = Belts,
             Wakes = Wakes,
             Joints = Joints.Select(j => j with { At = Swing(j.At), Axis = j.Axis is { } ax ? Swing(ax) : null }).ToList(),
+            Operator = Operator,
         };
     }
 
@@ -418,6 +422,10 @@ public sealed class MachineDef
                     c.Field("material") is { } m ? Sym(m, 1, loc) : "hemp", loc);
             }).ToList(),
             Joints = clauses.Where(c => c.Head == "joint").Select(ParseJoint).ToList(),
+            // (operator (at t (part field value)) … (srcloc …)): the timed settings of a demo operator, played in time order
+            Operator = clauses.Where(c => c.Head == "operator").SelectMany(c => c.Items.Skip(1).OfType<SList>().Where(a => a.Head == "at"))
+                .Select(a => OperatorLog.FromForm(a) ?? throw new MachineFormatException("an operator action is (at seconds (part field value))", ParseLoc(a)))
+                .OrderBy(a => a.At).ToList(),
             Meshes = clauses.Where(c => c.Head == "mesh").Select(c =>
             {
                 var loc = ParseLoc(c);

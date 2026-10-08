@@ -42,6 +42,7 @@ public static class MachineWriter
         foreach (var wk in m.Wakes) clauses.Add(WakeClause(wk));
         foreach (var b in m.Belts) clauses.Add(Tagged("belt", Sym(b.Id), Sym(b.A), Sym(b.B), Tagged("tension", Num(b.Tension)), Tagged("material", Sym(b.Material)), SrcLoc(b.Location)));
         foreach (var j in m.Joints) clauses.Add(JointClause(j));
+        if (m.Operator.Count > 0) clauses.Add(new SList([Sym("operator"), .. m.Operator.Select(a => (SExpr)OperatorLog.ToForm(a))]));
 
         var w = new System.Text.StringBuilder();
         w.Append(";; Saved by the in-game editor. Building from Racket will replace this file.\n");

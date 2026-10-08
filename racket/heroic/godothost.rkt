@@ -31,7 +31,7 @@
 ;; #:set gives sim fields a value before the first step: '((tap opening 0.04)), or at a given time, as simulate
 ;; does: '((tap opening 0.04 120)) -- the game applies it in the physics step once the run reaches 120 s.
 (define (godot-simulate machine-name #:seconds seconds #:sample-dt [sample-dt 0.1]
-                        #:set [settings '()] #:env [extra-env '()])
+                        #:set [settings '()] #:actions [actions #f] #:env [extra-env '()])
   (unless (godot-available?)
     (error 'godot-simulate "Godot not found at ~a (set HEROIC_GODOT)" godot-binary))
   (unless (file-exists? (build-path game-dir "machines" (format "~a.machine" machine-name)))
@@ -51,6 +51,8 @@
                                                         (map (λ (n) (number->string (exact->inexact n))) (cddr s)))
                                                  " "))
                                   "; "))
+  ;; #:actions replays an operator log (issue #153) through the game's own HEROIC_ACTIONS
+  (when actions (env! "HEROIC_ACTIONS" (actions->path actions)))
   ;; #:env '(("HEROIC_SAVE" . "/tmp/w.save") ("HEROIC_SAVE_AT" . "3")): more of the game's own switches
   (for ([kv extra-env]) (env! (car kv) (cdr kv)))
   (define errors (open-output-string))
@@ -62,7 +64,7 @@
       (system* godot-binary "--headless" "--fixed-fps" (number->string physics-ticks-per-second) ".")))
   ;; the game exits non-zero when a HEROIC_SET setting was malformed or could not be applied: a run in which
   ;; the test's own action never happened must not be read as evidence about the machine
-  (when (regexp-match? #rx"HEROIC_SET" (get-output-string errors))
+  (when (regexp-match? #rx"HEROIC_(SET|ACTIONS)" (get-output-string errors))
     (error 'godot-simulate "~a: ~a" machine-name (get-output-string errors)))
   (define frames (call-with-input-file trace (λ (in) (for/list ([f (in-port read in)]) f))))
   (delete-file trace)

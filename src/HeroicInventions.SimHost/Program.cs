@@ -9,7 +9,8 @@ using HeroicInventions.Sim.Materials;
 // without Godot installed.
 //
 // Command:  (simulate "<path-to>.machine" <seconds> <step> <sample-dt> [(set (<target> <field> <value> [<at-seconds>]) ...)]
-//                     [(save "<path>" <at-seconds>)] [(resume "<path>")])
+//                     [(save "<path>" <at-seconds>)] [(resume "<path>")] [(actions "<path>")])
+//           (actions ...) replays an operator log (issue #153): a file of (at <seconds> (<target> <field> <value>)) forms, applied as timed settings.
 //           (save ...) writes the running state to a save file (issue #67) when the clock reaches <at-seconds>; (resume ...) lays a saved
 //           state on the machine before the first step, so the run carries on from where the save left off.
 // Reply:    (run (<time> (<target.field> <value>) ...) (<time> ...) ...)
@@ -81,6 +82,9 @@ static string Handle(string line, MaterialLibrary materials)
                 [SSymbol target, SSymbol field, SNumber value, SNumber at] => (target.Name, field.Name, value.Value, at.Value),
                 _ => throw new FormatException("each setting is (target field value [at-seconds])"),
             });
+    // an operator log to replay: the same timed settings, in the form the game records them (issue #153)
+    if (options.FirstOrDefault(o => o.Head == "actions")?.Items.ElementAtOrDefault(1) is SString actionsPath)
+        pending.AddRange(OperatorLog.Parse(File.ReadAllText(actionsPath.Value)).Select(a => (a.Target, a.Field, a.Value, a.At)));
     void SaveDue()
     {
         if (savePath is null || saved || run.Time + 1e-9 < saveAt) return;
