@@ -39,6 +39,20 @@ aeolipile.rkt:6:24: define-machine: cannot join kettle.steam (steam port) to vat
 | `tests/HeroicInventions.Sim.Tests/` | xUnit tests, including simulations of the generated blueprints. |
 | `game/` | Godot 4.6 .NET project. `MachineView` builds any machine's scene from its definition. |
 
+## Download and run
+
+Releases are zips of the exported game (macOS, Windows, Linux), made by `tools/release.sh` and listed on the repository's Releases page; how a release is cut is in [docs/release.md](docs/release.md). Players need neither Godot nor Racket nor .NET.
+
+- **macOS:** unzip and open `HeroicInventions.app`. The app is not yet signed or notarised, so the first time right-click it and choose Open (or run `xattr -dr com.apple.quarantine HeroicInventions.app`).
+- **Windows:** unzip and run `HeroicInventions.exe`; keep the `.pck` and the other files beside it.
+- **Linux:** unzip, `chmod +x HeroicInventions.x86_64`, run it; keep the `.pck` beside it.
+
+The release builds are alpha: see the known issues in [docs/release.md](docs/release.md).
+
+## Licence
+
+**Pending.** No licence has been chosen yet (issue #92), so there is no LICENSE file, and until one is added all rights are reserved by the author. This section will be replaced when the owner decides.
+
 ## Requirements
 
 - **Godot 4.6.x, .NET edition.** The standard Godot download does not run C#.
