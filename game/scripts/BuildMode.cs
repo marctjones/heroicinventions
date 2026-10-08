@@ -141,6 +141,7 @@ public partial class BuildMode : Node3D
         ["pane"] = ("Glass panes", "Structure", "Glass in an enclosure's wall or roof: the only way light gets in. Too thin for the pressure, it cracks."),
         ["heat-store"] = ("Heat store (rock or hot water)", "Fire, water and steam", "A bed of rock, a block of iron or a tank of water that holds heat: aim mirrors or a fire at it, and it warms the room it stands in as it cools. Set #:contents water for a tank."),
         ["heat-bin"] = ("Lidded bin (storage-heater damper)", "Fire, water and steam", "An insulated bin round a heat store, its lid leaking 0.1 W/K shut: open the lid to give the room the heat, shut it to hold it. Pick the store in the inspector."),
+        ["bimetal"] = ("Bimetal strip (thermostat)", "Fire, water and steam", "Two metals bonded, clamped at one end: brass on steel bends as it warms, 60 µm per K on a 100 mm strip. Set what it feels (a store or room) and the heat bin whose lid it works: shut at 40 °C, wide open 35 K cooler."),
         ["pond"] = ("Warm pond", "Water", "Gives a tank's water a temperature: warmed, it evaporates into the air over it."),
         ["drain"] = ("Drain", "Water", "A grate in the ground over a pipe into a tank: water standing on the map over it runs in. Pick the tank in the inspector."),
         ["roof"] = ("Cold roof", "Structure", "An enclosure's roof chilled by the outside: its air's vapour condenses on it and rains into a gutter."),
