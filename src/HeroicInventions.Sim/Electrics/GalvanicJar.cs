@@ -63,6 +63,21 @@ public sealed class GalvanicJar
     /// <summary>s until the acid is spent at this current; infinite while off.</summary>
     public double TimeLeft => Current > 0 ? ChargeLeft / Current : double.PositiveInfinity;
 
+    /// <summary>W at which the lamp this jar lights runs white hot: ten of Eggebrecht's jars in series, 10 x 75 µW.</summary>
+    public const double LampRatedWatts = 649.5e-6;
+    /// <summary>K the lamp's filament reaches at its rated power (1,500 °C, white-yellow).</summary>
+    public const double LampRatedKelvin = 1773.15;
+
+    /// <summary>
+    /// °C of the lamp's filament while this jar's power runs through it. A filament gives off what it is fed as
+    /// radiation, P = ε σ A T⁴, so its temperature goes as the fourth root of the power: a filament sized for
+    /// <see cref="LampRatedWatts"/> at <see cref="LampRatedKelvin"/> runs at T = 1773 K (P / 649.5 µW)^¼. One jar's
+    /// 75 µW is then 760.5 °C (dull red), the ten-jar stack 1,500 °C, and a spent or switched-off jar a cold filament
+    /// (20 °C). Nothing is simulated: this is how the current is drawn, scaled so one jar's trickle can be seen
+    /// (the real 75 µW would not warm a filament visibly).
+    /// </summary>
+    public double FilamentCelsius => Power <= 0 ? 20 : Math.Max(20, LampRatedKelvin * Math.Pow(Power / LampRatedWatts, 0.25) - 273.15);
+
     public void Step(double dt)
     {
         Time += dt;

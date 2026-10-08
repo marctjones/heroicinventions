@@ -20,7 +20,8 @@ public partial class MachineView
 
     private sealed record PumpView(LiftPump Pump, float X, float Z, float Floor, MeshInstance3D Bucket, Node3D Wheel,
                                    MeshInstance3D Yoke, MeshInstance3D Rod, MeshInstance3D PipeWater, MeshInstance3D Void,
-                                   MeshInstance3D BarrelWater, MeshInstance3D LimitTick, MeshInstance3D Stream, Label3D Label);
+                                   MeshInstance3D BarrelWater, MeshInstance3D LimitTick, MeshInstance3D Stream, Label3D Label,
+                                   MeshInstance3D NeedBar, Label3D NeedLabel, Label3D ReachLabel);
 
     private readonly List<PumpView> _pumpViews = [];
 
@@ -92,7 +93,21 @@ public partial class MachineView
                 Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
             };
             AddChild(label);
-            _pumpViews.Add(new PumpView(pump, at.X, at.Z, floor, bucket, wheel, yoke, rod, pipeWater, gap, barrelWater, tick, stream, label));
+            // the lift needed against the reach (#176): an amber dimension line from the well's surface up to the barrel's
+            // foot, and the reach, however small, named at the red tick, so a pump that cannot lift shows its empty column
+            // against the line it fell short of
+            var need = Shapes.Cylinder(0.008f, 1, Shapes.Mat(new Color(0.95f, 0.65f, 0.1f), outline: false));
+            AddChild(need);
+            Label3D Tag(Color color) => new()
+            {
+                FontSize = 24, OutlineSize = 8, PixelSize = 0.004f, Modulate = color,
+                Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
+            };
+            var needLabel = Tag(new Color(1f, 0.8f, 0.3f));
+            AddChild(needLabel);
+            var reachLabel = Tag(new Color(1f, 0.45f, 0.4f));
+            AddChild(reachLabel);
+            _pumpViews.Add(new PumpView(pump, at.X, at.Z, floor, bucket, wheel, yoke, rod, pipeWater, gap, barrelWater, tick, stream, label, need, needLabel, reachLabel));
         }
     }
 
@@ -119,6 +134,13 @@ public partial class MachineView
             v.LimitTick.Position = new Vector3(v.X + 0.12f, limit, v.Z);
             float filled = p.Primed ? Mathf.Clamp(limit - foot, 0, s) : 0;
             Span(v.BarrelWater, v.X, v.Z, foot, filled >= s ? spout : foot + filled);
+
+            float needX = v.X - 0.16f, needTo = foot - 0.1f;
+            Span(v.NeedBar, needX, v.Z, surface, needTo);
+            v.NeedLabel.Position = new Vector3(needX - 0.05f, (surface + needTo) / 2, v.Z);
+            v.NeedLabel.Text = $"needs {needTo - surface:F2} m";
+            v.ReachLabel.Position = new Vector3(v.X + 0.5f, limit, v.Z);
+            v.ReachLabel.Text = $"— reach {(Math.Abs(p.Limit) < 0.1 ? $"{p.Limit * 1000:0.#} mm" : $"{p.Limit:F2} m")}";
 
             bool gushing = p.Flow > 1e-6;
             v.Stream.Visible = gushing;

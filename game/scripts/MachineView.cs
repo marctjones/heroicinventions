@@ -667,6 +667,7 @@ public partial class MachineView : Node3D
             node.AddChild(vane);
         }
         _smokeJackViews.Add((jack, node));
+        BuildSmokeJackWork(jack, fireAt, radius, top);   // the draught and the spit it turns (MachineView.Draughts.cs)
         AddChild(BuildSteamPuffs(() => jack.JetVelocity > 0.05 ? 1 : 0, at + new Vector3(0, -0.25f, 0)));
         AddLabel(part.Id, at + new Vector3(0, 0.3f, 0));
     }

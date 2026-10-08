@@ -1391,6 +1391,7 @@ public sealed class MachineRuntime
             _getters[$"{id}.current"] = () => j.Current * 1000;            // mA
             _getters[$"{id}.power"] = () => j.Power * 1e6;                 // µW
             _getters[$"{id}.spent"] = () => j.SpentFraction * 100;         // % of the acid used
+            _getters[$"{id}.filament"] = () => j.FilamentCelsius;          // °C of the lamp it lights (#176)
             _getters[$"{id}.delivered"] = () => j.Delivered;               // J given out
             _getters[$"{id}.days-left"] = () => j.TimeLeft / 86400;        // at this current
             _getters[$"{id}.on"] = () => j.On ? 1 : 0;

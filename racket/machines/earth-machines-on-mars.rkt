@@ -28,6 +28,9 @@
 ;;         thawed) and loses 2 W/K to the air, so it warms at
 ;;         (500 - 126) / 4186 = 0.089 K/s and is boiling -- its pressure
 ;;         above the air's -- after about 1.1 s.
+;; Drawn (#176, view only): beside the pump's pipe an amber dimension line from the well's surface up to the
+;; barrel's foot, "needs 0.90 m", and at the well's surface a red tick named "reach 1.2 mm": the empty column
+;; (drawn pale) stands against the line it fell short of by 0.9 m less 1.2 mm.
 (define-machine earth-machines-on-mars
   #:source "Earth's machines under Mars's numbers: gravity 3.71, 610 Pa of CO2, -63 °C"
   #:planet mars

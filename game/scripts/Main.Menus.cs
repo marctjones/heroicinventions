@@ -104,6 +104,34 @@ public partial class Main
 
     // -------------------------------------------------------------- Machine
 
+    /// <summary>
+    /// Machines that are parts of a world rather than a demonstration on their own (#175): opened alone they stand
+    /// still, or have no ground to stand on. Each maps to the world it belongs to and a few words saying what that
+    /// world makes of it; picking one from the menu opens the world. (field-windmill is not here: it has a default
+    /// wind of its own.)
+    /// </summary>
+    internal static readonly SortedDictionary<string, (string World, string Why)> PartHomes = new()
+    {
+        ["trough"] = ("linked-pipe", "filled by the cistern's pipe: linked-pipe world"),
+        ["cistern"] = ("linked-pipe", "drains through a pipe to the trough: linked-pipe world"),
+        ["cistern-drain"] = ("sump", "a grate in the sump world's hollow"),
+        ["crate"] = ("slide", "buried by the cliff: slide world"),
+        ["cargo-crate"] = ("lonely-rover-opening", "the rover's cargo: opening world"),
+        ["dry-mill"] = ("linked-shaft", "driven by the free sails: linked-shaft world"),
+        ["walkers-wheel"] = ("split-crane", "turns the hoist: split-crane world"),
+        ["crane-hoist"] = ("split-crane", "driven by the treadwheel: split-crane world"),
+        ["trench-crew"] = ("trench", "digs the clay pit: trench world"),
+        ["buried-crate"] = ("dig-out", "dug out of the ground: dig-out world"),
+        ["spill-tank"] = ("spill", "spills on the slope: spill world"),
+        ["hillside-pond"] = ("flood-plain", "floods the valley below it: flood-plain world"),
+    };
+
+    /// <summary>Opens a part for worlds in the world it belongs to; any other machine, as itself.</summary>
+    internal void OpenPart(string name)
+    {
+        if (PartHomes.TryGetValue(name, out var home)) LoadWorldNamed(home.World); else SelectMachine(name);
+    }
+
     private void BuildMachineMenu()
     {
         var m = NewMenu("Machine", _menuBar);
@@ -111,10 +139,21 @@ public partial class Main
         var list = NewMenu("Run Machine", m.Popup);
         foreach (var (name, _) in _machineFiles)
         {
+            if (PartHomes.ContainsKey(name)) continue;   // a part for a world: in its own section below (#175)
             string captured = name;
             list.Add(DisplayNames.GetValueOrDefault(name, name), () => SelectMachine(captured));
         }
         m.Popup.AddSubmenuNodeItem("Run Machine", list.Popup);
+
+        // Parts for worlds (#175): machines that do nothing, or the wrong thing, alone: each opens the world it belongs to.
+        var parts = NewMenu("Parts for Worlds", m.Popup);
+        foreach (var (name, (world, why)) in PartHomes)
+        {
+            if (!_machineFiles.ContainsKey(name)) continue;
+            string captured = name;
+            parts.Add($"{DisplayNames.GetValueOrDefault(name, name)} ({why})", () => OpenPart(captured));
+        }
+        m.Popup.AddSubmenuNodeItem("Parts for Worlds", parts.Popup);
 
         m.Add("Every Machine, Together", () => LoadWorldNamed("gallery"));
         m.Add("Build Mode", SelectBuildMode);

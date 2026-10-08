@@ -11,7 +11,8 @@
 ;; (1e-4 m³/s per metre of head) from a pond a metre deep, h = 1 - e^(-t/100),
 ;; reaching 10 cm at 100 ln(1/0.9) = 10.5 s. Then the 7.2 m³ above the race's
 ;; lip goes, at first the free weir's 1.705 x 0.3 x 0.9^1.5 = 437 L/s.
-;; Alone (no map), the race just pours off the scene.
+;; Alone (no map), the race just pours off the scene: the valley it runs down is the map's, so
+;; the machine menu lists the pond under Parts for Worlds and opens flood-plain.world (#175, #176).
 
 (define-machine hillside-pond
   #:source "a hillside pond let go by a water clock"
