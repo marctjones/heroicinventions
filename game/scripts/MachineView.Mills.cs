@@ -17,7 +17,8 @@ public partial class MachineView
     {
         public required RigidBody3D Stone;
         public required Vector3 Axis;
-        public required float Torque, Yield;   // N·m; kg per J
+        public required HeroicInventions.Sim.Mechanics.HingeDrive Drive;   // its grind-torque, N·m, which a person can reset (issue #154)
+        public required float Yield;           // kg per J
         public double Flour, Power;            // kg so far; W now
         public required MeshInstance3D Heap;
     }
@@ -44,7 +45,7 @@ public partial class MachineView
             _millstones.Add(new Millstone
             {
                 Stone = stone, Axis = hinge.Axis.Normalized(),
-                Torque = (float)part.Number("grind-torque"),
+                Drive = Runtime.Drives[part.Id],
                 Yield = (float)(part.Number("yield", 54) / 3.6e6),
                 Heap = heap,
             });
@@ -60,7 +61,7 @@ public partial class MachineView
             var state = PhysicsServer3D.BodyGetDirectState(m.Stone.GetRid());
             float inertia = m.Axis.Dot(state.InverseInertiaTensor.Inverse() * m.Axis);
             // never more than stops it this tick: a stone at rest grinds nothing
-            float torque = Mathf.Min(m.Torque, inertia * Mathf.Abs(spin) / (float)dt);
+            float torque = Mathf.Min((float)m.Drive.Grind, inertia * Mathf.Abs(spin) / (float)dt);
             m.Stone.ApplyTorque(-Mathf.Sign(spin) * torque * m.Axis);
             m.Power = torque * Mathf.Abs(spin);
             m.Flour += m.Yield * m.Power * dt;

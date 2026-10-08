@@ -70,6 +70,20 @@ public sealed class Tank(string name, double baseElevation, double area, double 
     }
 
     public double Capacity => Area * Height;
+
+    /// <summary>A tap on the tank's floor that someone has opened (issue #156), m³/s drawn off; 0 is shut. It runs whatever the head, as a bucket filled from it would.</summary>
+    public double TapRate { get; set; }
+    /// <summary>m³ drawn off through the tap, all told.</summary>
+    public double Tapped { get; private set; }
+
+    /// <summary>Draw off what the open tap gives in <paramref name="dt"/> seconds, no more than the tank holds.</summary>
+    public void RunTap(double dt)
+    {
+        if (TapRate <= 0 || WaterVolume <= 0) return;
+        double drawn = Math.Min(WaterVolume, TapRate * dt);
+        WaterVolume -= drawn;
+        Tapped += drawn;
+    }
     public double Level => WaterVolume / Area;
     public double SurfaceElevation => BaseElevation + Level;
     public double SurfaceGaugePressure => Air?.GaugePressure ?? 0;

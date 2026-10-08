@@ -56,6 +56,13 @@ public sealed class Hopper
     /// <summary>How fast the surface, and anything resting on it, sinks, m/s: W / (ρ_b·A). Steady while there is grain.</summary>
     public double SurfaceSpeed => Flow / (BulkDensity * Area);
 
+    /// <summary>
+    /// Turn the timer over (issue #156): the grain in the lower vessel becomes the grain in the upper one, and
+    /// what was above is now below. The flow does not depend on the depth (Beverloo), so a timer turned part-way
+    /// runs for exactly the time it has already run, and the whole sand again for its full time.
+    /// </summary>
+    public void Turn() => (Mass, Drained) = (Drained, Mass);
+
     public void Step(double dt)
     {
         double out_ = Math.Min(Mass, Flow * dt);

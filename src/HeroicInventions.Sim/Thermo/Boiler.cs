@@ -145,6 +145,18 @@ public sealed class Boiler(double waterMassKg, double temperatureC = 20, double 
     public double WaterFed { get; private set; }                    // kg of feed water taken in
 
     /// <summary>
+    /// A stoker's fill or bleed (issue #156): bring the water to <paramref name="kg"/>. More is poured in at the feed
+    /// water's temperature and mixes at once (<see cref="AddWater"/>), so a boiler at the boil takes its heat back
+    /// into the cold water; less is drawn off at the boiler's own temperature, which leaves that unchanged.
+    /// </summary>
+    public void SetWater(double kg, double feedTemperatureC)
+    {
+        kg = Math.Max(0, kg);
+        if (kg > WaterMass) AddWater(kg - WaterMass, feedTemperatureC);
+        else if (!Burst) WaterMass = kg;
+    }
+
+    /// <summary>
     /// Saturation pressure of water (Pa) from the Antoine equation, using the
     /// two standard coefficient sets for 1–100 °C and 99–374 °C.
     /// </summary>

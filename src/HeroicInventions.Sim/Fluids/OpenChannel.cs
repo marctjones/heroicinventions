@@ -9,7 +9,7 @@ public sealed class WaterSource(string name, Tank into, double flow)
 {
     public string Name { get; } = name;
     public Tank Into { get; } = into;
-    public double Rate { get; } = flow;            // m³/s offered
+    public double Rate { get; set; } = flow;       // m³/s offered (a sluice at the head can shut it: 0)
     public double Flow { get; private set; }       // m³/s that found room, last step
     /// <summary>A float valve in the tank it fills, throttling it, if it has one.</summary>
     public FloatValve? Valve { get; set; }
