@@ -28,7 +28,7 @@ public static partial class TickProfile
     public static void Add(string name, double ms)
     {
         if (!On) return;
-        if (name == "scripts") _scriptsMs = ms; else if (name == "engine(jolt+sync)") Add("tick-work", ms + _scriptsMs);
+        if (name == "scripts") _scriptsMs = ms; else if (name is "engine(jolt+sync)" or "engine+frame") Add("tick-work", ms + _scriptsMs);
         if (!_samples.TryGetValue(name, out var list)) _samples[name] = list = [];
         list.Add(ms);
     }
