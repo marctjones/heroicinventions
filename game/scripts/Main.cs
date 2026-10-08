@@ -682,7 +682,7 @@ public partial class Main : Node3D
         _hudControls = new Label
         {
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            Text = "Space pause/run · F fire · R restart · D details · H hide this panel · Esc menu · 1-9 pick a machine\n"
+            Text = "Space pause/run · F fire · R restart · D details · H hide this panel · P person for scale · L all labels · Esc menu · 1-9 pick a machine\n"
                  + "Drag to orbit · Shift+drag or middle-drag to pan · scroll or pinch to zoom\n"
                  + "Arrows move · Shift+arrows orbit · + / − or Page Up/Down zoom · Home resets the view",
         };
@@ -1401,6 +1401,9 @@ public partial class Main : Node3D
             case Key.P:
                 ToggleFigure();   // the scale figure
                 break;
+            case Key.L:
+                ToggleAllLabels();   // every label, or only those that fit without overlapping (Main.Labels.cs)
+                break;
             case Key.E when _views.Count > 0:
                 EditFocused();
                 break;
@@ -1505,6 +1508,7 @@ public partial class Main : Node3D
         FollowMissile();
         DrawTrail(delta);
         ApplySilhouette(_current);   // review mode only (HEROIC_SILHOUETTE)
+        DeclutterLabels();
         if (_figure is not null && (_current is null || !IsInstanceValid(_current))) { _figure.QueueFree(); _figure = null; }
         ShowSky(_current?.Runtime);
         UpdateInfoPanel();

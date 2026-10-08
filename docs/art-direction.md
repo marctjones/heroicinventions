@@ -333,3 +333,12 @@ Frames (`docs/art/skins/`): `recognisable-before-after.png` (pairs: crane, shadu
 - **The trebuchet** opens close, from behind its shoulder; the follow camera widens along the throw. Opening frame fill went from about 2% to 9% (`legibility.py`: sd 30, sep −83).
 
 Frames: `docs/art/skins/labels-and-trebuchet.png`.
+
+### 12.8 Label density (2026-10-07, #148)
+
+`Main.Labels.cs`: about twenty times a second, every visible label in the running machines is laid out on screen, most important first:
+- readouts (any label with a digit) come before part names;
+- then larger text;
+- then newer labels.
+
+A label that would overlap one already placed fades out until there's room again. **L** shows every label. A label is hidden by zeroing its text and outline alpha, re-applied just before each frame is drawn, because impact readouts and digger tags rewrite their own alpha every frame. The alpha a builder last wrote is restored. `Visible` is never touched, since builders own it. `GeometryInstance3D.Transparency` was tried first, but a Label3D drawn without depth testing ignores it. Frames: `docs/art/skins/label-density.png` (all labels, left; laid out, right).
