@@ -104,6 +104,15 @@ public sealed class ShaftLink(IShaft from, IShaft to, double ratio, double effic
                 }
         var given = new double[links.Count];
         var taken = new double[links.Count];
+        if (links.Count > 1 && dt > 0 && SolveTogether(links, omega, inertia, given, taken))
+        {
+            for (int i = 0; i < links.Count; i++)
+            {
+                impulse[links[i].To] += given[i];
+                impulse[links[i].From] += taken[i];
+            }
+        }
+        else
         for (int s = 0; s < Math.Max(1, sweeps); s++)
             for (int i = 0; i < links.Count; i++)
             {
@@ -136,6 +145,85 @@ public sealed class ShaftLink(IShaft from, IShaft to, double ratio, double effic
             l.Torque = dt > 0 ? given[i] / dt : 0;
             l.DriverTorque = dt > 0 ? taken[i] / dt : 0;
         }
+    }
+
+    /// <summary>
+    /// A train's links solved at once (#187): the impulses λ that put every link on its ratio together, from
+    /// one linear system, one row per link, ω'_to − Ratio·ω'_from = Bias with each end's ω' = ω + (what its links
+    /// give it) / I. Sweeping link by link instead moves only a link's own two ends each time, so a heavy part
+    /// at one end of a long train (a 1,667 kg·m² windmill behind a 0.09 kg·m² wheel and three 5:1 meshes) passes
+    /// a few percent of its pull along per sweep and the far gears slip: a 125:1 train ran its first pinion at
+    /// 0.4% of its ratio. Which way power passes each mesh (1/η or η) is settled by solving again with the
+    /// directions the last solution gave, a few times. False if the system is singular (a closed loop of
+    /// meshes repeats a constraint), and the sweeps are used.
+    /// </summary>
+    private static bool SolveTogether(IReadOnlyList<ShaftLink> links, Dictionary<IShaft, double> omega,
+                                      Dictionary<IShaft, double> inertia, double[] given, double[] taken)
+    {
+        int n = links.Count;
+        var live = new bool[n];
+        for (int i = 0; i < n; i++) live[i] = inertia[links[i].From] > 0 && inertia[links[i].To] > 0;
+        var k = new double[n];
+        Array.Fill(k, 1.0);
+        var lambda = new double[n];
+        for (int pass = 0; pass < 6; pass++)
+        {
+            // what link m gives end e, per unit of its λ: +1 on its driven end, −k·Ratio on its driving end
+            double Share(IShaft e, int m) =>
+                (ReferenceEquals(e, links[m].To) ? 1 : 0) - (ReferenceEquals(e, links[m].From) ? k[m] * links[m].Ratio : 0);
+            var a = new double[n, n + 1];
+            for (int i = 0; i < n; i++)
+            {
+                var l = links[i];
+                if (!live[i]) { a[i, i] = 1; continue; }
+                for (int m = 0; m < n; m++)
+                    if (live[m])
+                        a[i, m] = Share(l.To, m) / inertia[l.To] - l.Ratio * Share(l.From, m) / inertia[l.From];
+                a[i, n] = -(omega[l.To] - l.Ratio * omega[l.From] - l.Bias);
+            }
+            if (!Solve(a, n, lambda)) return false;
+            bool settled = true;
+            for (int i = 0; i < n; i++)
+            {
+                if (!live[i]) continue;
+                double want = lambda[i] * links[i].Ratio * omega[links[i].From] >= 0 ? 1 / links[i].Efficiency : links[i].Efficiency;
+                if (want != k[i]) { k[i] = want; settled = false; }
+            }
+            if (settled) break;
+        }
+        for (int i = 0; i < n; i++)
+        {
+            given[i] = live[i] ? lambda[i] : 0;
+            taken[i] = live[i] ? -k[i] * links[i].Ratio * lambda[i] : 0;
+        }
+        return true;
+    }
+
+    /// <summary>Gaussian elimination with partial pivoting on the augmented n × (n+1) matrix; false if singular.</summary>
+    private static bool Solve(double[,] a, int n, double[] x)
+    {
+        double scale = 0;
+        for (int r = 0; r < n; r++) for (int j = 0; j < n; j++) scale = Math.Max(scale, Math.Abs(a[r, j]));
+        for (int c = 0; c < n; c++)
+        {
+            int p = c;
+            for (int r = c + 1; r < n; r++) if (Math.Abs(a[r, c]) > Math.Abs(a[p, c])) p = r;
+            if (!(Math.Abs(a[p, c]) > 1e-12 * scale)) return false;
+            if (p != c) for (int j = c; j <= n; j++) (a[c, j], a[p, j]) = (a[p, j], a[c, j]);
+            for (int r = c + 1; r < n; r++)
+            {
+                double f = a[r, c] / a[c, c];
+                if (f == 0) continue;
+                for (int j = c; j <= n; j++) a[r, j] -= f * a[c, j];
+            }
+        }
+        for (int r = n - 1; r >= 0; r--)
+        {
+            double s = a[r, n];
+            for (int j = r + 1; j < n; j++) s -= a[r, j] * x[j];
+            x[r] = s / a[r, r];
+        }
+        return true;
     }
 }
 
