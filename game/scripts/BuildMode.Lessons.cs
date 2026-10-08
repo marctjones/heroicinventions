@@ -29,6 +29,7 @@ public partial class BuildMode
     private bool _lessonChecking;       // a settle command is running: don't check inside it
     private double? _lessonAutoTestIn;  // seconds until the lesson presses Test itself
     private int _lessonShownStep = -1;
+    private string? _lessonNudgeShown;  // the "why that didn't count" sentence on the panel (#180), or null
 
     /// <summary>Whether a lesson has been started in this build mode (for the first-run hint).</summary>
     public bool LessonStarted { get; private set; }
@@ -218,14 +219,17 @@ public partial class BuildMode
         try
         {
             int before = _lesson.Index;
+            string? nudge = null;
             for (int guard = 0; guard < 10; guard++)
             {
-                var (done, settle) = _lesson.CheckDesign(_session.Document);
+                var (done, settle, reason) = _lesson.CheckDesign(_session.Document);
+                nudge = reason;
                 if (!done) break;
                 GD.Print($"[Lesson] step {before + guard + 1} done{(settle is null ? "" : $": set on its target {settle}")}");
                 if (settle is not null) RunCommand(settle);
             }
             if (_lesson.Index != before || _lessonShownStep != _lesson.Index) { SaveProgress(); ShowLessonStep(); }
+            else if (nudge != _lessonNudgeShown) ShowLessonStep();
             else PlaceLessonTarget();
         }
         finally { _lessonChecking = false; }
@@ -268,8 +272,12 @@ public partial class BuildMode
         bool fresh = _lessonShownStep != run.Index;
         _lessonTitle.Text = $"{run.Lesson.Title} · step {run.Index + 1} of {n}";
         _lessonText.Text = run.Fill(step.Text, doc);
-        _lessonNote.Text = run.Failure ?? (run.Index > 0 && fresh ? $"✓ Step {run.Index} done." : _lessonNote.Text);
-        _lessonNote.Modulate = run.Failure is null ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 0.6f, 0.5f);
+        if (fresh) run.Rebase(doc);   // whatever is on the bench as a step begins is not nudged about
+        string? why = run.Failure ?? run.Nudge;
+        _lessonNote.Text = why ?? (run.Index > 0 && fresh ? $"✓ Step {run.Index} done." : _lessonNudgeShown is not null ? "" : _lessonNote.Text);
+        if (run.Nudge is not null && run.Nudge != _lessonNudgeShown) GD.Print($"[Lesson] step {run.Index + 1} nudge shown: {_lessonNote.Text}");
+        _lessonNudgeShown = run.Nudge;
+        _lessonNote.Modulate = why is null ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 0.6f, 0.5f);
         _lessonCheckAgain.Visible = step.Check.Type == "balanced" && run.Failure is not null;
         SetLessonHighlight(step.Highlight);
         PlaceLessonTarget();

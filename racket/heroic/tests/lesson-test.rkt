@@ -87,3 +87,33 @@
     (check-true (ormap (λ (l) (string-contains? l "[Lesson] started see-saw at step 3")) again) "it carries on at step 3")
     (check-true (ormap (λ (l) (regexp-match? #px"state: .*lever_1@\\(0 0.4 0\\).*block_2@\\(-0.2 0.463 0\\)" l)) again)
                 "with the beam and the granite block back where they were")))
+
+;; #180: a placement that doesn't count says why, in the lesson panel's words. At step 2 (a granite
+;; block on the green block, 0.2 m left of the pivot) three wrong things in turn, each taken away
+;; before the next; the panel's note is printed as "[Lesson] step 2 nudge shown: ..." when it changes.
+;; Worked by hand: a block at -0.5 is 0.3 m from the green one at -0.2 (within 0.15 m), so 0.3 m right.
+(define wrong-placements
+  (string-append "wait 30; lesson see-saw; wait 5; "
+                 "palette lever; click-at 0 0 0; wait 5; "                              ; step 1 done: the beam
+                 "palette ball; click-at -0.2 0.42 0; wait 5; "                           ; the wrong part, by the palette
+                 "log; cmd (remove ball_2); wait 3; "
+                 "cmd (block w #:at (-0.2 0.47 0) #:material oak); wait 5; "             ; the wrong material
+                 "cmd (remove w); wait 3; "
+                 "palette block; click-at -0.5 0.42 0; wait 5; "                          ; off the target, by the palette
+                 "log"))
+
+(test-case "Lesson 1 says why a placement didn't count: wrong part, wrong material, off the target"
+  (when (godot-available?)
+    (define out (run-editor wrong-placements #:seconds 45))
+    (define nudges (map (λ (l) (cadr (regexp-match #px"nudge shown: (.*)$" l))) (lines-with out "step 2 nudge shown: ")))
+    (check-equal? (length nudges) 3 (format "three nudges: ~a" nudges))
+    (check-equal? (car nudges)
+                  "That is a ball, but this step needs a block. Take the ball away and pick Block in the parts list."
+                  "the wrong part")
+    (check-equal? (cadr nudges)
+                  "That block is oak, a wood, but this step asks for a stone one, such as granite. Take it away and pick Block again: the lesson picks the material on its card."
+                  "the wrong material")
+    (check-equal? (caddr nudges)
+                  "Not on the green block yet: that block is 0.3 m from it, and it has to be within 0.15 m. Move it 0.3 m to the right."
+                  "off the target")
+    (check-false (ormap (λ (l) (string-contains? l "[Lesson] step 2 done")) out) "none of them counted")))
