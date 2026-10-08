@@ -70,67 +70,67 @@ public partial class Main : Node3D
         ["falling-stones"] = new(new Vector3(0.8f, 2.6f, 6f), new Vector3(0, 0.6f, 0), 50),   // the landing: 10 cm balls over 350 m are too small to follow down
         ["aeolipile"] = new(new Vector3(0, 0.55f, 0.85f), new Vector3(0, 0.32f, 0), 42),
         ["shaduf"] = new(new Vector3(1.0f, 3.2f, 7.5f), new Vector3(1.0f, 1.8f, 0), 50),
-        ["baghdad-battery"] = new(new Vector3(0.25f, 1.0f, 2.5f), new Vector3(0.25f, 0.06f, 0.1f), 45),
+        ["baghdad-battery"] = new(new Vector3(0.3f, 1.82f, 2.61f), new Vector3(0.3f, 0.1f, 0.15f), 45),   // pivot (0.3,0.1,0.15), 3 m out at 35 deg: the ten-jar lamp at x~1.2 clears the info panel (unverified against the new geometry)
         ["herons-fountain"] = new(new Vector3(0.25f, 1.25f, 2.3f), new Vector3(0.1f, 0.85f, 0), 45),
         ["material-samples"] = new(new Vector3(0, 0.7f, 1.6f), new Vector3(0, 0.3f, 0.3f), 45),
         ["branca-steam-wheel"] = new(new Vector3(0.35f, 0.95f, 1.35f), new Vector3(0.15f, 0.5f, 0), 45),
-        ["kitchen-smoke-jack"] = new(new Vector3(0.9f, 1.75f, 1.3f), new Vector3(0, 1.2f, 0), 50),
+        ["kitchen-smoke-jack"] = new(new Vector3(1.5f, 1.6f, 4.2f), new Vector3(0, 1.1f, 0.2f), 50),   // takes in the spit with its joint and the rising warm-air column (unverified against the new geometry)
         ["solar-steam-wheel"] = new(new Vector3(1.2f, 2.4f, 4.6f), new Vector3(0, 0.8f, 0), 50),
-        ["ball-ramp"] = new(new Vector3(3.2f, 1.1f, -1.2f), new Vector3(0f, 0.25f, -1.1f), 50),
+        ["ball-ramp"] = new(new Vector3(4.5f, 1.6f, -1.4f), new Vector3(0f, 0.2f, -2.0f), 55),
         ["wake-clock"] = new(new Vector3(0.2f, 0.9f, 3.2f), new Vector3(0f, 0.45f, 0), 50),
-        ["sand-timer"] = new(new Vector3(0.6f, 1.2f, 3.6f), new Vector3(0.6f, 0.7f, 0), 55),
-        ["ratchet-windlass"] = new(new Vector3(1.6f, 1.6f, 4.6f), new Vector3(0f, 1.4f, -1.5f), 55),
+        ["sand-timer"] = new(new Vector3(0.15f, 1.1f, 4.4f), new Vector3(0.15f, 0.7f, 0), 55),
+        ["ratchet-windlass"] = new(new Vector3(4.3f, 1.6f, -1.5f), new Vector3(0f, 1.08f, -1.5f), 55),
         ["trip-hammer"] = new(new Vector3(1.5f, 1.4f, 3.3f), new Vector3(0.2f, 0.75f, -0.5f), 55),
         ["tunnel-test"] = new(new Vector3(0f, 1.6f, 4.5f), new Vector3(0f, 1f, 0), 50),
-        ["crate-tongs"] = new(new Vector3(1f, 1.1f, 4.2f), new Vector3(1f, 0.75f, 0), 55),
-        ["belt-drive"] = new(new Vector3(0.3f, 1.6f, 2.6f), new Vector3(0.3f, 1f, -0.25f), 55),
+        ["crate-tongs"] = new(new Vector3(1f, 1.4f, 3.2f), new Vector3(1f, 0.68f, 0), 55),
+        ["belt-drive"] = new(new Vector3(2.4f, 1.2f, -0.25f), new Vector3(0.35f, 0.6f, -0.25f), 55),
         ["holy-water"] = new(new Vector3(0.75f, 1.1f, 3.3f), new Vector3(0.75f, 0.5f, 0), 50),
         ["trip-sluice"] = new(new Vector3(2f, 1.3f, 6.2f), new Vector3(2f, 0.75f, 0), 55),
         ["pendulum-demo"] = new(new Vector3(0, 0.7f, 1.3f), new Vector3(0, 0.5f, 0), 42),
         ["lever-demo"] = new(new Vector3(0, 0.75f, 1.5f), new Vector3(0, 0.55f, 0), 42),
-        ["inclined-plane-demo"] = new(new Vector3(0, 1.6f, 2.8f), new Vector3(0, 0.3f, -0.6f), 55),
-        ["newtons-cradle"] = new(new Vector3(0, 0.75f, 1.0f), new Vector3(0, 0.6f, 0), 38),
+        ["inclined-plane-demo"] = new(new Vector3(2.3f, 0.8f, -1.0f), new Vector3(0f, 0.3f, -1.0f), 50),
+        ["newtons-cradle"] = new(new Vector3(0, 0.8f, 1.6f), new Vector3(0, 0.6f, 0), 38),
         ["trebuchet"] = new(new Vector3(4.6f, 2.3f, 3.4f), new Vector3(-0.3f, 1.0f, 0), 50), // close on the machine from behind its shoulder; the follow camera widens along the throw (to −x) as the stone flies
         ["torsion-catapult"] = new(new Vector3(5.0f, 2.8f, 3.2f), new Vector3(-4.0f, 0.5f, 0), 55),   // along the throw, as the trebuchet
         ["antikythera-lunar-train"] = new(new Vector3(0.13f, 0.19f, 0.19f), new Vector3(0.022f, 0.09f, 0.004f), 38),
         ["archimedes-screw"] = new(new Vector3(0.5f, 2.2f, 7.0f), new Vector3(0, 1.4f, 0), 50),
-        ["hama-noria"] = new(new Vector3(0.5f, 6.5f, 17.5f), new Vector3(0.3f, 2.0f, -1.5f), 55),
+        ["hama-noria"] = new(new Vector3(0.9f, 7.5f, 22f), new Vector3(0.9f, 3.0f, -1.6f), 55),
         ["newcomen-engine"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
         ["roman-crane"] = new(new Vector3(3.0f, 3.8f, 10.5f), new Vector3(0.3f, 3.2f, 0.5f), 50),
         ["vitruvian-catapulta"] = new(new Vector3(2.4f, 2.0f, -3.6f), new Vector3(0, 0.4f, 4.0f), 50),   // from behind, along the bolt's flight (to +z)
-        ["component-gallery"] = new(new Vector3(3.5f, 5.5f, 13f), new Vector3(3.5f, 0.6f, 0), 60),
+        ["component-gallery"] = new(new Vector3(4.5f, 6.5f, 25f), new Vector3(4.5f, 0.8f, 0), 60),
         ["newcomen-hearth"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
         ["hearth-engine"] = new(new Vector3(0, 1.0f, 1.7f), new Vector3(0, 0.75f, 0), 45),
         ["post-and-lintel-crane"] = new(new Vector3(2.2f, 1.7f, 4.6f), new Vector3(0, 1.1f, 0), 50),
         ["water-mill-race"] = new(new Vector3(5f, 3.5f, 13f), new Vector3(5f, 0.9f, 0), 55),
         ["water-clock"] = new(new Vector3(0, 1.4f, 5.0f), new Vector3(-0.2f, 1.0f, 0), 50),
-        ["castellum-aquae"] = new(new Vector3(10.5f, 5.0f, 22f), new Vector3(10.5f, 2.6f, 0), 55),
+        ["castellum-aquae"] = new(new Vector3(11.3f, 8f, 32f), new Vector3(11.3f, 2.6f, 0), 55),
         ["heron-temple-doors"] = new(new Vector3(1.2f, 2.6f, 5.5f), new Vector3(1.0f, 1.0f, -0.4f), 55),
         ["bearing-friction"] = new(new Vector3(0.1f, 1.1f, 4.0f), new Vector3(0.1f, 0.85f, 0), 45),
-        ["axle-friction"] = new(new Vector3(6.5f, 3.2f, 17f), new Vector3(6.5f, 1.2f, 0), 55),
-        ["heading-rig"] = new(new Vector3(-1f, 3.5f, 9f), new Vector3(-1f, 0.5f, 0), 60),
+        ["axle-friction"] = new(new Vector3(6.05f, 3.5f, 16f), new Vector3(6.05f, 1.7f, 0), 55),
+        ["heading-rig"] = new(new Vector3(-1.0f, 3.4f, 7.2f), new Vector3(-1.0f, 0.6f, -0.66f), 60),
         ["field-windmill"] = new(new Vector3(-1.0f, 17.0f, 32.0f), new Vector3(-1.0f, 9.0f, -1.9f), 50),
-        ["water-wheels"] = new(new Vector3(7.0f, 4.8f, 15.5f), new Vector3(7.0f, 1.4f, 0), 55),
-        ["fire-and-water"] = new(new Vector3(0.9f, 2.4f, 6.0f), new Vector3(0.9f, 0.4f, 0), 50),
-        ["sluice-demo"] = new(new Vector3(4.5f, 3.2f, 9.5f), new Vector3(4.2f, 0.8f, -0.5f), 55),
-        ["dam-break"] = new(new Vector3(18f, 7f, 15f), new Vector3(22f, 1f, 0), 55),
+        ["water-wheels"] = new(new Vector3(6.8f, 6f, 24f), new Vector3(6.8f, 1.7f, 0), 55),
+        ["fire-and-water"] = new(new Vector3(0.3f, 2.5f, 8.2f), new Vector3(0.3f, 0.5f, 0), 50),
+        ["sluice-demo"] = new(new Vector3(4.1f, 4.5f, 13.5f), new Vector3(4.1f, 1.0f, -1.1f), 55),
+        ["dam-break"] = new(new Vector3(18f, 18f, 46f), new Vector3(18f, 1f, 0), 55),
         ["floats"] = new(new Vector3(1f, 1.6f, 3.2f), new Vector3(1f, 0.3f, 0), 50),
         ["hanging-chain"] = new(new Vector3(0, 1.6f, 3.2f), new Vector3(0, 1.5f, 0), 50),
-        ["placer-sluice"] = new(new Vector3(2.5f, 1.6f, 2.6f), new Vector3(2.4f, 0.5f, 0), 50),
+        ["placer-sluice"] = new(new Vector3(1.6f, 2.6f, 9f), new Vector3(1.6f, 0.4f, 0), 50),
         ["constant-head"] = new(new Vector3(2.2f, 2.2f, 2.8f), new Vector3(0.8f, 0.8f, -0.7f), 50),
         ["tank-leaks"] = new(new Vector3(3.6f, 1.8f, 10.5f), new Vector3(3.6f, 0.6f, 0), 50),
         ["boiler-safety"] = new(new Vector3(0.75f, 1.5f, 3.0f), new Vector3(0.75f, 0.4f, 0), 50),
-        ["boiler-shells"] = new(new Vector3(1.5f, 1.5f, 4.0f), new Vector3(1.5f, 0.4f, 0), 50),
+        ["boiler-shells"] = new(new Vector3(1.5f, 1.4f, 4.4f), new Vector3(1.5f, 0.4f, 0), 50),
         ["suction-limit"] = new(new Vector3(3.6f, 6.9f, 16f), new Vector3(3.6f, 6.7f, 0), 50),
         ["bellows-forge"] = new(new Vector3(1.2f, 1.1f, 2.2f), new Vector3(0, 0.5f, 0), 45),
         ["windmills"] = new(new Vector3(0, 9f, 46f), new Vector3(0, 8f, 0), 50),
         ["capstans"] = new(new Vector3(0, 2.6f, 7.5f), new Vector3(0, 1.6f, 0), 50),
-        ["steam-engines-mars"] = new(new Vector3(1.2f, 2.4f, 8.5f), new Vector3(1.2f, 0.9f, 0), 55),
-        ["mars-stirling"] = new(new Vector3(0, 9f, 22f), new Vector3(0, 0.5f, 0), 55),
+        ["steam-engines-mars"] = new(new Vector3(0.4f, 2.4f, 10f), new Vector3(0.4f, 1.0f, 0), 55),
+        ["mars-stirling"] = new(new Vector3(0, 14f, 34f), new Vector3(0, 0.8f, 0), 55),
         ["battering-rams"] = new(new Vector3(0.5f, 2.2f, 7.0f), new Vector3(0.5f, 1.1f, 0), 55),
         ["gristmill"] = new(new Vector3(1.2f, 3.4f, 7.5f), new Vector3(1.2f, 0.5f, 0), 50),
         ["rail-wagons"] = new(new Vector3(-4.0f, 2.5f, 3.5f), new Vector3(0.8f, 0.3f, -3.0f), 55),
-        ["carts"] = new(new Vector3(-4.5f, 3.0f, 7.0f), new Vector3(0, 0.3f, 2.5f), 55),
+        ["carts"] = new(new Vector3(-5.5f, 3.5f, 8f), new Vector3(0f, 0.2f, 3.5f), 55),
         ["crank-slider"] = new(new Vector3(1.3f, 1.6f, 2.6f), new Vector3(0, 1.15f, 0), 50),
         ["hierapolis-sawmill"] = new(new Vector3(2.6f, 2.4f, -4.6f), new Vector3(0.5f, 1.3f, -0.5f), 55), // from the saw side: the crank is behind the wheel seen from +z
         ["geared-brake"] = new(new Vector3(1.5f, 1.8f, -2.4f), new Vector3(0.6f, 0.95f, -0.1f), 50), // from behind: the gears sit behind the flywheels
@@ -140,14 +140,14 @@ public partial class Main : Node3D
         ["bar-crane"] = new(new Vector3(7.0f, 5.5f, 19.0f), new Vector3(7.0f, 3.5f, 0), 55),
         ["winter-night"] = new(new Vector3(0, 2.2f, 5.5f), new Vector3(0, 0.4f, 0), 50),
         ["earth-machines-on-mars"] = new(new Vector3(1.5f, 5f, 17f), new Vector3(1.5f, 3f, 0), 50),
-        ["kongming-lantern"] = new(new Vector3(1.5f, 4f, 13f), new Vector3(1.5f, 3.2f, 0), 50),
+        ["kongming-lantern"] = new(new Vector3(1.5f, 2.6f, 7.5f), new Vector3(1.5f, 1.6f, 0), 50),
         ["kongming-lantern-mars"] = new(new Vector3(1.5f, 1.6f, 5f), new Vector3(0f, 0.8f, 0), 50),
         ["two-modules"] = new(new Vector3(0, 6f, 15f), new Vector3(0, 1.5f, 0), 50),
         ["stove-rooms"] = new(new Vector3(0, 6f, 15f), new Vector3(0, 1.2f, 0), 50),
         ["airlock"] = new(new Vector3(-3f, 5f, 11f), new Vector3(-3f, 1.2f, 0), 50),
         ["mars-sols"] = new(new Vector3(4f, 3f, 5f), new Vector3(0, 0.8f, -1.2f), 50),
-        ["solar-furnace"] = new(new Vector3(8f, 7f, 15f), new Vector3(8f, 1f, 0), 50),
-        ["glass-rooms"] = new(new Vector3(0, 9f, 16f), new Vector3(0, 1.2f, 0), 50),
+        ["solar-furnace"] = new(new Vector3(8f, 12.1f, 27.8f), new Vector3(8f, 1f, 0), 50),   // 30 m out: all the mirrors and the larger crucible charge (unverified against the new geometry)
+        ["glass-rooms"] = new(new Vector3(0, 10f, 24f), new Vector3(0, 1.2f, 0), 50),
         ["rain-house"] = new(new Vector3(3f, 4f, 10f), new Vector3(0, 2.2f, 0), 50),
         ["greenhouse"] = new(new Vector3(-1f, 5f, 10f), new Vector3(-1.5f, 1f, 0), 50),
         ["heliostats"] = new(new Vector3(7.5f, 3.2f, 5.5f), new Vector3(0, 0.6f, 0), 50),
@@ -159,6 +159,28 @@ public partial class Main : Node3D
         ["aeolipile"] = 5,
         ["winter-night"] = 20,   // an hour of frost is three minutes
         ["heliostats"] = 20,     // a day in a little over an hour
+        // #168: each speed brings the machine's key event (its header's own time)
+        // to ~10-40 s of real time, capped at 20x. Event time / speed in brackets.
+        ["boiler-safety"] = 20,       // valve lifts at 425 s [21 s]
+        ["boiler-shells"] = 20,       // lead pot bursts at 501 s [25 s]
+        ["heron-temple-doors"] = 20,  // doors open at ~780 s (altar tau 660 s) [39 s]
+        ["hearth-engine"] = 10,       // kettle boils at ~55 s, 225 s of fire [6 s, 23 s]
+        ["mars-stirling"] = 20,       // hot ends settle over minutes; its text says "best at 20x" [~20 s]
+        ["mars-sols"] = 20,           // a sol is 88,775 s: even 20x is 74 min, so the cap is the answer; Sleep-until skips to the storm
+        ["solar-furnace"] = 20,       // clear glass melts at 930 s [47 s]; basalt (4,895 s) needs Sleep-until
+        ["solar-steam-wheel"] = 20,   // pot boils within 300 s from cold [15 s]
+        ["dam-break"] = 2,            // gate at 20 s, front at the low pond 34-52 s [10 s, 17-26 s]; faster rushes the wave
+        ["constant-head"] = 5,        // 120 s of the bare cistern's slowing drain [24 s]; the filling's 47.5 s [9.5 s]
+        ["water-clock"] = 20,         // receiver climbs 1.78 cm a minute: 36 cm a minute at 20x
+        ["wake-clock"] = 1,           // fills 50 L in 25 s: already in range, so the sleep control, not speed, is the point
+        ["sand-timer"] = 10,          // 193 s to empty [19 s]
+        ["rain-house"] = 20,          // 0.44 g/s of rain, 8.9 g/s at 20x
+        ["greenhouse"] = 20,          // air and glass settle over an hour; the trees take 30 sols
+        ["two-modules"] = 20,         // heater tau 1283 s [64 s]; puncture tau 2513 s [126 s]
+        ["kongming-lantern"] = 5,     // 1 cm off the ground at 34 s, 4.9 m at 45 s [7 s, 9 s]; at 2x it lifted only at 17 s, after the 10 s frame
+        ["fire-and-water"] = 10,      // left fire drowns at 150 s [15 s]; the copper recovers in 419 s [42 s]
+        ["field-windmill"] = 20,      // standalone at 6 m/s; time constant 728 s, ~40 min to settle [~2 min]: the cap
+        ["bearing-friction"] = 2,     // swings halve every 40 s [20 s], the 2 s period still readable at 1 s
         // No special default here on purpose: after retuning the vessels
         // (see herons-fountain.rkt), the whole "runs at strength, then
         // stops abruptly once the receiver fills" story completes in
@@ -792,6 +814,29 @@ public partial class Main : Node3D
         var centre = (min + max) / 2;
         float span = Mathf.Max(6, (max - min).Length());
         ApplyCamera(new CameraProfile(centre + new Vector3(0, span * 0.55f, span * 0.75f), centre, 50));
+        // #86: on a large map the whole-ground framing pivots on the map's middle, a kilometre from the
+        // action (lonely-rover-opening). Pivot on the placed machines instead, on the ground under them.
+        if (_groundSim?.Ground is { } map && world.Placements.Count > 0)
+        {
+            var (pmin, pmax) = (new Vector2(float.MaxValue, float.MaxValue), new Vector2(float.MinValue, float.MinValue));
+            foreach (var p in world.Placements)
+            {
+                pmin = new Vector2(Mathf.Min(pmin.X, (float)p.At.X), Mathf.Min(pmin.Y, (float)p.At.Z));
+                pmax = new Vector2(Mathf.Max(pmax.X, (float)p.At.X), Mathf.Max(pmax.Y, (float)p.At.Z));
+            }
+            var mid = (pmin + pmax) / 2;
+            if ((pmax - pmin).Length() < span / 4)
+            {
+                _orbit.Pivot = new Vector3(mid.X, (float)map.HeightAt(mid.X, mid.Y), mid.Y);
+                _orbit.Distance = Mathf.Max(40, (pmax - pmin).Length() * 1.3f);
+                _orbit.Yaw = Mathf.DegToRad(200);
+                _orbit.Pitch = Mathf.DegToRad(25);
+                _orbit.Apply();
+                _homePivot = _orbit.Pivot;
+                _homeDistance = _orbit.Distance;
+                _homeProfile = new CameraProfile(_camera.GlobalPosition, _orbit.Pivot, 50);   // Home returns here
+            }
+        }
         SetRunning(true);
         SetSpeed(1);
         _restartButton.Disabled = false;
@@ -953,6 +998,7 @@ public partial class Main : Node3D
         _byName[name] = view;
 
         ApplyCamera(Profiles.GetValueOrDefault(name, MenuCamera with { Eye = new Vector3(0, 1, 2) }));
+        CentreInClearArea(name, view);
         CheckFraming(name, view);
         PlaceFigure(view);      // a person for scale (Main.Composition.cs)
         SetRunning(true);
