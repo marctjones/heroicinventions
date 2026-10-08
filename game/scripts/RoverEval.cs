@@ -9,8 +9,9 @@ namespace HeroicInventions;
 /// Issue #94: the rover's body, measured under the game's own physics (Jolt at 120 Hz, gravity 9.81). Run headless:
 ///   godot --headless --fixed-fps 120 --path game res://scenes/RoverEval.tscn
 /// It prints one "EVAL name value" line per measurement; heroic/tests/rover-eval-test.rkt checks them against the numbers
-/// worked out beforehand (RoverSpec): the top speed, the slope at which six wheels of 24 N·m stall, the hold on a slope, the
-/// turn rate, the run over the crater's own height map, and the backhoe's volumes.
+/// worked out beforehand (RoverSpec): the top speed, the slope at which the tyres' grip stalls it (tan 30° = 0.577) on a box,
+/// a triangle mesh and a height map alike (#198), the hold on a slope, the turn rate, the run over the crater's own height map,
+/// and the backhoe's volumes.
 /// </summary>
 public partial class RoverEval : Node3D
 {
@@ -47,6 +48,13 @@ public partial class RoverEval : Node3D
             _runs.Add(new Run($"climb-{d}", 120 * 14, (r, t) => r.Command = (1, 0), (e, r) => e.Slope(r, d)));
             _runs.Add(new Run($"hold-{d}", 120 * 6, (r, t) => r.Command = (0, 0), (e, r) => e.Slope(r, d)));
         }
+        // #198: the same slope as a box, a triangle mesh and a height map (the game's ground), from rest: the stall is the same on all
+        foreach (var shape in new[] { "box", "mesh", "height" })
+            foreach (double deg in new[] { 29.0, 31.0 })
+            {
+                string k = shape; double d = deg;
+                _runs.Add(new Run($"grade-{k}-{d:0}", 120 * 10, (r, t) => r.Command = (1, 0), (e, r) => e.Ground(r, k, d)));
+            }
         _runs.Add(new Run("crater", 120 * 25, (r, t) => r.Command = t < 120 * 17 ? (1, t > 120 * 8 && t < 120 * 11 ? 0.5 : 0) : (0, 0), (e, r) => e.Crater(r)));
         _runs.Add(new Run("dig", 120 * 14, (r, t) => { if (t == 60) r.StartCycle(); }, (e, r) => e.Synthetic(r, uphill: false)) { Report = r => Backhoe(r) });
         _runs.Add(new Run("dig-uphill", 120 * 14, (r, t) => { if (t == 60) r.StartCycle(); }, (e, r) => e.Synthetic(r, uphill: true)) { Report = r => Backhoe(r) });
@@ -85,6 +93,42 @@ public partial class RoverEval : Node3D
         var ground = new StaticBody3D { CollisionLayer = 1, CollisionMask = 0, PhysicsMaterialOverride = new PhysicsMaterial { Friction = 0.6f, Bounce = 0f } };
         ground.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(100, 1, 300) } });
         ground.Transform = new Transform3D(tilt, ahead * 100 - up * 0.5f);
+        _world!.AddChild(ground);
+        rover.Place(0, 0, 0, 0, deg);
+    }
+
+    /// <summary>
+    /// The slope of <see cref="Slope"/> as <paramref name="kind"/>: "box" (that same box), "mesh" (a ConcavePolygonShape3D of 1 m
+    /// triangles) or "height" (a HeightMapShape3D of 0.25 m cells, as the worked ground's): the surface through the origin rising
+    /// <paramref name="deg"/> toward -z, the rover standing on it facing up it.
+    /// </summary>
+    private void Ground(Rover rover, string kind, double deg)
+    {
+        if (kind == "box") { Slope(rover, deg); return; }
+        double tan = Math.Tan(deg * Math.PI / 180), half = 40;
+        var ground = new StaticBody3D { CollisionLayer = 1, CollisionMask = 0, PhysicsMaterialOverride = new PhysicsMaterial { Friction = 0.6f, Bounce = 0f } };
+        if (kind == "height")
+        {
+            const double cell = 0.25;
+            int n = (int)Math.Round(2 * half / cell) + 1;
+            var data = new float[n * n];
+            for (int j = 0; j < n; j++)
+                for (int i = 0; i < n; i++) data[i + j * n] = (float)(-tan * (j - (n - 1) / 2.0) * cell);
+            ground.AddChild(new CollisionShape3D
+            {
+                Shape = new HeightMapShape3D { MapWidth = n, MapDepth = n, MapData = data },
+                Transform = new Transform3D(Basis.Identity.Scaled(new Vector3((float)cell, 1, (float)cell)), Vector3.Zero),
+            });
+        }
+        else
+        {
+            var faces = new List<Vector3>();
+            Vector3 P(double x, double z) => new((float)x, (float)(-tan * z), (float)z);
+            for (double z = -half; z < half; z++)
+                for (double x = -half; x < half; x++)
+                    faces.AddRange([P(x, z), P(x + 1, z), P(x, z + 1), P(x + 1, z), P(x + 1, z + 1), P(x, z + 1)]);
+            ground.AddChild(new CollisionShape3D { Shape = new ConcavePolygonShape3D { Data = faces.ToArray() } });
+        }
         _world!.AddChild(ground);
         rover.Place(0, 0, 0, 0, deg);
     }
@@ -156,7 +200,7 @@ public partial class RoverEval : Node3D
         }
         else if (n == "turn")
             GD.Print($"EVAL {n}.yaw-rate {F(At(_yaw, 4))}\nEVAL {n}.drift {F((_positions[last] - _positions[0]).Length())}");
-        else if (n.StartsWith("climb"))
+        else if (n.StartsWith("climb") || n.StartsWith("grade"))
             GD.Print($"EVAL {n}.cruise {F((Along(last) - Along(last - 4 * hz)) / 4)}");
         else if (n == "crater")
         {

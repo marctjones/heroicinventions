@@ -1,8 +1,9 @@
 #lang racket/base
 ;; Issue #94: the player's rover, six hinge-driven wheels, run in the game's own physics (Jolt, 120 Hz) by
 ;; game/scenes/RoverEval.tscn, which prints "EVAL <name> <value>" lines. Checked here against the numbers
-;; worked out beforehand (game/scripts/Rover.cs, RoverSpec): 2 m/s game speed, a steepest climb of about 30 degrees,
-;; a brake that holds past it, and the backhoe's volumes (what is dug is what is dumped; never upward; never bedrock).
+;; worked out beforehand (game/scripts/Rover.cs, RoverSpec): 2 m/s game speed, a steepest climb of 30 degrees set by the
+;; tyres' grip (tan 30 = 0.577) and the same on a box, a triangle mesh and a height map (#198), a brake that holds up to it,
+;; and the backhoe's volumes (what is dug is what is dumped; never upward; never bedrock).
 ;; Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -41,17 +42,28 @@
     (check-true (< 0.5 (abs (v "turn.yaw-rate")) 0.9))
     (check-true (< (v "turn.drift") 0.25)))
 
-  (test-case "it climbs slopes up to about 30 degrees at speed and refuses steeper ones"
-    ;; the steepest it climbs is set by the motors' torque (Jolt gives about half what it is told), measured at 30 to 31 degrees
+  (test-case "it climbs slopes up to 30 degrees at speed and refuses steeper ones: the tyres' grip, tan 30 = 0.577, is the limit"
+    ;; up a slope theta the wheels push with at most mu m g cos theta against m g sin theta: tan theta = 0.577, 30 degrees.
+    ;; The motors (6 x 42 N.m / 0.15 m = 1680 N) would climb 68. Measured: it stalls at 29.9 from rest.
     (for ([deg '(20 24 28)])
       (check-true (> (v (format "climb-~a.cruise" deg)) 1.5) (format "climbs ~a degrees at ~a m/s" deg (v (format "climb-~a.cruise" deg)))))
-    (for ([deg '(33 36 40)])
+    (for ([deg '(31 33 36 40)])
       (check-true (< (v (format "climb-~a.cruise" deg)) 0.3) (format "does not climb ~a degrees" deg))))
 
-  (test-case "with the wheels braked it holds a slope, even past the one it can climb, until it is steep enough to slide"
-    (for ([deg '(20 24 28 30 33 36)])
+  (test-case "the grade is the same on a box, a triangle mesh and a height map (#198: it was 29, 30-31 and 31-38 degrees)"
+    ;; from rest, 29 degrees climbs and 31 does not on all three, and the speeds agree: the stall is the same within a degree
+    (for ([shape '("box" "mesh" "height")])
+      (check-true (> (v (format "grade-~a-29.cruise" shape)) 0.5) (format "climbs 29 degrees on the ~a" shape))
+      (check-true (< (v (format "grade-~a-31.cruise" shape)) 0) (format "rolls back on 31 degrees on the ~a" shape)))
+    (for ([deg '(29 31)])
+      (check-= (v (format "grade-height-~a.cruise" deg)) (v (format "grade-box-~a.cruise" deg)) 0.05 (format "height map as box at ~a" deg))
+      (check-= (v (format "grade-mesh-~a.cruise" deg)) (v (format "grade-box-~a.cruise" deg)) 0.05 (format "mesh as box at ~a" deg))))
+
+  (test-case "with the wheels braked it holds a slope it can climb, and slides on one it can't: the same grip"
+    (for ([deg '(20 24 28)])
       (check-true (> (v (format "hold-~a.distance" deg)) -0.3) (format "holds ~a degrees" deg)))
-    (check-true (< (v "hold-40.distance") -0.3) "40 degrees is more than the tyres can hold"))
+    (for ([deg '(31 33 36 40)])
+      (check-true (< (v (format "hold-~a.distance" deg)) -0.3) (format "slides on ~a degrees" deg))))
 
   (test-case "on the crater's own height map it drives at speed, stays on the ground, and stops when told"
     (check-= (v "crater.cruise-8s") game-speed 0.15 "a little under on the 10 degree slope")

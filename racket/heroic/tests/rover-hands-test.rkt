@@ -5,7 +5,7 @@
 ;; code a mouse press and click use (headless has no pixels, so the ray is cast from above the part instead of through the cursor).
 ;; The numbers are worked out beforehand (RoverSpec, game/scripts/Rover.cs):
 ;;   reach     the arm's boom 0.8 + stick 0.7 + bucket 0.3 = 1.8 m from its pivot on the deck
-;;   push      min(wheels' pull 185 x 9.81 x sin 30 = 907 N, tyre grip 1.0 x 185 x g): 907 N on Earth, 685 N on Mars (g 3.72)
+;;   push      min(wheels' pull 185 x 9.81 x sin 30 = 907 N, tyre grip tan 30 x 185 x g): 907 N on Earth, 396 N on Mars (g 3.71)
 ;;   a body    takes mu m g to slide: the 21.6 t boulder (2 m of granite, 2700 kg/m3) on Mars with mu 0.6: 0.6 x 21600 x 3.71 = 48 kN
 ;;   lifting   none: the hand stops 5 cm above where it took hold
 ;; Skipped when Godot is not installed.
@@ -116,7 +116,7 @@
     (define why (refusals lines))
     (check-equal? (length why) 1)
     (check-true (string-prefix? (first why) "Too heavy for the rover's arm: 21.6 t") (first why))
-    (check-true (string-contains? (first why) "48.1 kN to slide, the rover can push 0.7 kN") "0.6 x 21600 x 3.71 against min(907, 185 x 3.71 = 685) N")
+    (check-true (string-contains? (first why) "48.1 kN to slide, the rover can push 0.4 kN") "0.6 x 21600 x 3.71 against min(907, tan 30 x 185 x 3.71 = 396) N")
     (check-true (string-contains? (first (lines-with lines "[rover] press")) "hand has nothing"))
     (define ps (positions lines))
     (check-equal? (first ps) (second ps) "the boulder did not move"))

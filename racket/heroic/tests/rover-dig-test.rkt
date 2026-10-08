@@ -6,7 +6,9 @@
 ;;    cell would drop 8 mm), and tipped makes a heap of about 0.35 m that stands at the soil's repose (tan 0.7);
 ;;  - every m3 dug is dumped: the patch ends where it began, to 1e-9;
 ;;  - a 45 degree bank of ice-cemented soil stops the rover; eight bucketfuls cut from beside the path and tipped at its foot
-;;    make a ramp of about 24 degrees from foot to crest, and the rover then climbs it.
+;;    make a ramp of about 24 degrees from foot to crest, and the rover then climbs it;
+;;  - the rover's grade is its tyres' grip, tan 30 = 0.577 (#198): on the fine ground (a height map) it climbs 29 degrees from rest
+;;    and not 31, as on a box; at 30 degrees grip and weight balance (0.577 cos 30 = sin 30), so a run-up carries it at a steady speed.
 ;; Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -28,8 +30,15 @@
   (define e (run-eval))
   (define (v k) (hash-ref e k (λ () (error 'rover-dig "no measurement ~a" k))))
 
-  (test-case "on the fine ground (a height map) the rover climbs 30 degrees and not 45; measured 41 climbs and 43 stalls, where the tilted-box test stalls from 30 to 31"
-    (check-true (> (v "slope-30.climb.furthest-x") 15) "climbs 30 degrees")
+  (test-case "on the fine ground (a height map) the rover's grade is 30 degrees, as on a box (#198: it was 41 with a run-up)"
+    ;; from rest: 29 degrees climbs (grip 0.577 cos 29 = 0.505 against sin 29 = 0.485), 31 does not (0.495 against 0.515)
+    (check-true (> (v "rest-29.travel") 3) "climbs 29 degrees from rest")
+    (check-true (< (v "rest-31.furthest") 0.5) "does not climb 31 degrees from rest")
+    (check-= (v "rest-31.rescues") 0 0)
+    ;; with a 2 m/s run-up: at 30 degrees the forces balance and it keeps the speed it came with; at 31 it slows at
+    ;; g (sin 31 - 0.577 cos 31) = 0.2 m/s^2 and stops in a few metres, short of the 8 m rise (15.5 m along); 45 is far beyond
+    (check-true (> (v "slope-30.climb.furthest-x") 15) "a run-up carries it up 30 degrees")
+    (check-true (< (v "slope-31.climb.furthest-x") 10) "31 degrees is refused even with a run-up")
     (check-true (< (v "slope-45.climb.furthest-x") 5) "stalls at 45 degrees")
     (check-true (< (v "plane-35.travel") 1) "the same 35 degrees as a tilted box is not climbed"))
 
