@@ -457,6 +457,7 @@ public partial class Main : Node3D
         {
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             ApplyHeroicSet(OS.GetEnvironment("HEROIC_SET"));
+            if (OS.GetEnvironment("HEROIC_DRAG") is { Length: > 0 } dragText) ParseHeroicDrag(dragText);   // a person's hand, replayed (Main.Drag.cs)
             string tracePath = OS.GetEnvironment("HEROIC_TRACE");
             double traceEvery = double.TryParse(OS.GetEnvironment("HEROIC_TRACE_DT"), inv, out double traceDt) ? traceDt : 0.1;
             // a world writes one trace per placed machine, <path>.<label>
@@ -1338,6 +1339,7 @@ public partial class Main : Node3D
     public override void _UnhandledInput(InputEvent @event)
     {
         if (_buildMode is not null) return; // build mode handles its own camera, keys and clicks
+        if (HandleHandInput(@event)) return;   // a press on a dynamic body drags it instead of orbiting (Main.Drag.cs)
         switch (@event)
         {
             case InputEventKey { Pressed: true, Echo: false } key:
@@ -1467,12 +1469,14 @@ public partial class Main : Node3D
             SaveWorld(auto: false, scripted);
             _scriptedSavePath = null;
         }
+        if (_running && !_sleep.Active) PreStepHand();   // a hand holding a body sets its target for this step (Main.Drag.cs)
         if (_sleep.Active)
             _sleep.Advance();                 // sleeping: run ahead as fast as it can, in place of stepping in real time
         else if (_running && _views.Count > 0)
             StepWorld(delta); // a world: every machine, stepped together, and the links between them
         else if (_running && _current is not null)
             _current.Simulate(delta); // already scaled: see SetSpeed
+        PostStepHand();
 
         ApplyDueSettings(); // after the step, as SimHost's ApplyDue is: a setting due at t is seen by the sample taken at t
         if (_audit && _running && _current is not null) _current.AuditTick(delta);
@@ -1489,6 +1493,7 @@ public partial class Main : Node3D
             foreach (var v in _views) v.StopTrace();
             _linksView?.StopTrace();
             ReportUnappliedSettings();
+            ReportUnappliedDrags();
             GetTree().Quit(_heroicSetFailed ? 1 : 0);
         }
 
