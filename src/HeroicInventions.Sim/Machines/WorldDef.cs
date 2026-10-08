@@ -28,6 +28,9 @@ public sealed record LinkSpec(string Id, string Kind, LinkEnd From, LinkEnd To, 
     public double Ratio { get; init; } = 1;
 }
 
+/// <summary>Where the player's rover starts in a world (issue #94): a point of the ground and a heading, degrees about the vertical.</summary>
+public sealed record RoverStart(double X, double Z, double Heading);
+
 /// <summary>
 /// A world (issue #74): many machines standing in one scene, each an
 /// ordinary machine moved into place with <see cref="MachineDef.Translated"/>.
@@ -44,6 +47,13 @@ public sealed record LinkSpec(string Id, string Kind, LinkEnd From, LinkEnd To, 
 /// </summary>
 public sealed class WorldDef
 {
+    /// <summary>
+    /// Where the player's rover stands when the world opens (issue #94): <c>(rover (at X Z) (heading D))</c>, on the ground
+    /// at X, Z, turned D degrees about the vertical (0 faces -z, 270 faces +x). A world with one is the game: the player
+    /// drives the rover there (game/scripts/Main.Rover.cs); a machine run has none, and keeps the free operator.
+    /// </summary>
+    public RoverStart? Rover { get; init; }
+
     public required string Name { get; init; }
     public required IReadOnlyList<Placement> Placements { get; init; }
     /// <summary>The ground the world stands on (issue #37): a map's name (game/maps/NAME.map), or null for the flat floor.</summary>
@@ -68,12 +78,12 @@ public sealed class WorldDef
     {
         if (Links.Any(l => l.Id == link.Id)) throw new MachineFormatException($"world {Name} already has a link named {link.Id}");
         CheckLink(link, Placements, null);
-        return new WorldDef { Name = Name, Map = Map, Placements = Placements, Links = [.. Links, link] };
+        return new WorldDef { Name = Name, Map = Map, Rover = Rover, Placements = Placements, Links = [.. Links, link] };
     }
 
     /// <summary>The same world without the named link.</summary>
     public WorldDef WithoutLink(string id) =>
-        new() { Name = Name, Map = Map, Placements = Placements, Links = Links.Where(l => l.Id != id).ToList() };
+        new() { Name = Name, Map = Map, Rover = Rover, Placements = Placements, Links = Links.Where(l => l.Id != id).ToList() };
 
     /// <summary>A link id not yet used in this world: pipe-1, pipe-2, …</summary>
     public string NextLinkId(string stem)
@@ -88,6 +98,8 @@ public sealed class WorldDef
         var sb = new System.Text.StringBuilder();
         sb.Append($"(world {Name}");
         if (Map is not null) sb.Append($"\n  (map {Map})");
+        if (Rover is { } r)
+            sb.Append($"\n  (rover (at {SExprWriter.Number(r.X)} {SExprWriter.Number(r.Z)})" + (r.Heading != 0 ? $" (heading {SExprWriter.Number(r.Heading)})" : "") + ")");
         foreach (var p in Placements)
             sb.Append($"\n  (place {p.Label} {p.Machine} (at {SExprWriter.Number(p.At.X)} {SExprWriter.Number(p.At.Y)} {SExprWriter.Number(p.At.Z)})"
                       + (p.Heading != 0 ? $" (heading {SExprWriter.Number(p.Heading)})" : "") + ")");
@@ -165,7 +177,15 @@ public sealed class WorldDef
         var map = root.Field("map") is { Items.Count: 2 } m
             ? (m.Items[1] is SSymbol ms ? ms.Name : throw new MachineFormatException($"{file}: (map NAME)"))
             : null;
-        return new WorldDef { Name = name.Name, Map = map, Placements = placements, Links = links };
+        RoverStart? rover = null;
+        if (root.Field("rover") is { } rv)
+        {
+            if (rv.Field("at") is not { Items.Count: 3 } ra)
+                throw new MachineFormatException($"{file}: (rover (at X Z) [(heading DEGREES)])");
+            double heading = rv.Field("heading") is { Items: [_, SNumber hv] } ? hv.Value : 0;
+            rover = new RoverStart(Num(ra.Items[1]), Num(ra.Items[2]), heading);
+        }
+        return new WorldDef { Name = name.Name, Map = map, Rover = rover, Placements = placements, Links = links };
 
         static double Num(SExpr e) => e is SNumber n ? n.Value : throw new MachineFormatException($"expected a number, got {e}");
     }

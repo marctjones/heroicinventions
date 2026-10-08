@@ -838,6 +838,7 @@ public partial class Main : Node3D
         if (_editButton is not null) _editButton.Visible = false;
         if (_joinButton is not null) _joinButton.Visible = false;
         ClearLinks();
+        ClearRover();   // the player's rover goes with its world (Main.Rover.cs)
         ClearGround();
         foreach (var v in _views) v.QueueFree();
         if (_current is not null && _views.Contains(_current)) _current = null;
@@ -927,6 +928,7 @@ public partial class Main : Node3D
         _editButton.Visible = true;
         _joinButton.Visible = true;
         RebuildLinks();
+        SpawnRover(world);   // a world that places a rover is the game: the player drives it (Main.Rover.cs)
     }
 
     /// <summary>
@@ -1509,9 +1511,13 @@ public partial class Main : Node3D
     public override void _UnhandledInput(InputEvent @event)
     {
         if (_buildMode is not null) return; // build mode handles its own camera, keys and clicks
-        if (AimInput(@event)) return;   // dragging a mirror's spot, Alt+click, a click on the ground for a digger (Main.Aim.cs)
-        OperateInput(@event);   // hover, click-to-operate, right-click list (Main.Operate.cs); consumes nothing
-        if (HandleHandInput(@event)) return;   // a press on a dynamic body drags it instead of orbiting (Main.Drag.cs)
+        if (RoverInput(@event)) return;   // the game: the rover's keys (Main.Rover.cs)
+        if (!RoverIsPlayer)   // the free operator is for machine runs; in the game every action will pass the rover's capability check (#163)
+        {
+            if (AimInput(@event)) return;   // dragging a mirror's spot, Alt+click, a click on the ground for a digger (Main.Aim.cs)
+            OperateInput(@event);   // hover, click-to-operate, right-click list (Main.Operate.cs); consumes nothing
+            if (HandleHandInput(@event)) return;   // a press on a dynamic body drags it instead of orbiting (Main.Drag.cs)
+        }
         switch (@event)
         {
             case InputEventKey { Pressed: true, Echo: false } key:
@@ -1619,19 +1625,19 @@ public partial class Main : Node3D
             case "pick": PrintPick(new Vector2(float.Parse(w[1]), float.Parse(w[2]))); return ScriptedInput.Step.Next;   // which part is drawn at that pixel (#151)
             case "pickworld": PrintPick(_camera.UnprojectPosition(new Vector3(float.Parse(w[1]), float.Parse(w[2]), float.Parse(w[3])))); return ScriptedInput.Step.Next;   // ... or where that point of the world is drawn
         }
-        return OperatorStep(w) ?? ClickStep(w) ?? AimStep(w);   // aim spots and the digger (Main.Aim.cs); operate / waitsim (Main.Operator.cs), hovered (Main.Operate.cs)
+        return OperatorStep(w) ?? ClickStep(w) ?? AimStep(w) ?? RoverStep(w);   // aim spots and the digger (Main.Aim.cs); operate / waitsim (Main.Operator.cs), hovered (Main.Operate.cs)
     }
 
     public override void _Process(double delta)
     {
-        if (_buildMode is null) _orbit.ProcessKeys(delta, GetViewport());
+        bool roverDrives = RoverProcess(delta);   // the game: held keys drive the rover, the camera follows it (Main.Rover.cs)
+        if (_buildMode is null && !roverDrives) _orbit.ProcessKeys(delta, GetViewport());
         // the haze stays behind whatever the camera is looking at, at any scale
         float d = Mathf.Max(_orbit.Distance, 2);
         _environment.FogDepthBegin = d * _hazeReach;
         _environment.FogDepthEnd = d * _hazeReach * 6;
         _inputScript?.Process(delta);
-        OperateHoverTick(delta);
-        OperatePanelTick();
+        if (!roverDrives) { OperateHoverTick(delta); OperatePanelTick(); }
         if (!_fpsReport || (_fpsTimer += delta) < 2) return;
         _fpsTimer = 0;
         GD.Print($"[fps] {Performance.GetMonitor(Performance.Monitor.TimeFps):F0} fps · frame {Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000:F1} ms process, " +
