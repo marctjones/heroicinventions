@@ -41,7 +41,9 @@ public partial class MachineView
             var paper = Shapes.Mat(Shapes.ColorFor(part.Material).Lightened(0.35f), roughness: 0.9f, alpha: 0.8f);
             paper.EmissionEnabled = true;
             paper.EmissionEnergyMultiplier = 0;
-            body.AddChild(Shapes.Cylinder(r, h, paper));
+            paper.CullMode = BaseMaterial3D.CullModeEnum.Disabled;   // the inside shows through the mouth
+            body.AddChild(new MeshInstance3D { Mesh = LanternMesh(r, h), MaterialOverride = paper });
+            AddLanternRibs(body, r, h);
 
             // the burner: a small dark dish at the mouth, and the flame over it
             var dish = Shapes.Cylinder(r * 0.22f, 0.03f, Shapes.Mat(new Color(0.3f, 0.25f, 0.2f), metallic: 0.3f));
@@ -69,6 +71,57 @@ public partial class MachineView
             float side = r * Mathf.Sqrt(Mathf.Pi);
             RegisterDrag(part, body, new Vector3(side, h, side), false);
             _envelopeViews.Add(new EnvelopeView(env, body, paper, flame, flameMat, label));
+        }
+    }
+
+    /// <summary>Radius (as a share of the lantern's) at each height (as a share of its height from the mouth): a paper lantern, narrow at the mouth, fullest low, rounding in to a small top.</summary>
+    private static readonly (float Up, float Out)[] LanternProfile = [(0f, 0.55f), (0.1f, 0.84f), (0.3f, 1f), (0.55f, 0.97f), (0.78f, 0.76f), (0.93f, 0.46f), (1f, 0.3f)];
+
+    /// <summary>The paper skin as a surface of revolution about the lantern's axis, open at the mouth (#176), centred on the body.</summary>
+    private static ArrayMesh LanternMesh(float r, float h)
+    {
+        const int around = 28;
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        Vector3 At(int ring, int k) =>
+            new(r * LanternProfile[ring].Out * Mathf.Cos(Mathf.Tau * k / around), -h / 2 + h * LanternProfile[ring].Up, r * LanternProfile[ring].Out * Mathf.Sin(Mathf.Tau * k / around));
+        for (int ring = 0; ring + 1 < LanternProfile.Length; ring++)
+            for (int k = 0; k < around; k++)
+            {
+                var a = At(ring, k); var b = At(ring, k + 1); var c = At(ring + 1, k + 1); var d = At(ring + 1, k);
+                st.AddVertex(a); st.AddVertex(c); st.AddVertex(b);
+                st.AddVertex(a); st.AddVertex(d); st.AddVertex(c);
+            }
+        var cap = new Vector3(0, h / 2, 0);   // the closed top
+        for (int k = 0; k < around; k++)
+        {
+            st.AddVertex(At(LanternProfile.Length - 1, k)); st.AddVertex(cap); st.AddVertex(At(LanternProfile.Length - 1, k + 1));
+        }
+        st.GenerateNormals();
+        return st.Commit();
+    }
+
+    /// <summary>The frame a paper lantern is pasted over: a hoop at the mouth, one at the belly and one at the shoulder, and eight ribs between them.</summary>
+    private void AddLanternRibs(Node3D body, float r, float h)
+    {
+        var cane = Shapes.Mat(new Color(0.45f, 0.3f, 0.15f), roughness: 0.9f);
+        foreach (int ring in new[] { 0, 2, 4 })
+        {
+            var hoop = new MeshInstance3D
+            {
+                Mesh = new TorusMesh { InnerRadius = r * LanternProfile[ring].Out - 0.012f, OuterRadius = r * LanternProfile[ring].Out + 0.012f, Rings = 24, RingSegments = 6 },
+                MaterialOverride = cane, Position = new Vector3(0, -h / 2 + h * LanternProfile[ring].Up, 0),
+            };
+            body.AddChild(hoop);
+        }
+        for (int k = 0; k < 8; k++)
+        {
+            float a = Mathf.Tau * k / 8;
+            for (int ring = 0; ring + 1 < LanternProfile.Length; ring++)
+            {
+                Vector3 P(int i) => new(r * LanternProfile[i].Out * 1.005f * Mathf.Cos(a), -h / 2 + h * LanternProfile[i].Up, r * LanternProfile[i].Out * 1.005f * Mathf.Sin(a));
+                body.AddChild(Shapes.Rod(P(ring), P(ring + 1), 0.006f, cane));
+            }
         }
     }
 

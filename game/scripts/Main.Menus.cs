@@ -123,6 +123,7 @@ public partial class Main
         ["trench-crew"] = ("trench", "digs the clay pit: trench world"),
         ["buried-crate"] = ("dig-out", "dug out of the ground: dig-out world"),
         ["spill-tank"] = ("spill", "spills on the slope: spill world"),
+        ["hillside-pond"] = ("flood-plain", "floods the valley below it: flood-plain world"),
     };
 
     /// <summary>Opens a part for worlds in the world it belongs to; any other machine, as itself.</summary>
