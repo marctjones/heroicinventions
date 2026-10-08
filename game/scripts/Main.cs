@@ -78,7 +78,7 @@ public partial class Main : Node3D
         ["solar-steam-wheel"] = new(new Vector3(1.2f, 2.4f, 4.6f), new Vector3(0, 0.8f, 0), 50),
         ["ball-ramp"] = new(new Vector3(4.5f, 1.6f, -1.4f), new Vector3(0f, 0.2f, -2.0f), 55),
         ["wake-clock"] = new(new Vector3(0.2f, 0.9f, 3.2f), new Vector3(0f, 0.45f, 0), 50),
-        ["sand-timer"] = new(new Vector3(0.15f, 1.1f, 4.4f), new Vector3(0.15f, 0.7f, 0), 55),
+        ["sand-timer"] = new(new Vector3(0.6f, 1.25f, 2.9f), new Vector3(0.6f, 0.7f, 0), 50),   // close enough that the three timers, not the scale figure, fill the frame (#190)
         ["ratchet-windlass"] = new(new Vector3(4.3f, 1.6f, -1.5f), new Vector3(0f, 1.08f, -1.5f), 55),
         ["trip-hammer"] = new(new Vector3(1.5f, 1.4f, 3.3f), new Vector3(0.2f, 0.75f, -0.5f), 55),
         ["tunnel-test"] = new(new Vector3(0f, 1.6f, 4.5f), new Vector3(0f, 1f, 0), 50),

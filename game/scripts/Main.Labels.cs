@@ -166,9 +166,10 @@ public partial class Main
     }
 
     /// <summary>
-    /// A dial's face, a gold glint, a leak hole, a valve's disc: a flat round disc (a cylinder at most 12.5 mm thick) that
-    /// is at most a metre across in the world (a glint spreads to its channel's width), and either opaque or unshaded. The water film drawn in a vessel that holds a
-    /// little (4 mm, see MachineView.Products) is the same shape but transparent and lit, and is left out.
+    /// A dial's face or a gold glint: a flat round disc (a cylinder at most 12.5 mm thick) at most a metre across in the
+    /// world (a glint spreads to its channel's width) that is near white and opaque (a dial) or unshaded (a glint). Jar
+    /// seals, leak holes and valve discs are the same shape but dark, and a vessel's water film is transparent and lit:
+    /// all left out (the Baghdad battery's jar seals had kept every label off its jars).
     /// </summary>
     private static bool IsInstrumentFace(GeometryInstance3D g)
     {
@@ -176,9 +177,11 @@ public partial class Main
         var size = (m.GlobalTransform * m.GetAabb()).Size;
         float thin = Mathf.Min(size.X, Mathf.Min(size.Y, size.Z)), wide = Mathf.Max(size.X, Mathf.Max(size.Y, size.Z));
         if (thin > 0.0125f || wide > 1f || wide < 0.02f) return false;
-        return m.MaterialOverride is not StandardMaterial3D mat
-            || mat.Transparency == BaseMaterial3D.TransparencyEnum.Disabled
-            || mat.ShadingMode == BaseMaterial3D.ShadingModeEnum.Unshaded;
+        if (m.MaterialOverride is not StandardMaterial3D mat) return false;
+        if (mat.ShadingMode == BaseMaterial3D.ShadingModeEnum.Unshaded) return true;   // a glint
+        // a dial's face: opaque and near white (a jar's seal or a leak's hole is a disc too, and dark)
+        var c = mat.AlbedoColor;
+        return mat.Transparency == BaseMaterial3D.TransparencyEnum.Disabled && c.V > 0.85f && c.S < 0.15f;
     }
 
     /// <summary>Meta on a mesh Main draws that labels must keep off (the throw's trail and landing marks).</summary>

@@ -66,6 +66,9 @@ public partial class Main
         if (box.Size == Vector3.Zero) return;
         // not ClearArea(): the menu is still expanded (a wide list) when a machine is selected and collapses just
         // after, so the panels are taken at their settled widths
+        // a profile that looks away from the machine as built is looking at where the action will be (material-samples:
+        // the cubes start above the frame and fall into it): leave it
+        if (PartsOnScreen(view) is not { } parts || parts.Intersection(SettledClearArea()).Area < 0.2f * parts.Area) return;
         FitBox(box, () => PartsOnScreen(view), _orbit.Distance, MostPullBack);
         _homePivot = _orbit.Pivot;
         _homeDistance = _orbit.Distance;
