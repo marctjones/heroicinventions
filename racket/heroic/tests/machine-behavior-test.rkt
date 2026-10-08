@@ -1796,9 +1796,12 @@
     (define cap (* 3 2 pi 1/60))
     (check-= omega cap 1e-5 "at 20 s, the walkers' 3 rpm")
     (check-= (value-at links '(axle driven-rpm) 20) (value-at links '(axle rpm) 20) 1e-9 "one speed both sides")
-    ;; the spin-up's time constant: w(10) / w(5) = 1 + e^(-5/tau)
+    ;; the spin-up's time constant. The stone rests on the ground (#148), so the wheel starts at w0 > 0 (it winds in the
+    ;; rope's stretch nearly unloaded first) and w(t) = w-inf - (w-inf - w0) e^(-t/tau); three equally spaced samples
+    ;; give e^(-5/tau) whatever w0 and w-inf are: (w(15) - w(10)) / (w(10) - w(5)). Measured 0.3748 (tau 5.095 s)
     (define tau (/ 1859.3 (* 0.2 1822.8)))
-    (check-= (/ (value-at walkers '(tympanus omega) 10) (value-at walkers '(tympanus omega) 5)) (+ 1 (exp (/ -5 tau))) 0.01)
+    (define (w t) (value-at walkers '(tympanus omega) t))
+    (check-= (/ (- (w 15) (w 10)) (- (w 10) (w 5))) (exp (/ -5 tau)) 0.003 "e^(-5/tau), tau = 1859.3 / (0.2 x 1822.8) = 5.10 s")
     ;; and the same spin-up as the one machine's, second by second
     (for ([t (in-range 1 21)])
       (check-= (value-at walkers '(tympanus omega) t) (value-at one '(tympanus omega) t) 1e-5
