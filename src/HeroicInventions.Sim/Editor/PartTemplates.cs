@@ -152,6 +152,7 @@ public static class PartTemplates
                 ["pressure"] = new SBool(false), ["temperature"] = new SBool(false),
                 ["insulation"] = new SNumber(2), ["heat-capacity"] = new SNumber(0), ["heater"] = new SNumber(0),
                 ["leak"] = new SNumber(0), ["supply"] = new SNumber(0), ["coefficient"] = new SNumber(0.6),
+                ["wall"] = new SBool(false), ["wall-thickness"] = new SNumber(0.5), ["ground"] = new SBool(false),   // a #:wall of regolith, say, that heat soaks into (#71)
                 ["o2"] = new SBool(false), ["n2"] = new SBool(false), ["co2"] = new SBool(false), ["h2o"] = new SBool(false), ["ar"] = new SBool(false),
             },
             [], null),

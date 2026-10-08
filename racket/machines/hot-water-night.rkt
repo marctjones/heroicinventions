@@ -1,6 +1,6 @@
 #lang heroic
 ;; Hot water through a Mars night (issue #71): three little rooms, each losing U = 2 W per kelvin through its walls (and
-;; holding C1 = 3,000 J/K of wall and air) to a night held at -80 C, each starting at 0 C with a tank of water at 60 C joined
+;; holding C1 = 3,000 J/K: 2,732.4 of wall and the 267.6 of its 12.84 mol of air) to a night held at -80 C, each starting at 0 C with a tank of water at 60 C joined
 ;; to it by a G = 6 W/K film (a contact film in 13.5 kPa air; radiation left out). The tank holds Cs = m x 4,186 J/K; the three
 ;; tanks are 10, 33 and 66 kg.
 ;;
@@ -27,11 +27,11 @@
   #:planet mars
   #:ambient -80
   (enclosure ten #:at ((m -2.4) 0 0) #:size ((m 1.5) (m 1.2) (m 1.2)) #:pressure 13500 #:air '((o2 0.21) (n2 0.79)) #:temperature 0
-             #:insulation 2 #:heat-capacity 3000)
+             #:insulation 2 #:heat-capacity 2732.4)
   (heat-store ten-tank #:at ((m -2.4) 0 0) #:mass 10 #:contents water #:temperature 60 #:area 0 #:conductance 6)
   (enclosure thirty-three #:at (0 0 0) #:size ((m 1.5) (m 1.2) (m 1.2)) #:pressure 13500 #:air '((o2 0.21) (n2 0.79)) #:temperature 0
-             #:insulation 2 #:heat-capacity 3000)
+             #:insulation 2 #:heat-capacity 2732.4)
   (heat-store thirty-three-tank #:at (0 0 0) #:mass 33 #:contents water #:temperature 60 #:area 0 #:conductance 6)
   (enclosure sixty-six #:at ((m 2.4) 0 0) #:size ((m 1.5) (m 1.2) (m 1.2)) #:pressure 13500 #:air '((o2 0.21) (n2 0.79)) #:temperature 0
-             #:insulation 2 #:heat-capacity 3000)
+             #:insulation 2 #:heat-capacity 2732.4)
   (heat-store sixty-six-tank #:at ((m 2.4) 0 0) #:mass 66 #:contents water #:temperature 60 #:area 0 #:conductance 6))

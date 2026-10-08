@@ -273,9 +273,10 @@ public class HeatStoreTests
     public void TheEditorPlacesAStoreABinAndAWallAndExportsThem()
     {
         var s = new BuildSession(Materials, catalogue: [], machinesDir: Path.GetTempPath(), name: "bench");
-        s.Execute("(enclosure vault #:at (0 0 0) #:size (0.5 0.5 0.5) #:material limestone)");
-        s.Execute("(set vault #:wall regolith)");
+        s.Execute("(enclosure vault #:at (0 0 0) #:size (0.5 0.5 0.5) #:wall regolith #:wall-thickness 0.4 #:material limestone)");
         s.Execute("(set vault #:insulation 0)");
+        s.Execute("(enclosure shed #:at (3 0 0) #:size (1 1 1) #:material limestone)");
+        s.Execute("(set shed #:wall granite)");                      // or set one later
         s.Execute("(heat-store rock #:at (0 0 0) #:mass 40 #:material basalt)");
         s.Execute("(heat-store bank #:at (0.2 0 0) #:mass 16 #:material iron)");
         s.Execute("(set bank #:contents cells)");
@@ -285,7 +286,8 @@ public class HeatStoreTests
         Assert.StartsWith("ok:", s.Execute("(check)"));
         Assert.Throws<InvalidOperationException>(() => s.Execute("(set bin #:holds nothing-here)"));
         string rkt = RktExporter.Write(s.Document.ToMachineDef());
-        Assert.Contains("#:wall regolith #:wall-thickness 0.5", rkt);
+        Assert.Contains("#:wall regolith #:wall-thickness 0.4", rkt);
+        Assert.Contains("#:wall granite #:wall-thickness 0.5", rkt);
         Assert.Contains("(heat-store rock #:at (0 0 0) #:mass 40 #:contents basalt #:emissivity 0.9 #:conductance 0 #:material basalt)", rkt);
         Assert.Contains("(heat-bin bin #:at (0 0 0) #:holds rock #:leak 0.1 #:open 0 #:sense bank #:open-below 5 #:close-above 40 #:material oak)", rkt);
         Assert.Contains("heat-store", PartTemplates.PrimitiveKinds);
