@@ -1,0 +1,45 @@
+;; Lesson 3: a ramp and a rolling ball (#184). Read by src/HeroicInventions.Sim/Editor/Lessons.cs;
+;; the format is described there.
+;;
+;; The numbers, worked by hand before writing the steps (the starter ramp: 1 m long, 15 degrees, a
+;; slab 5 cm thick; the starter ball: iron, 5 cm in radius; racket/machines/ball-ramp.rkt works out
+;; the same law for two bigger balls):
+;;   a solid ball has I = 2/5 m r², so a share 2/7 of the energy it loses goes into turning it:
+;;     a = g sin(theta) / (1 + 2/5) = 5/7 g sin(theta) = 0.7143 × 9.81 × 0.2588 = 1.814 m/s² along the slope
+;;     (a block sliding with no friction would get g sin(theta) = 2.539)
+;;   the ball is put 0.9 m up the slope, standing off the slab's middle by half its thickness and its radius,
+;;   0.025 + 0.05 + 0.001 = 0.076 m, so its centre is at
+;;     y = 0.9 sin 15° + 0.076 cos 15° = 0.2329 + 0.0734 = 0.3063 m
+;;     z = -0.9 cos 15° + 0.076 sin 15° = -0.8693 + 0.0197 = -0.8496 m (the ramp rises toward -z)
+;;   it comes to rest on the ground with its centre one radius, 0.05 m, up. It gives up h = 0.3063 - 0.05 = 0.2563 m:
+;;     v = sqrt(10/7 g h) = sqrt(1.4286 × 9.81 × 0.2563) = 1.895 m/s   (a sliding block: sqrt(2 g h) = 2.243 m/s)
+;;     it turns at w = v / r = 1.895 / 0.05 = 37.9 rad/s, under the engine's cap of 47.1 rad/s
+;;     (47.1 × 0.05 = 2.36 m/s is as fast as a 5 cm ball can roll; that is a drop of 0.40 m, so keep the ramp low)
+;;   the ball leaves the slab's lip and drops the last 0.023 m onto the ground, still rolling.
+;;   Traced in the sim (an editor Test of this very rig): the fastest the ball goes is 1.910 m/s, 0.8 % above the worked
+;;   number; nothing slows a ball rolling on flat ground, so it carries on at that speed for the whole 30 s test (52 m).
+;; So the check: the ball's fastest speed is within 0.15 m/s of 1.895, and it ended at least 1 m from where it began.
+
+(lesson ramp
+  (title "Lesson 3: the ramp and the ball")
+  (view 1.3 0.35 3.2 0 0.2 -0.5)
+
+  (step
+    (text "Put a ramp down. Pick Ramp in the parts list (it is lit up), then click on the green shape in the scene. A ramp is a fixed slope; its low end goes on the ground and it rises toward the back.")
+    (highlight ramp)
+    (target (kind ramp) (at 0 0 0) (within 0.5))
+    (check place (kind ramp) (as ramp)))
+
+  (step
+    (text "Put a ball near the top of the ramp, on the green ball. Pick Ball: it is iron, and heavy for its size.")
+    (highlight ball)
+    (target (kind ball) (on ramp) (along 0.9) (up 0.076) (within 0.2))
+    (check place (kind ball) (as ball)))
+
+  (step
+    (text "Work out what the ball will do before you watch it. Its middle is {drop} above the ground it will stop on, and it gives up that height as it goes down. A block sliding on a slope with no friction would turn all of it into speed: {slide} at the bottom. A ball turns some of it into spinning, so it only reaches {speed}: a solid ball keeps back two sevenths of what it loses to spin, which is why it is slower than a block. Press Test it (lit, top left): the ball rolls down and away.")
+    (highlight test)
+    (fail "The ball's fastest was {top} and it ended {across} from where it began, but rolling down from {drop} up should give {speed}, and it should roll away at least a metre. Is the ball on the ramp, near the top? Move it back to the green ball and press Test it again.")
+    (check rolled (part ball) (far 1) (within 0.15)))
+
+  (done "The ball reached {top} (worked out beforehand: {speed}) and rolled on {across}: nothing slows a ball on smooth flat ground. A block with no friction would have reached {slide}. A ball spins as it goes, and the spinning takes a share of the energy, so on any slope it picks up speed at five sevenths of what a sliding block would: 1.81 metres a second faster every second here, against 2.54."))

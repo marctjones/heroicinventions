@@ -1,0 +1,53 @@
+;; Lesson 4: water from tank to tank (#185). Read by src/HeroicInventions.Sim/Editor/Lessons.cs;
+;; the format is described there.
+;;
+;; The numbers, worked by hand from the sim's own pipe model (FluidNetwork.cs: the flow through a pipe is its
+;; conductance k times the difference of the two water heights, q = k (h_upper - h_lower), as in racket/machines/
+;; cistern-and-trough.rkt; a pipe's default k is 0.001 m³/s for each metre of difference):
+;;   the starter tank: 0.05 m² across, 0.3 m high, comes with 0.010 m³ = 10 litres = 0.2 m deep
+;;   the upper one stands on a 1 m post (its floor at 1.0 m), the lower one on the ground (its floor at 0),
+;;   both pipe connections at the floors; the lower one is poured out first (0 litres)
+;;   a = depth in the upper tank, b = depth in the lower one; the 10 litres are shared between them, so a + b = 0.2 m
+;;   the difference of the two water heights: D = (1.0 + a) - b = 0.8 + 2a
+;;   A da/dt = -k D   ->   da/dt = -(0.001 / 0.05)(0.8 + 2a) = -0.02 (0.8 + 2a)
+;;   so  a(t) = -0.4 + 0.6 e^(-0.04 t)   (time constant A / 2k = 25 s)
+;;   the upper tank runs dry when e^(-0.04 t) = 0.4/0.6, t = ln(1.5) / 0.04 = 10.14 s
+;;   all 10 litres have moved by then: the lower tank holds 10 litres, 0.2 m deep (the lower floor is below the upper one,
+;;   so the water never evens out: the upper empties first). The test ends a second after the water stops, at 11.1 s.
+;; So the check: the lower tank ends within 0.5 litre of 10 litres (and the upper one has none left).
+;; Measured: the editor's Test, 10.0 litres in the lower tank, ending at 11.1 s (see lesson-test.rkt).
+
+(lesson water
+  (title "Lesson 4: water from tank to tank")
+  (view 0.2 0.3 3.2 0.4 0.95 0)
+
+  (step
+    (text "Water runs downhill, so put a tank up high. First a post: pick Post in the parts list (it is lit up), then click on the green shape in the scene.")
+    (highlight post)
+    (target (kind post) (at 0 0 0) (within 0.5))
+    (check place (kind post) (as post)))
+
+  (step
+    (text "Put a water tank on top of the post, on the green shape. Pick Water tank: it comes with {upper.litres} of water in it, that is {upper.level} deep.")
+    (highlight tank)
+    (target (kind tank) (at 0 1 0) (within 0.25))
+    (check place (kind tank) (as upper)))
+
+  (step
+    (text "A second tank on the ground, to the right of the post, on the green shape. The lesson pours it out first: it starts empty.")
+    (highlight tank)
+    (target (kind tank) (at 0.8 0 0) (within 0.25))
+    (check place (kind tank) (as lower)
+           (then "(set {id} #:water 0)")))
+
+  (step
+    (text "Join the two with a pipe. Each tank has a blue dot low on its front, where water goes in and out. Click the dot on the upper tank, then the dot on the lower tank, and a pipe joins them.")
+    (check join (kind pipe) (between upper lower)))
+
+  (step
+    (text "Press Test it (lit, top left) and watch the water. The pipe lets through 1 litre a second for each metre the water in one tank stands above the other. The top of the upper tank's water is 1.2 m up and the lower tank's is at the floor, so at first the water runs at about 1.2 litres a second, slowing as the upper tank sinks and the lower one fills. The upper tank runs dry after about {empties}, and all {upper.litres} should end up in the lower one.")
+    (highlight test)
+    (fail "The lower tank ended with less water than the {upper.litres} the upper one had: it should hold all of it. Is the pipe joined to a dot on each tank, and is the lower tank below the upper? Change it and press Test it again.")
+    (check level (part lower) (litres 10) (within 0.5)))
+
+  (done "The lower tank ended with {moved} more water, {reached} deep, all that the upper one held: the water ran downhill until the upper tank was empty. It never stopped halfway to even the levels out, because the lower tank's floor is lower than the upper tank's. Water always runs from the higher surface to the lower one, at a rate set by how much higher."))

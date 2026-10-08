@@ -24,7 +24,7 @@ public class LessonTests
     {
         s.Execute(command);
         var (done, settle, _) = run.CheckDesign(s.Document);
-        if (settle is not null) s.Execute(settle);
+        foreach (var step in settle) s.Execute(step);
         if (done) run.Rebase(s.Document);   // as the editor does when it shows the next step
         return done;
     }

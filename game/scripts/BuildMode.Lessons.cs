@@ -59,7 +59,7 @@ public partial class BuildMode
 
     private void BuildLessonUi(CanvasLayer layer, HBoxContainer actions)
     {
-        var lessons = new Button { Text = "Lessons", TooltipText = "Step-by-step: build a simple machine, starting with a see-saw", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Disabled = Live };
+        var lessons = new Button { Text = "Lessons", TooltipText = "Step-by-step: build simple machines, from a see-saw to water running between tanks", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Disabled = Live };
         lessons.AddThemeColorOverride("font_color", new Color(0.7f, 1f, 0.7f));
         _lessonMenu = new PopupMenu();
         _lessonMenu.IndexPressed += OnLessonMenu;
@@ -159,7 +159,9 @@ public partial class BuildMode
         _lessonChecking = false;
         SetShowAll(false);
         Select(null);
-        (_orbit.Pivot, _orbit.Distance, _orbit.Yaw, _orbit.Pitch) = (new Vector3(0, 0.4f, 0), 3.4f, 0.35f, 0.5f);
+        var view = lesson.View;
+        (_orbit.Pivot, _orbit.Distance, _orbit.Yaw, _orbit.Pitch) = view is null ? (new Vector3(0, 0.4f, 0), 3.4f, 0.35f, 0.5f)
+            : (new Vector3((float)view.Pivot.X, (float)view.Pivot.Y, (float)view.Pivot.Z), (float)view.Distance, (float)view.Yaw, (float)view.Pitch);
         _orbit.Apply();
         _lessonPanel.Visible = true;
         GD.Print($"[Lesson] started {id}{(saved is { } s ? $" at step {_lesson.Index + 1}" : "")}");
@@ -225,8 +227,8 @@ public partial class BuildMode
                 var (done, settle, reason) = _lesson.CheckDesign(_session.Document);
                 nudge = reason;
                 if (!done) break;
-                GD.Print($"[Lesson] step {before + guard + 1} done{(settle is null ? "" : $": set on its target {settle}")}");
-                if (settle is not null) RunCommand(settle);
+                GD.Print($"[Lesson] step {before + guard + 1} done{(settle.Count == 0 ? "" : $": set on its target {string.Join(" ; ", settle)}")}");
+                foreach (var command in settle) RunCommand(command);
             }
             if (_lesson.Index != before || _lessonShownStep != _lesson.Index) { SaveProgress(); ShowLessonStep(); }
             else if (nudge != _lessonNudgeShown) ShowLessonStep();
@@ -239,11 +241,11 @@ public partial class BuildMode
     {
         if (_lesson is null) return;
         int before = _lesson.Index;
-        bool wasLast = _lesson.Current?.Check.Type == "balanced";
-        bool done = _lesson.OnTest(result.Tilts, result.Masses);
+        string? outcome = _lesson.Current?.Check is { IsOutcome: true } oc ? oc.Type : null;
+        bool done = _lesson.OnTest(result.Tilts, result.Masses, result.Facts, _session.Document);
         string tilts = string.Join(" ", result.Tilts.Select(kv => $"{kv.Key} most {kv.Value.Select(Math.Abs).DefaultIfEmpty(0).Max():0.###}° end {kv.Value.LastOrDefault():0.###}°"));
         GD.Print($"[Lesson] test seen at step {before + 1}: {tilts}; masses {string.Join(" ", result.Masses.Select(kv => $"{kv.Key}={kv.Value:0.###}kg"))}");
-        if (done) GD.Print($"[Lesson] step {before + 1} done{(wasLast ? $": balanced, most tilt {_lesson.LastTilt:0.###}°" : "")}");
+        if (done) GD.Print($"[Lesson] step {before + 1} done{(outcome == "balanced" ? $": balanced, most tilt {_lesson.LastTilt:0.###}°" : outcome is not null ? $": {outcome}" : "")}");
         else if (_lesson.Failure is { } why) GD.Print($"[Lesson] step {before + 1} not yet: {why}");
         SaveProgress();
         _lessonShownStep = -1;
@@ -278,7 +280,8 @@ public partial class BuildMode
         if (run.Nudge is not null && run.Nudge != _lessonNudgeShown) GD.Print($"[Lesson] step {run.Index + 1} nudge shown: {_lessonNote.Text}");
         _lessonNudgeShown = run.Nudge;
         _lessonNote.Modulate = why is null ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 0.6f, 0.5f);
-        _lessonCheckAgain.Visible = step.Check.Type == "balanced" && run.Failure is not null;
+        _lessonCheckAgain.Visible = step.Check.IsOutcome && run.Failure is not null;
+        if (fresh && step.Variant is { } size && step.Highlight is { } entry) _variantChosen[EntryKeyOf(entry)] = size;   // the card offers the size the lesson uses
         SetLessonHighlight(step.Highlight);
         PlaceLessonTarget();
         if (fresh)
@@ -308,6 +311,8 @@ public partial class BuildMode
     private void SetLessonHighlight(string? highlight)
     {
         _lessonHighlight = highlight;
+        // a part that is not among the starter parts (the pulley) is only in the full list
+        if (highlight is not (null or "test") && !highlight.StartsWith("part:") && !StarterKeys.Contains(highlight) && !_showAll) SetShowAll(true);
         HighlightPaletteEntry(highlight);
         _testButton.Modulate = highlight == "test" ? new Color(0.55f, 1.3f, 0.55f) : Colors.White;
         RefreshHighlights();
