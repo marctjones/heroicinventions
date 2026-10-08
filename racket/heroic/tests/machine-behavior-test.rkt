@@ -1956,7 +1956,14 @@
     ;; not swept: through the plank and on to the floor, its middle reaching ground level
     (check-true (< (min-of run '(bolt-plain y)) 0.7) (format "the plain bolt went through (lowest ~a m)" (min-of run '(bolt-plain y))))
     ;; the same bolt, the same fall, the same speed: only the sweep differs
-    (check-= (- (min-of run '(bolt-plain vy))) fastest 0.5)))
+    (check-= (- (min-of run '(bolt-plain vy))) fastest 0.5)
+    ;; lead on lead (#192): e = 0.2 gives back 15.3 m/s, 12.0 m of rise above the plank (its middle at 1.045 m), and the
+    ;; bolts come to rest where the lesson says, in view of the planks: the swept one on its plank, the plain one under it
+    (define peak (for/fold ([m 0]) ([t (times-of run)] [y (values-of run '(bolt-fast y))] #:when (> t 8)) (max m y)))
+    (check-= peak (+ 1.045 (/ (sqr (* 0.2 76.5)) (* 2 9.81))) 0.3 (format "the swept bolt rose to ~a m" peak))
+    (check-= (final-of run '(bolt-fast y)) 1.045 0.01 "at rest on its plank by 12 s")
+    (check-= (final-of run '(bolt-plain y)) 0.025 0.01 "at rest on the ground under its plank")
+    (check-= (final-of run '(bolt-plain x)) 0.6 0.1 "under its plank, not beside it")))
 
 ;; ---------------------------------------------------------------------------
 ;; An airlock on Mars (issue #41). Working in racket/machines/airlock.rkt.
