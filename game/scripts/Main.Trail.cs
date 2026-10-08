@@ -31,6 +31,7 @@ public partial class Main
         _trailTouchdown = null;
         if (body is null) { _trailRoot = null; return; }
         _trailRoot = new Node3D { Name = "Trail" };
+        MachineView.MarkScenery(_trailRoot);   // a record of where it flew, not a part
         view.AddChild(_trailRoot);   // freed with the machine
         _trailStart = _trailLastDot = body.GlobalPosition;
     }

@@ -17,6 +17,7 @@ public partial class MachineView
     {
         foreach (var (id, drain) in Runtime.Drains)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             float side = Mathf.Max(0.05f, (float)drain.Perimeter / 4);
             // on a map, at the ground's surface there; on the floor, where it was put

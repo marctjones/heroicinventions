@@ -33,6 +33,7 @@ public partial class MachineView
     {
         foreach (var (id, cam) in Runtime.Cams)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var wheel = _bodiesById.GetValueOrDefault(part.Symbol("on", "?"))
                 ?? throw new Sim.Machines.MachineFormatException($"cam {id} is pegged on {part.Symbol("on", "?")}, which is not a wheel in this machine", part.Location);

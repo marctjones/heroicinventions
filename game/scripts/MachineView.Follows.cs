@@ -28,6 +28,7 @@ public partial class MachineView
         TakeStartPoses();
         foreach (var (id, f) in Runtime.Follows)
         {
+            _building = id;
             double? input = f.Spec.Lever is { } lever
                 ? (BodyNamed(lever) is { } body && IsInstanceValid(body) ? HingeAngleDegrees(body) : null)
                 : _ropes.FirstOrDefault(r => r.Spec.Id == f.Spec.Rope)?.Tension;

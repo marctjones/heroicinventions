@@ -17,6 +17,7 @@ public partial class MachineView
     {
         foreach (var (id, pot) in Runtime.Crucibles)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             // the bowl: a charge of sand about 1,500 kg/m³, 15 cm deep, wide enough to hold it
             float radius = Mathf.Clamp(Mathf.Sqrt((float)(pot.Charge / 1500 / 0.15) / Mathf.Pi), 0.08f, 0.6f);

@@ -23,6 +23,7 @@ public partial class MachineView
     {
         foreach (var (id, mirror) in Runtime.Mirrors)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var at = V(part.At);
             float side = Mathf.Sqrt((float)mirror.Area);

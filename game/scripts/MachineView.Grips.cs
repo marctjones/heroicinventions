@@ -36,6 +36,7 @@ public partial class MachineView
     {
         foreach (var (id, grip) in Runtime.Grips)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             string on = part.Symbol("on", "world");
             RigidBody3D? host = on == "world" ? null : _bodiesById.GetValueOrDefault(on)

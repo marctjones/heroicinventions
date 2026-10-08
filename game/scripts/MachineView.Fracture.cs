@@ -97,7 +97,9 @@ public partial class MachineView
         post.EnergyTaken = (float)Math.Min(taken, before);
         _impactOverride = impact with { EnergyLost = post.EnergyTaken };   // the strike took the break's energy, not a bounce's
         GD.Print($"{part.Id} broke: {stress / 1e6:F0} MPa against {mat.TensileStrength:F0}, struck at {v:F2} m/s; the break took {post.EnergyTaken:F0} J");
+        _building = part.Id;   // the stump and splinters are still that post
         Shatter(post, sx, sy, sz, round);
+        _building = null;
     }
 
     /// <summary>Swaps the standing post for a stump and loose pieces.</summary>

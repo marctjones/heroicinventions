@@ -23,6 +23,7 @@ public partial class MachineView
     {
         foreach (var (id, (valve, flow)) in Runtime.FloatValves)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var tankPart = Runtime.Def.Part(valve.Tank.Name)!;
             float side = Mathf.Sqrt((float)tankPart.Number("area"));

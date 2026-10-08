@@ -23,6 +23,7 @@ public partial class MachineView
     {
         foreach (var (id, (valve, _)) in Runtime.SafetyValves)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var seat = V(part.At);
             var bronze = Surface(part.Material);
@@ -52,6 +53,7 @@ public partial class MachineView
         }
         foreach (var (id, boiler) in Runtime.Boilers)
         {
+            _building = id;
             if (boiler.Rating <= 0 || !_boilerBodies.TryGetValue(id, out var body)) continue;
             var part = Runtime.Def.Part(id)!;
             float r = (float)part.Number("radius"), h = (float)part.Number("height");

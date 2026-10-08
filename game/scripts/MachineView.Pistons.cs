@@ -77,6 +77,7 @@ public partial class MachineView
     {
         foreach (var spec in Runtime.Def.Cylinders)
         {
+            _building = spec.Piston;
             var (body, bottom, piston) = _pistons[spec.Piston];
             var cylinder = Runtime.Cylinders[spec.Id];
             _cylinderDrives.Add((cylinder, body, bottom, _casings[spec.Piston]));

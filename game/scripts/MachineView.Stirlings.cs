@@ -18,6 +18,7 @@ public partial class MachineView
     {
         foreach (var (id, engine) in Runtime.Stirlings)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var at = V(part.At);
             float r = Mathf.Clamp(Mathf.Sqrt((float)engine.Aperture / Mathf.Pi), 0.1f, 1f);

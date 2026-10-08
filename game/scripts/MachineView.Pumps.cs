@@ -29,6 +29,7 @@ public partial class MachineView
         var water = Shapes.Mat(Shapes.Water, roughness: 0.2f, alpha: 0.8f);
         foreach (var (id, pump) in Runtime.Pumps)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var at = V(part.At);
             var wood = Surface(part.Material);

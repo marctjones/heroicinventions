@@ -50,6 +50,7 @@ public partial class MachineView
     {
         foreach (var spec in Runtime.Def.Channels)
         {
+            _building = spec.Id;
             var channel = Runtime.Channels[spec.Id];
             var fromPart = Runtime.Def.Part(spec.From.Part)!;
             PartSpec? toPart = spec.To is { } t ? Runtime.Def.Part(t.Part) : null;
@@ -94,6 +95,7 @@ public partial class MachineView
 
         foreach (var spec in Runtime.Def.Sources)
         {
+            _building = spec.Id;
             var source = Runtime.Sources[spec.Id];
             var part = Runtime.Def.Part(spec.Into)!;
             var centre = new Vector3((float)part.At.X, 0, (float)part.At.Z);

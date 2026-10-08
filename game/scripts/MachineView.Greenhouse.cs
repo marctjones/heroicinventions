@@ -20,6 +20,7 @@ public partial class MachineView
     {
         foreach (var (id, plants) in Runtime.Plants)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             float side = Mathf.Sqrt((float)plants.Area);
             var bed = Shapes.Box(new Vector3(side, 0.15f, side), Shapes.Mat(new Color(0.3f, 0.22f, 0.15f)));
@@ -48,6 +49,7 @@ public partial class MachineView
         }
         foreach (var (id, melter) in Runtime.Melters)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var glow = Shapes.Mat(new Color(0.35f, 0.33f, 0.32f), metallic: 0.6f);
             glow.EmissionEnabled = true;
@@ -60,6 +62,7 @@ public partial class MachineView
         }
         foreach (var (id, cell) in Runtime.Electrolysers)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var jar = Shapes.Box(new Vector3(0.3f, 0.4f, 0.3f), Shapes.Mat(new Color(0.8f, 0.9f, 0.95f), roughness: 0.1f, alpha: 0.4f));
             jar.Position = V(part.At) + new Vector3(0, 0.2f, 0);

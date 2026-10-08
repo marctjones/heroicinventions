@@ -31,6 +31,7 @@ public partial class MachineView
     {
         foreach (var spec in Runtime.Def.Joints)
         {
+            _building = spec.Id;
             RigidBody3D? Body(string id) => id == "world" ? null : _bodiesById.GetValueOrDefault(id);
             var a = Body(spec.A);
             var b = Body(spec.B);

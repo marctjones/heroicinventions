@@ -33,6 +33,7 @@ public partial class MachineView
     {
         foreach (var (id, bearing) in Runtime.AxleBearings)
         {
+            _building = id;
             var part = Runtime.Def.Part(id);
             if (part is null || part.Kind is not ("wheel" or "lever")) continue;
             if (!_bodiesById.TryGetValue(id, out var body) || !_hinges.TryGetValue(body, out var hinge)) continue;

@@ -37,6 +37,7 @@ public partial class MachineView
     {
         foreach (var spec in Runtime.Def.Lifts.Where(l => Runtime.Def.Part(l.By)!.Kind != "piston")) // pumps: see BuildPistonDrives
         {
+            _building = spec.Id;
             var by = Runtime.Def.Part(spec.By)!;
             var body = _bodiesById[spec.By];
             var axis = _hinges[body].Axis;

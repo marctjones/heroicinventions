@@ -30,6 +30,7 @@ public partial class MachineView
     {
         foreach (var (id, ratchet) in Runtime.Ratchets)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var wheel = _bodiesById.GetValueOrDefault(part.Symbol("on", "?"))
                 ?? throw new Sim.Machines.MachineFormatException($"ratchet {id} is cut on {part.Symbol("on", "?")}, which is not a wheel in this machine", part.Location);

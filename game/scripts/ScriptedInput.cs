@@ -23,6 +23,7 @@ namespace HeroicInventions;
 ///   look YAW PITCH [DISTANCE [X Y Z]]   aim the camera: degrees round and up (pitch is camera height), metres
 ///                       out, and optionally the point it looks at
 ///   shot PATH           save what the window shows as a PNG
+///   pick X Y · pickworld X Y Z   print which part is drawn at a viewport pixel, or where a world point is drawn (the run view; #151)
 ///   quit                end the run
 ///
 /// A view adds its own steps through the <c>extra</c> handler, which
