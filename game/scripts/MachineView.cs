@@ -161,8 +161,12 @@ public partial class MachineView : Node3D
         BuildTurnMarks();   // a stripe on everything that turns, a blur ring above 15 rev/s (#172)
         Skins.ScreenLabels(this);      // every label the same size on screen, near or far (#148)
         // and every label added later (an impact's readout, a fracture's tag) the same way
-        GetTree().NodeAdded += OnNodeAdded;
-        TreeExiting += () => GetTree().NodeAdded -= OnNodeAdded;   // standing structure recedes; what moves keeps its colour (#167)   // after every part is built: each piece of wood's grain along its length
+        if (!_watchingNodes)
+        {
+            _watchingNodes = true;
+            GetTree().NodeAdded += OnNodeAdded;
+            TreeExiting += StopWatchingNodes;
+        }
         Refresh();
 
         // Baseline for "energy retained": mechanical energy before anything
@@ -216,6 +220,17 @@ public partial class MachineView : Node3D
     /// A part's heading as a turn about the vertical (issue #83): the frame it is built in is the machine's own
     /// turned by this, so its body, axle and slope stand at the heading and its pivot stays where it was put.
     /// </summary>
+    private bool _watchingNodes;
+
+    /// <summary>Once only: a view built again, or taken out of the tree twice (the editor does both), would otherwise unhook a hook it no longer has.</summary>
+    private void StopWatchingNodes()
+    {
+        if (!_watchingNodes) return;
+        _watchingNodes = false;
+        GetTree().NodeAdded -= OnNodeAdded;
+        TreeExiting -= StopWatchingNodes;
+    }
+
     private void OnNodeAdded(Node node)
     {
         if (node is Label3D label && IsAncestorOf(label)) Skins.ScreenLabel(label);
