@@ -1466,6 +1466,45 @@
     ;; and the edit really happened: the new block is in the machine by the end
     (check-not-false (assq 'extra.y (cdr (last edited))) "the added block is part of the running machine")))
 
+;; Timed settings in the game's own run path (issue #150): (target field value at-seconds) used to be applied
+;; before the first step by godot-simulate, the time dropped. Now the game queues them, as simhost does.
+(test-case "Timed settings under godot-simulate: the thumb goes on the tank-leaks hole at 100 s, as under simulate"
+  (when (godot-available?)
+    (define plug '((plug-hole area 0 100)))
+    (define sim (simulate 'tank-leaks #:seconds 300 #:step 0.01 #:sample-dt 1 #:set plug))
+    (define game (godot-simulate 'tank-leaks #:seconds 300 #:sample-dt 1 #:set plug))
+    ;; by hand: free until 100 s, then held; the same Torricelli draw-down the simulate test checks
+    (define held (* 100 (leak-level 0.10 100)))
+    (check-= (value-at game '(plugged level) 100) held 0.1 "the level when the thumb goes on")
+    (check-= (value-at game '(plugged level) 300) held 0.1 "and 200 s later it has not moved")
+    (check-= (value-at game '(plug-hole area) 99) 5 1e-6 "the hole was open at 99 s (a start-of-run set would have shut it)")
+    (check-= (value-at game '(plug-hole area) 101) 0 1e-12)
+    (for ([t '(50 100 200 300)])
+      (check-= (value-at game '(plugged level) t) (value-at sim '(plugged level) t) 0.1
+               (format "Godot and SimHost agree at ~a s" t)))))
+
+(test-case "Timed settings under godot-simulate: the airlock opens its outer door at 600 s, and shuts it at 700 s"
+  (when (godot-available?)
+    (define cycle '((bleed open 1 400) (bleed open 0 600) (outer open 1 600) (outer open 0 700)
+                    (pump speed 0 700) (inner open 1 700)))
+    (define game (godot-simulate 'airlock #:seconds 720 #:sample-dt 1 #:set cycle))
+    (define sim (simulate 'airlock #:seconds 720 #:step 0.05 #:sample-dt 1 #:set cycle))
+    (define (opened run)
+      (for/first ([f run] #:when (= 1 (cadr (assq 'outer.open (cdr f))))) (car f)))
+    (check-= (opened sim) 600 1)
+    (check-= (opened game) 600 1 "the outer door opens when the run reaches 600 s, not before the first step")
+    (check-= (value-at game '(outer open) 650) 1 1e-9)
+    (check-= (value-at game '(outer open) 710) 0 1e-9)
+    (check-= (value-at game '(chamber pressure) 399) (value-at sim '(chamber pressure) 399) 0.05
+             "the pump has pumped it down to its 5 kPa switch in both")))
+
+(test-case "Timed settings under godot-simulate: a malformed or impossible setting is an error, not a skipped line"
+  (when (godot-available?)
+    (check-exn #rx"HEROIC_SET" (λ () (godot-simulate 'pendulum-demo #:seconds 1 #:set '((nosuchpart angle 1)))))
+    (check-exn #rx"HEROIC_SET" (λ () (godot-simulate 'pendulum-demo #:seconds 1 #:env '(("HEROIC_SET" . "rod only-two")))))
+    (check-exn #rx"never applied" (λ () (godot-simulate 'pendulum-demo #:seconds 1 #:set '((scene ambient 5 50)))))
+    (check-exn #rx"target field value" (λ () (godot-simulate 'pendulum-demo #:seconds 1 #:set '((scene ambient)))))))
+
 (test-case "Tripwire: a trigger under a falling weight fires when the weight arrives, and only then opens the sluice"
   ;; the weight's middle falls 1.5 m -> 0.95 m, the trigger's top face: h = 0.55 m,
   ;; t = sqrt(2 h / g) = 0.3349 s, or 0.3368 s with the engine's default 0.1/s damping

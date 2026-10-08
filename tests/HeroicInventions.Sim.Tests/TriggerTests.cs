@@ -38,6 +38,28 @@ public class TriggerTests
         Assert.Equal(1, runtime.GetField("switch", "fired"));
     }
 
+    /// <summary>Issue #150: scene.elapsed counts seconds since the run began, so a trigger can schedule by it; scene.time (solar hours) can't, wrapping at 24 and held still by clock-rate 0.</summary>
+    [Fact]
+    public void ATriggerOnSceneElapsedFiresAtTheFirstStepAtOrPastItsTime()
+    {
+        var s = Fresh();
+        s.Execute("(boiler pot #:at (2 0 0))");
+        s.Execute("(trigger go #:when (scene elapsed above 5) #:do ((pot fire 3000)))");
+        var runtime = new MachineRuntime(s.Document.ToMachineDef(), Materials);
+        runtime.SetField("scene", "clock-rate", 0);                      // the sun is held still: only elapsed moves
+        double fireBefore = 0;
+        while (runtime.Time < 6)
+        {
+            runtime.Step(0.01);
+            if (runtime.GetField("go", "fired") == 0) fireBefore = runtime.GetField("pot", "fire");
+        }
+        Assert.Equal(runtime.Time, runtime.GetField("scene", "elapsed"), precision: 9);
+        Assert.Equal(0, fireBefore);
+        Assert.Equal(3000, runtime.GetField("pot", "fire"));
+        double firedAt = runtime.GetField("go", "fired-at");
+        Assert.InRange(firedAt, 5.0 - 1e-9, 5.0 + 0.01 + 1e-9);          // the first 0.01 s tick at or past 5.0 s
+    }
+
     [Fact]
     public void ATriggerFiresOnce()
     {
