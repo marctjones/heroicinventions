@@ -138,4 +138,16 @@ public class WorldSaveTests
         Assert.Equal(map.Heights, fresh.Heights);
         Assert.Equal(map.Soil, fresh.Soil);
     }
+
+    /// <summary>Issue #201: a (rover 1 ...) section is carried through text unchanged, and a save without one reads back with none.</summary>
+    [Fact]
+    public void A_rover_section_survives_text_and_an_older_save_has_none()
+    {
+        var rover = (SList)SExprReader.ReadAll("(rover 1 (chassis (xf 1 0 0 0 1 0 0 0 1 0.1 2.2 3.3) (vel 0 0 0) (spin 0 0 0)) (bucket (carried 0.19999999999999998) (ceiling none)) (arm (step 4) (status \"Backhoe swinging\")))")[0];
+        var machine = new SavedMachine("m", "m", 1, new SList([new SSymbol("state")]));
+        var with = new WorldSave { Kind = "world", Name = "w", Machines = [machine], Rover = rover };
+        var back = WorldSave.Parse(with.ToText());
+        Assert.Equal(SExprWriter.Print(rover), SExprWriter.Print(back.Rover!));
+        Assert.Null(WorldSave.Parse(new WorldSave { Kind = "world", Name = "w", Machines = [machine] }.ToText()).Rover);
+    }
 }

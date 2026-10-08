@@ -1146,6 +1146,7 @@ public partial class Main : Node3D
                 Ground = _groundSim is { } ground ? RuntimeState.CaptureGround(ground) : null,     // the dug earth and the water on it
                 Boulders = _groundSim is { Ground.Boulders.Count: > 0 } rocky ? rocky.Ground.SaveBoulders() : null,   // and the rocks slides left on it (#88)
                 Worked = _groundSim?.Ground.SaveWorked(),    // and the trenches and heaps the rover has dug (#199)
+                Rover = RoverSaveState(),                    // and the rover itself: pose, bucket and arm (#201)
                 Operated = _operatorLog.ToList(), OperatorTaken = _operatorTaken,   // what was done to the machine, in order (Main.Operator.cs)
             };
             string target = path ?? SavePath(auto);
@@ -1190,6 +1191,7 @@ public partial class Main : Node3D
             rocky.RetraceBoulders();
         }
         if (save.Worked is { } worked && _groundSim is { } dug) dug.Ground.LoadWorked(worked);   // the trenches and heaps, with their carry ceilings (#199)
+        if (save.Rover is { } roverState) RoverLoadState(roverState);   // the rover where it was, with its bucket and arm (#201)
         foreach (var m in save.Machines)
         {
             var view = _views.Count > 0 ? _views.FirstOrDefault(v => v.Name == m.Label) : _current;

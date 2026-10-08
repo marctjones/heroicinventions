@@ -66,8 +66,24 @@ public partial class Main
         _plainControls = null;
         RemoveRoverHands();
         RestorePanels();
+        if (_rover.GetParent() is { } parent) parent.RemoveChild(_rover);   // detach first: a new Rover made this frame must not be auto-named (the QueueFree trap)
         _rover.QueueFree();
         _rover = null;
+    }
+
+    /// <summary>The rover for a world save (#201), or null in a world without one.</summary>
+    private SList? RoverSaveState() => RoverIsPlayer ? _rover!.SaveState() : null;
+
+    /// <summary>Puts the saved rover back (LoadSave, after the world has spawned it) and points the camera behind it again.</summary>
+    private void RoverLoadState(SList saved)
+    {
+        if (!RoverIsPlayer) return;
+        try { _rover!.LoadState(saved); }
+        catch (FormatException e) { GD.PushError($"could not load the rover: {e.Message}"); return; }
+        _roverHeading = RoverHeading();
+        _orbit.Pivot = _rover!.Chassis.GlobalPosition;
+        _orbit.Yaw = _roverHeading;
+        _orbit.Apply();
     }
 
     private float RoverHeading()
@@ -238,7 +254,7 @@ public partial class Main
         return box.Size == Vector3.Zero ? null : box;
     }
 
-    /// <summary>Scripted checks (tools/gui-check.sh): "rover" prints where it is and what it is doing; "rover place X Z HEADING" puts it on the ground there.</summary>
+    /// <summary>Scripted checks (tools/gui-check.sh): "rover" prints where it is and what it is doing; "rover place X Z HEADING" puts it on the ground there; "rover save FILE" writes a world save now.</summary>
     private ScriptedInput.Step? RoverStep(string[] w)
     {
         if (w[0] != "rover") return null;
@@ -251,6 +267,7 @@ public partial class Main
             _roverHeading = RoverHeading();
             return ScriptedInput.Step.Next;
         }
+        if (w.Length == 3 && w[1] == "save") { SaveWorld(auto: false, w[2]); return ScriptedInput.Step.Next; }   // the world save, now, to this file (checks of #201)
         if (w.Length == 3 && w[1] == "until")   // wait for the arm to reach a phase (Digging, Lifting, Swinging, Placing, Dumping, Stowed ...)
             return _rover.PhaseName == w[2] ? ScriptedInput.Step.Next : ScriptedInput.Step.Again;
         if (w.Length > 1 && RoverHandsStep(w) is { } handsStep) return handsStep;   // the rover's hands: Main.RoverHands.cs
