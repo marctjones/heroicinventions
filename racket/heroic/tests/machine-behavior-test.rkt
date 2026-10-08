@@ -2936,11 +2936,10 @@
 ;; ---- #113: gear trains driven by any shaft, and loaded (geared-brake.rkt)
 ;; Worked before the first run, in the machine's header: a flywheel geared
 ;; 10:1 up into a 0.1 N m brake, the train 1 kg m^2 seen from the flywheel,
-;; let go at 36 rpm (37.7 rad/s at the brake, under the 47.1 rad/s Jolt in
-;; Godot lets a body spin; the issue's 60 rpm case is GearTrainTests', on the
-;; sim side). Through a perfect mesh the brake reflects 1 N m and the
+;; let go at 60 rpm, the issue's case (62.8 rad/s at the brake at 600 rpm: it ran at 36 rpm
+;; while Jolt let a body spin only 47.1 rad/s, and since #187 the limit is 314.16). Through a perfect mesh the brake reflects 1 N m and the
 ;; speed falls in a straight line, 1 rad/s per second, to a stop at
-;; I w0 / tau = 3.770 s; through a mesh of efficiency 0.9 at (eta I_1 + n^2 I_2)
+;; I w0 / tau = 6.283 s; through a mesh of efficiency 0.9 at (eta I_1 + n^2 I_2)
 ;; w0 / (n tau), with I_1 and I_2 the two arbors' own inertia read from the
 ;; compiled machine. The brake's heat is the energy that reached it: all the
 ;; train's spin through the perfect mesh, and only 0.9 of the flywheel arbor's
@@ -2957,14 +2956,16 @@
 
 (test-case "Geared brake (Jolt): a flywheel geared 10:1 into a 0.1 N m brake stops in I w0 / (n tau / eta)"
   (when (godot-available?)
-    (define run (godot-simulate 'geared-brake #:seconds 5 #:sample-dt 1/120))
-    (define w0 (* 2 pi 36/60))
+    (define run (godot-simulate 'geared-brake #:seconds 8 #:sample-dt 1/120))
+    (define w0 (* 2 pi 60/60))
     (define I1 (+ (machine-inertia 'geared-brake 'plain-flywheel) (machine-inertia 'geared-brake 'plain-gear)))
     (define I2 (+ (machine-inertia 'geared-brake 'plain-brake) (machine-inertia 'geared-brake 'plain-pinion)))
     (check-= (+ I1 (* 100 I2)) 1.0 1e-9 "kg m^2: the train seen from the flywheel")
     (define (stops eta) (/ (* (+ (* eta I1) (* 100 I2)) w0) (* 10 0.1)))
-    (check-= (stops 1) 3.770 0.001)
-    (check-= (stops 0.9) 3.402 0.001)
+    (check-= (stops 1) 6.283 0.001)
+    (check-= (stops 0.9) 5.669 0.001)
+    ;; #202: the engine reports a body pinned at Jolt's spin limit (314.16 rad/s); the 600 rpm brake shaft is nowhere near it
+    (check-= (final-of run '(spin-limit hits)) 0 0 "bodies that reached the spin limit")
     (for ([name '(plain lossy)] [eta '(1 0.9)])
       (define fly (string->symbol (format "~a-flywheel" name)))
       (define brake (string->symbol (format "~a-brake" name)))
@@ -2996,6 +2997,8 @@
     (define (at k) (value-at run k 240))
     (define w-sails (* (at '(sails rpm)) 2 pi 1/60))
     (check-= (at '(sails rpm)) 13.282 0.01 "1.39086 rad/s")
+    ;; the rotor at 173.86 rad/s is well under Jolt's 314.16 limit: no body is clamped (#202)
+    (check-= (at '(spin-limit hits)) 0 0 "bodies that reached the spin limit")
     ;; read at the start of each step, before the load slows it within it: 2 x (1/120) / 0.0984 = 0.17 rad/s over the ratio
     (check-= (at '(generator omega)) (+ (* 125 w-sails) 0.17) 0.05 "125 x the sails")
     (check-= (at '(generator omega)) 173.86 (* 0.002 173.86) "rad/s")

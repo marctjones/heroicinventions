@@ -1,16 +1,14 @@
 #lang heroic
 ;; A gear train turned by a flywheel and loaded by a brake (issue #113): the
 ;; check that a mesh carries torque both ways. Nothing cranks these trains;
-;; each is let go turning at speed (the flywheel at 36 rpm, the brake shaft
-;; at 360 the other way) and only the brake at the far end slows it.
+;; each is let go turning at speed (the flywheel at 60 rpm, the brake shaft
+;; at 600 the other way) and only the brake at the far end slows it.
 ;;
-;; The issue's case is 60 rpm, so 600 at the brake: 62.8 rad/s, past the
-;; 47.1 rad/s Jolt in Godot lets any body spin (its max angular velocity),
-;; which clamps the brake shaft and breaks the ratio. Raising that limit
-;; changes other machines (the belt drive and the catapulta are tuned to
-;; it), so this train runs at 36 rpm (37.7 rad/s at the brake) and the
-;; 60 rpm numbers are checked on the sim side (GearTrainTests): 6.28 s, and
-;; 5.65 s through a 0.9 mesh.
+;; The issue's case is 60 rpm, so 600 at the brake: 62.8 rad/s. Jolt in Godot
+;; once let a body spin no faster than 47.1 rad/s, which clamped the brake
+;; shaft and broke the ratio, so this train ran at 36 rpm for a while (#113).
+;; Since #187 the limit is 314.16 rad/s (100 pi), and the train runs the
+;; issue's case.
 ;;
 ;; Each train: an iron flywheel keyed with a 100-tooth oak gear on one
 ;; arbor, meshing a 10-tooth iron pinion on another, keyed to an iron brake
@@ -24,8 +22,8 @@
 ;; from its arbor, is I = 1 kg m^2: the flywheel and big gear, I_1, plus
 ;; 100 x the brake shaft's I_2. The speed falls in a straight line, 1 rad/s
 ;; every second, to a stop at
-;;   t = I w0 / tau = 1 x 3.770 / 1 = 3.770 s             (eta = 1, "plain")
-;;   t = (eta I_1 + n^2 I_2) w0 / (n tau) = 3.402 s       (eta = 0.9, "lossy")
+;;   t = I w0 / tau = 1 x 6.283 / 1 = 6.283 s             (eta = 1, "plain")
+;;   t = (eta I_1 + n^2 I_2) w0 / (n tau) = 5.669 s       (eta = 0.9, "lossy")
 ;; with n = 10, I_1 = 0.9772 and I_2 = 0.000228: the mesh loses its share
 ;; only of the power through it; the brake shaft's own spin is spent at the
 ;; brake without passing through it.
@@ -60,22 +58,22 @@
   #:source "issue #113: a flywheel geared 10:1 up into a 0.1 N m brake"
   ;; plain: a perfect mesh
   (wheel plain-flywheel #:shape (disc-wheel #:radius (cm 25) #:width fly-width) #:at (0 (m 1) 0) #:material iron
-         #:start-rpm 36 #:bearing-radius (cm 2))
-  (wheel plain-gear #:shape big #:at (0 (m 1) (cm -4)) #:material oak #:start-rpm 36)
-  (wheel plain-brake #:shape brake-drum #:at (apart (m 1) (cm -16)) #:material iron #:start-rpm -360
+         #:start-rpm 60 #:bearing-radius (cm 2))
+  (wheel plain-gear #:shape big #:at (0 (m 1) (cm -4)) #:material oak #:start-rpm 60)
+  (wheel plain-brake #:shape brake-drum #:at (apart (m 1) (cm -16)) #:material iron #:start-rpm -600
          #:bearing-radius pin #:bearing-mu brake-mu)
-  (wheel plain-pinion #:shape pinion #:at (apart (m 1) (cm -4)) #:material iron #:angle-deg pinion-angle #:start-rpm -360)
+  (wheel plain-pinion #:shape pinion #:at (apart (m 1) (cm -4)) #:material iron #:angle-deg pinion-angle #:start-rpm -600)
   (arbor plain-flywheel plain-gear)
   (arbor plain-brake plain-pinion)
   (mesh plain-gear plain-pinion)
 
   ;; lossy: the same train through a mesh of efficiency 0.9
   (wheel lossy-flywheel #:shape (disc-wheel #:radius (cm 25) #:width fly-width) #:at ((m 1) (m 1) 0) #:material iron
-         #:start-rpm 36 #:bearing-radius (cm 2))
-  (wheel lossy-gear #:shape big #:at ((m 1) (m 1) (cm -4)) #:material oak #:start-rpm 36)
-  (wheel lossy-brake #:shape brake-drum #:at ((+ (m 1) apart) (m 1) (cm -16)) #:material iron #:start-rpm -360
+         #:start-rpm 60 #:bearing-radius (cm 2))
+  (wheel lossy-gear #:shape big #:at ((m 1) (m 1) (cm -4)) #:material oak #:start-rpm 60)
+  (wheel lossy-brake #:shape brake-drum #:at ((+ (m 1) apart) (m 1) (cm -16)) #:material iron #:start-rpm -600
          #:bearing-radius pin #:bearing-mu brake-mu)
-  (wheel lossy-pinion #:shape pinion #:at ((+ (m 1) apart) (m 1) (cm -4)) #:material iron #:angle-deg pinion-angle #:start-rpm -360)
+  (wheel lossy-pinion #:shape pinion #:at ((+ (m 1) apart) (m 1) (cm -4)) #:material iron #:angle-deg pinion-angle #:start-rpm -600)
   (arbor lossy-flywheel lossy-gear)
   (arbor lossy-brake lossy-pinion)
   (mesh lossy-gear lossy-pinion #:efficiency 0.9))

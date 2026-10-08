@@ -1531,6 +1531,7 @@ public partial class MachineView : Node3D
         ApplyHand();   // a hand holding something (#159)
         ConstrainChains();
         CheckBurial();
+        CheckSpinLimit();   // the bodies have stepped: any at Jolt's spin limit are reported (MachineView.SpinLimit.cs, #202)
         Runtime.Step(dt);
         CoupleDrivenTrains(dt);   // after the sim's turning parts have stepped, before Jolt's bodies do (#113)
         Refresh();
