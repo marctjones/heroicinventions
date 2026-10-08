@@ -82,7 +82,7 @@ public partial class Main : Node3D
         ["ratchet-windlass"] = new(new Vector3(1.55f, 1.7f, 4.2f), new Vector3(1.55f, 1.1f, 0), 55),   // from the front: four windlasses in a row, ratchets facing the lens (#192)
         ["trip-hammer"] = new(new Vector3(0.9f, 1.1f, 2.4f), new Vector3(0.7f, 0.65f, 0), 55),   // the two rigs side by side, peg wheels face on (#192)
         ["tunnel-test"] = new(new Vector3(0f, 1.6f, 4.5f), new Vector3(0f, 1f, 0), 50),
-        ["crate-tongs"] = new(new Vector3(1f, 1.4f, 3.2f), new Vector3(1f, 0.68f, 0), 55),
+        ["crate-tongs"] = new(new Vector3(1.5f, 1.1f, 1.9f), new Vector3(1.5f, 0.7f, 0), 55),   // close on the three rigs, 0.5 m apart, so the tongs read (#192)
         ["belt-drive"] = new(new Vector3(2.4f, 1.2f, -0.25f), new Vector3(0.35f, 0.6f, -0.25f), 55),
         ["holy-water"] = new(new Vector3(0.75f, 1.1f, 3.3f), new Vector3(0.75f, 0.5f, 0), 50),
         ["trip-sluice"] = new(new Vector3(2f, 1.3f, 6.2f), new Vector3(2f, 0.75f, 0), 55),
