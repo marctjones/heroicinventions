@@ -67,6 +67,7 @@ Environment switches (all `HEROIC_*`):
 - **Godot and screenshots:**
   - Never test the GUI with computer-use; `tools/gui-check.sh --hidden` doesn't take focus. Hidden shots can drift if real input reaches the window, so confirm the camera with a `camera` print at each shot.
   - Headless Godot has no real window: projected screen positions are nonsense there.
+  - `QueueFree()` frees at the frame's end, so the node keeps its name until then. Creating a node with the same name in the same frame gets an auto-name (`@Node3D@390`). Detach first (`GetParent().RemoveChild(n)`), as ClearWorld does, or anything matched by name (saves, scripts) silently misses.
   - The viewport is 1600×1000 whatever the window size. Screen rules (the clear area between panels) are in viewport units.
 - **Machines and traces:**
   - A game machine is listed by the name **inside** its file, not the file name.
