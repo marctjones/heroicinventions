@@ -64,6 +64,9 @@ public partial class Main
             if (!FitsOnScreen(at) || !FitsOnScreen(at + Vector3.Up * FigureHeight)) continue;
             // the spots beside it share its depth and can't hide it; only the two in front are checked
             if (k >= 2 && machineOnScreen is { } r && FigureOnScreen(at).Intersects(r)) continue;
+            // nor stand so far forward that it looks bigger than it is beside the machine: a ruler nearer the lens than
+            // the machine misreads its size (the post-and-lintel crane's figure stood in front of it, half again too tall)
+            if (k >= 2 && FigureOnScreen(at).Size.Y > 1.15f * FigureOnScreen(box.GetCenter() with { Y = at.Y }).Size.Y) continue;
             spot = at;
             break;
         }
