@@ -17,7 +17,7 @@ public partial class Hints : PanelContainer
 {
     /// <summary>What the game is doing, read twice a second.</summary>
     public readonly record struct State(bool MachineShown, bool Running, double Speed, bool InBuildMode, bool CameraMoved,
-                                        int MachinesWatched, int PartsInDesign);
+                                        int MachinesWatched, int PartsInDesign, bool LessonStarted = false);
 
     private sealed record Hint(string Id, string Text, double After, Func<State, bool> When, Func<State, bool> Done);
 
@@ -33,8 +33,8 @@ public partial class Hints : PanelContainer
             s => s.Running && Math.Abs(s.Speed - 1) < 1e-9 && !s.InBuildMode, s => Math.Abs(s.Speed - 1) > 1e-9),
         new("build", "Build your own: the Build Mode button, or Machine ▸ Build Mode.", 20,
             s => !s.InBuildMode && s.MachinesWatched >= 2, s => s.InBuildMode),
-        new("place", "Drag a part from the list into the scene. Hold R and drag a part to turn it; Ctrl+Z undoes.", 5,
-            s => s.InBuildMode && s.PartsInDesign == 0, s => s.PartsInDesign > 0),
+        new("place", "New here? Press Lessons (top left) to build a see-saw step by step. Or drag a part from the list into the scene; Ctrl+Z undoes.", 5,
+            s => s.InBuildMode && s.PartsInDesign == 0 && !s.LessonStarted, s => s.PartsInDesign > 0 || s.LessonStarted),
     ];
 
     private readonly Func<State> _read;

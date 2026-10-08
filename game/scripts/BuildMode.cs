@@ -99,12 +99,23 @@ public partial class BuildMode : Node3D
     private List<string> _materialIds = [];
     private VBoxContainer _inspector = null!;
     private Label _status = null!;
-    private Label _partHelp = null!;
+    private Button _testButton = null!;
+    private bool _keepStatus;   // the next redraw leaves the status line alone (a test's sentence)
+    private bool _showNumbers;  // the inspector lists every number of the selected part
+
+    /// <summary>The status line for a selection: the part's plain name, then its id.</summary>
+    private string SelectedText(string id) =>
+        _session.Document.Parts.TryGetValue(id, out var p)
+        && _entryByKey.TryGetValue(EntryKeyOf(p.Props.GetValueOrDefault("catalogue") is SSymbol c ? c.Name : p.Kind), out var e)
+            ? $"Selected: {e.Label.ToLowerInvariant()} ({id}). Drag to move it, Delete removes it"
+            : $"Selected {id}";
+    private readonly Dictionary<LinkGestures.Kind, Button> _joinButtons = [];
     private FileDialog _saveDialog = null!, _loadDialog = null!;
 
     private static readonly StandardMaterial3D SelectedOverlay = Overlay(new Color(1f, 0.62f, 0.1f, 0.35f));
     private static readonly StandardMaterial3D PickedOverlay = Overlay(PickColor);
     private static readonly StandardMaterial3D HoverOverlay = Overlay(new Color(1f, 1f, 1f, 0.18f));
+    private static readonly StandardMaterial3D CandidateOverlay = Overlay(new Color(0.4f, 1f, 0.5f, 0.22f));
 
     /// <summary>
     /// Each part in plain words: what a person would call it, which group it
@@ -202,6 +213,7 @@ public partial class BuildMode : Node3D
         foreach (string kind in PartTemplates.PrimitiveKinds)
             _palette.Add((kind, PartInfo.GetValueOrDefault(kind).Label ?? kind, kind, null));
         foreach (var e in catalogue) _palette.Add((e.Id, e.Description, null, e));
+        BuildEntries(catalogue);
 
         BuildUi();
         BuildGrid();
@@ -294,6 +306,7 @@ public partial class BuildMode : Node3D
     public override void _Process(double delta)
     {
         _orbit.ProcessKeys(delta, GetViewport());
+        LessonProcess(delta);
         _inputScript?.Process(delta);
     }
 
@@ -301,20 +314,62 @@ public partial class BuildMode : Node3D
     {
         switch (w[0])
         {
-            case "palette":
-                for (int i = 0; i < _paletteList.ItemCount; i++)
-                    if (_paletteList.GetItemMetadata(i).AsString() == w[1]) _paletteList.Select(i);
-                StartPlacing(w[1]);
+            case "palette":   // "palette NAME": an entry (block, lever, gear…) or one catalogue size (pulley-10cm), as a click in the list would
+            {
+                string key = EntryKeyOf(w[1]);
+                if (key != w[1]) _variantChosen[key] = w[1];
+                SelectListItem(key);
+                StartEntry(key);
+                return ScriptedInput.Step.Next;
+            }
+            case "drag-to":   // "drag-to PART X Y Z": press on a part, drag it over the scene, let go where that world point is drawn
+            {
+                if (BoundsOf(NodesOf(w[1])) is not { } box) { GD.Print($"[BuildMode] no part {w[1]}"); return ScriptedInput.Step.Next; }
+                var screen = GetViewport().GetScreenTransform();
+                var from = screen * _camera.UnprojectPosition(box.GetCenter());
+                var to = screen * _camera.UnprojectPosition(new Vector3(float.Parse(w[2], System.Globalization.CultureInfo.InvariantCulture),
+                                                                        float.Parse(w[3], System.Globalization.CultureInfo.InvariantCulture),
+                                                                        float.Parse(w[4], System.Globalization.CultureInfo.InvariantCulture)));
+                _inputScript!.Mouse(from);
+                _inputScript.Mouse(from, MouseButton.Left, true);
+                for (int k = 1; k <= 10; k++) _inputScript.Mouse(from.Lerp(to, k / 10f), MouseButton.Left);
+                _inputScript.Mouse(to, MouseButton.Left, false);
+                return ScriptedInput.Step.Next;
+            }
+            case "lesson":   // "lesson ID": start that lesson afresh; "lesson-resume ID" takes it up where it was left
+            case "lesson-resume":
+                StartLesson(w[1], resume: w[0] == "lesson-resume");
+                return ScriptedInput.Step.Next;
+            case "lesson-leave":
+                LeaveLesson();
+                return ScriptedInput.Step.Next;
+            case "show-all":   // "show-all on|off": the full list or the starter set
+                SetShowAll(w.Length < 2 || w[1] != "off");
+                return ScriptedInput.Step.Next;
+            case "test":   // press Test
+                StartTest();
+                return ScriptedInput.Step.Next;
+            case "wait-test":   // wait until no test is running or about to run (the lesson presses Test itself)
+                return Testing || _lessonAutoTestIn is not null ? ScriptedInput.Step.Again : ScriptedInput.Step.Next;
+            case "click-at":   // "click-at X Y Z": a click wherever that world point is drawn
+                ClickAt(new Vector3(float.Parse(w[1], System.Globalization.CultureInfo.InvariantCulture),
+                                    float.Parse(w[2], System.Globalization.CultureInfo.InvariantCulture),
+                                    float.Parse(w[3], System.Globalization.CultureInfo.InvariantCulture)));
                 return ScriptedInput.Step.Next;
             case "palette-drag":   // "palette-drag ID X Y": press on the entry in the list, drag it out over the scene, let go at X Y
             {
-                int i = Enumerable.Range(0, _paletteList.ItemCount).FirstOrDefault(k => _paletteList.GetItemMetadata(k).AsString() == w[1], -1);
-                if (i < 0) { GD.Print($"[BuildMode] no palette entry {w[1]}"); return ScriptedInput.Step.Next; }
+                string key = EntryKeyOf(w[1]);
+                if (key != w[1]) _variantChosen[key] = w[1];
+                int i = ListIndexOf(key);
+                if (i < 0) { GD.Print($"[BuildMode] no palette entry {w[1]} in the list (show-all on?)"); return ScriptedInput.Step.Next; }
                 // the item's rect leaves out the list's own margin and scroll; step down its column until the list itself says the point is on it
                 var rect = _paletteList.GetItemRect(i);
-                var local = rect.GetCenter();
+                // scroll it into the list's view first, as a person would before dragging it
+                _paletteList.GetVScrollBar().Value = Math.Max(0, rect.Position.Y - 8);
+                var centre = rect.GetCenter() - new Vector2(0, (float)_paletteList.GetVScrollBar().Value);
+                var local = centre;
                 for (int dy = -40; dy <= 40 && _paletteList.GetItemAtPosition(local, exact: true) != i; dy += 2)
-                    local = rect.GetCenter() + new Vector2(0, dy);
+                    local = centre + new Vector2(0, dy);
                 if (_paletteList.GetItemAtPosition(local, exact: true) != i) { GD.Print($"[BuildMode] palette entry {w[1]} is scrolled out of sight"); return ScriptedInput.Step.Next; }
                 var from = GetViewport().GetScreenTransform() * (_paletteList.GetGlobalTransform() * local);   // injected events are in window pixels
                 var to = new Vector2(float.Parse(w[2], System.Globalization.CultureInfo.InvariantCulture), float.Parse(w[3], System.Globalization.CultureInfo.InvariantCulture));
@@ -346,7 +401,7 @@ public partial class BuildMode : Node3D
                 return ScriptedInput.Step.Next;
             }
             case "log":
-                GD.Print($"[BuildMode] state: px={F(1 / GetViewport().GetScreenTransform().Scale.X)} selected={_selectedId ?? "none"} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})" + (p.Props.GetValueOrDefault("heading-deg") is SNumber h ? $"^{F(h.Value)}" : "")))}");
+                GD.Print($"[BuildMode] state: px={F(1 / GetViewport().GetScreenTransform().Scale.X)} selected={_selectedId ?? "none"} placing={_placingPaletteId ?? "none"} link={_link?.ToString() ?? "none"} testing={Testing} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})" + (p.Props.GetValueOrDefault("heading-deg") is SNumber h ? $"^{F(h.Value)}" : "")))}");
                 return ScriptedInput.Step.Continue;
             case "focus":
                 if (w[1] == "console") _consoleInput.GrabFocus(); else GetViewport().GuiReleaseFocus();
@@ -381,6 +436,12 @@ public partial class BuildMode : Node3D
         left.AddChild(leftCol);
 
         leftCol.AddChild(new Label { Text = "Build Mode" });
+        var actions = new HBoxContainer();
+        _testButton = new Button { Text = "Test it", TooltipText = "Run the design here for a few seconds, then come back to building", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Disabled = Live };
+        _testButton.Pressed += () => StartTest();
+        actions.AddChild(_testButton);
+        leftCol.AddChild(actions);
+        BuildLessonUi(layer, actions);
 
         // Start from something that works, and change it.
         var examples = new OptionButton { TooltipText = "Load a working machine to change" };
@@ -398,35 +459,11 @@ public partial class BuildMode : Node3D
         };
         leftCol.AddChild(examples);
 
-        leftCol.AddChild(new Label { Text = "Parts: pick one, then click in the scene", AutowrapMode = TextServer.AutowrapMode.WordSmart });
-        _paletteList = new ItemList { CustomMinimumSize = new Vector2(230, 260), SizeFlagsVertical = Control.SizeFlags.ExpandFill };
-        var groups = _palette.GroupBy(p => p.PrimitiveKind is { } k ? PartInfo.GetValueOrDefault(k).Group ?? "Other" : "Gears, pulleys and drums")
-            .OrderBy(g => Array.IndexOf(GroupOrder, g.Key) is var i and >= 0 ? i : 99);
-        foreach (var group in groups)
-        {
-            int header = _paletteList.AddItem(group.Key);
-            _paletteList.SetItemSelectable(header, false);
-            _paletteList.SetItemCustomFgColor(header, new Color(1f, 0.8f, 0.45f));
-            foreach (var item in group)
-            {
-                int i = _paletteList.AddItem("   " + item.Label);
-                _paletteList.SetItemMetadata(i, item.Id);
-                _paletteList.SetItemTooltip(i, item.PrimitiveKind is { } k && PartInfo.TryGetValue(k, out var info) ? info.Description : item.Label);
-            }
-        }
-        _paletteList.ItemSelected += index => StartPlacing(_paletteList.GetItemMetadata((int)index).AsString());
-        _paletteList.FixedIconSize = new Vector2I(PaletteThumbnails.Size, PaletteThumbnails.Size);
-        leftCol.AddChild(_paletteList);
-        // thumbnails render one a frame in the background, offscreen (none when headless: nothing would draw them)
-        if (DisplayServer.GetName() != "headless")
-            AddChild(new PaletteThumbnails(this, Enumerable.Range(0, _paletteList.ItemCount)
-                .Where(i => _paletteList.IsItemSelectable(i))
-                .Select(i => (i, _paletteList.GetItemMetadata(i).AsString())).ToList(),
-                (i, texture) => _paletteList.SetItemIcon(i, texture)));
-        _partHelp = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(230, 0), Modulate = new Color(1, 1, 1, 0.75f) };
-        leftCol.AddChild(_partHelp);
+        BuildPaletteUi(leftCol);
 
-        leftCol.AddChild(new Label { Text = "Join parts: pick a tool, then click the parts" });
+        var joinBox = new VBoxContainer { Visible = _showAll };
+        _joinBox = joinBox;
+        joinBox.AddChild(new Label { Text = "Join parts: pick a tool, then click the parts" });
         var joinGrid = new GridContainer { Columns = 2 };
         foreach (var (kind, label, tip) in new[]
         {
@@ -442,25 +479,27 @@ public partial class BuildMode : Node3D
             var b = new Button { Text = label, TooltipText = tip, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
             b.Pressed += () => StartLink(kind);
             joinGrid.AddChild(b);
+            _joinButtons[kind] = b;
         }
-        leftCol.AddChild(joinGrid);
+        joinBox.AddChild(joinGrid);
+        leftCol.AddChild(joinBox);
 
-        leftCol.AddChild(new Label { Text = "New parts are made of" });
+        joinBox.AddChild(new Label { Text = "Parts with no usual material are made of", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         _materialBox = new OptionButton();
         _materialIds = _materials.All.OrderBy(m => m.Id).Select(m => m.Id).ToList();
         foreach (var mat in _materials.All.OrderBy(m => m.Id)) _materialBox.AddItem(mat.Name);
         _materialBox.Select(Math.Max(0, _materialIds.IndexOf(_material)));
         _materialBox.ItemSelected += index => _material = _materialIds[(int)index];
-        leftCol.AddChild(_materialBox);
+        joinBox.AddChild(_materialBox);
 
         // The planet the scene stands on (issue #38): its gravity, air and sunlight.
-        leftCol.AddChild(new Label { Text = "On the planet" });
+        joinBox.AddChild(new Label { Text = "On the planet" });
         var planetBox = new OptionButton { TooltipText = "Gravity, air pressure and mix, sunlight: (planet mars) in the console, with #:gravity etc. to change a number" };
         var planetIds = HeroicInventions.Sim.Planet.Presets.Keys.ToList();
         foreach (var id in planetIds) planetBox.AddItem(HeroicInventions.Sim.Planet.Presets[id].Name);
         planetBox.Select(Math.Max(0, planetIds.IndexOf(_session.Document.Planet.Id)));
         planetBox.ItemSelected += index => RunCommand($"(planet {planetIds[(int)index]})");
-        leftCol.AddChild(planetBox);
+        joinBox.AddChild(planetBox);
 
         var fileRow = new HBoxContainer();
         var saveButton = new Button { Text = "Save…", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
@@ -583,6 +622,7 @@ public partial class BuildMode : Node3D
         }
         if (_selectedId is { } id && !_session.Document.Parts.ContainsKey(id)) _selectedId = null;
         Redraw();
+        LessonCheck();
         return ok;
     }
 
@@ -683,9 +723,10 @@ public partial class BuildMode : Node3D
         }
         string? problem = _unfinished.Count == 0 ? null
             : $"{_unfinished.Count} part{(_unfinished.Count == 1 ? "" : "s")} not finished (red): {string.Join("; ", _unfinished.Select(kv => $"{kv.Key}: {Plain(kv.Value)}"))}";
-        _status.Text = problem is null
-            ? (_placingPaletteId is { } p ? $"Placing {p}: click to place, Shift keeps placing, Esc cancels" : _selectedId is { } s ? $"Selected {s}" : "")
-            : problem;
+        if (_link is { } activeLink) _status.Text = LinkSteps(activeLink, _linkPicks.Count);
+        else if (problem is not null) _status.Text = problem;
+        else if (_placingPaletteId is null && !_keepStatus) _status.Text = _selectedId is { } s ? SelectedText(s) : "";
+        _keepStatus = false;
         DrawLinks();
         DrawPorts();
         RefreshHighlights();
@@ -781,7 +822,9 @@ public partial class BuildMode : Node3D
     {
         foreach (var id in _session.Document.Parts.Keys)
         {
-            var overlay = id == _selectedId ? SelectedOverlay : _linkPicks.Contains(id) ? PickedOverlay : id == _hoverId ? HoverOverlay : null;
+            var overlay = id == _selectedId ? SelectedOverlay : _linkPicks.Contains(id) ? PickedOverlay : id == _hoverId ? HoverOverlay
+                : _link is { } tool && tool is not (LinkGestures.Kind.Rope or LinkGestures.Kind.Joint) && LinkTakes(tool, id) ? CandidateOverlay
+                : id == LessonPartId ? LessonPartOverlay : null;
             foreach (var root in NodesOf(id))
                 foreach (var g in Descendants(root).OfType<GeometryInstance3D>())
                     if (g is not Label3D) g.MaterialOverlay = overlay;
@@ -808,7 +851,9 @@ public partial class BuildMode : Node3D
             _inspector.AddChild(new Label { Text = "Nothing selected. Click a part.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
             return;
         }
-        _inspector.AddChild(new Label { Text = $"{part.Id} ({part.Kind})" });
+        string entryKey = EntryKeyOf(part.Props.GetValueOrDefault("catalogue") is SSymbol cat ? cat.Name : part.Kind);
+        string plainName = _entryByKey.TryGetValue(entryKey, out var pe) ? pe.Label : part.Kind;
+        _inspector.AddChild(new Label { Text = $"{part.Id}: {plainName}" });
         if (_unfinished.TryGetValue(id, out var why))
             _inspector.AddChild(new Label { Text = $"Not finished: {Plain(why)}", AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(1f, 0.55f, 0.45f) });
 
@@ -828,15 +873,18 @@ public partial class BuildMode : Node3D
         }
         _inspector.AddChild(posRow);
 
-        _inspector.AddChild(new Label { Text = "Material" });
-        var matBox = new OptionButton();
-        foreach (var mid in _materialIds) matBox.AddItem(_materials[mid].Name);
-        matBox.Select(Math.Max(0, _materialIds.IndexOf(part.Material)));
-        matBox.ItemSelected += index => RunCommand($"(set {id} #:material {_materialIds[(int)index]})");
-        _inspector.AddChild(matBox);
+        _inspector.AddChild(new Label { Text = "Made of" });
+        var swatches = new HFlowContainer();
+        FillSwatches(swatches, part.Material, UsualMaterial(entryKey), m => RunCommand($"(set {id} #:material {m})"));
+        _inspector.AddChild(swatches);
 
+        // the part's own numbers, folded away until asked for: a newcomer needs where and what, not bearing-drag
+        var numbers = new Button { Text = _showNumbers ? "Hide its numbers ▾" : "Show all its numbers ▸", Flat = true, Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.None };
+        numbers.Pressed += () => { _showNumbers = !_showNumbers; RebuildInspector(); };
+        _inspector.AddChild(numbers);
         foreach (var (key, value) in part.Props.OrderBy(p => p.Key))
         {
+            if (!_showNumbers) break;
             var row = new HBoxContainer();
             row.AddChild(new Label { Text = key, CustomMinimumSize = new Vector2(120, 0), ClipText = true, TooltipText = key });
             if (value is SNumber n)
@@ -1021,6 +1069,13 @@ public partial class BuildMode : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (Testing && @event is InputEventKey or InputEventMouseButton { ButtonIndex: MouseButton.Left })
+        {
+            // while a test runs only the camera moves; Esc stops it early
+            if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }) FinishTest();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         switch (@event)
         {
             case InputEventMouseButton { ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } or InputEventMagnifyGesture or InputEventPanGesture:
@@ -1216,7 +1271,8 @@ public partial class BuildMode : Node3D
         _selectedId = id;
         RefreshHighlights();
         RebuildInspector();
-        _status.Text = id is null ? "" : $"Selected {id}";
+        if (_link is { } l) _status.Text = LinkSteps(l, _linkPicks.Count);
+        else _status.Text = id is null ? "" : SelectedText(id);
     }
 
     private void OnLeftDown(Vector2 screen, bool shift)
@@ -1321,15 +1377,21 @@ public partial class BuildMode : Node3D
 
     private void StartPlacing(string paletteId)
     {
+        string key = EntryKeyOf(paletteId);
+        string material = key == _placingKey && _placeMaterial is { } m ? m : UsualMaterial(key);
+        bool wasShown = _ghost is { Visible: true };
+        var at = _ghost?.Position;
         CancelPlacing();
+        CancelLink();
+        _placingKey = key;
+        _placeMaterial = material;
         _placingPaletteId = paletteId;
         _ghost = BuildGhost(paletteId, out _ghostBottom);
         AddChild(_ghost);
-        _ghost.Visible = false;
-        var item = _palette.First(p => p.Id == paletteId);
-        string label = item.PrimitiveKind is { } k && PartInfo.TryGetValue(k, out var info) ? info.Label : item.Label;
-        _partHelp.Text = item.PrimitiveKind is { } k2 && PartInfo.TryGetValue(k2, out var info2) ? info2.Description : "";
-        _status.Text = $"Placing {label}: click to place, Shift keeps placing, Esc cancels";
+        _ghost.Visible = wasShown;   // a new size or material keeps the ghost where it was
+        if (at is { } p) _ghost.Position = p;
+        string label = _entryByKey.TryGetValue(key, out var e) ? e.Label : paletteId;
+        _status.Text = $"Placing {label.ToLowerInvariant()} ({_materials[material].Name.ToLowerInvariant()}): click in the scene to put it there. Shift keeps placing, Esc cancels";
     }
 
     private void CancelPlacing()
@@ -1337,7 +1399,10 @@ public partial class BuildMode : Node3D
         _ghost?.QueueFree();
         _ghost = null;
         _placingPaletteId = null;
+        _placingKey = null;
+        _placeMaterial = null;
         _paletteList.DeselectAll();
+        ShowCard(null);
     }
 
     /// <summary>
@@ -1349,7 +1414,7 @@ public partial class BuildMode : Node3D
     /// </summary>
     private Node3D BuildGhost(string paletteId, out float bottom)
     {
-        var ghost = BuildPartModel(paletteId);
+        var ghost = BuildPartModel(paletteId, material: _placeMaterial);
         AddChild(ghost);   // briefly, to measure it
         if (ghost is MachineView mv) mv.SetFrozen(true);
         foreach (var g in Descendants(ghost).OfType<GeometryInstance3D>())
@@ -1357,6 +1422,7 @@ public partial class BuildMode : Node3D
             g.Transparency = 0.55f;
             g.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
         }
+        foreach (var label in Descendants(ghost).OfType<Label3D>()) label.Visible = false;   // its name is "ghost": nothing to read
         bottom = BoundsOf([ghost]) is { } box ? box.Position.Y : 0;
         RemoveChild(ghost);
         return ghost;
@@ -1369,12 +1435,22 @@ public partial class BuildMode : Node3D
     /// by the placing ghost and the palette's thumbnails, so both look like
     /// what will be built.
     /// </summary>
-    public Node3D BuildPartModel(string paletteId, bool hosted = false)
+    public Node3D BuildPartModel(string paletteId, bool hosted = false, string? material = null)
     {
+        string key = EntryKeyOf(paletteId);
+        if (_entryByKey.ContainsKey(paletteId)) paletteId = VariantOf(paletteId);   // an entry: the size it places now
+        material ??= UsualMaterial(key);
         var item = _palette.First(p => p.Id == paletteId);
+        var lifted = new Vec3(0, Lift(key), 0);
         var spec = item.Catalogue is { } entry
-            ? PartTemplates.Create(entry, "ghost", new Vec3(0, 0, 0), _material)
-            : PartTemplates.Create(item.PrimitiveKind!, "ghost", new Vec3(0, 0, 0), _material);
+            ? PartTemplates.Create(entry, "ghost", lifted, material)
+            : PartTemplates.Create(item.PrimitiveKind!, "ghost", lifted, material);
+        if (ExtraProps(key) is { Length: > 0 } extra)
+        {
+            var props = new Dictionary<string, SExpr>(spec.Props);
+            foreach (var (k, v) in extra) props[k] = new SNumber(v);
+            spec = spec with { Props = props };
+        }
         Node3D ghost;
         try
         {
@@ -1435,8 +1511,10 @@ public partial class BuildMode : Node3D
         while (_session.Document.Parts.ContainsKey(id)) id = $"{paletteId.Replace('-', '_')}_{_serial++}";
         string head = item.Catalogue is { } entry ? entry.PartKind : item.PrimitiveKind!;
         string catalogueArg = item.Catalogue is not null ? $" #:catalogue {paletteId}" : "";
-        var at = _ghost.Position;
-        if (RunCommand($"({head} {id} #:at {Xyz(at)}{catalogueArg} #:material {_material})"))
+        string key = EntryKeyOf(paletteId);
+        var at = _ghost.Position + new Vector3(0, Lift(key), 0);
+        string extra = string.Concat(ExtraProps(key).Select(p => $" #:{p.Key} {F(p.Value)}"));
+        if (RunCommand($"({head} {id} #:at {Xyz(at)}{catalogueArg} #:material {_placeMaterial ?? UsualMaterial(key)}{extra})"))
         {
             TrySnapAllPorts(id);
             if (!keepPlacing) { CancelPlacing(); Select(id); }
@@ -1505,7 +1583,8 @@ public partial class BuildMode : Node3D
         CancelConnect();
         _linkPicks.Clear();
         _link = kind;
-        _status.Text = LinkGestures.Prompt(kind, 0);
+        _status.Text = LinkSteps(kind, 0);
+        foreach (var (k, b) in _joinButtons) b.Modulate = k == kind ? new Color(0.6f, 1f, 1f) : Colors.White;
         RefreshHighlights();
     }
 
@@ -1513,8 +1592,36 @@ public partial class BuildMode : Node3D
     {
         _link = null;
         _linkPicks.Clear();
+        foreach (var b in _joinButtons.Values) b.Modulate = Colors.White;
         RefreshHighlights();
     }
+
+    /// <summary>A join tool's steps in plain words: which step this is, what to click next, and how to finish or back out.</summary>
+    private static string LinkSteps(LinkGestures.Kind kind, int picked) => kind switch
+    {
+        LinkGestures.Kind.Rope => picked == 0 ? "Rope, step 1 of 2: click the first thing to tie (any part). Esc cancels"
+                                              : "Rope, step 2 of 2: click the thing to tie it to (click the first again to let go of it)",
+        LinkGestures.Kind.Mesh => picked == 0 ? "Gear mesh, step 1 of 2: click a gear (the lit parts can mesh). Esc cancels"
+                                              : "Gear mesh, step 2 of 2: click the gear whose teeth it should turn",
+        LinkGestures.Kind.Belt => picked == 0 ? "Belt, step 1 of 2: click the wheel or drum that does the driving (lit). Esc cancels"
+                                              : "Belt, step 2 of 2: click the wheel or drum the belt turns",
+        LinkGestures.Kind.Cylinder => picked == 0 ? "Cylinder, step 1 of 2: click the piston, or the pot whose steam drives it (lit). Esc cancels"
+                                                  : "Cylinder, step 2 of 2: click the other one (the pot, or the piston)",
+        LinkGestures.Kind.Joint => picked == 0 ? "Ball joint, step 1 of 2: click a moving part. Esc cancels"
+                                               : "Ball joint, step 2 of 2: click the part to join it to (the joint goes halfway between them)",
+        LinkGestures.Kind.Arbor => $"Axle: click each wheel to fix on one shaft (lit); the first carries the bearing. {picked} picked: press Enter when done, Esc cancels",
+        _ => $"Shared air: click each tank that shares one sealed air space (lit). {picked} picked: press Enter when done, Esc cancels",
+    };
+
+    /// <summary>Whether a join tool can take this part: the lit parts while it is active.</summary>
+    private bool LinkTakes(LinkGestures.Kind kind, string id) =>
+        _session.Document.Parts.TryGetValue(id, out var part) && kind switch
+        {
+            LinkGestures.Kind.Mesh or LinkGestures.Kind.Belt or LinkGestures.Kind.Arbor => part.Kind == "wheel",
+            LinkGestures.Kind.Cylinder => part.Kind is "piston" or "boiler",
+            LinkGestures.Kind.SealedAir => part.Kind == "tank",
+            _ => true,
+        };
 
     /// <summary>A click on a part while a Join tool is active: two-part tools finish on the second pick, axles and shared air wait for Enter.</summary>
     private void PickForLink(LinkGestures.Kind kind, string id)
@@ -1524,7 +1631,7 @@ public partial class BuildMode : Node3D
         RefreshHighlights();
         var (min, max) = LinkGestures.Picks(kind);
         if (max is { } m && _linkPicks.Count == m) FinishLink(kind);
-        else _status.Text = LinkGestures.Prompt(kind, _linkPicks.Count);
+        else _status.Text = LinkSteps(kind, _linkPicks.Count);
     }
 
     private void FinishLink(LinkGestures.Kind kind)
@@ -1533,10 +1640,10 @@ public partial class BuildMode : Node3D
         {
             string command = LinkGestures.Command(_session.Document, kind, _linkPicks);
             var last = _linkPicks[^1];
-            _linkPicks.Clear();
-            _link = null;
+            CancelLink();
             RunCommand(command);
             Select(last);
+            _status.Text = kind == LinkGestures.Kind.Rope ? "Tied. The rope's length is in the panel on the right" : "Joined";
         }
         catch (InvalidOperationException e)
         {

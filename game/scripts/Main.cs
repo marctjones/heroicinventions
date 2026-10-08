@@ -619,7 +619,7 @@ public partial class Main : Node3D
 
         // first-run hints (#98), above the panels
         _hints = new Hints(() => new Hints.State(MachineOnScreen, _running, _timeScale, _buildMode is not null, _cameraMoved,
-                                                 _machinesWatched, _buildMode?.PartCount ?? 0));
+                                                 _machinesWatched, _buildMode?.PartCount ?? 0, _buildMode?.LessonStarted ?? false));
         layer.AddChild(_hints);
     }
 
