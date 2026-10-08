@@ -1342,7 +1342,13 @@
     (define run (godot-simulate 'shaduf #:seconds 10 #:sample-dt 0.5))
     (for ([t '(2 5 10)]) (check-= (value-at run '(half-full angle) t) 0.0 0.3 (format "half full holds level at ~a s" t)))
     (check-= (final-of run '(full angle)) -25.0 0.3 "full bucket down at its stop")
-    (check-= (final-of run '(empty angle)) 25.0 0.3 "empty bucket up at its stop")))
+    (check-= (final-of run '(empty angle)) 25.0 0.3 "empty bucket up at its stop")
+    ;; the well (#176): the full bucket's underside, 1.632 - 1.2 - 0.185 = 0.247 m, is under the pool's 0.30 m surface
+    (for ([t '(3 5 8 10)])
+      (define bottom (- (value-at run '(full-bucket y) t) (/ (expt (/ 17 2700.0) 1/3) 2)))
+      (check-= bottom 0.247 0.03 (format "full bucket's underside at ~a s" t))
+      (check-true (< bottom 0.30) "dipped into the water"))
+    (check-= (final-of run '(well water)) 300 1e-6 "litres in the pool")))
 
 (test-case "Material samples: all four dropped cubes come to rest on the floor, centres 7.5 cm up"
   (when (godot-available?)

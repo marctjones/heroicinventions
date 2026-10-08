@@ -20,6 +20,15 @@
 ;; Buckets and counterweight are granite blocks of those masses. The
 ;; poles are undamped (#:damping 0): with a lever's default damping a rope
 ;; under-holds its load and a balanced pole creeps (issue #138).
+;;
+;; The well (#176): a 1 m wide pool of 300 L, its surface 30 cm up, stands under the full
+;; bucket where the sweep ends. The sweep turns through 25 degrees, so the bucket's rope
+;; hangs from the long end at x = 3 cos 25 = 2.719 m, y = 2.9 - 3 sin 25 = 1.632 m; the
+;; rope 1.2 m and the 17 kg granite block 0.185 m on a side put its underside at
+;; 1.632 - 1.2 - 0.185 = 0.247 m, 5.3 cm under the water: it dips. The pool is only drawn
+;; (no buoyancy: the buckets are granite blocks of the stated masses), so none of the
+;; balance above changes. The other two buckets do not reach it: the half-full one hangs
+;; level at 1.5 m, the empty one is lifted to 3 m.
 (require racket/math)
 
 (define plank-mass (* 4 0.025 0.22 720))                           ; 15.84 kg of oak
@@ -46,6 +55,8 @@
   (block full-bucket #:at ((m 3) (- pivot-y bucket-rope (/ (granite-side 17) 2)) (m 1.5))
          #:size (granite-side 17) #:material granite)
   (rope full-bucket-rope #:from (full 3 0 0) #:to (full-bucket 0 (/ (granite-side 17) 2) 0) #:length bucket-rope)
+
+  (tank well #:at ((* 3 (cos (degrees->radians 25))) 0 (m 1.5)) #:area 1 #:height (m 0.6) #:water (L 300) #:material limestone)
 
   (lever empty #:at (0 pivot-y (m -1.5)) #:length (m 4) #:material oak #:pivot-fraction 0.25 #:limit-deg 25 #:damping 0)
   (block empty-cw #:at ((m -1) (- pivot-y cw-rope (/ (granite-side counterweight-kg) 2)) (m -1.5))
