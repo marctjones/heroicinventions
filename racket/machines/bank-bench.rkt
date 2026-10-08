@@ -12,7 +12,7 @@
 ;;   They settle in tau = I / (tau* / w* + k) = 40 / 10.447 = 3.8 s.
 ;; A bank of 5 Wh (18,000 J) fills in 18,000 / 159.87 = 112.6 s of charging.
 ;;
-;; warm   20 C, held there: charges from the start, full at about 117 s
+;; warm   20 C, held there: charges from the start, full at about 119 s (112.6 s of charging after the sails reach the cut-in: 6.5 s)
 ;; cold   -10 C, in a 20 C air through 5 W/K (the cells' 16 kJ/K: tau 3,200 s): T = 20 - 30 exp(-t / 3200) crosses 0 C at
 ;;        3,200 ln(30/20) = 1,297.5 s. No charge before it; charging resumes from it, full about 113 s later
 ;; hot    50 C, cooling the same way: 20 + 30 exp(-t / 3200) falls to 45 C at 3,200 ln(30/25) = 583.4 s. No charge before it; from it, full about 113 s later
@@ -40,13 +40,13 @@
   (battery-bank cold #:at ((m 8.1) 0 (m -1)) #:in cold-cells #:capacity 5)
   (battery-bank hot #:at ((m 14.1) 0 (m -1)) #:in hot-cells #:capacity 5)
   ;; the call
-  (heat-store ok-cells #:at ((m 1.5) 0 (m -3)) #:mass 16 #:contents cells #:temperature 20 #:area 0)
-  (heat-store late-cells #:at ((m 4.5) 0 (m -3)) #:mass 16 #:contents cells #:temperature 20 #:area 0)
-  (heat-store hot-w-cells #:at ((m 7.5) 0 (m -3)) #:mass 16 #:contents cells #:temperature 50 #:area 0)
-  (heat-store cold-w-cells #:at ((m 10.5) 0 (m -3)) #:mass 16 #:contents cells #:temperature -5 #:area 0)
-  (heat-store easy-cells #:at ((m 13.5) 0 (m -3)) #:mass 16 #:contents cells #:temperature 20 #:area 0)
-  (battery-bank ok #:at ((m 2.1) 0 (m -3)) #:in ok-cells #:capacity 5 #:charge 5)
-  (battery-bank late #:at ((m 5.1) 0 (m -3)) #:in late-cells #:capacity 5 #:charge 0)
-  (battery-bank hot-w #:at ((m 8.1) 0 (m -3)) #:in hot-w-cells #:capacity 5 #:charge 5)
-  (battery-bank cold-w #:at ((m 11.1) 0 (m -3)) #:in cold-w-cells #:capacity 5 #:charge 5)
-  (battery-bank easy #:at ((m 14.1) 0 (m -3)) #:in easy-cells #:capacity 5 #:charge 5 #:call-any-time #t))
+  (heat-store ok-cells #:at ((m 1.5) 0 (m -6)) #:mass 16 #:contents cells #:temperature 20 #:area 0)
+  (heat-store late-cells #:at ((m 4.5) 0 (m -6)) #:mass 16 #:contents cells #:temperature 20 #:area 0)
+  (heat-store hot-w-cells #:at ((m 7.5) 0 (m -6)) #:mass 16 #:contents cells #:temperature 50 #:area 0)
+  (heat-store cold-w-cells #:at ((m 10.5) 0 (m -6)) #:mass 16 #:contents cells #:temperature -5 #:area 0)
+  (heat-store easy-cells #:at ((m 13.5) 0 (m -6)) #:mass 16 #:contents cells #:temperature 20 #:area 0)
+  (battery-bank ok #:at ((m 2.1) 0 (m -6)) #:in ok-cells #:capacity 5 #:charge 5)
+  (battery-bank late #:at ((m 5.1) 0 (m -6)) #:in late-cells #:capacity 5 #:charge 0)
+  (battery-bank hot-w #:at ((m 8.1) 0 (m -6)) #:in hot-w-cells #:capacity 5 #:charge 5)
+  (battery-bank cold-w #:at ((m 11.1) 0 (m -6)) #:in cold-w-cells #:capacity 5 #:charge 5)
+  (battery-bank easy #:at ((m 14.1) 0 (m -6)) #:in easy-cells #:capacity 5 #:charge 5 #:call-any-time #t))

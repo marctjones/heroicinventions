@@ -40,15 +40,15 @@ public partial class MachineView
             _building = id;
             var part = Runtime.Def.Part(id)!;
             var at = V(part.At);
-            const float w = 0.34f, h = 0.26f, d = 0.2f;
+            const float w = 0.75f, h = 0.57f, d = 0.44f;   // drawn well over a real pack's size: legibility over realism
             var armour = Shapes.Mat(new Color(0.16f, 0.17f, 0.2f), metallic: 0.5f, roughness: 0.5f);
             var caseBox = Shapes.Box(new Vector3(w, h, d), armour);
             caseBox.Position = at + new Vector3(0, h / 2, 0);
             AddChild(caseBox);
-            foreach (float x in new[] { -0.09f, 0.09f })   // the terminals
+            foreach (float x in new[] { -0.2f, 0.2f })   // the terminals
             {
-                var post = Shapes.Cylinder(0.018f, 0.04f, Shapes.Mat(Shapes.Copper, metallic: 0.7f, roughness: 0.4f));
-                post.Position = at + new Vector3(x, h + 0.02f, 0);
+                var post = Shapes.Cylinder(0.04f, 0.09f, Shapes.Mat(Shapes.Copper, metallic: 0.7f, roughness: 0.4f));
+                post.Position = at + new Vector3(x, h + 0.045f, 0);
                 AddChild(post);
             }
             // the fill: a column through the case, a hair proud of both faces, rising from the bottom
@@ -59,14 +59,14 @@ public partial class MachineView
             fill.SetMeta("bank_base", at + new Vector3(0, (h - fh) / 2, 0));
             var beaconMat = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                                                      AlbedoColor = new Color(0.6f, 1f, 1f, 0.45f), NoDepthTest = false };
-            var beacon = Shapes.Cylinder(0.035f, 3f, beaconMat);
-            beacon.Position = at + new Vector3(0, h + 1.5f, 0);
+            var beacon = Shapes.Cylinder(0.07f, 4f, beaconMat);
+            beacon.Position = at + new Vector3(0, h + 2f, 0);
             beacon.Visible = false;
             AddChild(beacon);
             var label = new Label3D
             {
-                FontSize = 22, OutlineSize = 6, PixelSize = 0.0035f, NoDepthTest = true, Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
-                Position = at + new Vector3(0, h + 0.2f, 0),
+                FontSize = 26, OutlineSize = 6, PixelSize = 0.0024f, Width = 900, NoDepthTest = true, Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+                Position = at + new Vector3(1.0f, h * 0.8f, 0),   // beside the case, clear of the vault's own label above it
             };
             AddChild(label);
             _bankViews.Add(new BankView(bank, fill, fillMat, fh, label, beacon, beaconMat));
@@ -86,31 +86,42 @@ public partial class MachineView
             }
             var basis = new Basis(new Quaternion(Vector3.Up, axis));   // Y of the meshes along the axle
             // the motor can, an iron cylinder along the axle, its face toward -axis (where the dial is read)
-            var can = Shapes.Cylinder(0.11f, 0.18f, Surface(part.Material));
+            var can = Shapes.Cylinder(0.22f, 0.34f, Surface(part.Material));
             can.Position = at; can.Basis = basis;
             AddChild(can);
             var capMat = Shapes.Mat(new Color(0.9f, 0.9f, 0.92f), metallic: 0.3f, roughness: 0.5f);
-            var cap = Shapes.Box(new Vector3(0.012f, 0.1f, 0.012f), capMat);   // the stripe that turns with the rotor, on the -axis end
+            var cap = Shapes.Box(new Vector3(0.025f, 0.2f, 0.025f), capMat);   // the stripe that turns with the rotor, on the -axis end
             AddChild(cap);
             // the dial: a plate on the -axis face with a needle from nothing to the current at rated torque
-            var plate = Shapes.Cylinder(0.085f, 0.008f, Shapes.Mat(new Color(0.93f, 0.93f, 0.88f), roughness: 0.7f));
-            plate.Position = at - axis * 0.094f; plate.Basis = basis;
+            var plate = Shapes.Cylinder(0.17f, 0.014f, Shapes.Mat(new Color(0.93f, 0.93f, 0.88f), roughness: 0.7f));
+            plate.Position = at - axis * 0.177f; plate.Basis = basis;
             AddChild(plate);
-            var needleRoot = new Node3D { Position = at - axis * 0.1f, Basis = basis };
+            var needleRoot = new Node3D { Position = at - axis * 0.19f, Basis = basis };
             AddChild(needleRoot);
-            var needle = Shapes.Box(new Vector3(0.01f, 0.012f, 0.075f), Shapes.Mat(new Color(0.8f, 0.1f, 0.1f), roughness: 0.4f));
-            needle.Position = new Vector3(0, 0, 0.034f);
+            var needle = Shapes.Box(new Vector3(0.02f, 0.02f, 0.15f), Shapes.Mat(new Color(0.8f, 0.1f, 0.1f), roughness: 0.4f));
+            needle.Position = new Vector3(0, 0, 0.07f);
             needleRoot.AddChild(needle);
             var label = new Label3D
             {
-                FontSize = 22, OutlineSize = 6, PixelSize = 0.0035f, NoDepthTest = true, Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
-                Position = at + new Vector3(0, 0.3f, 0),
+                FontSize = 26, OutlineSize = 6, PixelSize = 0.0024f, Width = 900, NoDepthTest = true, Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+                Position = at + new Vector3(0, 0.75f, 0),
             };
             AddChild(label);
             double volts = gen.Bank?.Volts ?? 28;
             double ratedWatts = gen.Efficiency * gen.RatedTorque * gen.RatedOmega;
             _generatorViews.Add(new GeneratorView(gen, needleRoot, cap, label, axis, ratedWatts / volts));
-            cap.SetMeta("gen_at", at - axis * 0.1f);
+            cap.SetMeta("gen_at", at - axis * 0.19f);
+        }
+        // the wire: lossless and implicit in the sim, drawn so the charge is seen to travel (a copper line from each motor to its bank)
+        foreach (var (id, gen) in Runtime.Generators)
+        {
+            if (gen.Bank is null || Runtime.Def.Part(gen.Bank.Name) is not { } bankPart) continue;
+            _building = id;
+            var start = V(Runtime.Def.Part(id)!.At) + new Vector3(0, 0.22f, 0);
+            var to = V(bankPart.At) + new Vector3(0, 0.66f, 0);
+            AddChild(Shapes.Rod(start, start with { Y = to.Y + 0.4f }, 0.012f, Shapes.Mat(Shapes.Copper, metallic: 0.7f, roughness: 0.4f)));
+            AddChild(Shapes.Rod(start with { Y = to.Y + 0.4f }, to with { Y = to.Y + 0.4f }, 0.012f, Shapes.Mat(Shapes.Copper, metallic: 0.7f, roughness: 0.4f)));
+            AddChild(Shapes.Rod(to with { Y = to.Y + 0.4f }, to, 0.012f, Shapes.Mat(Shapes.Copper, metallic: 0.7f, roughness: 0.4f)));
         }
         _building = null;
     }
@@ -129,9 +140,9 @@ public partial class MachineView
     }
 
     private static string BankState(BatteryBank b) =>
-        b.Won ? "the call went out" : b.Ready ? "full and warm: ready to call"
-        : b.Full ? $"full, but {b.Temperature:0.#} °C is outside {b.MinChargeC:0} to {b.MaxChargeC:0} °C"
-        : b.Temperature < b.MinChargeC ? "too cold to charge" : b.Temperature > b.MaxChargeC ? "too hot to charge" : "taking charge";
+        b.Won ? "CALLED EARTH" : b.Ready ? "full: ready to call"
+        : b.Full ? "full, out of 0-45 °C"
+        : b.Temperature < b.MinChargeC ? "too cold" : b.Temperature > b.MaxChargeC ? "too hot" : "charging";
 
     private void DrawElectrics()
     {
@@ -147,9 +158,9 @@ public partial class MachineView
             v.FillMat.EmissionEnabled = b.Ready;
             v.FillMat.Emission = c; v.FillMat.EmissionEnergyMultiplier = 0.6f;
             v.Beacon.Visible = b.Won;
-            v.Label.Text = $"{b.Name}: {b.ChargeWh:0.0} / {b.CapacityWh:0.0} Wh ({b.Fraction * 100:0}%) · {b.Temperature:0.0} °C\n{BankState(b)}"
-                         + (b.Won ? $" (sol {b.WonAtSol}, {HoursText(b.WonAtHour)})" : b.CallAnyTime ? " · the call may go at any hour"
-                            : b.InWindow(Runtime.Sun.Time) ? " · relay pass open" : $" · pass at {HoursText(b.CallHour)}");
+            v.Label.Text = $"{b.Name} {b.ChargeWh:0.0}/{b.CapacityWh:0.0} Wh · {b.Temperature:0.0} °C\n{BankState(b)}"
+                         + (b.Won ? $" (sol {b.WonAtSol}, {HoursText(b.WonAtHour)})" : b.CallAnyTime ? " · call at any hour"
+                            : b.InWindow(Runtime.Sun.Time) ? " · pass open" : $" · pass {HoursText(b.CallHour)}");
         }
         double now = Runtime.Time, dt = now - _generatorSeen;
         _generatorSeen = now;
@@ -163,13 +174,13 @@ public partial class MachineView
             _capAngle += (float)(g.Omega * Math.Max(dt, 0));
             var capBasis = new Basis(new Quaternion(Vector3.Up, v.Axis)) * new Basis(Vector3.Up, _capAngle);
             v.Cap.Basis = capBasis;
-            v.Cap.Position = (Vector3)v.Cap.GetMeta("gen_at") - v.Axis * 0.012f;
-            v.Label.Text = $"{g.Name}: {g.Rpm:#,0} rpm · {g.Torque:0.00} N·m\n{g.Delivered:0} W into {g.Bank?.Name} · {amps:0.0} A at {g.Bank?.Volts:0} V"
-                         + (g.Rpm < g.CutInRpm ? $"\nunder its {g.CutInRpm:#,0} rpm cut-in: nothing" : "");
+            v.Cap.Position = (Vector3)v.Cap.GetMeta("gen_at") - v.Axis * 0.025f;
+            v.Label.Text = $"{g.Name} {g.Rpm:#,0} rpm · {g.Torque:0.00} N·m\n{g.Delivered:0} W · {amps:0.0} A at {g.Bank?.Volts:0} V"
+                         + (g.Rpm < g.CutInRpm ? "\nunder cut-in: nothing" : "");
         }
     }
 
-    private static string HoursText(double hours)
+    public static string HoursText(double hours)
     {
         int minutes = (int)Math.Round(hours * 60);
         return $"{minutes / 60 % 24:00}:{minutes % 60:00}";

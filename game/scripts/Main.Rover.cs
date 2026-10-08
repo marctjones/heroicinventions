@@ -177,6 +177,8 @@ public partial class Main
         _roverInfo.AddChild(_roverBucket = Line("Bucket"));
         Section("Energy");
         _roverInfo.AddChild(_roverEnergy = Line("Energy", dim: true));
+        Section("Bank");
+        _roverInfo.AddChild(_roverBank = Line("Bank"));   // (Main.Win.cs)
         Section("Nearby");
         _roverInfo.AddChild(_roverNear = Line("Nearby", dim: true));
         _roverInfo.AddChild(_roverNote = Line("Said"));
@@ -217,6 +219,7 @@ public partial class Main
         _roverArm!.Text = $"{r.ArmStatus}\nReaches {Rover.ArmReach:0.0} m · pushes up to {RoverSpec.PushForce(r.GroundGravity) / 1000:0.0} kN · never lifts a load. B digs and dumps.";
         _roverBucket!.Text = $"{r.Carried:0.00} of {Rover.BucketVolume:0.00} m³\ndug {r.Dug:0.00} m³, dumped {r.Dumped:0.00} m³";
         _roverEnergy!.Text = "Upkeep is free for now. The energy budget is not modelled yet (#62).";
+        UpdateWinHud();   // the Bank section and the win banner (Main.Win.cs)
         var here = r.Chassis.GlobalPosition;
         var near = _views.Select(v => (View: v, Box: PartsBox(v))).Where(x => x.Box is not null)
                          .Select(x => (x.View, Distance: here.DistanceTo(x.Box!.Value.Position.Max(here.Min(x.Box.Value.End)))))

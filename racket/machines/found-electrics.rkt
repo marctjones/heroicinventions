@@ -20,7 +20,7 @@
 ;;   needed to reach 1,500 rpm from the loaded sails' 13.33 rpm is 112.5:1; from the free sails' 28.6 rpm, 52.4:1. Three 5:1 stages (125) clear it.
 ;; The bank   10 Wh (36,000 J: a scenario number, small so a run can fill it) in a vault at 20 C, taking charge from 0 to 45 C. It fills in
 ;;   36,000 / 278.30 = 129.4 s of charging. The sails reach the cut-in's w = 157.08/125 = 1.2566 rad/s from rest in about
-;;   -19.2 s x ln(1 - 1.2566/3) = 10.4 s, so it is full at about 140 s.
+;;   -19.2 s x ln(1 - 1.2566/3) = 10.4 s, so it is full at about 140 s (traced 143 s).
 ;; The call   The run starts at 02:55 on Earth's 3,600 s hour: 03:00 is 300 s in. The bank is full from about 140 s and warm all the way,
 ;;   but the pass opens at 03:00: not won at 02:59 (240 s), won by 305 s. The window is 10 minutes (to 03:10).
 (require racket/math)
@@ -55,8 +55,9 @@
   (mesh wheel-a pinion-b #:efficiency eta)
   (mesh wheel-b pinion-c #:efficiency eta)
   (mesh wheel-c pinion-d #:efficiency eta)
-  (generator motor #:at ((* 3 apart) hub-y (cm -175)) #:on rotor-disc #:charges bank)
-  ;; the vault: the bank's cells, a heat store at 20 C, in a small room
-  (enclosure vault #:at ((m 2.8) 0 (m -1.6)) #:size ((m 0.9) (m 0.5) (m 0.6)) #:temperature 20)
-  (heat-store cells #:at ((m 2.6) 0 (m -1.6)) #:mass 16 #:contents cells #:temperature 20)
-  (battery-bank bank #:at ((m 3.05) 0 (m -1.6)) #:in cells #:capacity 10 #:charge 0))
+  (generator motor #:at ((* 3 apart) hub-y (cm -185)) #:on rotor-disc #:charges bank)
+  ;; the vault: the bank's cells, a heat store at 20 C, in a small room, on a shelf beside the motor (the wire is implicit)
+  (post shelf #:at ((m 3.0) 0 (m -1.6)) #:size ((m 1.6) (m 5.4) (m 0.9)) #:material oak)
+  (enclosure vault #:at ((m 3.0) (m 5.4) (m -1.6)) #:size ((m 1.5) (m 0.8) (m 0.8)) #:temperature 20)
+  (heat-store cells #:at ((m 2.5) (m 5.4) (m -1.6)) #:mass 16 #:contents cells #:temperature 20)
+  (battery-bank bank #:at ((m 3.3) (m 5.4) (m -1.6)) #:in cells #:capacity 10 #:charge 0))
