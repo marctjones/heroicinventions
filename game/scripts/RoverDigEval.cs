@@ -271,6 +271,7 @@ public partial class RoverDigEval : Node3D
         {
             var (x, z, h) = PoseFor(d, p);
             Stand(x, z, h);
+            Say($"cycle-{cycle}.pose", $"{x + 29.5:0.000} {z + 30:0.000} {h:0.00}");   // as rover-dig-bank.world has the bank (x + 29.5, z + 30)
             yield return Secs(0.7);
             foreach (var s in Cycle()) yield return s;
             Say($"cycle-{cycle++}.status", _rover.ArmStatus.Replace(' ', '_'));
