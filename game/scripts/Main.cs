@@ -90,14 +90,19 @@ public partial class Main : Node3D
         ["lever-demo"] = new(new Vector3(0, 0.75f, 1.5f), new Vector3(0, 0.55f, 0), 42),
         ["inclined-plane-demo"] = new(new Vector3(2.3f, 0.8f, -1.0f), new Vector3(0f, 0.3f, -1.0f), 50),
         ["newtons-cradle"] = new(new Vector3(0, 0.8f, 1.6f), new Vector3(0, 0.6f, 0), 38),
-        ["trebuchet"] = new(new Vector3(4.6f, 2.3f, 3.4f), new Vector3(-0.3f, 1.0f, 0), 50), // close on the machine from behind its shoulder; the follow camera widens along the throw (to −x) as the stone flies
-        ["torsion-catapult"] = new(new Vector3(5.0f, 2.8f, 3.2f), new Vector3(-4.0f, 0.5f, 0), 55),   // along the throw, as the trebuchet
+        // throwers (#190): side-on to the throw, which runs to screen-left; the machine in the right half of the clear area,
+        // so the follow camera (Main.Trail.cs) widens towards the landing and comes back here for the reload
+        ["trebuchet"] = new(new Vector3(-1.0f, 2.6f, 9.5f), new Vector3(-1.0f, 1.2f, 0), 50),   // throws to -x
+        ["torsion-catapult"] = new(new Vector3(-0.4f, 1.5f, 4.4f), new Vector3(-0.4f, 0.5f, 0), 50),   // throws to -x
         ["antikythera-lunar-train"] = new(new Vector3(0.13f, 0.19f, 0.19f), new Vector3(0.022f, 0.09f, 0.004f), 38),
         ["archimedes-screw"] = new(new Vector3(0.5f, 2.2f, 7.0f), new Vector3(0, 1.4f, 0), 50),
         ["hama-noria"] = new(new Vector3(0.9f, 7.5f, 22f), new Vector3(0.9f, 3.0f, -1.6f), 55),
         ["newcomen-engine"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
         ["roman-crane"] = new(new Vector3(3.0f, 3.8f, 10.5f), new Vector3(0.3f, 3.2f, 0.5f), 50),
-        ["vitruvian-catapulta"] = new(new Vector3(2.4f, 2.0f, -3.6f), new Vector3(0, 0.4f, 4.0f), 50),   // from behind, along the bolt's flight (to +z)
+        // #161's reload demos had no profile, so the menu's camera stood inside the treadwheel (#190); the crane's own view, fitted
+        ["roman-crane-reload"] = new(new Vector3(3.0f, 3.8f, 10.5f), new Vector3(0.3f, 3.2f, 0.5f), 50),
+        ["roman-crane-reload-gang"] = new(new Vector3(3.0f, 3.8f, 10.5f), new Vector3(0.3f, 3.2f, 0.5f), 50),
+        ["vitruvian-catapulta"] = new(new Vector3(7.5f, 2.2f, 1.6f), new Vector3(0, 0.8f, 1.6f), 50),   // throws to +z, screen-left from +x
         ["component-gallery"] = new(new Vector3(4.5f, 6.5f, 25f), new Vector3(4.5f, 0.8f, 0), 60),
         ["newcomen-hearth"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
         ["hearth-engine"] = new(new Vector3(0, 1.0f, 1.7f), new Vector3(0, 0.75f, 0), 45),
@@ -116,7 +121,7 @@ public partial class Main : Node3D
         ["dam-break"] = new(new Vector3(18f, 18f, 46f), new Vector3(18f, 1f, 0), 55),
         ["floats"] = new(new Vector3(1f, 1.6f, 3.2f), new Vector3(1f, 0.3f, 0), 50),
         ["hanging-chain"] = new(new Vector3(0, 1.6f, 3.2f), new Vector3(0, 1.5f, 0), 50),
-        ["placer-sluice"] = new(new Vector3(1.6f, 2.6f, 9f), new Vector3(1.6f, 0.4f, 0), 50),
+        ["placer-sluice"] = new(new Vector3(1.6f, 4.6f, 7.4f), new Vector3(1.6f, 0.3f, 0), 50),   // from above enough to see into the channel and the gold behind the riffles (#190)
         ["constant-head"] = new(new Vector3(2.2f, 2.2f, 2.8f), new Vector3(0.8f, 0.8f, -0.7f), 50),
         ["tank-leaks"] = new(new Vector3(3.6f, 1.8f, 10.5f), new Vector3(3.6f, 0.6f, 0), 50),
         ["boiler-safety"] = new(new Vector3(0.75f, 1.5f, 3.0f), new Vector3(0.75f, 0.4f, 0), 50),
@@ -129,8 +134,8 @@ public partial class Main : Node3D
         ["mars-stirling"] = new(new Vector3(0, 14f, 34f), new Vector3(0, 0.8f, 0), 55),
         ["battering-rams"] = new(new Vector3(0.5f, 2.2f, 7.0f), new Vector3(0.5f, 1.1f, 0), 55),
         ["gristmill"] = new(new Vector3(1.2f, 3.4f, 7.5f), new Vector3(1.2f, 0.5f, 0), 50),
-        ["rail-wagons"] = new(new Vector3(-4.0f, 2.5f, 3.5f), new Vector3(0.8f, 0.3f, -3.0f), 55),
-        ["carts"] = new(new Vector3(-5.5f, 3.5f, 8f), new Vector3(0f, 0.2f, 3.5f), 55),
+        ["rail-wagons"] = new(new Vector3(11f, 3.2f, 0.5f), new Vector3(0.4f, 0.3f, 0.5f), 50),   // side-on: the wagons run across the screen, not at the lens (#190)
+        ["carts"] = new(new Vector3(10f, 3.5f, 3.5f), new Vector3(0f, 0.3f, 3.5f), 50),   // side-on: the carts roll across the screen, not at the lens (#190)
         ["crank-slider"] = new(new Vector3(1.3f, 1.6f, 2.6f), new Vector3(0, 1.15f, 0), 50),
         ["hierapolis-sawmill"] = new(new Vector3(2.6f, 2.4f, -4.6f), new Vector3(0.5f, 1.3f, -0.5f), 55), // from the saw side: the crank is behind the wheel seen from +z
         ["geared-brake"] = new(new Vector3(1.5f, 1.8f, -2.4f), new Vector3(0.6f, 0.95f, -0.1f), 50), // from behind: the gears sit behind the flywheels
@@ -151,6 +156,17 @@ public partial class Main : Node3D
         ["rain-house"] = new(new Vector3(3f, 4f, 10f), new Vector3(0, 2.2f, 0), 50),
         ["greenhouse"] = new(new Vector3(-1f, 5f, 10f), new Vector3(-1.5f, 1f, 0), 50),
         ["heliostats"] = new(new Vector3(7.5f, 3.2f, 5.5f), new Vector3(0, 0.6f, 0), 50),
+    };
+
+    /// <summary>
+    /// Worlds whose whole-map framing misses the action (#190), each checked by a shot. flood-plain: the pond, the race,
+    /// the run down the valley and the hollow at x = 30 between the panels (look 0 32 50 14 1.5 0). dig-out: the crate
+    /// and the ground over it, not the whole 20 x 12 m map with the crate a speck (look 90 35 8 0 -0.75 0).
+    /// </summary>
+    private static readonly Dictionary<string, CameraProfile> WorldProfiles = new()
+    {
+        ["flood-plain"] = new(new Vector3(14f, 28.0f, 42.4f), new Vector3(14f, 1.5f, 0), 50),
+        ["dig-out"] = new(new Vector3(6.55f, 3.84f, 0), new Vector3(0, -0.75f, 0), 50),
     };
     private static readonly (double Scale, string Label)[] Speeds =
         [(0.1, "0.1×"), (0.25, "0.25×"), (1, "1×"), (5, "5×"), (10, "10×"), (20, "20×")];
@@ -838,6 +854,7 @@ public partial class Main : Node3D
                 _homeProfile = new CameraProfile(_camera.GlobalPosition, _orbit.Pivot, 50);   // Home returns here
             }
         }
+        if (WorldProfiles.TryGetValue(world.Name, out var worldShot)) ApplyCamera(worldShot);
         SetRunning(true);
         SetSpeed(1);
         _restartButton.Disabled = false;
@@ -1612,36 +1629,13 @@ public partial class Main : Node3D
             CallDeferred(MethodName.EditFocused);   // after this physics step, as a click would be
         }
         FollowMissile();
+        KeepActionInFrame();   // a ball off the ramp's foot, a cart along the floor (Main.Framing.cs)
         DrawTrail(delta);
         ApplySilhouette(_current);   // review mode only (HEROIC_SILHOUETTE)
         DeclutterLabels();
         if (_figure is not null && (_current is null || !IsInstanceValid(_current))) { _figure.QueueFree(); _figure = null; }
         ShowSky(_current?.Runtime);
         UpdateInfoPanel();
-    }
-
-    /// <summary>
-    /// Once a thrown stone or bolt (or a rising lantern) is clear of the machine, eases the camera
-    /// to look between the two and pulls back far enough to keep both in
-    /// view, so the flight and the landing are on screen.
-    /// </summary>
-    private void FollowMissile()
-    {
-        if (_follow is null || !IsInstanceValid(_follow)) return;
-        var target = _follow.GlobalPosition;
-        var home = _homePivot with { Y = 0 };
-        // how far it has gone: across the ground (a thrown stone) or up (a lantern rising), whichever is more
-        float across = new Vector2(target.X - home.X, target.Z - home.Z).Length(), up = target.Y - _homePivot.Y;
-        float separation = Mathf.Max(across, up);
-        // a flight across the screen fits in its width; one going up must fit in its height, which is shorter:
-        // half the separation over tan(fov/2) is about 1.2 x it at 45 degrees
-        float pullBack = up > across ? 1 / (2 * Mathf.Tan(Mathf.DegToRad(_camera.Fov / 2))) * 1.5f : 0.6f;
-        if (separation < 1f) return;
-        var wantPivot = (_homePivot + target) / 2;
-        float wantDistance = Mathf.Max(_homeDistance, separation * pullBack + 1.5f);
-        _orbit.Pivot = _orbit.Pivot.Lerp(wantPivot, 0.06f);
-        _orbit.Distance = Mathf.Lerp(_orbit.Distance, wantDistance, 0.06f);
-        _orbit.Apply();
     }
 
     private void UpdateInfoPanel()
