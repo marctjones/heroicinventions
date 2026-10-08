@@ -113,7 +113,7 @@ public sealed record ScenarioTuning
         "generator-cut-in" => this with { GeneratorCutIn = v }, "call-window" => this with { CallWindow = v },
         "call-any-time" => this with { CallAnyTime = v != 0 }, "sleep-speed" => this with { SleepSpeed = v },
         "gravity" => this with { Gravity = double.IsNaN(v) ? null : v }, "generator-efficiency" => this with { GeneratorEfficiency = double.IsNaN(v) ? null : v },
-        "bank-min-charge-c" => this with { BankMinChargeC = v }, "bank-max-charge-c" => this with { BankMaxChargeC = v },
+        "bank-min-charge-c" => this with { BankMinChargeC = v == 0 ? null : v }, "bank-max-charge-c" => this with { BankMaxChargeC = v == 45 ? null : v },   // the real limits are the unset ones
         _ => throw new ArgumentException($"no tuning number named {key}"),
     };
 

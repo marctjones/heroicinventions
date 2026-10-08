@@ -19,6 +19,8 @@ public partial class Main
     private GoalsPanel? _goalsPanel;
     private Label? _toast;
     private double _toastUntil;
+    private readonly bool _goalsReport = OS.GetEnvironment("HEROIC_GOALS_REPORT") == "1";
+    private double _goalsReportAt;
     private readonly Queue<string> _toastQueue = new();
 
     private void BuildGoalsPanel()
@@ -53,17 +55,25 @@ public partial class Main
         return new CrateReading(ground.HeightAt(at.X, at.Z) - (at.Y + size / 2), size, at.X, at.Z);
     }
 
+    /// <summary>A tracker reading this game's crate and ground (a save loaded first thing makes one before any frame has run).</summary>
+    private GoalTracker NewTracker() => new()
+    {
+        BankCrate = BankCrateReading,
+        GroundSettled = () => _groundSim is null || !_groundSim.FieldGetters.TryGetValue("map.settling", out var settling) || settling() == 0,
+    };
+
     /// <summary>Looks at the scene and toasts what was newly earned. Every frame, and every half second of a sleep.</summary>
     private void GoalsTick()
     {
         var runtimes = GoalRuntimes();
         if (runtimes.Count == 0) return;
         string key = _world?.Name ?? _currentName ?? "";
-        if (_goals is null)
+        _goals ??= NewTracker();
+        if (_goalsReport && runtimes[0].Time >= _goalsReportAt)
         {
-            _goals = new GoalTracker();
-            _goals.BankCrate = BankCrateReading;
-            _goals.GroundSettled = () => _groundSim is null || !_groundSim.FieldGetters.TryGetValue("map.settling", out var settling) || settling() == 0;
+            _goalsReportAt = runtimes[0].Time + 2;
+            var c = BankCrateReading();
+            GD.Print($"[goals] t={runtimes[0].Time:0.0} crate " + (c is null ? "none" : $"cover {c.Cover:0.00} m at ({c.X:0.0}, {c.Z:0.0})") + $" settled {_goals.GroundSettled()} earned {_goals.EarnedGoals.Count}");
         }
         if (_goalsKey != key) { if (_goalsKey is not null) _goals.RestartRun(); _goalsKey = key; }
         foreach (var goal in _goals.Update(runtimes, runtimes[0].Time))
@@ -89,7 +99,7 @@ public partial class Main
     /// <summary>Takes up the goals a save holds (an older save has none).</summary>
     private void GoalsRestore(Sim.Machines.WorldSave save)
     {
-        _goals ??= new GoalTracker();
+        _goals ??= NewTracker();
         _goalsKey = _world?.Name ?? _currentName ?? "";
         if (save.Goals is { } g) _goals.Restore(g);
         _goalsPanel?.Refresh();
