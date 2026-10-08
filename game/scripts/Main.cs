@@ -156,6 +156,7 @@ public partial class Main : Node3D
         [(0.1, "0.1×"), (0.25, "0.25×"), (1, "1×"), (5, "5×"), (10, "10×"), (20, "20×")];
     private static readonly Dictionary<string, double> DefaultSpeeds = new()
     {
+        ["herons-fountain"] = 1,   // its demo operator refills it at 36 s; at the 20x a demo otherwise gets, the whole cycle is two seconds
         ["aeolipile"] = 5,
         ["winter-night"] = 20,   // an hour of frost is three minutes
         ["heliostats"] = 20,     // a day in a little over an hour
@@ -171,7 +172,7 @@ public partial class Main : Node3D
         ["solar-steam-wheel"] = 20,   // pot boils within 300 s from cold [15 s]
         ["dam-break"] = 2,            // gate at 20 s, front at the low pond 34-52 s [10 s, 17-26 s]; faster rushes the wave
         ["constant-head"] = 5,        // 120 s of the bare cistern's slowing drain [24 s]; the filling's 47.5 s [9.5 s]
-        ["water-clock"] = 20,         // receiver climbs 1.78 cm a minute: 36 cm a minute at 20x
+        ["water-clock"] = 10,   // the receiver fills in 404.5 s (17.8 cm/min, its header corrected by #157): 40 s at 10x
         ["wake-clock"] = 1,           // fills 50 L in 25 s: already in range, so the sleep control, not speed, is the point
         ["sand-timer"] = 10,          // 193 s to empty [19 s]
         ["rain-house"] = 20,          // 0.44 g/s of rain, 8.9 g/s at 20x

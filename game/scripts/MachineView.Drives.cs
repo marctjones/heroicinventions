@@ -27,6 +27,9 @@ public partial class MachineView
         // positive turn about the axle. Speed 0 is a motor that holds still, as men standing in the wheel do.
         joint.SetParam(HingeJoint3D.Param.MotorTargetVelocity, -(float)(drive.Rpm * Math.Tau / 60));
         // #:drive-torque caps the motor: the most torque it can give in one physics tick is that torque times the tick's length.
-        joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, (float)(drive.Torque / Engine.PhysicsTicksPerSecond));
+        // the most impulse the walkers give in one physics step: torque × the step's length in sim time. A speed-up raises the
+        // tick rate AND the time scale together (Main.SetSpeed), so a step stays 1/120 s of sim time; dividing by the tick
+        // rate alone made every driven wheel 20x weaker at 20x (found by #157: the crane's stone never left the ground)
+        joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, (float)(drive.Torque * Engine.TimeScale / Engine.PhysicsTicksPerSecond));
     }
 }
