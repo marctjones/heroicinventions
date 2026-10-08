@@ -10,6 +10,11 @@
 ;; 2 pi x 0.25 x 3 / 60 = 7.85 cm/s, and the stone rises as it does in the
 ;; one-machine crane; the shaft carries what the stone's weight needs at
 ;; the drum, 583 x 9.81 x 0.25 = 1430 N·m, within the walkers' 1545.
+;;
+;; The stone starts resting on the ground (#148): its centre 0.30 m up, half
+;; its 0.6 m side. (It used to start 5 mm up and settle in the first second;
+;; the rope, cut to reach it, is 5 mm shorter now. Traced before, it came
+;; down to 0.300 m and sat there; now it sits at 0.300 m from the first frame.)
 (require racket/math)
 
 (define drum-r (cm 25))
@@ -21,7 +26,7 @@
 (define pulley-r (cm 15))
 (define pulley-at (list (+ (car jib-base) jib-reach) (- jib-height pulley-r) rope-z))
 (define stone-size (m 0.6))
-(define stone-at (list (+ (car pulley-at) pulley-r) (+ (/ stone-size 2) (mm 5)) rope-z))
+(define stone-at (list (+ (car pulley-at) pulley-r) (/ stone-size 2) rope-z))
 (define over-top (list (car pulley-at) (+ (cadr pulley-at) pulley-r) rope-z))
 (define over-side (list (+ (car pulley-at) pulley-r) (cadr pulley-at) rope-z))
 (define stone-top (list (car stone-at) (+ (cadr stone-at) (/ stone-size 2)) rope-z))

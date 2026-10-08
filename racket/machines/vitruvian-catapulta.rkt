@@ -66,6 +66,20 @@
 ;; 10.7 s the rope's length alone asks.) Laid on the trough again
 ;; ((string-right load 1) nocks it on both strings), the bolt is shot as the
 ;; first was, four times traced alike: 19.8 m/s, at rest 35.9 m out.
+;;
+;; The range, worked (#148). The bolt is driven along the channel by the
+;; string to 22-24 m/s (traced 22.1 at the sampling used here, 23.8 at the
+;; finest) and, when the arms hit their stops and the string goes slack,
+;; flies on at 17.6 m/s, level, 0.686 m up (the channel top). The 19.8 m/s
+;; above is a spike read off sampled frames, not the speed it flies at.
+;; Level, so no v^2 sin 2 theta / g: it falls 0.686 - 0.012 = 0.674 m in
+;; sqrt(2 x 0.674 / 9.81) = 0.371 s, 17.6 x 0.371 = 6.5 m on, from the 0.96 m
+;; where it leaves the trough: 7.5 m (traced 7.0 m, the 69 cm bolt noses down
+;; and its tip lands first). It runs on along the floor, at 15.4 m/s after
+;; the first bounce, and slides on at mu g = 0.45 x 9.81 = 4.41 m/s^2
+;; (oak on the floor): 15.4^2 / (2 x 4.41) = 26.9 m, so it rests 7.6 + 26.9
+;; = 34.5 m out, against the traced 35.9 m (the slide begins as the bolt
+;; tumbles and drags, 4% more). A flat-ground range is the 7 m, not the 36.
 (define drum-r (cm 6))
 (define drum-z (- (g 'channel-back) (cm 18)))
 (define span-length (m 1.95))

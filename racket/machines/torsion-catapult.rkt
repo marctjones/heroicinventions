@@ -49,6 +49,16 @@
 ;; 301.5 N.m (traced 301.4), and laid in the sling again the stone flies as
 ;; the first did: 12.42 m/s, first touching down 15.24 m from where it hung,
 ;; four times in a row to the millimetre.
+;;
+;; The range, worked (#148). The stone's speed peaks at 12.42 m/s just as the
+;; sling's loop slips off the arm's tip (the rope's last tug), and leaves at
+;; 11.7 m/s: 10.29 across and 5.56 up, 28.4 degrees above level, 2.13 m up and
+;; 0.17 m out from the axle (traced at 2.28 s). It is thrown from height, so
+;; the flat-ground range v^2 sin 2 theta / g (11.8 m) is short of it: the stone
+;; comes back to the 0.15 m it hung at after t = (vy + sqrt(vy^2 + 2 g (2.13 -
+;; 0.15))) / g = 1.419 s, 10.29 x 1.419 = 14.6 m on, at x = 0.17 - 14.6 = -14.4,
+;; 15.4 m from where it hung (x = 1.0). Traced 15.24 m: air drag takes the
+;; 1.2% (0.19 m).
 (define drum-r (cm 8))
 (define span-at (m 0.9))
 (define drum-at (list span-at (m 0.13) (m 0.3)))   ; beside the stone, clear of it
