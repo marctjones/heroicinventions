@@ -89,7 +89,7 @@ public partial class Main : Node3D
         ["pendulum-demo"] = new(new Vector3(0, 0.7f, 1.3f), new Vector3(0, 0.5f, 0), 42),
         ["lever-demo"] = new(new Vector3(0, 0.75f, 1.5f), new Vector3(0, 0.55f, 0), 42),
         ["inclined-plane-demo"] = new(new Vector3(2.3f, 0.8f, -1.0f), new Vector3(0f, 0.3f, -1.0f), 50),
-        ["newtons-cradle"] = new(new Vector3(0, 0.75f, 1.0f), new Vector3(0, 0.6f, 0), 38),
+        ["newtons-cradle"] = new(new Vector3(0, 0.8f, 1.6f), new Vector3(0, 0.6f, 0), 38),
         ["trebuchet"] = new(new Vector3(4.6f, 2.3f, 3.4f), new Vector3(-0.3f, 1.0f, 0), 50), // close on the machine from behind its shoulder; the follow camera widens along the throw (to −x) as the stone flies
         ["torsion-catapult"] = new(new Vector3(5.0f, 2.8f, 3.2f), new Vector3(-4.0f, 0.5f, 0), 55),   // along the throw, as the trebuchet
         ["antikythera-lunar-train"] = new(new Vector3(0.13f, 0.19f, 0.19f), new Vector3(0.022f, 0.09f, 0.004f), 38),
@@ -98,7 +98,7 @@ public partial class Main : Node3D
         ["newcomen-engine"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
         ["roman-crane"] = new(new Vector3(3.0f, 3.8f, 10.5f), new Vector3(0.3f, 3.2f, 0.5f), 50),
         ["vitruvian-catapulta"] = new(new Vector3(2.4f, 2.0f, -3.6f), new Vector3(0, 0.4f, 4.0f), 50),   // from behind, along the bolt's flight (to +z)
-        ["component-gallery"] = new(new Vector3(4.5f, 6f, 22f), new Vector3(4.5f, 0.8f, 0), 60),
+        ["component-gallery"] = new(new Vector3(4.5f, 6.5f, 25f), new Vector3(4.5f, 0.8f, 0), 60),
         ["newcomen-hearth"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
         ["hearth-engine"] = new(new Vector3(0, 1.0f, 1.7f), new Vector3(0, 0.75f, 0), 45),
         ["post-and-lintel-crane"] = new(new Vector3(2.2f, 1.7f, 4.6f), new Vector3(0, 1.1f, 0), 50),
@@ -108,7 +108,7 @@ public partial class Main : Node3D
         ["heron-temple-doors"] = new(new Vector3(1.2f, 2.6f, 5.5f), new Vector3(1.0f, 1.0f, -0.4f), 55),
         ["bearing-friction"] = new(new Vector3(0.1f, 1.1f, 4.0f), new Vector3(0.1f, 0.85f, 0), 45),
         ["axle-friction"] = new(new Vector3(6.05f, 3.5f, 16f), new Vector3(6.05f, 1.7f, 0), 55),
-        ["heading-rig"] = new(new Vector3(-1.0f, 3.2f, 6.0f), new Vector3(-1.0f, 0.6f, -0.66f), 60),
+        ["heading-rig"] = new(new Vector3(-1.0f, 3.4f, 7.2f), new Vector3(-1.0f, 0.6f, -0.66f), 60),
         ["field-windmill"] = new(new Vector3(-1.0f, 17.0f, 32.0f), new Vector3(-1.0f, 9.0f, -1.9f), 50),
         ["water-wheels"] = new(new Vector3(6.8f, 6f, 24f), new Vector3(6.8f, 1.7f, 0), 55),
         ["fire-and-water"] = new(new Vector3(0.3f, 2.5f, 8.2f), new Vector3(0.3f, 0.5f, 0), 50),
@@ -120,7 +120,7 @@ public partial class Main : Node3D
         ["constant-head"] = new(new Vector3(2.2f, 2.2f, 2.8f), new Vector3(0.8f, 0.8f, -0.7f), 50),
         ["tank-leaks"] = new(new Vector3(3.6f, 1.8f, 10.5f), new Vector3(3.6f, 0.6f, 0), 50),
         ["boiler-safety"] = new(new Vector3(0.75f, 1.5f, 3.0f), new Vector3(0.75f, 0.4f, 0), 50),
-        ["boiler-shells"] = new(new Vector3(1.5f, 1.3f, 3.5f), new Vector3(1.5f, 0.4f, 0), 50),
+        ["boiler-shells"] = new(new Vector3(1.5f, 1.4f, 4.4f), new Vector3(1.5f, 0.4f, 0), 50),
         ["suction-limit"] = new(new Vector3(3.6f, 6.9f, 16f), new Vector3(3.6f, 6.7f, 0), 50),
         ["bellows-forge"] = new(new Vector3(1.2f, 1.1f, 2.2f), new Vector3(0, 0.5f, 0), 45),
         ["windmills"] = new(new Vector3(0, 9f, 46f), new Vector3(0, 8f, 0), 50),
@@ -983,6 +983,7 @@ public partial class Main : Node3D
         _byName[name] = view;
 
         ApplyCamera(Profiles.GetValueOrDefault(name, MenuCamera with { Eye = new Vector3(0, 1, 2) }));
+        CentreInClearArea(name, view);
         CheckFraming(name, view);
         PlaceFigure(view);      // a person for scale (Main.Composition.cs)
         SetRunning(true);
