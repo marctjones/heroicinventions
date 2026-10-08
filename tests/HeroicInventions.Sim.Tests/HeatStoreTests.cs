@@ -1,3 +1,4 @@
+using HeroicInventions.Sim.Editor;
 using HeroicInventions.Sim.Machines;
 using HeroicInventions.Sim.Materials;
 using HeroicInventions.Sim.Thermo;
@@ -259,5 +260,72 @@ public class HeatStoreTests
         }
         double slow = AtThreeAm(30), fast = AtThreeAm(1.0 / 8);
         Assert.InRange(slow, fast - 1.0, fast + 1.0);
+    }
+
+    private static MachineRuntime Machine(string name) =>
+        new(MachineDef.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "machines", name + ".machine"))), Materials);
+
+    [Fact]
+    public void TheEditorPlacesAStoreABinAndAWallAndExportsThem()
+    {
+        var s = new BuildSession(Materials, catalogue: [], machinesDir: Path.GetTempPath(), name: "bench");
+        s.Execute("(enclosure vault #:at (0 0 0) #:size (0.5 0.5 0.5) #:material limestone)");
+        s.Execute("(set vault #:wall regolith)");
+        s.Execute("(set vault #:insulation 0)");
+        s.Execute("(heat-store rock #:at (0 0 0) #:mass 40 #:material basalt)");
+        s.Execute("(heat-store bank #:at (0.2 0 0) #:mass 16 #:material iron)");
+        s.Execute("(set bank #:contents cells)");
+        s.Execute("(heat-bin bin #:at (0 0 0) #:material oak)");
+        s.Execute("(set bin #:holds rock)");
+        s.Execute("(set bin #:sense bank)");
+        Assert.StartsWith("ok:", s.Execute("(check)"));
+        Assert.Throws<InvalidOperationException>(() => s.Execute("(set bin #:holds nothing-here)"));
+        string rkt = RktExporter.Write(s.Document.ToMachineDef());
+        Assert.Contains("#:wall regolith #:wall-thickness 0.5", rkt);
+        Assert.Contains("(heat-store rock #:at (0 0 0) #:mass 40 #:contents basalt #:emissivity 0.9 #:conductance 0 #:material basalt)", rkt);
+        Assert.Contains("(heat-bin bin #:at (0 0 0) #:holds rock #:leak 0.1 #:open 0 #:sense bank #:open-below 5 #:close-above 40 #:material oak)", rkt);
+        Assert.Contains("heat-store", PartTemplates.PrimitiveKinds);
+        Assert.Contains("heat-bin", PartTemplates.PrimitiveKinds);
+    }
+
+    [Fact]
+    public void ARuntimeBuiltFromTheMachineHasTheStoresBinsAndWall()
+    {
+        var rt = Machine("night-heat");
+        Assert.Equal(40 * 840.0, rt.HeatStores["tight-rock"].HeatCapacity, 6);
+        Assert.Equal(16 * 1000.0, rt.HeatStores["tight-bank"].HeatCapacity, 6);
+        Assert.Same(rt.HeatBins["tight-bin"], rt.HeatStores["tight-rock"].Bin);
+        var wall = rt.Enclosures["tight"].Wall!;
+        Assert.Equal(1.5, wall.Area, 9);                              // 6 × 0.25 m²
+        Assert.Equal(0.039, wall.Conductivity, 9);
+        Assert.Equal(-55, wall.GroundTemperature, 9);
+        Assert.Equal(0.117, rt.GetField("tight", "wall-steady"), 9);
+        // the lid and thermostat answer to the field names the HUD, a trigger or an operator uses
+        rt.SetField("leaky-bin", "open", 0.5);
+        Assert.Equal(0.5, rt.GetField("leaky-bin", "open"));
+        rt.SetField("leaky-rock", "temperature", 150);
+        Assert.Equal(150, rt.GetField("leaky-rock", "temperature"), 9);
+        Assert.Equal(0.5, rt.GetField("leaky-bin", "leak"));
+    }
+
+    [Fact]
+    public void AnEditedMachineKeepsTheWarmthItsWallHasSoakedUp()
+    {
+        // issue #75: the world keeps running while the player adds and changes parts, and a vault wall keeps the warmth it has soaked up
+        var running = Machine("night-heat");
+        for (int i = 0; i < 3600; i++) running.Step(5);
+        double soaked = running.GetField("tight", "wall-heat"), depth = running.GetField("tight", "wall-depth");
+        Assert.True(soaked > 1, $"{soaked} MJ in 5 h");
+        var edited = new MachineRuntime(running.Def, Materials);
+        Assert.Equal(0, edited.GetField("tight", "wall-heat"));
+        edited.TakeStateFrom(running);
+        Assert.Equal(soaked, edited.GetField("tight", "wall-heat"), 9);
+        Assert.Equal(depth, edited.GetField("tight", "wall-depth"), 9);
+        Assert.Equal(running.GetField("tight-rock", "temperature"), edited.GetField("tight-rock", "temperature"), 9);
+        Assert.Equal(running.GetField("tight", "wall-surface"), edited.GetField("tight", "wall-surface"), 9);
+        // and goes on from there as the original would have
+        for (int i = 0; i < 360; i++) { running.Step(5); edited.Step(5); }
+        Assert.Equal(running.GetField("tight-bank", "temperature"), edited.GetField("tight-bank", "temperature"), 6);
+        Assert.Equal(running.GetField("tight", "wall-heat"), edited.GetField("tight", "wall-heat"), 6);
     }
 }

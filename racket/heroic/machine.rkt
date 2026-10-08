@@ -44,7 +44,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar heat-store heat-bin
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -349,6 +349,13 @@
      (unless (< (abs (- total 1)) 0.001) (bad (format "#:air's fractions must add up to 1, got ~a" total)))
      (for/list ([g enclosure-gases]) (cons g (cond [(assq g air) => cadr] [else 0])))]))
 
+;; A wall, its ground and the inner surface's emissivity (issue #71) are props only when given, so an enclosure
+;; without them compiles to exactly what it always did.
+(define (enclosure-wall-props wall thickness ground emissivity)
+  (append (if wall (list (cons 'wall wall) (cons 'wall-thickness (or thickness 0.5))) '())
+          (if ground (list (cons 'ground ground)) '())
+          (if emissivity (list (cons 'emissivity emissivity)) '())))
+
 (define (check-panes parts)
   (for ([p parts] #:when (eq? (part-kind p) 'pane))
     (define (prop k) (cdr (assq k (part-props p))))
@@ -393,7 +400,41 @@
     (for ([k '(insulation leak heater heat-capacity supply)])
       (unless (and (real? (prop k)) (>= (prop k) 0)) (bad (format "#:~a must be 0 or more, got ~e" k (prop k)))))
     (unless (and (real? (prop 'coefficient)) (> (prop 'coefficient) 0) (<= (prop 'coefficient) 1))
-      (bad (format "#:coefficient must be in (0, 1], got ~e" (prop 'coefficient)))))
+      (bad (format "#:coefficient must be in (0, 1], got ~e" (prop 'coefficient))))
+    (define (given k) (cond [(assq k (part-props p)) => cdr] [else #f]))
+    (unless (or (not (given 'wall-thickness)) (and (real? (given 'wall-thickness)) (> (given 'wall-thickness) 0)))
+      (bad (format "#:wall-thickness must be above 0 m, got ~e" (given 'wall-thickness))))
+    (unless (or (not (given 'ground)) (and (real? (given 'ground)) (> (given 'ground) -273.15)))
+      (bad (format "#:ground must be above absolute zero, got ~e" (given 'ground))))
+    (unless (or (not (given 'emissivity)) (and (real? (given 'emissivity)) (> (given 'emissivity) 0) (<= (given 'emissivity) 1)))
+      (bad (format "#:emissivity must be in (0, 1], got ~e" (given 'emissivity)))))
+  parts)
+
+;; Heat stores and their bins (issue #71): numbers checked when the machine is built.
+(define (check-heat-stores parts)
+  (for ([p parts] #:when (memq (part-kind p) '(heat-store heat-bin)))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what) (error 'define-machine "~a:~a:~a: ~a ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-kind p) (part-id p) what))
+    (case (part-kind p)
+      [(heat-store)
+       (unless (and (real? (prop 'mass)) (> (prop 'mass) 0)) (bad (format "#:mass must be above 0 kg, got ~e" (prop 'mass))))
+       (unless (symbol? (prop 'contents)) (bad (format "#:contents is water or a material of the table, got ~e" (prop 'contents))))
+       (unless (or (not (prop 'temperature)) (and (real? (prop 'temperature)) (> (prop 'temperature) -273.15)))
+         (bad (format "#:temperature must be above absolute zero, got ~e" (prop 'temperature))))
+       (unless (or (not (prop 'area)) (and (real? (prop 'area)) (>= (prop 'area) 0)))
+         (bad (format "#:area must be 0 m² (no radiation) or more, got ~e" (prop 'area))))
+       (unless (and (real? (prop 'emissivity)) (> (prop 'emissivity) 0) (<= (prop 'emissivity) 1))
+         (bad (format "#:emissivity must be in (0, 1], got ~e" (prop 'emissivity))))
+       (unless (and (real? (prop 'conductance)) (>= (prop 'conductance) 0))
+         (bad (format "#:conductance must be 0 W/K or more, got ~e" (prop 'conductance))))]
+      [(heat-bin)
+       (unless (and (real? (prop 'leak)) (>= (prop 'leak) 0)) (bad (format "#:leak must be 0 W/K or more, got ~e" (prop 'leak))))
+       (unless (and (real? (prop 'open)) (<= 0 (prop 'open) 1)) (bad (format "#:open must be in [0, 1], got ~e" (prop 'open))))
+       (for ([k '(open-below close-above)])
+         (unless (and (real? (prop k)) (> (prop k) -273.15)) (bad (format "#:~a must be a temperature in deg C, got ~e" k (prop k)))))
+       (unless (< (prop 'open-below) (prop 'close-above))
+         (bad "#:open-below must be under #:close-above, or the lid chatters"))]))
   parts)
 
 ;; A mirror's numbers are checked when the machine is built.
@@ -488,7 +529,7 @@
     (unless (and (real? time) (<= 0 time) (< time 24))
       (error 'define-machine "machine ~a: #:time must be solar hours in [0, 24), got ~e" name time)))
   (machine name source ambient sun planet-v weather-v
-           (check-panes (check-zone-joins (check-enclosures (check-carried-wheels (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-floats (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))))))))
+           (check-panes (check-heat-stores (check-zone-joins (check-enclosures (check-carried-wheels (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-floats (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)))))))))))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -522,7 +563,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar heat-store heat-bin
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
   inflow channel off trigger follow belt wake joint)
 
@@ -581,6 +622,7 @@
   (struct chinfo (id from to onto))
   (struct zjinfo (id kind from to))
   (struct pninfo (id on))
+  (struct hbinfo (id holds sense))    ; a heat-bin: the heat-store it holds, the one that works its lid (or #f)
   (struct gninfo (id water store))    ; plants, a melter or an electrolyser: its water tank, the hearth its wood is stacked on (or #f)
   (struct rfinfo (id kind on gutter)) ; a pond (on a tank) or a roof (on an enclosure, with a gutter tank or #f)            ; a pane: the enclosure whose wall it is in  ; a door or air-pump: the zones it joins (enclosure ids or outside)  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
 
@@ -624,8 +666,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, envelope, burning-mirror, hopper, pane, pond, drain, roof, stirling, ball, plants, melter, electrolyser, galvanic-jar) or link (pipe, connect, sealed-air)"
-    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror pane pond drain roof plants melter electrolyser galvanic-jar tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, envelope, burning-mirror, hopper, pane, pond, drain, roof, stirling, ball, plants, melter, electrolyser, galvanic-jar, heat-store, heat-bin) or link (pipe, connect, sealed-air)"
+    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror pane pond drain roof plants melter electrolyser galvanic-jar heat-store heat-bin tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1077,6 +1119,14 @@
     ;; or bellows can blow in #:supply m³/s of the surroundings' air (default
     ;; 0): a room's air supply, which a leak then lets out again.
     ;; Enclosures nest: one inside another leaks and loses heat into it.
+    ;; A #:wall of a material (issue #71: regolith, say) replaces the fixed
+    ;; #:insulation with a wall heat soaks into, 1-D transient conduction
+    ;; through #:wall-thickness m (default 0.5) over the box's six faces,
+    ;; its far face held at #:ground deg C (default the air outside) and the
+    ;; whole wall starting there, as a freshly dug one does. #:insulation is
+    ;; then 0 unless given (a leak in parallel). The room is the wall's inner
+    ;; surface, which heat stores inside it (heat-store) radiate to, #:emissivity
+    ;; ε of it (default 0.9).
     (pattern (enclosure id:id
                         (~alt (~once (~seq #:at at:vec3))
                               (~once (~seq #:size size:vec3))
@@ -1089,15 +1139,22 @@
                               (~optional (~seq #:leak leak-v:expr))
                               (~optional (~seq #:supply supply-v:expr))
                               (~optional (~seq #:coefficient cd-v:expr))
+                              (~optional (~seq #:wall wall-mat:id))
+                              (~optional (~seq #:wall-thickness wall-t:expr))
+                              (~optional (~seq #:ground ground-v:expr))
+                              (~optional (~seq #:emissivity eps-v:expr))
                               (~optional (~seq #:material mat:id))) ...)
+      #:fail-unless (or (not (attribute wall-mat)) (memq (syntax-e (attribute wall-mat)) known-materials)) "#:wall is a material of the table (regolith, sand, granite ...)"
       #:attr info (pinfo #'id 'enclosure (attribute mat) '())
+      #:with ua-default (if (attribute wall-mat) #'0 #'2)
       #:with expr #`(part 'id 'enclosure '(~? mat hemp) (list at.x at.y at.z)
                           (list* (cons 'size-x size.x) (cons 'size-y size.y) (cons 'size-z size.z)
                                  (cons 'pressure (~? pressure-v #f)) (cons 'temperature (~? temp-v #f))
-                                 (cons 'insulation (~? ua-v 2)) (cons 'heat-capacity (~? cap-v 0))
+                                 (cons 'insulation (~? ua-v ua-default)) (cons 'heat-capacity (~? cap-v 0))
                                  (cons 'heater (~? heater-v 0)) (cons 'leak (~? leak-v 0)) (cons 'supply (~? supply-v 0))
                                  (cons 'coefficient (~? cd-v 0.6))
-                                 (enclosure-air-props 'id (~? air-v #f) #,(loc-of this-syntax)))
+                                 (append (enclosure-wall-props '(~? wall-mat #f) (~? wall-t #f) (~? ground-v #f) (~? eps-v #f))
+                                         (enclosure-air-props 'id (~? air-v #f) #,(loc-of this-syntax))))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1428,6 +1485,61 @@
       #:with expr #`(part 'id 'pond 'limestone (list at.x at.y at.z)
                           (list (cons 'on 'tank-id) (cons 'heater (~? heater-v 0)) (cons 'temperature (~? temp-v #f))
                                 (cons 'coefficient (~? k-v 3.6e-8)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A body that stores heat (issue #71): #:mass kg of #:contents, water or any
+    ;; material of the table (default basalt: specific heat 840 J/(kg K)), at
+    ;; #:at the middle of its base. It has a temperature (#:temperature, default
+    ;; its air's) and a heat capacity m c, gains what a mirror or a hearth aims
+    ;; at it, and gives heat to its room by Newton's law, #:conductance W/K (h A,
+    ;; default 0: in a vault's 610 Pa there is no air to carry it) and by
+    ;; radiation from #:area m² (default a cube of its volume; 0 for none) of #:emissivity
+    ;; (default 0.9): to the walls of its enclosure, as a body in a closed
+    ;; room, or to the open air. Cooled with only a conductance it falls to its
+    ;; room's temperature as e^(-t m c/G). Water freezes at 0 deg C, holding there
+    ;; while the 334 kJ/kg leaves. A heat-bin round it works its lid.
+    (pattern (heat-store id:id
+                         (~alt (~once (~seq #:at at:vec3))
+                               (~once (~seq #:mass mass-v:expr))
+                               (~optional (~seq #:contents stuff:id))
+                               (~optional (~seq #:temperature temp-v:expr))
+                               (~optional (~seq #:area area-v:expr))
+                               (~optional (~seq #:emissivity eps-v:expr))
+                               (~optional (~seq #:conductance k-v:expr))
+                               (~optional (~seq #:material mat:id))) ...)
+      #:fail-unless (or (not (attribute stuff)) (eq? (syntax-e (attribute stuff)) 'water) (memq (syntax-e (attribute stuff)) known-materials))
+                    "#:contents is water or a material of the table (basalt, iron, granite ...)"
+      #:attr info (pinfo #'id 'heat-store (attribute mat) '())
+      #:with expr #`(part 'id 'heat-store '(~? mat basalt) (list at.x at.y at.z)
+                          (list (cons 'mass mass-v) (cons 'contents '(~? stuff basalt))
+                                (cons 'temperature (~? temp-v #f)) (cons 'area (~? area-v #f))
+                                (cons 'emissivity (~? eps-v 0.9)) (cons 'conductance (~? k-v 0)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; A lidded bin round heat store #:holds (issue #71), the storage heater's
+    ;; damper. Shut, the store gives its room heat only through the lid,
+    ;; #:leak W/K (default 0.1: the most that holds a vault's bank at 40 deg C; a
+    ;; 0.5 W/K lid lets it overheat); open (#:open 0 shut ... 1 wide, default
+    ;; shut, set at run time with (bin open 1)) the store is bare to its room.
+    ;; #:sense bank gives it a thermostat in the meantime (the bimetal strip is
+    ;; #97): it opens when that store has cooled to #:open-below (default 5 deg C)
+    ;; and shuts when it has warmed to #:close-above (default 40), and is left
+    ;; between. It is drawn on the store, wherever #:at is.
+    (pattern (heat-bin id:id
+                       (~alt (~once (~seq #:at at:vec3))
+                             (~once (~seq #:holds held:id))
+                             (~optional (~seq #:leak leak-v:expr))
+                             (~optional (~seq #:open open-v:expr))
+                             (~optional (~seq #:sense sensed:id))
+                             (~optional (~seq #:open-below lo-v:expr))
+                             (~optional (~seq #:close-above hi-v:expr))
+                             (~optional (~seq #:material mat:id))) ...)
+      #:attr info (hbinfo #'id #'held (attribute sensed))
+      #:with expr #`(part 'id 'heat-bin '(~? mat oak) (list at.x at.y at.z)
+                          (list (cons 'holds 'held) (cons 'leak (~? leak-v 0.1)) (cons 'open (~? open-v 0))
+                                (cons 'sense '(~? sensed #f)) (cons 'open-below (~? lo-v 5)) (cons 'close-above (~? hi-v 40)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -2504,19 +2616,26 @@
     (for ([h infos] #:when (hinfo? h))
       (define heats (syntax-e (hinfo-heats h)))
       (define b (hash-ref parts heats #f))
-      (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure)))
+      (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure heat-store)))
                   (for/or ([r infos]) (and (rfinfo? r) (eq? (rfinfo-kind r) 'pond) (eq? (syntax-e (rfinfo-id r)) heats)))
                   (for/or ([g infos]) (and (gninfo? g) (eq? (syntax-e (gninfo-id g)) heats)))
                   (for/or ([a infos]) (and (ainfo? a) (memq heats (map syntax-e (ainfo-tanks a))))))
-        (fail (format "~a is not a boiler, a tank in a sealed-air or an enclosure; a hearth heats one of those" heats) (hinfo-heats h))))
+        (fail (format "~a is not a boiler, a tank in a sealed-air or an enclosure; a hearth heats one of those (or a heat store)" heats) (hinfo-heats h))))
     (for ([m infos] #:when (mrinfo? m))
       (define onto (syntax-e (mrinfo-onto m)))
       (define b (hash-ref parts onto #f))
-      (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure crucible stirling envelope)))
+      (unless (or (and b (memq (pinfo-kind b) '(boiler enclosure crucible stirling envelope heat-store)))
                   (for/or ([r infos]) (and (rfinfo? r) (eq? (rfinfo-kind r) 'pond) (eq? (syntax-e (rfinfo-id r)) onto)))
                   (for/or ([g infos]) (and (gninfo? g) (eq? (syntax-e (gninfo-id g)) onto)))
                   (for/or ([a infos]) (and (ainfo? a) (memq onto (map syntax-e (ainfo-tanks a))))))
-        (fail (format "~a is not a boiler, a tank in a sealed-air, an enclosure, a crucible, a hot-air engine or a hot-air envelope; a mirror heats one of those" onto) (mrinfo-onto m))))
+        (fail (format "~a is not a boiler, a tank in a sealed-air, an enclosure, a crucible, a hot-air engine or a hot-air envelope; a mirror heats one of those (or a heat store)" onto) (mrinfo-onto m))))
+    (for ([b infos] #:when (hbinfo? b))
+      (define id (syntax-e (hbinfo-id b)))
+      (when (hash-ref parts id #f) (fail (format "there is already a part named ~a" id) (hbinfo-id b)))
+      (for ([ref (list (hbinfo-holds b) (hbinfo-sense b))] [what '("holds" "senses")] #:when ref)
+        (define p (hash-ref parts (syntax-e ref) #f))
+        (unless (and p (eq? (pinfo-kind p) 'heat-store))
+          (fail (format "~a is not a heat-store; a heat-bin ~a one" (syntax-e ref) what) ref))))
     (for ([c infos] #:when (cpinfo? c))
       (define v (hash-ref parts (syntax-e (cpinfo-vessel c)) #f))
       (unless (and v (eq? (pinfo-kind v) 'tank))

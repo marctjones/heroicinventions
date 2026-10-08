@@ -51,6 +51,8 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Mirror> _mirrors = [];
     private readonly Dictionary<string, Enclosure> _enclosures = [];
     private readonly Dictionary<string, Crucible> _crucibles = [];
+    private readonly Dictionary<string, HeatStore> _heatStores = [];
+    private readonly Dictionary<string, HeatBin> _heatBins = [];
     private readonly Dictionary<string, Envelope> _envelopes = [];
     private readonly Dictionary<string, Pane> _panes = [];
     private readonly Dictionary<string, Pond> _ponds = [];
@@ -136,6 +138,9 @@ public sealed class MachineRuntime
     public IReadOnlyDictionary<string, Mirror> Mirrors => _mirrors;
     /// <summary>Enclosures (issue #39): boxes with their own air, which the parts inside read their conditions from.</summary>
     public IReadOnlyDictionary<string, Enclosure> Enclosures => _enclosures;
+    /// <summary>Heat stores (rock beds, blocks, tanks of hot water) and the lidded bins round them (issue #71).</summary>
+    public IReadOnlyDictionary<string, HeatStore> HeatStores => _heatStores;
+    public IReadOnlyDictionary<string, HeatBin> HeatBins => _heatBins;
     /// <summary>Crucibles of sand at a focal spot, melting to glass (issue #56).</summary>
     public IReadOnlyDictionary<string, Crucible> Crucibles => _crucibles;
 
@@ -247,6 +252,11 @@ public sealed class MachineRuntime
                 if (r is not null && b is not null && e is not null && e.GetType().IsClass) StateCopy.Carry(r, b, e);
             }
         }
+        // an enclosure's wall keeps the warmth it has soaked up (issue #71): it is an object of its own, which Carry does not enter
+        foreach (var (id, room) in _enclosures)
+            if (room.Wall is { } wall && previous._enclosures.TryGetValue(id, out var was) && was.Wall is { } oldWall && baseline._enclosures.TryGetValue(id, out var fresh) && fresh.Wall is { } freshWall
+                && oldWall.Cells == wall.Cells)
+                StateCopy.Carry(oldWall, freshWall, wall);
         StateCopy.Carry(previous.Sun, baseline.Sun, Sun);
         StateCopy.Carry(previous.Fluids, baseline.Fluids, Fluids);
         // sealed air belongs to its tanks, in the order they were declared
@@ -432,6 +442,25 @@ public sealed class MachineRuntime
                     break;
                 }
                 case "enclosure": break; // built first: every other part reads its zone
+                case "heat-store":
+                {
+                    double mass = part.Number("mass");
+                    if (!(mass > 0)) throw new MachineFormatException($"heat-store {part.Id}: #:mass must be above 0 kg", part.Location);
+                    Substance stuff;
+                    try { stuff = Substance.Named(part.Symbol("contents", "basalt"), materials); }
+                    catch (ArgumentException e) { throw new MachineFormatException($"heat-store {part.Id}: {e.Message}", part.Location); }
+                    // a cube of its volume, unless told: 6 V^(2/3)
+                    double area = part.Number("area", 6 * Math.Pow(mass / stuff.Density, 2.0 / 3));
+                    double emissivity = part.Number("emissivity", 0.9), conductance = part.Number("conductance", 0);
+                    if (area < 0 || !(emissivity > 0 && emissivity <= 1) || conductance < 0)
+                        throw new MachineFormatException($"heat-store {part.Id}: #:area must be 0 or more, #:emissivity in (0, 1], #:conductance 0 or more", part.Location);
+                    _heatStores[part.Id] = new HeatStore(part.Id, stuff, mass, TemperatureOr(part, "temperature", freezing: false))
+                    {
+                        Area = area, Emissivity = emissivity, Conductance = conductance,
+                    };
+                    break;
+                }
+                case "heat-bin": break;   // built once the store it holds exists
                 case "door":
                 {
                     Zone a = ZoneNamed(part.Symbol("from", ""), part), b = ZoneNamed(part.Symbol("to", ""), part);
@@ -539,6 +568,23 @@ public sealed class MachineRuntime
                                            part.Symbol("fuel-kind", "wood"), part.Number("efficiency", 0.5));
         }
 
+        foreach (var part in def.Parts.Where(p => p.Kind == "heat-bin"))
+        {
+            string holds = part.Symbol("holds", ""), sense = part.Symbol("sense", "");
+            if (!_heatStores.TryGetValue(holds, out var held))
+                throw new MachineFormatException($"heat-bin {part.Id} holds {holds}, which is not a heat-store", part.Location);
+            if (held.Bin is not null)
+                throw new MachineFormatException($"heat-store {holds} is already in a bin", part.Location);
+            double leak = part.Number("leak", 0.1), lo = part.Number("open-below", 5), hi = part.Number("close-above", 40);
+            if (leak < 0 || !(lo < hi))
+                throw new MachineFormatException($"heat-bin {part.Id}: #:leak must be 0 or more and #:open-below under #:close-above", part.Location);
+            var bin = new HeatBin(part.Id, held, leak) { Open = part.Number("open", 0), OpenBelow = lo, CloseAbove = hi };
+            if (sense != "")
+                bin.Sense = _heatStores.TryGetValue(sense, out var sensed) ? sensed
+                    : throw new MachineFormatException($"heat-bin {part.Id} senses {sense}, which is not a heat-store", part.Location);
+            held.Bin = bin;
+            _heatBins[part.Id] = bin;
+        }
         foreach (var part in def.Parts.Where(p => p.Kind == "pond"))
         {
             var tank = TankNamed(part.Symbol("on", ""), part.Location);
@@ -1097,6 +1143,20 @@ public sealed class MachineRuntime
                 Supply = box.Number("supply", 0),
                 Cd = box.Number("coefficient", Enclosure.DefaultCoefficient),
             };
+            double sx = box.Number("size-x"), sy = box.Number("size-y"), sz = box.Number("size-z");
+            e.InnerArea = 2 * (sx * sy + sy * sz + sx * sz);
+            e.WallEmissivity = box.Number("emissivity", 0.9);
+            if (box.Symbol("wall", "") is { Length: > 0 } wallName)
+            {
+                // a wall heat soaks into (issue #71): the table's conductivity, density and specific heat, over all six faces
+                if (!_materials.TryGet(wallName, out var stuff) || stuff.Conductivity is not { } k || stuff.SpecificHeat is not { } c)
+                    throw new MachineFormatException($"enclosure {box.Id}: #:wall {wallName} is not a material with a conductivity and specific heat", box.Location);
+                double thickness = box.Number("wall-thickness", 0.5);
+                if (!(thickness > 0)) throw new MachineFormatException($"enclosure {box.Id}: #:wall-thickness must be above 0 m", box.Location);
+                double ground = box.Props.GetValueOrDefault("ground") is SNumber g ? g.Value : around.Temperature;
+                e.Wall = new HeatSlab(k, stuff.Density, c, thickness, e.InnerArea, ground, ground);
+                e.Wall.SurfaceTemperature = e.Temperature;   // the room starts where it was told, the wall at the ground's
+            }
             _enclosures[box.Id] = e;
             if (around is Enclosure) _zoneOfPart[box.Id] = around;
         }
@@ -1111,6 +1171,11 @@ public sealed class MachineRuntime
         foreach (var (id, p) in _plants) p.Zone = ZoneOf(id);
         foreach (var (id, e) in _electrolysers) e.Zone = ZoneOf(id);
         foreach (var (id, c) in _crucibles) c.Zone = ZoneOf(id);
+        foreach (var (id, h) in _heatStores)
+        {
+            h.Zone = ZoneOf(id);
+            if (h.Zone is Enclosure room && !room.Stores.Contains(h)) room.AddStore(h);   // a room solves its stores with its wall
+        }
         foreach (var (id, e) in _envelopes) e.Zone = ZoneOf(id);
         foreach (var (id, se) in _stirlings) se.Zone = ZoneOf(id);
         foreach (var (id, b) in _boilers) b.Zone = ZoneOf(id);
@@ -1544,6 +1609,41 @@ public sealed class MachineRuntime
             _getters[$"{id}.transmittance"] = () => c.Sand.Transmittance; // of its glass
             _getters[$"{id}.absorbed"] = () => c.Absorbed / 1e6;         // MJ
         }
+        foreach (var (id, h) in _heatStores)
+        {
+            _getters[$"{id}.temperature"] = () => h.Temperature;               // °C
+            _setters[$"{id}.temperature"] = t => h.Temperature = Math.Max(-273.15, t);   // reloaded with hot rock, say
+            _getters[$"{id}.heat"] = () => h.Heat / 1e6;                       // MJ above liquid at 0 °C
+            _getters[$"{id}.capacity"] = () => h.HeatCapacity / 1000;          // kJ/K, m·c
+            _getters[$"{id}.exchange"] = () => h.Exchange;                     // W given to its room (negative: taking)
+            _getters[$"{id}.given"] = () => h.Given / 1e6;                     // MJ given to its room, all told
+            _getters[$"{id}.gained"] = () => h.Gained / 1e6;                   // MJ from mirrors and fires
+            _getters[$"{id}.frozen"] = () => h.Frozen * 100;                   // % of its water that is ice
+            _getters[$"{id}.mass"] = () => h.Mass;                             // kg
+            _getters[$"{id}.conductance"] = () => h.ExposedConductance(h.Zone.Temperature, h.Zone is Enclosure room ? room.InnerArea : double.PositiveInfinity,
+                                                                         h.Zone is Enclosure r2 ? r2.WallEmissivity : 1);   // W/K, bare to its room now
+            _setters[$"{id}.conductance"] = k => h.Conductance = Math.Max(0, k);      // the contact film alone (h·A)
+        }
+        foreach (var (id, b) in _heatBins)
+        {
+            _getters[$"{id}.open"] = () => b.Open;
+            _setters[$"{id}.open"] = v => b.Open = v;                          // 0 shut … 1 wide
+            _getters[$"{id}.leak"] = () => b.Leak;                             // W/K through the shut lid
+            _setters[$"{id}.leak"] = k => b.Leak = Math.Max(0, k);
+            _getters[$"{id}.openings"] = () => b.Openings;
+            _getters[$"{id}.power"] = () => b.Store.Exchange;                  // W the bin gives its room
+            _getters[$"{id}.temperature"] = () => b.Store.Temperature;         // °C of what it holds
+        }
+        foreach (var (id, e) in _enclosures)
+        {
+            if (e.Wall is not { } wall) continue;
+            _getters[$"{id}.wall-surface"] = () => wall.SurfaceTemperature;    // °C of the inner face
+            _getters[$"{id}.wall-heat"] = () => wall.Absorbed / 1e6;           // MJ that have soaked into it
+            _getters[$"{id}.wall-flux"] = () => wall.Flux;                     // W flowing in now
+            _getters[$"{id}.wall-depth"] = () => wall.PenetrationDepth * 100;  // cm the warmth has gone
+            _getters[$"{id}.wall-steady"] = () => wall.SteadyConductance;      // W/K once soaked through, k A / thickness
+            _getters[$"{id}.ground-loss"] = () => wall.ToGround / 1e6;         // MJ that have gone on into the ground
+        }
         foreach (var (id, e) in _envelopes)
         {
             _getters[$"{id}.temperature"] = () => e.Temperature;               // °C of the air inside
@@ -1930,6 +2030,7 @@ public sealed class MachineRuntime
         : _ponds.TryGetValue(id, out var pond) ? (pond, Def.Part(pond.Tank.Name)!)
         : _stirlings.TryGetValue(id, out var engine) ? (engine, Def.Part(id)!)
         : _envelopes.TryGetValue(id, out var balloon) ? (balloon, Def.Part(id)!)
+        : _heatStores.TryGetValue(id, out var block) ? (block, Def.Part(id)!)
         : _melters.TryGetValue(id, out var melter) ? (melter, Def.Part(id)!)
         : throw new MachineFormatException($"{by.Kind} {by.Id} heats {id}, which is not a boiler, a sealed vessel or an enclosure", by.Location);
 
@@ -1954,7 +2055,10 @@ public sealed class MachineRuntime
         foreach (var h in _hearths.Values) h.Step(dt);
         foreach (var m in _mirrors.Values) m.Step(dt);
         foreach (var (target, sources) in _heatSources) target.HeatInput = _ownHeat[target] + sources.Sum(w => w());
-        foreach (var e in _enclosures.Values) e.Step(dt);
+        foreach (var b in _heatBins.Values) b.Step();                // a thermostat works the lid
+        foreach (var h in _heatStores.Values) h.Absorb(dt);          // what mirrors and fires aimed at them give
+        foreach (var e in _enclosures.Values) e.Step(dt);            // rooms with stores and walls solve them together
+        foreach (var h in _heatStores.Values) if (h.Zone is not Enclosure) h.StepOpen(dt);   // the rest are in the open air
         foreach (var c in _crucibles.Values) c.Step(dt);
         foreach (var e in _envelopes.Values) e.Step(dt);
         foreach (var p in _panes.Values) p.Step(dt);

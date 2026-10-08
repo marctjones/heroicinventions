@@ -56,3 +56,8 @@
 ;; docs/lonely-rover.html uses it) and density 1500 its bulk density. Basalt: c = 840 (Waples & Waples 2004, 0.84-0.96 kJ/(kg K)
 ;; at 25 C), k = 1.7 (1.3-2.9 by texture), density 2900: the rock the rover digs and heats in the open.
 (basalt    (name "Basalt")       (category stone) (density 2900) (youngs-modulus 70.0)  (tension 10)  (across-grain 10)  (compression 250) (friction 0.60) (restitution 0.55) (color "#4F4B49") (specific-heat 840) (conductivity 1.7))
+;; Lithium-ion cells, a pack's average, for the battery bank as a body that must be kept warm (#71). Specific heat
+;; about 1 kJ/(kg K) and conductivity about 1 W/(m K) across the cell (the reviews of Li-ion thermal management give
+;; 0.7-1.1 kJ/(kg K) for cells); density 2,500 kg/m3 (an 18650 cell is 47 g in 16.5 mL, 2,850, less with spacing).
+;; Strengths are nominal: a bank is not a structure.
+(cells     (name "Battery cells") (category metal) (density 2500) (youngs-modulus 10.0)  (tension 20)  (across-grain 20)  (compression 50)  (friction 0.30) (restitution 0.20) (color "#3C4A5C") (specific-heat 1000) (conductivity 1.0))

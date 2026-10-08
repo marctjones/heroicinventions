@@ -137,6 +137,7 @@ public partial class MachineView : Node3D
         Pass(BuildEnclosures);
         Pass(BuildDoors);
         Pass(BuildCrucibles);
+        Pass(BuildHeatStores);
         Pass(BuildEnvelopes);
         Pass(BuildPanes);
         Pass(BuildRainHouse);
@@ -1660,6 +1661,7 @@ public partial class MachineView : Node3D
         DrawEnclosures();
         DrawDoors();
         DrawCrucibles();
+        DrawHeatStores();
         DrawEnvelopes();
         DrawGalvanicJars();
         DrawPanes();

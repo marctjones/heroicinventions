@@ -244,7 +244,9 @@ public static class RktExporter
                        Opt("pressure", "pressure") + Opt("temperature", "temperature") +
                        (gases.Count > 0 ? $" #:air '({string.Join(' ', gases.Select(g => $"({g} {F(N(g))})"))})" : "") +
                        $" #:insulation {F(N("insulation", 2))} #:heat-capacity {F(N("heat-capacity"))} #:heater {F(N("heater"))}" +
-                       $" #:leak {F(N("leak"))} #:supply {F(N("supply"))} #:coefficient {F(N("coefficient", 0.6))} {Mat()})\n";
+                       $" #:leak {F(N("leak"))} #:supply {F(N("supply"))} #:coefficient {F(N("coefficient", 0.6))}" +
+                       (p.Props.GetValueOrDefault("wall") is SSymbol wall ? $" #:wall {wall.Name} #:wall-thickness {F(N("wall-thickness", 0.5))}" : "") +
+                       Opt("ground", "ground") + Opt("emissivity", "emissivity") + $" {Mat()})\n";
             }
             case "door":
                 return $"  (door {p.Id} {At()} #:from {Sym("from", "?")} #:to {Sym("to", "?")} #:area {F(N("area"))} #:open {F(N("open"))} " +
@@ -263,6 +265,13 @@ public static class RktExporter
             case "crucible":
                 return $"  (crucible {p.Id} {At()} #:sand {Sym("sand", "basalt")} #:charge {F(N("charge"))} #:spot {F(N("spot"))} " +
                        $"#:emissivity {F(N("emissivity", 0.9))}" + Opt("temperature", "temperature") + $" {Mat()})\n";
+            case "heat-store":
+                return $"  (heat-store {p.Id} {At()} #:mass {F(N("mass", 10))} #:contents {Sym("contents", "basalt")}" + Opt("temperature", "temperature") + Opt("area", "area") +
+                       $" #:emissivity {F(N("emissivity", 0.9))} #:conductance {F(N("conductance"))} {Mat()})\n";
+            case "heat-bin":
+                return $"  (heat-bin {p.Id} {At()} #:holds {Sym("holds", "?")} #:leak {F(N("leak", 0.1))} #:open {F(N("open"))}" +
+                       (p.Props.GetValueOrDefault("sense") is SSymbol sense ? $" #:sense {sense.Name} #:open-below {F(N("open-below", 5))} #:close-above {F(N("close-above", 40))}" : "") +
+                       $" {Mat()})\n";
             case "burning-mirror":
                 return $"  (burning-mirror {p.Id} {At()} #:area {F(N("area"))} #:image {F(N("image"))} #:onto {Sym("onto", "?")} #:reflectivity {F(N("reflectivity", 0.85))} {Mat()})\n";
             case "pane":

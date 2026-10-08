@@ -23,7 +23,7 @@ namespace HeroicInventions.Sim.Thermo;
 /// </summary>
 public sealed class HeatSlab
 {
-    private readonly double[] _t;          // °C of each cell's middle
+    private double[] _t;                   // °C of each cell's middle (not readonly: StateCopy carries a wall's warmth across a live edit by copying such arrays)
     private readonly double[] _w;          // m, each cell's thickness
     private readonly double _heatCapacityPerM;   // J/(K·m) = ρ·c·A
 
@@ -58,7 +58,7 @@ public sealed class HeatSlab
     public double SteadyConductance => Conductivity * Area / Thickness;
 
     /// <summary>°C of the near face, the room's inner surface.</summary>
-    public double SurfaceTemperature { get; private set; }
+    public double SurfaceTemperature { get; set; }
     /// <summary>W flowing from the surface into the wall, last step.</summary>
     public double Flux { get; private set; }
     /// <summary>J that have flowed from the surface into the wall, all told.</summary>

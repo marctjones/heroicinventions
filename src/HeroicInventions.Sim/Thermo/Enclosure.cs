@@ -91,7 +91,11 @@ public sealed class Enclosure : Zone, IHeated
     public override Planet Planet { get => Outside.Planet; set => Outside.Planet = value; }
 
     private double _temperature;
-    public override double Temperature { get => _temperature; set => _temperature = value; }
+    public override double Temperature
+    {
+        get => _temperature;
+        set { _temperature = value; if (Wall is not null) Wall.SurfaceTemperature = value; }
+    }
 
     /// <summary>Pa: Σnᵢ·R·T/V. Set, the gas is pumped in or bled out at the same mixture and temperature.</summary>
     public override double Pressure
