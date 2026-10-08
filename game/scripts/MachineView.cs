@@ -144,6 +144,7 @@ public partial class MachineView : Node3D
         Pass(BuildMirrors);
         Pass(BuildPumps);
         Pass(BuildPistonDrives);
+        Pass(BuildGauges);   // after the boilers, cylinders, tanks and rooms it sits on (#170)
         Pass(BuildCarriedWheels);
         Pass(BuildMillstones);
         Pass(BuildAxleFriction);
@@ -304,6 +305,7 @@ public partial class MachineView : Node3D
             }
 
         Skins.HoopTank(shell, side, height, Surface("iron"));   // iron hoops, a few by its height (#102)
+        Graduate(shell, part.Id, side / 2, side / 2, -height / 2, height, side * side);   // a scale on the wall, amber where the machine watches the level (#174)
 
         // nearly opaque: water held in a vessel must read against a pale sky through its glass (readable first)
         var water = Shapes.Box(new Vector3(side * 0.96f, 1, side * 0.96f),
@@ -1627,6 +1629,7 @@ public partial class MachineView : Node3D
         DrawDiggers();
         DrawFloats();
         DrawSluiceBoxes();
+        DrawGauges();   // last: a room's dial follows its walls
     }
 
     public void ToggleFire()

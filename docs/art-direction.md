@@ -377,3 +377,29 @@ Used wherever the sim has a temperature for a part: every boiler's shell (`Boile
 - `PlankSeams`: wooden boxes wider than 0.3 m get dark seams along their length on their two broad faces, one plank to about 0.2 m of width (2 to 6 planks); a beam or post is one piece and gets none. Runs once after a view is built, so any wooden box qualifies, a crate, cart bed or platform.
 - Shared-material hazard respected: every detail uses its own material instance (made for the part), none replaces a builder's `MaterialOverride`, and seams carry no outline. The Kongming lantern envelope was done by another agent.
 - Frames: `docs/art/skins/detail-before-after.png` (crate, Heron's fountain, Newcomen's boiler, carts' wheels).
+
+### 12.11 Pressure you can see, and scales on vessels (2026-10-07, #170 and #174)
+
+**Dials** (`MachineView.Gauges.cs`, rule functions in the last block of `Skins.cs`). One dial for every pressurised vessel; the needle sweeps 270 degrees from lower left over the top (`Skins.GaugeAngle`: `135 - 270 x share` degrees).
+- A **rated boiler** (its own #:burst or a #:wall shell): full scale is its burst limit as it stands now (`BoilerShare`: gauge over `BurstLimit`, derated by heat), an amber tick at 60% (`Skins.RimFrom`, the value `Skins.Rim` starts at) and a red one at 100%. The needle and the shell's outline read the same share, so the needle crosses the amber tick on the tick the outline turns amber.
+- No limit, plain scale, no amber or red: an unrated boiler (200 kPa gauge), a cylinder on an unrated boiler (100 kPa; on a rated boiler, that boiler's limit with the same marks), a sealed air vessel (25 kPa), a room (100 kPa gauge over the air outside).
+- **Below the air outside** the needle swings the other way from zero and turns blue (`Skins.Vacuum`), a quarter turn at a full vacuum: a Newcomen cylinder under the cold jet reads -76 kPa at 2.0 s. Scale for the negative side is the ambient pressure.
+- Placement: a boiler's dial stands proud of its bands; a cylinder's is low on its casing; a sealed air vessel's (Heron's fountain) is on its shell and rides with it; a room's is on its front wall and follows it as it billows.
+- **Soft rooms** (membrane enclosures, `Skins.Billow`): slack and flat at nothing over the outside, full height by 1 kPa, then up to 8% wider and taller as they fill (saturating near 30 kPa). A wood, stone or metal room keeps its shape and only has the dial.
+- **Jets** (`Skins.JetSpeed`): a gas leaving a hole, a door's rush and a safety valve's plume all leave at `0.4 + 2.6 x sqrt(dP / 101,325 Pa)` m/s (to 3 m/s), so a harder push always throws farther. Particle count still follows the flow. Water jets from tank holes (Leaks.cs) already follow `sqrt(2 g h)`.
+- **Suction limit** on a lift pump's pipe: the existing red tick is where this water at this temperature lets go ((P - P_v)/(rho g) = 10.09 m on Earth at 20 C, nothing on Mars); a pale line above it at P/(rho g) from the pump's own air and gravity (10.33 m on Earth, 0.164 m on Mars).
+
+**Graduations** (`MachineView.Graduations.cs`). Every tank and hopper gets a scale on its wall, as children of its shell (a hung vessel carries them) in one merged mesh per colour with its own unlit material.
+- Plain marks: dark rings at round steps (1, 2 or 5 times a power of ten) of capacity, no more than ten, in litres for vessels of 0.1 to 1 m² (or any a wake watches as `water`) and cm of depth otherwise (or any a trigger or wake watches as `level`; hoppers always). The lowest and highest are numbered.
+- **Thresholds** in the trigger's amber (`Skins.Watch`), a little thicker, always numbered: every wake term or event, and every field trigger, on the vessel. `water` is litres, `level` cm.
+- **Capstan slip line**: a hold scale beside the hauler, as tall as the load's weight; a bar for the hold (green while it holds, red once it slips) and an amber line at weight / e^(mu theta), numbered "slips below N".
+- Not done: a time scale on a clock's vessel (the header's rate is prose, not a declared field the view can read); the Stirling engine, bellows and balloon envelopes have no dial.
+
+**Checks** (`HEROIC_GAUGE_TRACE=<path> HEROIC_GAUGE_DT=<s>` logs each dial's share, needle angle, rim colour and kPa, each pump's two lines and the first frame a drawn level reaches each mark, beside `HEROIC_TRACE`):
+- airlock: needle angle equals `135 - 2.7 x gauge(kPa)` from the trace exactly at 100, 400 and 700 s (chamber 64.388, 123.147, 135.000 degrees); a fit of the red pixels in a paused close-up gives 66.40, 123.28, 135.13 against 65.91, 123.15, 135.00 logged at the same pause. Against absolute pressure the gap is a constant 1.65 degrees (Mars's 0.61 kPa).
+- boiler-shells: lead pot needle reaches -27.0 degrees (60%) and the outline turns `ffb219` in the same frame, t 452.608 s, at 144.0 kPa = 0.6 x 240 kPa.
+- suction-limit: pale line at 10.3287 m over the well = 101.325 kPa / (1000 x 9.81); red tick at 10.0913 m. earth-machines-on-mars: 0.1644 m = 610 Pa / (1000 x 3.71).
+- wake-clock: drawn level reaches 20, 30, 40, 50 L marks at 10.000, 15.008, 20.008, 25.008 s; the trace crosses them at 10.000, 15.000, 20.000, 25.008 s; sleeps woke at 10 (either), 15 (guarded), 20 (both), 25.01 s (filled), each within one 1/120 s step of its mark. dam-break: 55 cm mark drawn at 20.000 s, trace 20.008; hillside-pond: 10 cm at 10.542 s, trace 10.542.
+- water-clock: receiver marks every 20 cm are crossed at 67.4, 134.8, 202.2 s = 20 cm / 0.2967 cm/s (the header's 2.967 mm/s).
+
+Frames: `docs/art/skins/pressure-and-graduations.png`.

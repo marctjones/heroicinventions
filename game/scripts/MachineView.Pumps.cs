@@ -21,7 +21,7 @@ public partial class MachineView
     private sealed record PumpView(LiftPump Pump, float X, float Z, float Floor, MeshInstance3D Bucket, Node3D Wheel,
                                    MeshInstance3D Yoke, MeshInstance3D Rod, MeshInstance3D PipeWater, MeshInstance3D Void,
                                    MeshInstance3D BarrelWater, MeshInstance3D LimitTick, MeshInstance3D Stream, Label3D Label,
-                                   MeshInstance3D NeedBar, Label3D NeedLabel, Label3D ReachLabel);
+                                   MeshInstance3D NeedBar, Label3D NeedLabel, Label3D ReachLabel, MeshInstance3D Ideal, Label3D IdealLabel);
 
     private readonly List<PumpView> _pumpViews = [];
 
@@ -107,7 +107,15 @@ public partial class MachineView
             AddChild(needLabel);
             var reachLabel = Tag(new Color(1f, 0.45f, 0.4f));
             AddChild(reachLabel);
-            _pumpViews.Add(new PumpView(pump, at.X, at.Z, floor, bucket, wheel, yoke, rod, pipeWater, gap, barrelWater, tick, stream, label, need, needLabel, reachLabel));
+            // the suction limit as the atmosphere alone sets it (#170, #174): P / (rho g) over the well, a pale line across the pipe,
+            // above the red tick, which is where this water at this temperature really lets go (vapour pressure takes the last
+            // 24 cm on Earth, and on Mars all of it)
+            var ideal = Shapes.Box(new Vector3(0.5f, 0.012f, 0.012f), Shapes.Mat(new Color(0.9f, 0.95f, 1f), roughness: 1, outline: false));
+            ((StandardMaterial3D)ideal.MaterialOverride).ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
+            AddChild(ideal);
+            var idealLabel = Tag(new Color(0.85f, 0.92f, 1f));
+            AddChild(idealLabel);
+            _pumpViews.Add(new PumpView(pump, at.X, at.Z, floor, bucket, wheel, yoke, rod, pipeWater, gap, barrelWater, tick, stream, label, need, needLabel, reachLabel, ideal, idealLabel));
         }
     }
 
@@ -141,6 +149,12 @@ public partial class MachineView
             v.NeedLabel.Text = $"needs {needTo - surface:F2} m";
             v.ReachLabel.Position = new Vector3(v.X + 0.5f, limit, v.Z);
             v.ReachLabel.Text = $"— reach {(Math.Abs(p.Limit) < 0.1 ? $"{p.Limit * 1000:0.#} mm" : $"{p.Limit:F2} m")}";
+
+            // P / (rho g) from the air and gravity this pump stands in: 10.3 m on Earth, a few decimetres on Mars
+            float pOverRhoG = (float)(p.Zone.Pressure / (HeroicInventions.Sim.Physics.WaterDensity * p.Zone.Gravity));
+            v.Ideal.Position = new Vector3(v.X - 0.02f, surface + pOverRhoG, v.Z);
+            v.IdealLabel.Position = new Vector3(v.X - 0.5f, surface + pOverRhoG, v.Z);
+            v.IdealLabel.Text = $"P/ρg {pOverRhoG:F2} m —";
 
             bool gushing = p.Flow > 1e-6;
             v.Stream.Visible = gushing;

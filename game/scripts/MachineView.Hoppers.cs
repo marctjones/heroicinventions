@@ -37,6 +37,7 @@ public partial class MachineView
             var walls = Shapes.Box(new Vector3(side + 0.01f, start * 1.15f + 0.05f, side + 0.01f), glass);
             walls.Position = floor + new Vector3(0, (start * 1.15f + 0.05f) / 2, 0);
             AddChild(walls);
+            Graduate(walls, id, side / 2, side / 2, -(start * 1.15f + 0.05f) / 2, start, hopper.Area, grain: true);   // cm of depth up the glass (#174)
             var sand = Shapes.Mat(new Color(0.82f, 0.7f, 0.42f), roughness: 1);
             var grain = Shapes.Box(Vector3.One, sand);
             var plate = Shapes.Box(new Vector3(side * 0.94f, 0.012f, side * 0.94f), Shapes.Mat(new Color(0.45f, 0.35f, 0.2f)));
