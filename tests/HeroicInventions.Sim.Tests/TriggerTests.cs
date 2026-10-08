@@ -46,7 +46,7 @@ public class TriggerTests
         s.Execute("(boiler pot #:at (2 0 0))");
         s.Execute("(trigger go #:when (scene elapsed above 5) #:do ((pot fire 3000)))");
         var runtime = new MachineRuntime(s.Document.ToMachineDef(), Materials);
-        runtime.SetField("scene", "clock-rate", 0);                      // the sun is held still: only elapsed moves
+        runtime.SetField("scene", "clock-rate", 0);                      // scenario, not an operator: the sun is held still, only elapsed moves
         double fireBefore = 0;
         while (runtime.Time < 6)
         {
@@ -64,10 +64,10 @@ public class TriggerTests
     public void ATriggerFiresOnce()
     {
         var runtime = new MachineRuntime(LevelSwitch().Document.ToMachineDef(), Materials);
-        while (runtime.Time < 0.7) runtime.Step(0.01);
+        var person = OperatorRun.Of(runtime, "(at 0.7 (pot fire 0))");   // a person puts the fire out again at 0.7 s
+        person.Run(0.7, 0.01);
         double at = runtime.GetField("switch", "fired-at");
-        runtime.SetField("pot", "fire", 0);                    // put the fire out again by hand
-        while (runtime.Time < 1.5) runtime.Step(0.01);         // the level is still above 5 cm
+        person.Run(0.8, 0.01);                                 // the level is still above 5 cm
         Assert.Equal(at, runtime.GetField("switch", "fired-at"));
         Assert.Equal(0, runtime.GetField("pot", "fire"));      // it did not fire a second time
     }

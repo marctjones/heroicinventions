@@ -66,11 +66,11 @@ public class GripTests
         s.Execute("(grip tongs #:at (0 1 0) #:force 100 #:material bronze)");
         var runtime = new MachineRuntime(s.Document.ToMachineDef(), Materials);
         Assert.Equal(0, runtime.GetField("tongs", "closed"));                  // starts open
-        runtime.SetField("tongs", "closed", 1);
+        var person = OperatorRun.Of(runtime, "(at 0 (tongs closed 1)) (at 0.01 (tongs force 200))");   // a person closes the tongs, then squeezes harder
         Assert.Equal(1, runtime.GetField("tongs", "closed"));
         Assert.Equal(0, runtime.GetField("tongs", "held"));                    // nothing is held without the engine's bodies
         Assert.Equal(0.3 * 2 * 100, runtime.GetField("tongs", "capacity"), precision: 9);   // its own jaws' friction until it meets a load
-        runtime.SetField("tongs", "force", 200);
+        person.Run(0.01, 0.01);
         Assert.Equal(120, runtime.GetField("tongs", "capacity"), precision: 9);
     }
 
