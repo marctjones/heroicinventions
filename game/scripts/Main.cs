@@ -1512,12 +1512,9 @@ public partial class Main : Node3D
     {
         if (_buildMode is not null) return; // build mode handles its own camera, keys and clicks
         if (RoverInput(@event)) return;   // the game: the rover's keys (Main.Rover.cs)
-        if (!RoverIsPlayer)   // the free operator is for machine runs; in the game every action will pass the rover's capability check (#163)
-        {
-            if (AimInput(@event)) return;   // dragging a mirror's spot, Alt+click, a click on the ground for a digger (Main.Aim.cs)
-            OperateInput(@event);   // hover, click-to-operate, right-click list (Main.Operate.cs); consumes nothing
-            if (HandleHandInput(@event)) return;   // a press on a dynamic body drags it instead of orbiting (Main.Drag.cs)
-        }
+        if (!RoverIsPlayer && AimInput(@event)) return;   // dragging a mirror's spot, Alt+click, a click on the ground for a digger (Main.Aim.cs): a machine run's; the rover digs with its own backhoe
+        OperateInput(@event);   // hover, click-to-operate, right-click list (Main.Operate.cs); consumes nothing. In the game every action passes the rover's capability check (#163)
+        if (HandleHandInput(@event)) return;   // a press on a dynamic body drags it instead of orbiting (Main.Drag.cs)
         switch (@event)
         {
             case InputEventKey { Pressed: true, Echo: false } key:
@@ -1637,7 +1634,7 @@ public partial class Main : Node3D
         _environment.FogDepthBegin = d * _hazeReach;
         _environment.FogDepthEnd = d * _hazeReach * 6;
         _inputScript?.Process(delta);
-        if (!roverDrives) { OperateHoverTick(delta); OperatePanelTick(); }
+        OperateHoverTick(delta); OperatePanelTick();   // (in the game the tooltip says why the rover can't)
         if (!_fpsReport || (_fpsTimer += delta) < 2) return;
         _fpsTimer = 0;
         GD.Print($"[fps] {Performance.GetMonitor(Performance.Monitor.TimeFps):F0} fps · frame {Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000:F1} ms process, " +
@@ -1711,6 +1708,7 @@ public partial class Main : Node3D
 
     private void UpdateInfoPanel()
     {
+        if (RoverIsPlayer) return;   // the rover's own panel is kept by Main.Rover.cs (#196)
         if (_current is null)
         {
             _hudTitle.Text = "No machine selected";

@@ -5,10 +5,14 @@ namespace HeroicInventions;
 
 /// <summary>
 /// The player is the rover (owner decision 2026-10-08, issue #94). In a world that places a rover (<c>(rover (at X Z))</c>,
-/// the Lonely Rover's opening) the player drives it with a follow camera, and the free operator (clicking any control, dragging
-/// any body, aiming a digger) is off: in the game every action will pass the rover's capability check (#163), and until that
-/// exists a click does nothing. A machine run has no rover and keeps the free operator unchanged. HEROIC_ROVER=0 keeps the rover out of
+/// the Lonely Rover's opening) the player drives it with a follow camera, and every click, drag and hook is the rover's own and
+/// passes its capability check (reach, force, never up, only what a rover could do: Main.RoverHands.cs, #163). Aiming a mirror and
+/// sending a digging gang to a clicked spot (Main.Aim.cs) are off in the game: the rover digs with its own backhoe (B). A machine
+/// run has no rover and keeps the free operator unchanged. HEROIC_ROVER=0 keeps the rover out of
 /// a world that has one, for tests that need the old behaviour.
+///
+/// The side panels show the rover (#196): the right panel its speed, nose and tilt, its arm and bucket and what it last refused; the
+/// left panel only what the rover can do (sleep until, save and load, menu, speed). Editing and joining machines are build mode's.
 ///
 /// Keys: arrows or W A S D drive (forward, back, turn); B runs the backhoe's dig-and-dump; Shift+arrows orbit the camera, + and -
 /// (or Page Up / Down) zoom it, Home puts it back behind the rover; the mouse orbits and zooms as everywhere.
@@ -16,8 +20,12 @@ namespace HeroicInventions;
 public partial class Main
 {
     private Rover? _rover;
-    private Label? _roverHud;
-    private PanelContainer? _roverPanel;
+    private VBoxContainer? _roverInfo;     // the rover's section of the right panel
+    private Label? _roverDrive, _roverArm, _roverBucket, _roverEnergy, _roverNear, _roverNote;
+    private Label? _roverState;
+    private readonly Dictionary<Control, bool> _roverHidden = [];   // what the game hides in the panels, as it was
+    private string _roverNoteSeen = "";
+    private double _roverNoteAt;
     private float _roverHeading;           // the heading the camera last followed, radians
     private string? _plainControls;
     private static readonly bool RoverOff = OS.GetEnvironment("HEROIC_ROVER") == "0";
@@ -40,14 +48,8 @@ public partial class Main
         _plainControls = _hudControls.Text;
         _hudControls.Text = "Arrows or W A S D drive the rover · B backhoe: dig and dump · Space pause/run · H hide this panel · L all labels · Esc menu\n"
                           + "Drag to orbit · scroll or pinch to zoom · Shift+arrows orbit · + / − or Page Up/Down zoom · Home puts the camera behind the rover";
-        var layer = new CanvasLayer { Layer = 2 };
-        AddChild(layer);
-        HudTheme.Install(layer);
-        _roverPanel = new PanelContainer { Name = "RoverPanel", MouseFilter = Control.MouseFilterEnum.Ignore };
-        _roverHud = new Label { HorizontalAlignment = HorizontalAlignment.Center };
-        _roverHud.AddThemeFontSizeOverride("font_size", 16);
-        _roverPanel.AddChild(_roverHud);
-        layer.AddChild(_roverPanel);
+        BuildRoverPanels();
+        InstallRoverHands();   // every action from here on passes the rover's capability check (Main.RoverHands.cs)
 
         _roverHeading = RoverHeading();
         _orbit.Pivot = _rover.Chassis.GlobalPosition;
@@ -62,8 +64,8 @@ public partial class Main
         if (_rover is null) return;
         if (_plainControls is not null) _hudControls.Text = _plainControls;
         _plainControls = null;
-        if (_roverPanel?.GetParent() is { } layer) layer.QueueFree();
-        _roverPanel = null; _roverHud = null;
+        RemoveRoverHands();
+        RestorePanels();
         _rover.QueueFree();
         _rover = null;
     }
@@ -88,6 +90,8 @@ public partial class Main
             case Key.B:
                 if (!key.Echo) _rover!.StartCycle();
                 break;
+            case Key.E or Key.J or Key.R or Key.D:
+                break;   // edit, join, restart and details belong to machine runs and build mode: used up so they do nothing here
             case Key.Home:
                 _orbit.Yaw = RoverHeading();
                 _orbit.Pitch = RoverCameraPitch;
@@ -143,17 +147,94 @@ public partial class Main
         return true;
     }
 
+    // ---- the panels (#196) ----------------------------------------------------------------------------------------
+
+    /// <summary>The rover's section at the top of the right panel, and the panels pared down to what the rover can do.</summary>
+    private void BuildRoverPanels()
+    {
+        var col = (VBoxContainer)_infoPanel.GetChild(0);
+        _roverInfo = new VBoxContainer { Name = "RoverInfo" };
+        _roverInfo.AddThemeConstantOverride("separation", 6);
+        Label Line(string name, int size = 15, bool dim = false)
+        {
+            var l = new Label { Name = name, AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(340, 0) };
+            l.AddThemeFontSizeOverride("font_size", size);
+            if (dim) l.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.75f));
+            return l;
+        }
+        void Section(string title)
+        {
+            _roverInfo.AddChild(new HSeparator());
+            _roverInfo.AddChild(SectionLabel(title, 15));
+        }
+        _roverInfo.AddChild(SectionLabel("Rover", 20));
+        _roverInfo.AddChild(_roverState = Line("State"));
+        Section("Driving");
+        _roverInfo.AddChild(_roverDrive = Line("Driving"));
+        Section("Arm");
+        _roverInfo.AddChild(_roverArm = Line("Arm"));
+        Section("Bucket");
+        _roverInfo.AddChild(_roverBucket = Line("Bucket"));
+        Section("Energy");
+        _roverInfo.AddChild(_roverEnergy = Line("Energy", dim: true));
+        Section("Nearby");
+        _roverInfo.AddChild(_roverNear = Line("Nearby", dim: true));
+        _roverInfo.AddChild(_roverNote = Line("Said"));
+        _roverNote.AddThemeColorOverride("font_color", new Color(1f, 0.78f, 0.45f));
+        col.AddChild(_roverInfo);
+        col.MoveChild(_roverInfo, 0);
+
+        // the right panel is the rover's: the focused machine's title, energy and speed mean nothing to the player; its toasts and key help stay
+        foreach (var child in col.GetChildren().OfType<Control>())
+            if (child != _roverInfo && child != _hudNote && child != _hudControls && child != _operatorSection) Hide(child);
+        // the left panel offers sleep, save and load, menu and speed (and pause); the machine list, restart, details, edit and join are for machine runs
+        foreach (Control c in new Control[] { _machinesToggle, _machineList, _restartButton, _detailsButton, _editButton, _joinButton }) Hide(c);
+    }
+
+    private void Hide(Control c)
+    {
+        if (!_roverHidden.ContainsKey(c)) _roverHidden[c] = c.Visible;
+        c.Visible = false;
+    }
+
+    private void RestorePanels()
+    {
+        foreach (var (c, was) in _roverHidden) if (IsInstanceValid(c)) c.Visible = was;
+        _roverHidden.Clear();
+        if (_roverInfo is not null && IsInstanceValid(_roverInfo)) _roverInfo.QueueFree();
+        _roverInfo = null;
+    }
+
     private void UpdateRoverHud()
     {
-        if (_roverHud is null || _roverPanel is null || _rover is null) return;
+        if (_roverInfo is null || _rover is null) return;
         var r = _rover;
-        double kmh = r.Speed;
-        _roverHud.Text = $"Rover   {kmh:0.0} m/s   nose {r.PitchDeg:+0;-0;0}°   tilt {r.TiltDeg:0}°\n"
-                       + $"{r.ArmStatus}   ·   bucket {r.Carried:0.00} of {Rover.BucketVolume:0.00} m³   ·   dug {r.Dug:0.00} m³, dumped {r.Dumped:0.00} m³   ·   B digs and dumps";
-        var vp = GetViewport().GetVisibleRect().Size;
-        var clear = SettledClearArea();
-        _roverPanel.ResetSize();
-        _roverPanel.Position = new Vector2(clear.GetCenter().X - _roverPanel.Size.X / 2, vp.Y - _roverPanel.Size.Y - 18);
+        // Main re-shows these when it focuses a machine or folds the menu; keep them away while the rover is the player
+        foreach (var c in _roverHidden.Keys) if (IsInstanceValid(c) && c.Visible) c.Visible = false;
+        _roverState!.Text = $"{(_running ? "Running" : "Paused")} · time ×{_timeScale:0.##}";
+        _roverDrive!.Text = $"{r.Speed:0.0} m/s · nose {r.PitchDeg:+0;-0;0}° · tilt {r.TiltDeg:0}°";
+        _roverArm!.Text = $"{r.ArmStatus}\nReaches {Rover.ArmReach:0.0} m · pushes up to {RoverSpec.PushForce(r.GroundGravity) / 1000:0.0} kN · never lifts a load. B digs and dumps.";
+        _roverBucket!.Text = $"{r.Carried:0.00} of {Rover.BucketVolume:0.00} m³\ndug {r.Dug:0.00} m³, dumped {r.Dumped:0.00} m³";
+        _roverEnergy!.Text = "Upkeep is free for now. The energy budget is not modelled yet (#62).";
+        var here = r.Chassis.GlobalPosition;
+        var near = _views.Select(v => (View: v, Box: PartsBox(v))).Where(x => x.Box is not null)
+                         .Select(x => (x.View, Distance: here.DistanceTo(x.Box!.Value.Position.Max(here.Min(x.Box.Value.End)))))
+                         .Where(x => x.Distance < 25).OrderBy(x => x.Distance).Take(3).ToList();
+        _roverNear!.Text = near.Count == 0 ? "No machine within 25 m."
+            : string.Join("\n", near.Select(x => $"{DisplayNames.GetValueOrDefault(_viewMachine.GetValueOrDefault(x.View, ""), _viewMachine.GetValueOrDefault(x.View, "machine"))} {x.Distance:0.0} m"
+                                                   + (x.Distance <= Rover.ArmReach ? " (in reach)" : "")));
+        _roverNote!.Text = RoverSaid is { } said ? said : "";
+        _roverNote.Visible = _roverNote.Text.Length > 0;
+        // a toast from the rest of the game (Saved ..., a part's click) shows for a few seconds, then goes
+        if (_hudNote.Text != _roverNoteSeen) { _roverNoteSeen = _hudNote.Text; _roverNoteAt = Clock; }
+        if (_hudNote.Text.Length > 0 && Clock - _roverNoteAt > 6) { _hudNote.Text = ""; _roverNoteSeen = ""; }
+    }
+
+    /// <summary>The box round a machine's body, for how far it is from the rover (cached with the view's own bounds).</summary>
+    private Aabb? PartsBox(MachineView v)
+    {
+        if (!_viewBounds.TryGetValue(v, out var box)) _viewBounds[v] = box = BoundsOf(v);
+        return box.Size == Vector3.Zero ? null : box;
     }
 
     /// <summary>Scripted checks (tools/gui-check.sh): "rover" prints where it is and what it is doing; "rover place X Z HEADING" puts it on the ground there.</summary>
@@ -171,6 +252,7 @@ public partial class Main
         }
         if (w.Length == 3 && w[1] == "until")   // wait for the arm to reach a phase (Digging, Lifting, Swinging, Placing, Dumping, Stowed ...)
             return _rover.PhaseName == w[2] ? ScriptedInput.Step.Next : ScriptedInput.Step.Again;
+        if (w.Length > 1 && RoverHandsStep(w) is { } handsStep) return handsStep;   // the rover's hands: Main.RoverHands.cs
         var p = _rover.Chassis.GlobalPosition;
         var clear = SettledClearArea();
         var box = _rover.Bounds();

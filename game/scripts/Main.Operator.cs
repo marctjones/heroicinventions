@@ -27,14 +27,18 @@ public partial class Main
     /// <summary>
     /// A person's action on <paramref name="view"/>: sets <c>target.field</c> to <paramref name="value"/> now and appends
     /// <c>(at t (target field value))</c> to the run's log. Anything that operates a machine by hand (clicks, drags, keys) calls this.
-    /// A bad target or field throws before anything is logged.
+    /// A bad target or field throws before anything is logged. In the game it returns false, having said why, when the rover could not do it (#163).
     /// </summary>
-    public void Operate(MachineView view, string target, string field, double value)
+    public bool Operate(MachineView view, string target, string field, double value)
     {
+        // the game: every action is the rover's own and passes its capability check first (Main.RoverHands.cs); a refusal says why and logs nothing
+        if (RoverIsPlayer && RoverOperateRefusal(view, target, field, value) is { } why) { RoverRefuse(why); return false; }
+        if (RoverIsPlayer && view != _current) RoverFocus(view);   // the rover's hand is on this machine now: its log is the one that takes the action
         // a person's hand on a rope or a view-side drive is the view's to do (MachineView.Hooks.cs), the rest the runtime's
         if (!view.TrySetViewField(target, field, value)) view.Runtime.SetField(target, field, value);
         TakeControl();
         if (view == _current) LogOperatorAction(new OperatorAction(view.Runtime.Time, target, field, value));
+        return true;
     }
 
     /// <summary>The person has a control: any demo operator hands over to them.</summary>
