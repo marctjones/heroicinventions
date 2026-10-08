@@ -58,6 +58,7 @@ Environment switches (all `HEROIC_*`):
 | `LIVE_EDIT_AFTER=<s>` | live edit after this much sim time |
 | `EDITOR=1`, `EDITOR_INPUT=...` | scripted editor input; needs a real window |
 | `FPS_REPORT=1` | frame-rate report |
+| `TUNING_PANEL=1`, `GOALS_PANEL=1` | open the game-tuning panel (F3, #60) or the goals panel (F2, #68) at the start, for frames |
 
 ## Traps already met
 

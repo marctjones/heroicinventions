@@ -25,9 +25,9 @@ public partial class Main
     {
         _goalsPanel = new GoalsPanel(this) { Name = "GoalsPanel", Visible = OS.GetEnvironment("HEROIC_GOALS_PANEL") == "1" };
         AddChild(_goalsPanel);
-        var layer = new CanvasLayer { Layer = 65, Name = "GoalToast" };
+        var layer = new CanvasLayer { Layer = 80, Name = "GoalToast" };
         AddChild(layer);
-        _toast = new Label { Visible = false, HorizontalAlignment = HorizontalAlignment.Center, Position = new Vector2(450, 120), Size = new Vector2(700, 80) };
+        _toast = new Label { Visible = false, HorizontalAlignment = HorizontalAlignment.Center, Position = new Vector2(400, 8), Size = new Vector2(800, 80) };
         _toast.AddThemeFontSizeOverride("font_size", 22);
         _toast.AddThemeColorOverride("font_color", new Color(1f, 0.9f, 0.55f));
         _toast.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0));
@@ -109,7 +109,7 @@ public partial class GoalsPanel : CanvasLayer
 
     public override void _Ready()
     {
-        var root = new PanelContainer { Position = new Vector2(40, 60), CustomMinimumSize = new Vector2(560, 0) };
+        var root = new PanelContainer { Position = new Vector2(310, 60), CustomMinimumSize = new Vector2(560, 0) };
         root.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = new Color(0.17f, 0.15f, 0.14f, 0.96f), ContentMarginLeft = 14, ContentMarginRight = 14, ContentMarginTop = 10, ContentMarginBottom = 10, CornerRadiusBottomLeft = 6, CornerRadiusBottomRight = 6, CornerRadiusTopLeft = 6, CornerRadiusTopRight = 6 });
         AddChild(root);
         var col = new VBoxContainer();

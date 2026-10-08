@@ -102,7 +102,7 @@ public partial class TuningPanel : CanvasLayer
 
     public override void _Ready()
     {
-        var root = new PanelContainer { Position = new Vector2(500, 60), CustomMinimumSize = new Vector2(600, 0) };
+        var root = new PanelContainer { Position = new Vector2(540, 60), CustomMinimumSize = new Vector2(600, 0) };
         root.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = new Color(0.17f, 0.15f, 0.14f, 0.96f), ContentMarginLeft = 14, ContentMarginRight = 14, ContentMarginTop = 10, ContentMarginBottom = 10, CornerRadiusBottomLeft = 6, CornerRadiusBottomRight = 6, CornerRadiusTopLeft = 6, CornerRadiusTopRight = 6 });
         AddChild(root);
         var col = new VBoxContainer();
@@ -114,7 +114,7 @@ public partial class TuningPanel : CanvasLayer
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(570, 0) };
         _status.AddThemeColorOverride("font_color", HudTheme.CreamDim);
         col.AddChild(_status);
-        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(570, 520) };
+        var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(570, 520), HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
         col.AddChild(scroll);
         _rows = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         _rows.AddThemeConstantOverride("separation", 4);
@@ -126,6 +126,18 @@ public partial class TuningPanel : CanvasLayer
         close.Pressed += () => Visible = false;
         buttons.AddChild(real); buttons.AddChild(close);
         col.AddChild(buttons);
+        Refresh();
+    }
+
+    private (bool Game, ScenarioTuning Tuning)? _shown;
+
+    /// <summary>The numbers in force change as a world loads: the rows follow them.</summary>
+    public override void _Process(double delta)
+    {
+        if (!Visible) return;
+        var now = (_main.CallGameRunning(), _main.CallTuningShown());
+        if (_shown is { } s && s.Game == now.Item1 && s.Tuning == now.Item2) return;
+        _shown = (now.Item1, now.Item2);
         Refresh();
     }
 
@@ -152,7 +164,7 @@ public partial class TuningPanel : CanvasLayer
         warn.AddThemeColorOverride("font_color", new Color(1f, 0.55f, 0.35f));
         _rows.AddChild(new HSeparator());
         _rows.AddChild(warn);
-        var caution = new Label { Text = "These carry the lessons (rain is a poor engine, flat mirrors can't melt basalt). Changing them changes what the game teaches; they are for experiments and difficulty.", AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(560, 0) };
+        var caution = new Label { Text = "These carry the lessons (rain is a poor engine, flat mirrors can't melt basalt). Changing them changes what the game teaches; they are for experiments and difficulty.", AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(520, 0) };
         caution.AddThemeColorOverride("font_color", new Color(1f, 0.75f, 0.55f));
         _rows.AddChild(caution);
         foreach (var e in ScenarioTuning.Entries.Where(e => e.Advanced)) AddRow(e, t, game);
@@ -190,7 +202,7 @@ public partial class TuningPanel : CanvasLayer
         var lockLabel = new Label { Text = locked ? "locked during a game" : "", Modulate = new Color(1, 1, 1, 0.6f) };
         row.AddChild(lockLabel);
         box.AddChild(row);
-        var note = new Label { Text = $"{e.Note}" + (double.IsNaN(e.Real) ? "" : $" (real: {e.Real:0.##})"), AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(540, 0) };
+        var note = new Label { Text = $"{e.Note}" + (double.IsNaN(e.Real) ? "" : $" (real: {e.Real:0.##})"), AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(500, 0) };
         note.AddThemeFontSizeOverride("font_size", 12);
         note.AddThemeColorOverride("font_color", HudTheme.CreamDim);
         box.AddChild(note);
