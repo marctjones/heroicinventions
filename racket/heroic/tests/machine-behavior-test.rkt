@@ -2822,3 +2822,38 @@
     (check-= (- (apply max xs) (apply min xs)) 0.5 0.01 "m, the stroke: twice the crank")
     (define traced-w (* rpm (/ pi 30)))
     (check-= (/ (for/sum ([f late]) (abs (field f 'saw-frame.vx))) (length late)) (/ (* 2 traced-w 0.25) pi) 0.01 "m/s, the blade's mean speed")))
+
+;; ---- #175 world-only parts: what each one shows when it is picked from the machine list
+
+(test-case "Field windmill, alone (#175): a default 6 m/s wind, 515.2 W through the sails, 154.5 W to the stones at 14.03 rpm"
+  ;; field-windmill.rkt: 1/2 rho A v^3 = 0.5 x 0.0151833 x 314.159 x 216; the stones are set for rho 0.0155,
+  ;; 1.020829 x too stiff for this air, so lambda = 2.5 (2 - 1.020829) = 2.44786, omega = 1.46872 rad/s,
+  ;; reached with the time constant I / (load/1.020829 x R / (2.5 v)) = 50000 / 68.69 = 727.9 s
+  (define run (simulate 'field-windmill #:seconds 5000 #:step 0.05 #:sample-dt 1200))
+  (check-= (final-of run '(mill wind)) 6 1e-9)
+  (check-= (final-of run '(mill wind-power)) 515.158 0.01)
+  (define (rpm-at t) (* 1.46872 (- 1 (exp (- (/ t 727.9)))) (/ 30 pi)))
+  (define (value-at-time t key) (cadr (assq key (cdr (for/first ([f run] #:when (>= (car f) (- t 1e-6))) f)))))
+  (check-= (value-at-time 1200 'mill.rpm) (rpm-at 1200) 0.05 "11.33 rpm")
+  (check-= (final-of run '(mill rpm)) (rpm-at 4800) 0.05 "settling toward 14.03")
+  (check-= (final-of run '(mill power)) (* 105.1805 (final-of run '(mill rpm)) (/ pi 30)) 0.05 "the stones take load x omega"))
+
+;; ---- #176 demos with the part that shows their effect
+
+(test-case "Baghdad battery lamp (#176): the filament glows by the jars' power, 760 C for one jar, 1500 C for ten, cold once the acid is spent"
+  ;; filament T = 1773.15 K (P / 649.5 uW)^(1/4): one jar 75 uW -> 1033.6 K = 760.5 C; ten jars 649.5 uW -> 1500.0 C;
+  ;; the drops jar (75 uW) is spent at 8.034 C / 0.15 mA = 53,558 s and then gives no power: a cold filament, 20 C
+  (define (filament p) (- (* 1773.15 (expt (/ p 649.5) 0.25)) 273.15))
+  (check-= (filament 75) 760.5 0.05)
+  (check-= (filament 649.5) 1500.0 1e-6)
+  (define run (simulate 'baghdad-battery #:seconds 54000 #:step 10 #:sample-dt 6000))
+  (define (at t key) (cadr (assq key (cdr (for/first ([f run] #:when (>= (car f) (- t 1e-3))) f)))))
+  (for ([t '(0 24000 48000)])
+    (check-= (at t 'one-jar.power) 75 1e-6)
+    (check-= (at t 'one-jar.filament) (filament 75) 1e-6 (format "one jar at ~a s" t))
+    (check-= (at t 'ten-jars.power) 649.5 1e-6)
+    (check-= (at t 'ten-jars.filament) (filament 649.5) 1e-6)
+    (check-= (at t 'drops.filament) (filament 75) 1e-6 "the drops jar glows the same until it is spent"))
+  (check-= (at 54000 'drops.power) 0 1e-9 "spent")
+  (check-= (at 54000 'drops.filament) 20 1e-9 "cold")
+  (check-= (at 54000 'one-jar.filament) (filament 75) 1e-6 "the full jar still lights it"))

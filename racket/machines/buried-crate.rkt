@@ -13,6 +13,11 @@
 ;; its height, 12.5 cm: after the third spit it is still under 25 cm; the
 ;; fourth, which takes the trench to 1 m, bares its lid and frees it. That
 ;; takes 2 m³ at c + γ (1 + tan φ) D/2 = 15.6 kJ/m³, 31.3 kJ, 20.9 s at 1.5 kW.
+;;
+;; A part for a world (#175): the crate lies a metre and a quarter down, which on the bare
+;; floor is inside the floor itself, and it falls through (92 m/s at 10 s). The machine menu
+;; lists it under Parts for Worlds and opens game/worlds/dig-out.world, where the map's loam
+;; holds it.
 (define-machine buried-crate
   #:source "a crate buried in the ground, and the gang digging it out"
   (block crate #:at (0 (m -1.25) 0) #:size (cm 50) #:material oak)

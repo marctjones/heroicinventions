@@ -14,6 +14,13 @@
 ;;               4.33 V: 0.433 V a jar. Same current, so 649.5 µW.
 ;;   drops       a jar with 0.1 mL left: 8 C, spent in 14.9 hours. Its
 ;;               rod rusts as it goes (Sleep until, or 20x, to watch).
+;;   lamp        each row is wired to a small lamp (#176) so the current can be seen.
+;;               Its filament radiates what it is fed, so T goes as P^(1/4): the lamp is
+;;               rated at the ten-jar stack's 649.5 uW and 1,500 C, T = 1773.15 K (P /
+;;               649.5 uW)^(1/4): one jar 75 uW -> 760.5 C (dull red), ten jars 1,500 C
+;;               (white-yellow), the drops jar the same as one jar until it is spent
+;;               at 53,558 s and then cold (20 C). Scaled for the eye: 75 uW would not
+;;               really warm a filament. The trace has it as <jar>.filament.
 ;; The Lonely Rover's 5 kWh bank (18 MJ) would take the single jar about
 ;; 7,600 years, and the vinegar of about 10,000 jars: a trap that teaches.
 

@@ -80,6 +80,22 @@ public class GalvanicJarTests
     }
 
     [Fact]
+    public void ALampLitByTheJarsGlowsByTheFourthRootOfTheirPower()
+    {
+        // #176: T = 1773.15 K (P / 649.5 µW)^¼: one jar 75 µW is 760.5 °C, ten jars 1,500 °C, a spent jar cold
+        var one = new GalvanicJar("one", 1, 0.5, 0.15, 4.5e-5);
+        var ten = new GalvanicJar("ten", 10, 0.433, 0.15, 4.5e-5);
+        Assert.Equal(760.5, one.FilamentCelsius, precision: 1);
+        Assert.Equal(1500.0, ten.FilamentCelsius, precision: 6);
+        var drops = new GalvanicJar("drops", 1, 0.5, 0.15, 1e-7);
+        Assert.Equal(760.5, drops.FilamentCelsius, precision: 1);
+        for (int i = 0; i < 900; i++) drops.Step(60);     // past its 53,558 s
+        Assert.True(drops.Spent);
+        Assert.Equal(20, drops.FilamentCelsius);
+        Assert.Equal(20, new GalvanicJar("off", 1, 0.5, 0.15, 4.5e-5) { On = false }.FilamentCelsius);
+    }
+
+    [Fact]
     public void TheEditorPlacesAJarAndExportsIt()
     {
         var s = new BuildSession(Materials, catalogue: [], machinesDir: Path.GetTempPath(), name: "bench");
