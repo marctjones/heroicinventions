@@ -22,11 +22,13 @@
 ;;            m g y'(phi) = 5, sin(pi phi / alpha) = 5 / 9.81, phi = 7.7 degrees
 ;;            in, and no further (the pull and push settle it there): the hammer
 ;;            stands 0.70 cm up, never falls, and never strikes.
+;; The two rigs stand side by side, 1 m apart along x (#192). One behind the other, their wheels shared an axle line,
+;; so they were drawn on one axle under one stacked label; moved along x, every body's motion is the same to the bit.
 (define-machine trip-hammer
   #:source "A trip-hammer: pegs on a wheel lift it, a weaker wheel stalls"
   (wheel strong-wheel #:shape (pulley #:radius (cm 15) #:width (cm 7.5)) #:at (0 (m 1) 0) #:material oak
          #:drive-rpm 30 #:drive-torque 20)
   (cam strong-hammer #:at ((cm 40) (cm 30) 0) #:on strong-wheel #:pegs 4 #:lift (cm 10) #:rise 0.5 #:mass 5)
-  (wheel weak-wheel #:shape (pulley #:radius (cm 15) #:width (cm 7.5)) #:at (0 (m 1) (m -1)) #:material oak
+  (wheel weak-wheel #:shape (pulley #:radius (cm 15) #:width (cm 7.5)) #:at ((m 1) (m 1) 0) #:material oak
          #:drive-rpm 2 #:drive-torque 5)
-  (cam weak-hammer #:at ((cm 40) (cm 30) (m -1)) #:on weak-wheel #:pegs 4 #:lift (cm 10) #:rise 0.5 #:mass 5))
+  (cam weak-hammer #:at ((cm 140) (cm 30) 0) #:on weak-wheel #:pegs 4 #:lift (cm 10) #:rise 0.5 #:mass 5))
