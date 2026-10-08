@@ -1202,7 +1202,7 @@ public partial class Main : Node3D
             rocky.Ground.LoadBoulders(boulders);   // the boulders lie (and roll) where they were saved (#88)
             rocky.RetraceBoulders();
         }
-        if (save.Worked is { } worked && _groundSim is { } dug) dug.Ground.LoadWorked(worked);   // the trenches and heaps, with their carry ceilings (#199)
+        if (save.Worked is { } worked && _groundSim is { } dug) dug.Ground.LoadWorked(worked);   // the trenches and heaps, and their water (#199, #200)
         GoalsRestore(save);   // the goals and achievements the save had earned (#68)
         if (save.Rover is { } roverState) RoverLoadState(roverState);   // the rover where it was, with its bucket and arm (#201)
         foreach (var m in save.Machines)
