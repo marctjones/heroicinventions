@@ -1482,6 +1482,7 @@ public partial class MachineView : Node3D
         ApplyBuoyancy();
         ApplyLift();
         ApplyDrag();
+        ApplyHand();   // a hand holding something (#159)
         ConstrainChains();
         CheckBurial();
         Runtime.Step(dt);

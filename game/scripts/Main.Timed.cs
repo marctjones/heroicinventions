@@ -46,7 +46,8 @@ public partial class Main
             _timedSettings.Remove(due);
             try
             {
-                _current.Runtime.SetField(due.Target, due.Field, due.Value);
+                // a person's hand on a rope or a wheel's drive is the view's to do (MachineView.Hooks.cs), the rest the runtime's
+                if (!_current.TrySetViewField(due.Target, due.Field, due.Value)) _current.Runtime.SetField(due.Target, due.Field, due.Value);
                 if (due.Source is not null) LogOperatorAction(new Sim.Machines.OperatorAction(due.At, due.Target, due.Field, due.Value));
             }
             catch (Exception e) { SettingFailed($"'{due.Target} {due.Field} {due.Value} {due.At}': {e.Message}", due.Source is ReplaySource ? "HEROIC_ACTIONS" : "HEROIC_SET"); }

@@ -31,10 +31,37 @@ public partial class Main
     /// </summary>
     public void Operate(MachineView view, string target, string field, double value)
     {
-        view.Runtime.SetField(target, field, value);
-        _operatorTaken = true;
-        _timedSettings.RemoveAll(s => s.Source == DemoSource);   // the person has a control: the demo hands over
+        // a person's hand on a rope or a view-side drive is the view's to do (MachineView.Hooks.cs), the rest the runtime's
+        if (!view.TrySetViewField(target, field, value)) view.Runtime.SetField(target, field, value);
+        TakeControl();
         if (view == _current) LogOperatorAction(new OperatorAction(view.Runtime.Time, target, field, value));
+    }
+
+    /// <summary>The person has a control: any demo operator hands over to them.</summary>
+    private void TakeControl()
+    {
+        _operatorTaken = true;
+        _timedSettings.RemoveAll(s => s.Source == DemoSource);
+    }
+
+    /// <summary>
+    /// The hand (#159, #160) noted in the operator log. A hook or unhook is a field (`ROPE hook 1/0`) and is logged
+    /// like any control. A drag is a path through time, not one value, so it isn't a log entry: it takes the controls
+    /// from any demo operator and prints its own replay line (HEROIC_DRAG), which reproduces it.
+    /// </summary>
+    private sealed class LoggedHandActions(Main main) : IHandActions
+    {
+        public void RecordDrag(MachineView view, DragRecord drag)
+        {
+            main.TakeControl();
+            GD.Print($"[hand] HEROIC_DRAG=\"{drag.ToReplay()}\"");
+        }
+
+        public void RecordHook(MachineView view, string rope, string action, string? load, Vector3 point)
+        {
+            main.TakeControl();
+            if (view == main._current) main.LogOperatorAction(new OperatorAction(view.Runtime.Time, rope, "hook", action == "hook" ? 1 : 0));
+        }
     }
 
     /// <summary>The F key and the menu's Fire: one logged action for each boiler it changes.</summary>
