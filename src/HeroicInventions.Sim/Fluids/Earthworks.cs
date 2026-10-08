@@ -26,6 +26,12 @@ public sealed partial class Terrain
     /// <summary>Whether each cell's top is loose soil (spoil, or a wall that has slumped): no cohesion.</summary>
     public bool[] Loose => _loose ??= new bool[Count];
 
+    /// <summary>
+    /// Cells that may not rise while it is set (#72): a body stands on them or against them, and holds back soil that would slide
+    /// there, as a wall does. Null (as on every map) closes nothing. Set by <see cref="WorkedGround.Around"/> for one change.
+    /// </summary>
+    [NonSerialized] public bool[]? Blocked;
+
     /// <summary>Goes up by one each time the ground's shape changes, so a view knows to redraw it.</summary>
     public int Version { get; private set; }
 
@@ -198,6 +204,7 @@ public sealed partial class Terrain
                     var soil = SoilOf(a);
                     double repose = soil.Friction * run * Cell;
                     if (drop <= repose + 1e-9) continue;
+                    if (Blocked is { } closed && closed[b]) continue;   // a body's base: the soil stays upslope
                     if (!loose[a])
                     {
                         if (drop <= soil.CriticalHeight(gravity) + 1e-9) continue;   // the cut face holds

@@ -253,11 +253,13 @@ public sealed class WorkedGround
 
     /// <summary>
     /// Tips <paramref name="m3"/> of loose soil onto the ground within <see cref="PourRadius"/> of a point, level over its nodes,
-    /// whatever its height. Returns the surface it landed on, or null if there is no workable ground there.
+    /// whatever its height, but not on a node closed by a body (<see cref="Terrain.Blocked"/>): it heaps on the open ones. Returns
+    /// the surface it landed on, or null if there is no open workable ground there.
     /// </summary>
     public double? Pour(double x, double z, double m3, int soil)
     {
         var nodes = Within(x, z, PourRadius);
+        if (Fine.Blocked is { } closed) nodes.RemoveAll(k => closed[k]);
         if (nodes.Count == 0 || m3 <= 0) return null;
         double surface = nodes.Average(k => Fine.Heights[k]);
         double rise = m3 / (nodes.Count * Area);
@@ -273,7 +275,7 @@ public sealed class WorkedGround
     }
 
     /// <summary>A node a change to the ground raised: where it is (m), and its height before and after.</summary>
-    public readonly record struct Raised(double X, double Z, double Before, double After);
+    public readonly record struct Raised(int Node, double X, double Z, double Before, double After);
 
     /// <summary>
     /// Makes <paramref name="change"/> to the ground (a dig or a dump, and the slide after it) and keeps it only if
@@ -291,13 +293,43 @@ public sealed class WorkedGround
         change();
         var raised = new List<Raised>();
         for (int k = 0; k < heights.Length; k++)
-            if (Fine.Heights[k] > heights[k] + 1e-6) raised.Add(new Raised(NodeX(k % Nx), NodeZ(k / Nx), heights[k], Fine.Heights[k]));
+            if (Fine.Heights[k] > heights[k] + 1e-6) raised.Add(new Raised(k, NodeX(k % Nx), NodeZ(k / Nx), heights[k], Fine.Heights[k]));
         if (raised.Count == 0 || allow(raised)) return true;
         Array.Copy(heights, Fine.Heights, heights.Length);
         Array.Copy(loose, Fine.Loose, loose.Length);
         Array.Copy(soil, Fine.Soil, soil.Length);
         (Dug, Dumped) = (dug, dumped);
         Fine.PutBack(version);
+        return false;
+    }
+
+    /// <summary>
+    /// Makes <paramref name="change"/> (a dig or a dump, and the slide after it) with the soil going round the bodies standing on
+    /// the ground, as gravel poured against a crate piles round it (#72, owner decision 2026-10-08: nothing is refused). The change
+    /// is tried; every node it raised that <paramref name="inTheWay"/> says would rise under or against a body is closed
+    /// (<see cref="Terrain.Blocked"/>: a tip lands only on open nodes, and a slide's deposit stops at a closed one, the body a
+    /// retaining wall, the soil staying upslope at its repose); the ground is put back and the change made again, until it raises
+    /// nothing that reaches a body. Volume is kept exactly; ground under a body may still go down (its support dug away, it falls).
+    /// Returns false only if it could not be done in <paramref name="rounds"/> tries (the ground then as it was).
+    /// </summary>
+    public bool Around(Action change, Func<Raised, bool> inTheWay, int rounds = 24)
+    {
+        var closed = new bool[Fine.Heights.Length];
+        for (int r = 0; r < rounds; r++)
+        {
+            bool kept = Try(() =>
+            {
+                Fine.Blocked = closed;
+                try { change(); } finally { Fine.Blocked = null; }
+            }, raised =>
+            {
+                bool clear = true;
+                foreach (var n in raised)
+                    if (inTheWay(n)) { closed[n.Node] = true; clear = false; }
+                return clear;
+            });
+            if (kept) return true;
+        }
         return false;
     }
 

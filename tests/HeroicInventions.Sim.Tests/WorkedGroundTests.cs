@@ -342,6 +342,57 @@ public class WorkedGroundTests
         Assert.All(Enumerable.Range(0, w.Fine.Heights.Length), k => Assert.True(w.Fine.Heights[k] >= w.Floor[k] - 1e-9));
     }
 
+    /// <summary>
+    /// <see cref="WorkedGround.Around"/> (#72, owner decision 2026-10-08: nothing is refused): soil goes round a body. A 0.5 m block's
+    /// footprint stands for the body here (the game asks Jolt). Tipped beside it, so the heap's skirt would run under its edge, the
+    /// heap piles against it and no node under it rises; tipped half over it, the soil lands on the open half; slid off a pit's wall
+    /// toward it, the deposit stops at its base. Each time the volume is kept to 1e-9, and nothing is refused. Only a bucket right
+    /// over it, every node of its footprint under the block, keeps its load.
+    /// </summary>
+    [Fact]
+    public void SoilGoesRoundABodyAndNothingIsRefused()
+    {
+        static Func<WorkedGround.Raised, bool> Block(double bx, double bz) =>
+            r => Math.Abs(r.X - bx) <= 0.25 + WorkedGround.FineCell / 2 && Math.Abs(r.Z - bz) <= 0.25 + WorkedGround.FineCell / 2;
+        bool Under(WorkedGround w, int k, double bx, double bz) => Block(bx, bz)(new WorkedGround.Raised(k, w.NodeX(k % w.Nx), w.NodeZ(k / w.Nx), 0, 0));
+
+        foreach (var (px, label) in new[] { (0.75, "beside"), (0.3, "half over") })
+        {
+            var w = Map().WorkAt(0, 0)!;
+            var before = (double[])w.Fine.Heights.Clone();
+            var s = w.Scoop(-4, 0, 0.2)!.Value;
+            double? landed = null;
+            for (int n = 0; n < 3; n++)
+            {
+                Assert.True(w.Around(() => { landed = w.Pour(px, 0, 0.2, s.Soil); w.Settle(G); }, Block(px - (px == 0.75 ? 0.75 : 0.3), 0)), label);
+                Assert.NotNull(landed);
+            }
+            for (int k = 0; k < before.Length; k++)
+                if (Under(w, k, 0, 0) && w.Fine.Heights[k] > before[k] + 1e-6) Assert.Fail($"{label}: a node under the block rose {w.Fine.Heights[k] - before[k]:0.000} m");
+            Assert.Equal(0.4, w.Net(), 9);   // three tips of 0.2 less the one scoop
+            Assert.True(w.Fine.Heights.Max() > 0.3, $"{label}: the soil heaped beside it");
+        }
+        // right over it: the bucket keeps its load
+        var o = Map().WorkAt(0, 0)!;
+        double? on = 0;
+        Assert.True(o.Around(() => on = o.Pour(0, 0, 0.2, 0), Block(0, 0)));
+        Assert.Null(on);
+        Assert.Equal(0, o.Net(), 12);
+        // a pit's wall slumping toward a block on its floor: the deposit stops at its base
+        var p = Map().WorkAt(0, 0)!;
+        p.Shape((x, z) => -Math.Clamp(2.5 - Math.Sqrt(x * x + z * z), 0, 1));
+        var floor = (double[])p.Fine.Heights.Clone();
+        Assert.True(p.Around(() => { p.Scoop(2.7, 0, 0.2); p.Settle(G); }, Block(1.2, 0)));
+        bool slid = false;
+        for (int k = 0; k < floor.Length; k++)
+        {
+            if (Under(p, k, 1.2, 0)) Assert.True(p.Fine.Heights[k] <= floor[k] + 1e-6, "the block's base holds the slide back");
+            else if (p.Fine.Heights[k] > floor[k] + 1e-3) slid = true;
+        }
+        Assert.True(slid, "the walls did slump elsewhere");
+        Assert.Equal(-p.Dug, p.Net(), 9);
+    }
+
     [Fact]
     public void PatchesMergeAndKeepTheWorkAlreadyDone()
     {
