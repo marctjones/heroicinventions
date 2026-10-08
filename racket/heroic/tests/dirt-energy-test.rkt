@@ -13,7 +13,10 @@
 ;;  - the ground model alone (no check) does give energy: a heap grown under a block leaves it inside the ground (it falls through
 ;;    and is lost), a heap's skirt run under a block's edge lifts it (m g dh, 0.11 m and some 380 J for three bucketfuls), and a
 ;;    pit's wall slumping onto its floor lifts a block standing there. That is the rover lifting a load by the back door;
-;;  - the backhoe's check refuses those same tips and that dig, and the blocks gain nothing; a tip well clear of them goes.
+;;  - the backhoe's soil goes round the blocks instead (#72, owner decision 2026-10-08: nothing is refused): tipped half over a block
+;;    or beside one it piles against it, a pit wall's slump stops at a block's base, and the blocks gain nothing. Only a bucket
+;;    held right over a block keeps its load;
+;;  - digging a bank out from under a block lets it fall: its energy goes down by m g dh (0.39 m, 1302 J), and never up.
 ;; Skipped when Godot is not installed. The water's side (soil tipped into a pond) is DirtEnergyTests.cs.
 (require rackunit racket/system racket/port racket/string racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -62,13 +65,26 @@
     (check-= (v "heap-beside.after-3.block.gain-j") (* m 9.81 dh) 1.0 "by m g dh, at rest again")
     (check-true (> (v "slide-under.after.block.gain-j") 50) "a pit's slumping wall lifts a block on its floor"))
 
-  (test-case "the backhoe refuses a tip under or beside a block and a dig whose slide would reach one; the blocks gain nothing"
-    (check-true (string-prefix? (v "guarded-dump.on-block.status") "Kept_0.20"))
-    (check-true (string-prefix? (v "guarded-dump.beside-block.status") "Kept_0.20"))
-    (check-true (string-prefix? (v "guarded-dig.status") "Dug_nothing:_the_slide"))
-    (check-equal? (v "guarded-dump.clear.status") "Dumped_0.20_m³" "a tip well clear of them goes")
-    (check-= (v "guarded-dump.clear.carried") 0 1e-12)
-    (check-= (v "guarded-dump.net-volume") 0 1e-9)
-    (for ([k '("guarded-dump.after.under" "guarded-dump.after.beside" "guarded-dig.after.block")])
+  (test-case "the backhoe's soil goes round the blocks: nothing refused but a bucket right over one, and they gain nothing"
+    (check-true (string-prefix? (v "around-dump.over.status") "Kept_0.20_m³:_the_bucket_is_over") "the one case: the whole footprint under the block")
+    (for ([k '("half-over-0" "half-over-1" "half-over-2" "beside-0" "beside-1" "beside-2")])
+      (check-equal? (v (format "around-dump.~a.status" k)) "Dumped_0.20_m³" k)
+      (check-= (v (format "around-dump.~a.carried" k)) 0 1e-12 k))
+    (check-= (v "around-dump.dumped") 1.2 1e-9)
+    (check-= (v "around-dump.net-volume") 0 1e-9 "every m3 is on the ground or in the bucket")
+    (check-true (> (v "around-dump.heap-by-under-m") 0.3) "the soil heaped against the block")
+    (check-true (string-prefix? (v "around-dig.status") "Dumped") "the dig at the pit's rim went ahead")
+    (check-= (v "around-dig.dug") 0.2 1e-9)
+    (check-true (> (v "around-dig.floor-across-pit-m") -0.95) "the wall slumped across the floor")
+    (for ([k '("around-dump.after.under" "around-dump.after.beside" "around-dig.after.block")])
       (check-true (< (v (string-append k ".peak-gain-j")) none) k)
-      (check-true (< (abs (v (string-append k ".rise-m"))) 1e-6) k))))
+      (check-true (< (v (string-append k ".gain-j")) none) k)
+      (check-true (< (abs (v (string-append k ".rise-m"))) 1e-4) k)))
+
+  (test-case "a block on a bank's edge, the bank dug out from under it, falls as gravity takes it: m g dh down, nothing up"
+    (for ([n 3]) (check-equal? (v (format "undermine.cycle-~a.status" n)) "Dumped_0.20_m³"))
+    (define m (v "undermine.after.block.mass-kg"))
+    (define dh (v "undermine.after.block.rise-m"))
+    (check-true (< dh -0.2) (format "it fell ~a m" dh))
+    (check-= (v "undermine.after.block.gain-j") (* m 9.81 dh) 1.0 "at rest again: its energy is down by m g dh")
+    (check-true (< (v "undermine.after.block.peak-gain-j") none) "and was never above where it began")))

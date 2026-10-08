@@ -19,8 +19,9 @@ namespace HeroicInventions;
 ///  - patch-made: a block resting on lumpy map ground when the rover's first dig, 8 m off, lays the fine patch under it;
 ///  - heap-under, heap-beside, slide-under: the ground model alone (no check), soil tipped under a block, tipped 0.75 m from it so
 ///    the heap's slumping skirt runs under its edge, and a pit's wall dug at the rim so the slump raises the pit's floor under a block;
-///  - guarded-dump, guarded-dig: the same tips and dig done by the rover's backhoe, whose check refuses them (and a tip well clear
-///    of the blocks, which it makes).
+///  - around-dump, around-dig: the same tips and dig done by the rover's backhoe, whose soil goes round the blocks (#72, owner
+///    decision 2026-10-08: nothing is refused but a bucket right over a body);
+///  - undermine: the backhoe digs a bank out from under a block, which falls as gravity takes it.
 /// </summary>
 public partial class DirtEnergyEval : Node3D
 {
@@ -60,7 +61,7 @@ public partial class DirtEnergyEval : Node3D
         string only = OS.GetEnvironment("HEROIC_ONLY");
         foreach (var (name, script) in new (string, Func<IEnumerable<int>>)[]
                  { ("rest", Rest), ("reshape", Reshape), ("patch-made", PatchMade), ("heap-under", HeapUnder), ("heap-beside", HeapBeside),
-                   ("slide-under", SlideUnder), ("guarded-dump", GuardedDump), ("guarded-dig", GuardedDig) })
+                   ("slide-under", SlideUnder), ("around-dump", AroundDump), ("around-dig", AroundDig), ("undermine", Undermine) })
             if (only.Length == 0 || only.Split(',').Contains(name)) _runs.Add((name, script));
         NextRun();
     }
@@ -294,42 +295,40 @@ public partial class DirtEnergyEval : Node3D
         _rover.Place(-12, -12, 0, _terrain.HeightAt(-12, -12));   // out of the way while the blocks come to rest
     }
 
-    private IEnumerable<int> GuardedDump()
+    private IEnumerable<int> Tip((double X, double Z) at, string key)
+    {
+        StandToDump(at, 270);
+        yield return Secs(1);
+        foreach (var s in Cycle()) yield return s;
+        Say($"{key}.status", _rover!.ArmStatus.Replace(' ', '_'));
+        Say($"{key}.carried", _rover.Carried);
+    }
+
+    /// <summary>The backhoe tips right over a block (it keeps its load: the one case), half over it, and beside a second one.</summary>
+    private IEnumerable<int> AroundDump()
     {
         var w = Level();
         yield return 2;
         AddRover();
-        var under = Block("under", 0, 0);
-        var beside = Block("beside", 4.75, 0);
+        Block("under", 0, 0);
+        Block("beside", 4.75, 0);
         yield return Secs(3);
         AtRest();
-        double before = w.Fine.Heights.Sum();
-        // the bucket tipped on the block
-        StandToDump((0, 0), 270);
-        yield return Secs(1);
-        foreach (var s in Cycle()) yield return s;
-        Say("on-block.status", _rover.ArmStatus.Replace(' ', '_'));
-        Say("on-block.carried", _rover.Carried);
-        // the bucket tipped 0.75 m from the second block: its skirt would run under the block's edge
-        StandToDump((4, 0), 270);
-        yield return Secs(1);
-        _rover.StartCycle();   // the bucket is full already: the dig finds it full, the dump is tried
-        yield return 1;
-        for (int n = 0; _rover.ArmBusy && n < Secs(30); n++) yield return 1;
-        Say("beside-block.status", _rover.ArmStatus.Replace(' ', '_'));
-        Say("beside-block.carried", _rover.Carried);
-        // and tipped well clear of both: it goes
-        StandToDump((2, 3), 270);
-        yield return Secs(1);
-        foreach (var s in Cycle()) yield return s;
-        Say("clear.status", _rover.ArmStatus.Replace(' ', '_'));
-        Say("clear.carried", _rover.Carried);
-        Say("net-volume", w.Net());
+        foreach (var s in Tip((0, 0), "over")) yield return s;                 // the whole footprint under the block: kept
+        for (int n = 0; n < 3; n++)
+            foreach (var s in Tip((0.3, 0), $"half-over-{n}")) yield return s;  // the open half of the footprint takes it
+        for (int n = 0; n < 3; n++)
+            foreach (var s in Tip((4, 0), $"beside-{n}")) yield return s;       // 0.75 m off: the skirt piles against it
+        Say("dumped", _rover!.Dumped);
+        Say("net-volume", w.Net() + _rover.Carried);
+        Say("heap-by-under-m", w.HeightAt(0.5, 0));
+        Say("heap-by-beside-m", w.HeightAt(4.4, 0));
         yield return Secs(1);
         Report("after");
     }
 
-    private IEnumerable<int> GuardedDig()
+    /// <summary>The backhoe digs a pit's rim: the wall slumps across the floor and stops at a block's base.</summary>
+    private IEnumerable<int> AroundDig()
     {
         var w = Level();
         w.Shape((x, z) => { double r = Math.Sqrt(x * x + z * z); return -Math.Clamp(2.5 - r, 0, 1); });   // SlideUnder's pit
@@ -338,16 +337,46 @@ public partial class DirtEnergyEval : Node3D
         Block("block", 1.2, 0);
         yield return Secs(3);
         AtRest();
-        // the teeth on the rim at (2.7, 0), the rover facing -x from outside the pit
-        double heading = 90, t = heading * Math.PI / 180, fx = -Math.Sin(t), fz = -Math.Cos(t), rx = Math.Cos(t), rz = -Math.Sin(t);
-        double x = 2.7 - DigAhead * fx - DigRight * rx, z = 0 - DigAhead * fz - DigRight * rz;
-        _rover!.Place(x, z, heading, _terrain.HeightAt(x, z));
+        StandToDig((2.7, 0), 90);   // the teeth on the rim, the rover facing -x from outside the pit
         yield return Secs(1);
         foreach (var s in Cycle()) yield return s;
-        Say("status", _rover.ArmStatus.Replace(' ', '_'));
+        Say("status", _rover!.ArmStatus.Replace(' ', '_'));
         Say("dug", _rover.Dug);
-        Say("floor-under-block-m", w.HeightAt(1.2, 0));
+        Say("floor-beside-block-m", w.HeightAt(1.6, 0));
+        Say("floor-across-pit-m", w.HeightAt(-1.6, 0));
         yield return Secs(1);
         Report("after");
+    }
+
+    /// <summary>
+    /// A block on the edge of a bank 0.6 m high, the backhoe digging the bank out from under it: it falls as gravity takes it. Its
+    /// energy goes down by m g Δh (less, while it still moves), never up.
+    /// </summary>
+    private IEnumerable<int> Undermine()
+    {
+        var w = Level();
+        w.Shape((x, z) => x >= 0 ? 0.6 : Math.Max(0, 0.6 + x * 0.7));   // a level top, its face at repose
+        yield return 2;
+        AddRover();
+        Block("block", 0.3, 0);   // spanning 0.05 to 0.55, its near face 5 cm from the edge
+        yield return Secs(3);
+        AtRest();
+        for (int n = 0; n < 3; n++)
+        {
+            StandToDig((0.25, 0), 90);
+            yield return Secs(1);
+            foreach (var s in Cycle()) yield return s;
+            Say($"cycle-{n}.status", _rover!.ArmStatus.Replace(' ', '_'));
+            yield return Secs(2);
+        }
+        Say("ground-under-block-m", w.HeightAt(0.3, 0));
+        Report("after");
+    }
+
+    private void StandToDig((double X, double Z) d, double heading)
+    {
+        double t = heading * Math.PI / 180, fx = -Math.Sin(t), fz = -Math.Cos(t), rx = Math.Cos(t), rz = -Math.Sin(t);
+        double x = d.X - DigAhead * fx - DigRight * rx, z = d.Z - DigAhead * fz - DigRight * rz;
+        _rover!.Place(x, z, heading, _terrain.HeightAt(x, z));
     }
 }

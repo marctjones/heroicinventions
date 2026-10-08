@@ -14,10 +14,11 @@ namespace HeroicInventions;
 /// bucket's volume is taken from the nodes within 0.45 m of the teeth (never from bedrock), a third of a metre deep, and where
 /// the bucket tips it is put back on the nodes there. The two volumes are the same, so what is dug is dumped, and the heap and
 /// the hole then settle by Mohr–Coulomb as the rest of the ground does. It digs and dumps wherever the arm reaches, a hole down to
-/// bedrock and a heap on a heap (#72, owner decision 2026-10-08: soil is not a load). What it won't do is raise the ground under or
-/// against a body: a dig or a dump whose ground, the slide after it included, would rise into anything loose but the rover itself is
-/// refused and the ground left as it was (<see cref="WorkedGround.Try"/>), so piling soil never lifts or shoves a load. A bucket
-/// that can't dump keeps its load.
+/// bedrock and a heap on a heap (#72, owner decision 2026-10-08: soil is not a load, and nothing is refused). Soil goes round the
+/// bodies on the ground, as gravel poured against a crate piles round it: a tip lands on the open ground of its footprint, and a
+/// slide's deposit stops at a body's base, the body a retaining wall (<see cref="WorkedGround.Around"/>), so piling soil never lifts
+/// or shoves a load. Digging away what a body rests on is allowed: it falls as gravity takes it. Only a bucket held right over a body,
+/// its whole footprint covered, keeps its load.
 /// </summary>
 public sealed partial class Rover
 {
@@ -230,10 +231,10 @@ public sealed partial class Rover
         // a slump that would rise under or against a body is refused, and the ground is left as it was (#72)
         WorkedGround.Scooped? took = null;
         string? inTheWay = null;
-        bool kept = work.Try(() => { took = work.Scoop(at.X, at.Z, room); if (took is not null) work.Settle(GroundGravity); },
-                             raised => (inTheWay = BodyInTheWay(raised)) is null);
+        bool done = work.Around(() => { took = work.Scoop(at.X, at.Z, room); if (took is not null) work.Settle(GroundGravity); },
+                                raised => BodyAt(raised) is { } name && (inTheWay = name) is not null);
         TickProfile.Stop("backhoe-scoop", t);
-        if (!kept) { Refuse($"Dug nothing: the slide would heap soil against the {inTheWay}"); return; }
+        if (!done) { Refuse($"Dug nothing: the soil found no way to settle round the {inTheWay}"); return; }
         if (took is not { } scooped) { Refuse($"Dug nothing: {soil.Material} under the teeth is too hard for the backhoe"); return; }
         _carriedSoil = scooped.Soil;
         Carried += scooped.Volume;
@@ -255,11 +256,15 @@ public sealed partial class Rover
         long t = TickProfile.Start();
         double? landed = null;
         string? inTheWay = null;
-        bool kept = work.Try(() => { landed = work.Pour(at.X, at.Z, m3, _carriedSoil); if (landed is not null) work.Settle(GroundGravity); },
-                             raised => (inTheWay = BodyInTheWay(raised)) is null);
+        bool done = work.Around(() => { landed = work.Pour(at.X, at.Z, m3, _carriedSoil); if (landed is not null) work.Settle(GroundGravity); },
+                                raised => BodyAt(raised) is { } name && (inTheWay = name) is not null);
         TickProfile.Stop("backhoe-pour", t);
-        if (!kept) { Refuse($"Kept {Carried:0.00} m³: it would heap soil under or against the {inTheWay}"); return; }
-        if (landed is null) { Refuse("Kept the load: no ground to tip it on"); return; }
+        if (!done) { Refuse($"Kept {Carried:0.00} m³: the soil found no way to settle round the {inTheWay}"); return; }
+        if (landed is null)
+        {
+            Refuse(inTheWay is null ? "Kept the load: no ground to tip it on" : $"Kept {Carried:0.00} m³: the bucket is over the {inTheWay}");
+            return;
+        }
         Dumped += m3;
         Carried = 0;
         Cycles++;
@@ -271,27 +276,25 @@ public sealed partial class Rover
     private const float BodySlack = 0.03f, BodyClearance = 0.05f;
 
     /// <summary>
-    /// The name of the first loose body (a rigid body, frozen or not, other than the rover's own chassis and wheels) that the ground,
-    /// risen at these nodes, would reach: a column a fine cell across over each node, from just under its old height to a little over
-    /// its new one. Null if there is none. (#72: the rover may move soil anywhere, but not lift or push a load with it.)
+    /// The name of a loose body (a rigid body, frozen or not, other than the rover's own chassis and wheels) that the ground, risen at
+    /// this node, would reach: a column a fine cell across over it, from just under its old height to a little over its new one.
+    /// Null if there is none. (#72: the rover may move soil anywhere, but not lift or push a load with it.)
     /// </summary>
-    private string? BodyInTheWay(IReadOnlyList<WorkedGround.Raised> raised)
+    private string? BodyAt(WorkedGround.Raised r)
     {
         if (!IsInsideTree()) return null;
         var space = GetWorld3D().DirectSpaceState;
         var exclude = new Godot.Collections.Array<Rid> { Chassis.GetRid() };
         foreach (var w in _wheels) exclude.Add(w.GetRid());
-        var box = new BoxShape3D();
-        var query = new PhysicsShapeQueryParameters3D { Shape = box, CollideWithAreas = false, CollideWithBodies = true, Exclude = exclude };
         float cell = (float)WorkedGround.FineCell;
-        foreach (var r in raised)
+        float lo = (float)r.Before - BodySlack, hi = (float)r.After + BodyClearance;
+        var query = new PhysicsShapeQueryParameters3D
         {
-            float lo = (float)r.Before - BodySlack, hi = (float)r.After + BodyClearance;
-            box.Size = new Vector3(cell, hi - lo, cell);
-            query.Transform = new Transform3D(Basis.Identity, new Vector3((float)r.X, (lo + hi) / 2, (float)r.Z));
-            foreach (var hit in space.IntersectShape(query, 32))
-                if (hit["collider"].AsGodotObject() is RigidBody3D body) return body.Name;   // frozen too: it would be shoved when let go
-        }
+            Shape = new BoxShape3D { Size = new Vector3(cell, hi - lo, cell) }, CollideWithAreas = false, CollideWithBodies = true, Exclude = exclude,
+            Transform = new Transform3D(Basis.Identity, new Vector3((float)r.X, (lo + hi) / 2, (float)r.Z)),
+        };
+        foreach (var hit in space.IntersectShape(query, 32))
+            if (hit["collider"].AsGodotObject() is RigidBody3D body) return body.Name;   // frozen too: it would be shoved when let go
         return null;
     }
 
