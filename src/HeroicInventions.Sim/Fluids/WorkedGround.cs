@@ -15,8 +15,8 @@ namespace HeroicInventions.Sim.Fluids;
 /// coarse mesh's triangles included, so on the day it is made it is the ground that was there, to the last bit.
 ///
 /// The patch's outer ring of nodes sits on the coarse cell centres and is never changed; the rover works at least
-/// <see cref="Margin"/> m inside it. Nothing else of the map changes: the coarse heights, soils and water are as they were,
-/// so a world where no one digs is untouched.
+/// <see cref="Margin"/> m inside it. The coarse heights and soils are as they were; the water on the map cells wholly inside the
+/// patch moves onto the patch's own fine grid (<see cref="PatchWater"/>, #200), every drop of it. A world where no one digs is untouched.
 ///
 /// Free effort must not make energy (#72), but a backhoe lifts spoil out of its own hole. Every cell remembers the level its top soil may be carried to
 /// (<see cref="Terrain.Ceiling"/>): ground never covered is the level it had when the patch was made (so spoil may be lifted out of a hole
