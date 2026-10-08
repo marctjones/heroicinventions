@@ -15,8 +15,8 @@ namespace HeroicInventions.Sim.Fluids;
 /// coarse mesh's triangles included, so on the day it is made it is the ground that was there, to the last bit.
 ///
 /// The patch's outer ring of nodes sits on the coarse cell centres and is never changed; the rover works at least
-/// <see cref="Margin"/> m inside it. Nothing else of the map changes: the coarse heights, soils and water are as they were,
-/// so a world where no one digs is untouched.
+/// <see cref="Margin"/> m inside it. The coarse heights and soils are as they were; the water on the map cells wholly inside the
+/// patch moves onto the patch's own fine grid (<see cref="PatchWater"/>, #200), every drop of it. A world where no one digs is untouched.
 ///
 /// Free effort must not make energy (#72), but a backhoe lifts spoil out of its own hole. Every cell remembers the level its top soil may be carried to
 /// (<see cref="Terrain.Ceiling"/>): ground never covered is the level it had when the patch was made (so spoil may be lifted out of a hole
@@ -55,6 +55,9 @@ public sealed class WorkedGround
     public double[] Original { get; }
     /// <summary>The lowest each node may be cut: bedrock is never cut, and ground that was bedrock keeps its level under any spoil on it.</summary>
     public double[] Floor { get; }
+
+    /// <summary>The water standing on the patch (#200), on a grid of its fine cells nested in the map's; null until the map's water first steps with the patch there.</summary>
+    public PatchWater? Water { get; internal set; }
 
     /// <summary>m³ taken out of the patch and put back into it since it was made (the totals of patches merged into it included).</summary>
     public double Dug { get; private set; }
@@ -122,6 +125,19 @@ public sealed class WorkedGround
             w.Dug += p.Dug; w.Dumped += p.Dumped;
         }
         w.Fine.Touch();
+        // the water on the parts goes with them, cell for cell: their grids lie on the same lattice as the merged one's (#200)
+        foreach (var p in parts)
+        {
+            if (p.Water is not { Ci: > 0, Cj: > 0 } from) continue;
+            var to = w.Water ??= new PatchWater(w);
+            int di = (from.I0 - to.I0) * w.K, dj = (from.J0 - to.J0) * w.K;
+            for (int j = 0; j < from.Bed.Nz; j++)
+                for (int i = 0; i < from.Bed.Nx; i++)
+                {
+                    var (h, qx, qz) = from.Water.CellState(i + j * from.Bed.Nx);
+                    to.Water.SetCell(i + di + (j + dj) * to.Bed.Nx, h, qx, qz);
+                }
+        }
         return w;
     }
 
@@ -293,9 +309,10 @@ public sealed class WorkedGround
     internal const int SaveVersion = 1;
 
     /// <summary>
-    /// The patch as a save holds it: <c>(patch (box I0 J0 I1 J1) (dug V) (dumped V) (heights …) (carry (k original ceiling) …) (rock (k level) …) (soil (value count) …) (loose k …))</c>.
+    /// The patch as a save holds it: <c>(patch (box I0 J0 I1 J1) (dug V) (dumped V) (heights …) (carry (k original ceiling) …) (rock (k level) …) (soil (value count) …) (loose k …) [(water (k depth qx qz) …)])</c>.
     /// Heights are all written; a node's original height and carry ceiling only where they differ from its height (an untouched
-    /// node has all three the same), the floor only where it is not minus infinity (bedrock), the soil as runs, loose flags as the nodes that are.
+    /// node has all three the same), the floor only where it is not minus infinity (bedrock), the soil as runs, loose flags as the nodes that are,
+    /// and the water standing on it (#200), cell by cell of its grid where there is any (a dry patch has no water field).
     /// Numbers are written to the digit that reads back as the same double.
     /// </summary>
     internal SList Save()
@@ -318,10 +335,13 @@ public sealed class WorkedGround
             for (run = 1; k + run < h.Length && Fine.Soil[k + run] == Fine.Soil[k]; run++) { }
             soil.Add(new SList([N(Fine.Soil[k]), N(run)]));
         }
-        return new SList([new SSymbol("patch"),
+        var items = new List<SExpr> { new SSymbol("patch"),
             L("box", new[] { Bi0, Bj0, Bi1, Bj1 }.Select(x => N(x))),
             L("dug", [N(Dug)]), L("dumped", [N(Dumped)]),
-            L("heights", h.Select(N)), L("carry", carry), L("rock", rock), L("soil", soil), L("loose", loose)]);
+            L("heights", h.Select(N)), L("carry", carry), L("rock", rock), L("soil", soil), L("loose", loose) };
+        if (Water?.Water.WetCells().Select(c => (SExpr)new SList([N(c.Cell), N(c.H), N(c.Qx), N(c.Qz)])).ToList() is { Count: > 0 } wet)
+            items.Add(L("water", wet));
+        return new SList(items);
     }
 
     /// <summary>A patch rebuilt from <see cref="Save"/>'s form over <paramref name="ground"/> (whose own heights and soils are already the saved ones).</summary>
@@ -362,6 +382,17 @@ public sealed class WorkedGround
         foreach (var e in saved.Field("loose")!.Items.Skip(1)) w.Fine.Loose[Node(e is SNumber k ? k.Value : -1)] = true;
         w.Dug = Nums("dug")[0]; w.Dumped = Nums("dumped")[0];
         w.Fine.Touch();
+        if (saved.Field("water") is { } water)
+        {
+            var grid = w.Water = new PatchWater(w);
+            int cells = grid.Bed.Nx * grid.Bed.Nz;
+            foreach (var e in water.Items.Skip(1))
+            {
+                if (e is not SList { Items: [SNumber k, SNumber d, SNumber qx, SNumber qz] } || k.Value < 0 || k.Value >= cells || k.Value != Math.Floor(k.Value))
+                    throw new FormatException("a water entry is (CELL DEPTH QX QZ) over the patch's grid");
+                grid.Water.SetCell((int)k.Value, d.Value, qx.Value, qz.Value);
+            }
+        }
         return w;
     }
 }

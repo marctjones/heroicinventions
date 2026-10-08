@@ -34,8 +34,12 @@ public sealed partial class ShallowWater2D
     public double Clipped { get; private set; }     // m³ lost to clipping a depth at zero (should stay ~0)
     public double Time { get; private set; }
 
-    public ShallowWater2D(Terrain ground)
+    public ShallowWater2D(Terrain ground) : this(ground, nested: false) { }
+
+    /// <summary>A nested grid (#200) runs no sediment of its own: its bed is sampled from a worked patch, not ground the water can carry.</summary>
+    internal ShallowWater2D(Terrain ground, bool nested)
     {
+        if (nested) _erodes = false;
         Ground = ground;
         Manning = ground.Roughness;
         int n = ground.Count;
@@ -47,13 +51,38 @@ public sealed partial class ShallowWater2D
 
     public IReadOnlyList<double> Depths => _h;
     public (double U, double V) VelocityAt(int cell) => (ShallowWater.Velocity(_h[cell], _qx[cell]), ShallowWater.Velocity(_h[cell], _qz[cell]));
-    public double DepthAt(double x, double z) => Ground.CellAt(x, z) is { } c ? _h[c] : 0;
+    public double DepthAt(double x, double z) =>
+        Ground.Worked.Count > 0 && FineAt(x, z) is { } fine ? fine.Grid._h[fine.Cell] : Ground.CellAt(x, z) is { } c ? _h[c] : 0;
     public double SurfaceAt(int cell) => Ground.Heights[cell] + _h[cell];
     /// <summary>m³ standing on the ground.</summary>
-    public double Volume => _h.Sum() * Ground.Cell * Ground.Cell;
+    public double Volume
+    {
+        get
+        {
+            double v = _h.Sum() * Ground.Cell * Ground.Cell;
+            foreach (var p in Ground.Worked) if (p.Water is { } w) v += w.Water.Volume;   // what stands in the rover's trenches (#200)
+            return v;
+        }
+    }
     /// <summary>m² of ground under more than a millimetre of water.</summary>
-    public double WetArea => _h.Count(h => h > 1e-3) * Ground.Cell * Ground.Cell;
-    public double MaxDepth => _h.Max();
+    public double WetArea
+    {
+        get
+        {
+            double a = _h.Count(h => h > 1e-3) * Ground.Cell * Ground.Cell;
+            foreach (var p in Ground.Worked) if (p.Water is { } w) a += w.Water.WetArea;
+            return a;
+        }
+    }
+    public double MaxDepth
+    {
+        get
+        {
+            double d = _h.Max();
+            foreach (var p in Ground.Worked) if (p.Water is { } w) d = Math.Max(d, w.Water.MaxDepth);
+            return d;
+        }
+    }
 
     /// <summary>Sets the water on the ground: a depth at each cell centre (x, z), m. Counted as poured.</summary>
     public void Fill(Func<double, double, double> depthAt)
@@ -66,6 +95,16 @@ public sealed partial class ShallowWater2D
                 _h[c] = Math.Max(0, depthAt(Ground.CellX(i), Ground.CellZ(j)));
                 _qx[c] = _qz[c] = 0;
             }
+        if (Ground.Worked.Count > 0)
+        {
+            // over a patch the water stands on the fine ground (#200): its cells are filled at their own centres, the coarse ones under it left dry
+            Sync();
+            foreach (var p in _nested)
+            {
+                ForUnder(p, c => _h[c] = 0);
+                p.Water.Fill(depthAt);
+            }
+        }
         Poured += Volume - before;
     }
 
@@ -80,12 +119,31 @@ public sealed partial class ShallowWater2D
                 var (u, w) = velocityAt(Ground.CellX(i), Ground.CellZ(j));
                 (_qx[c], _qz[c]) = (_h[c] * u, _h[c] * w);
             }
+        foreach (var p in _nested)
+        {
+            ForUnder(p, c => _qx[c] = _qz[c] = 0);
+            var fine = p.Water;
+            for (int j = 0; j < fine.Ground.Nz; j++)
+                for (int i = 0; i < fine.Ground.Nx; i++)
+                {
+                    int c = i + j * fine.Ground.Nx;
+                    var (u, w) = velocityAt(fine.Ground.CellX(i), fine.Ground.CellZ(j));
+                    (fine._qx[c], fine._qz[c]) = (fine._h[c] * u, fine._h[c] * w);
+                }
+        }
     }
 
     /// <summary>Pours m³ onto the ground at a world point (a channel running off a machine onto it). Off the map, it runs away: false.</summary>
     public bool AddWater(double x, double z, double m3)
     {
         if (m3 <= 0) return true;
+        if (Ground.Worked.Count > 0 && FineAt(x, z) is { } fine)
+        {
+            // onto a patch's fine ground (#200): into the fine cell there
+            fine.Grid._h[fine.Cell] += m3 / (fine.Grid.Ground.Cell * fine.Grid.Ground.Cell);
+            Poured += m3;
+            return true;
+        }
         if (Ground.CellAt(x, z) is not { } c) return false;
         _h[c] += m3 / (Ground.Cell * Ground.Cell);
         Poured += m3;
@@ -98,7 +156,15 @@ public sealed partial class ShallowWater2D
     /// </summary>
     public double TakeWater(double x, double z, double m3)
     {
-        if (m3 <= 0 || Ground.CellAt(x, z) is not { } c) return 0;
+        if (m3 <= 0) return 0;
+        if (Ground.Worked.Count > 0 && FineAt(x, z) is { } fine)
+        {
+            double took = fine.Grid.TakeWater(x, z, m3);
+            fine.Grid.Drained -= took;   // on this ledger, not the nested grid's
+            Drained += took;
+            return took;
+        }
+        if (Ground.CellAt(x, z) is not { } c) return 0;
         double area = Ground.Cell * Ground.Cell, taken = Math.Min(m3, _h[c] * area);
         if (taken <= 0) return 0;
         double left = _h[c] - taken / area;
@@ -123,20 +189,23 @@ public sealed partial class ShallowWater2D
 
     public void Step(double dt)
     {
+        Sync();
+        bool nested = _nested.Count > 0;
+        if (nested) PrepareNested();
         for (double t = 0; t < dt - 1e-12;)
         {
-            double sub = Math.Min(dt - t, StableStep());
+            double sub = Math.Min(dt - t, nested ? CoupledStableStep() : StableStep());
             foreach (var s in Ground.Sources) AddWater(s.X, s.Z, s.Flow * sub);
-            Substep(sub);
+            if (nested) CoupledSubstep(sub); else Substep(sub);
             t += sub;
         }
         Time += dt;
     }
 
-    /// <summary>The longest step the waves allow: 0.45 · cell / (fastest speed + wave speed).</summary>
-    private double StableStep()
+    /// <summary>The longest step the waves allow: 0.45 · cell / (fastest speed + wave speed), no less than <paramref name="floor"/> m/s taken as the fastest.</summary>
+    private double StableStep(double floor = 0)
     {
-        double fastest = 0;
+        double fastest = floor;
         for (int c = 0; c < _h.Length; c++)
         {
             double h = _h[c];
@@ -149,11 +218,20 @@ public sealed partial class ShallowWater2D
 
     private void Substep(double dt)
     {
+        _pendingDt = dt;
+        Faces();
+        Update(dt);
+        if (_erodes ??= Ground.Soils.Any(s => s.Erodible)) MoveSediment(dt);
+    }
+
+    /// <summary>The fluxes across every face from the water as it stands (a face next to a cell under a patch's fine water, #200, is left at nothing here: the coupling fills it).</summary>
+    private void Faces()
+    {
         int nx = Ground.Nx, nz = Ground.Nz;
         var z = Ground.Heights;
-        double g = Gravity, dx = Ground.Cell;
+        double g = Gravity;
         bool open = Ground.OpenEdges;
-        _pendingDt = dt;
+        var off = _inactive;
 
         // x-faces: face i of row j lies between cells (i-1, j) and (i, j)
         for (int j = 0; j < nz; j++)
@@ -162,7 +240,8 @@ public sealed partial class ShallowWater2D
                 int f = i + j * (nx + 1);
                 int l = i - 1 + j * nx, r = i + j * nx;
                 bool lIn = i > 0, rIn = i < nx;
-                if ((!lIn || _h[l] <= ShallowWater.Dry) && (!rIn || _h[r] <= ShallowWater.Dry))
+                if ((!lIn || _h[l] <= ShallowWater.Dry) && (!rIn || _h[r] <= ShallowWater.Dry)
+                    || off is not null && (lIn && off[l] || rIn && off[r]))
                 { _massX[f] = _momX[f] = _momXr[f] = _tanX[f] = 0; continue; }
                 if (lIn && rIn)
                 {
@@ -180,7 +259,8 @@ public sealed partial class ShallowWater2D
                 int f = j + i * (nz + 1);
                 int l = i + (j - 1) * nx, r = i + j * nx;
                 bool lIn = j > 0, rIn = j < nz;
-                if ((!lIn || _h[l] <= ShallowWater.Dry) && (!rIn || _h[r] <= ShallowWater.Dry))
+                if ((!lIn || _h[l] <= ShallowWater.Dry) && (!rIn || _h[r] <= ShallowWater.Dry)
+                    || off is not null && (lIn && off[l] || rIn && off[r]))
                 { _massZ[f] = _momZ[f] = _momZr[f] = _tanZ[f] = 0; continue; }
                 if (lIn && rIn)
                 {
@@ -191,12 +271,20 @@ public sealed partial class ShallowWater2D
                 }
                 else Edge(lIn ? l : r, lIn ? 1 : -1, _qz, _qx, out _massZ[f], out _momZ[f], out _momZr[f], out _tanZ[f], g, open);
             }
+    }
 
+    /// <summary>Each cell from the fluxes across its faces, then its friction and what its soil soaks away; cells under a patch's fine water (#200) are left dry.</summary>
+    private void Update(double dt)
+    {
+        int nx = Ground.Nx, nz = Ground.Nz;
+        double g = Gravity, dx = Ground.Cell;
+        var off = _inactive;
         double k = dt / dx, area = dx * dx;
         for (int j = 0; j < nz; j++)
             for (int i = 0; i < nx; i++)
             {
                 int c = i + j * nx;
+                if (off is not null && off[c]) continue;
                 int fw = i + j * (nx + 1), fe = fw + 1, fs = j + i * (nz + 1), fn = fs + 1;
                 if (_massX[fw] == 0 && _massX[fe] == 0 && _massZ[fs] == 0 && _massZ[fn] == 0 && _h[c] <= ShallowWater.Dry
                     && _momXr[fw] == 0 && _momX[fe] == 0 && _momZr[fs] == 0 && _momZ[fn] == 0) continue;
@@ -220,7 +308,6 @@ public sealed partial class ShallowWater2D
                 _qx[c] = qx * damp;
                 _qz[c] = qz * damp;
             }
-        if (_erodes ??= Ground.Soils.Any(s => s.Erodible)) MoveSediment(dt);
     }
     private bool? _erodes;
 
