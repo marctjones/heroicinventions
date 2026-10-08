@@ -852,7 +852,9 @@ public partial class Main : Node3D
         ClearLinks();
         ClearRover();   // the player's rover goes with its world (Main.Rover.cs)
         ClearGround();
-        foreach (var v in _views) v.QueueFree();
+        // out of the tree now, not at the frame's end: a world loaded straight after (a save's load) names its views by
+        // their labels, and a name still taken makes Godot call the new one @Node3D@390, which no save then matches
+        foreach (var v in _views) { v.GetParent()?.RemoveChild(v); v.QueueFree(); }
         if (_current is not null && _views.Contains(_current)) _current = null;
         _views.Clear();
         _viewMachine.Clear();
@@ -868,7 +870,7 @@ public partial class Main : Node3D
     private void LoadWorld(WorldDef world)
     {
         ClearWorld();
-        _current?.QueueFree();
+        if (_current is not null) { _current.GetParent()?.RemoveChild(_current); _current.QueueFree(); }
         _current = null;
         _byName.Clear();
         LoadGround(world);
@@ -1080,7 +1082,7 @@ public partial class Main : Node3D
     {
         _machinesWatched++;
         ClearWorld();
-        _current?.QueueFree();
+        if (_current is not null) { _current.GetParent()?.RemoveChild(_current); _current.QueueFree(); }
         _byName.Clear();
 
         var def = MachineDef.Parse(Godot.FileAccess.GetFileAsString(_machineFiles[name]));
@@ -1220,7 +1222,7 @@ public partial class Main : Node3D
     private void SelectBuildMode()
     {
         ClearWorld();
-        _current?.QueueFree();
+        if (_current is not null) { _current.GetParent()?.RemoveChild(_current); _current.QueueFree(); }
         _current = null;
         _currentName = null;
         _byName.Clear();
@@ -1267,7 +1269,7 @@ public partial class Main : Node3D
     private void DeselectMachine()
     {
         ClearWorld();
-        _current?.QueueFree();
+        if (_current is not null) { _current.GetParent()?.RemoveChild(_current); _current.QueueFree(); }
         _current = null;
         _currentName = null;
         _byName.Clear();

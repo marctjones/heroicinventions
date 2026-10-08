@@ -49,7 +49,13 @@
     (define w1 (worked-of (p "s1.save")))
     (check-= (car (numbers-after w1 "dug")) 0.2 1e-9)
     (check-= (car (numbers-after w1 "dumped")) 0.2 1e-9)
-    (check-true (for/or ([l loaded]) (regexp-match? #rx"^\\[terrain\\] 1 worked patch" l)) "the view made the loaded patch's mesh and body"))
+    (check-true (for/or ([l loaded]) (regexp-match? #rx"^\\[terrain\\] 1 worked patch" l)) "the view made the loaded patch's mesh and body")
+    ;; every saved entry found its place: the cargo crates' views kept their labels through the reload (they were named
+    ;; @Node3D@390.. while the old views still held the names, so no crate's state came back), and the save written after
+    ;; the load names them as the world does
+    (check-true (for/or ([l loaded]) (regexp-match? #rx"^\\[save\\] loaded " l)) "it loaded")
+    (check-false (for/or ([l loaded]) (regexp-match? #rx"found nothing to set" l)) "every entry of the save found its place")
+    (check-true (regexp-match? #rx"\\(machine battery-bank " (file->string (p "s2.save"))) "the save after a load keeps the crates' labels"))
 
   (test-case "the loaded rover stands in the hole, which is not the ground that was there"
     (check-true (< (pitch (first (rover-lines loaded))) 0) "pitch on the dug ground")

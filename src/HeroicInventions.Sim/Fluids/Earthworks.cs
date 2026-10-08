@@ -196,7 +196,7 @@ public sealed partial class Terrain
     private bool _stood;
     private double[]? _stepBefore;                 // the ground as the collapse found it, when it will leave boulders (#88)
     private HashSet<int>? _stepFailed;
-    private readonly Dictionary<int, int> _stepMade = [];
+    [NonSerialized] private readonly Dictionary<int, int> _stepMade = [];   // filled only in the tick that finishes a collapse and read by nothing after: not state a save needs
 
     /// <summary>Whether <see cref="SettleStep"/> has found the whole map standing.</summary>
     public bool Stood => _stood;
