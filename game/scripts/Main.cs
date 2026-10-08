@@ -158,7 +158,7 @@ public partial class Main : Node3D
         ["heliostats"] = new(new Vector3(7.5f, 3.2f, 5.5f), new Vector3(0, 0.6f, 0), 50),
         ["night-heat"] = new(new Vector3(-1.4f, 2.6f, 8.5f), new Vector3(-1.4f, 0.35f, 0), 50),   // the three vaults and the rock in the sun, cut away at the front (+z)
         ["hot-water-night"] = new(new Vector3(0, 2.4f, 6.5f), new Vector3(0, 0.5f, 0), 50),
-        ["bimetal-night"] = new(new Vector3(0, 2.2f, 6.5f), new Vector3(0, 0.45f, 0), 50),   // the ideal, strip and warm vaults, cut away at the front (+z)
+        ["bimetal-night"] = new(new Vector3(0.4f, 1.5f, 4.2f), new Vector3(0.4f, 0.3f, 0), 50),   // the strip vault in the middle, the ideal and warm ones at the sides, cut away at the front (+z)
     };
 
     /// <summary>
