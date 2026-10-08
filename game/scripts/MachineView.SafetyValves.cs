@@ -120,8 +120,8 @@ public partial class MachineView
             plume.Emitting = valve.Flow > 1e-6;
             if (plume.ProcessMaterial is ParticleProcessMaterial m)
             {
-                // exit speed scales with the flow, so a harder blow throws the plume higher
-                float v = 0.4f + 2.5f * (float)valve.Opening;
+                // exit speed is the one jet rule: it grows as the square root of the pressure pushing (Skins.JetSpeed)
+                float v = Skins.JetSpeed(Runtime.SafetyValves.Values.FirstOrDefault(x => x.Valve == valve).Boiler?.GaugePressure ?? 0);
                 m.InitialVelocityMin = v * 0.8f;
                 m.InitialVelocityMax = v * 1.2f;
             }
@@ -132,7 +132,7 @@ public partial class MachineView
             // the margin on the shell: the outline warms to amber and reddens as the pressure goes from 60% to 100% of what it holds now (art direction 4.7)
             if (!boiler.Burst && body.MaterialOverride is StandardMaterial3D shell)
             {
-                Skins.Rim(shell, boiler.GaugePressure / Math.Max(1.0, boiler.BurstLimit));
+                Skins.Rim(shell, BoilerShare(boiler));   // the same share the boiler's dial reads (#170)
                 Skins.Glow(shell, boiler.Temperature);   // boiled dry over a fire, the shell itself glows (#105)
             }
             wreck.Visible = boiler.Burst;

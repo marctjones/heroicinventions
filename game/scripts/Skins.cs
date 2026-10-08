@@ -421,7 +421,7 @@ public static class Skins
     /// </summary>
     public static void Rim(StandardMaterial3D mat, double share)
     {
-        float t = Mathf.Clamp(((float)share - 0.6f) / 0.4f, 0, 1);
+        float t = Mathf.Clamp(((float)share - RimFrom) / (1 - RimFrom), 0, 1);
         bool seeThrough = mat.Transparency != BaseMaterial3D.TransparencyEnum.Disabled;
         // at rest: the plain line, or none on glass (a hull behind glass would show through it)
         if (t <= 0) { mat.NextPass = seeThrough ? null : Outline; return; }
@@ -685,5 +685,64 @@ public static class Skins
         var m = OutlineIn(new Color(0.35f, 0.9f, 1f));
         m.SetShaderParameter("width", 0.0075f);
         return m;
+    }
+
+    // ── pressure you can see, and scales on vessels (#170, #174) ─────────────────────────────────────
+
+    /// <summary>Where the strain rim starts (<see cref="Rim"/>): 60% of a limit. A dial's amber mark stands here.</summary>
+    public const float RimFrom = 0.6f;
+
+    /// <summary>The trigger's amber: a mark where something watches a level, and the dial's 60% mark where the strain rim begins.</summary>
+    public static readonly Color Watch = new(1f, 0.75f, 0.2f);
+    /// <summary>Ink for scale marks; the dial's below-ambient needle is <see cref="Vacuum"/> blue.</summary>
+    public static readonly Color Ink = new(0.1f, 0.08f, 0.07f), Vacuum = new(0.2f, 0.45f, 0.95f);
+
+    /// <summary>
+    /// The one dial rule: a needle at <paramref name="share"/> of the scale (0 to 1) sits 270 degrees round, from lower
+    /// left over the top to lower right, as a rotation about the dial's axis. A share below zero (under the air outside)
+    /// swings it the other way from zero, a quarter turn at a full vacuum (share -1), and the caller colours it blue.
+    /// </summary>
+    public static float GaugeAngle(double share) =>
+        share >= 0 ? 135f - 270f * (float)Math.Min(share, 1) : 135f + 90f * (float)Math.Min(-share, 1);
+
+    /// <summary>
+    /// How a membrane room stands for its gauge pressure (Pa) over the air outside: slack and nearly flat at nothing,
+    /// full height by 1 kPa, then billowing out up to 8% wider and taller as it fills (saturating by about 30 kPa).
+    /// Returns the height scale and the width scale.
+    /// </summary>
+    public static (float Height, float Width) Billow(double gauge)
+    {
+        if (gauge <= 1000) return (0.12f + 0.88f * (float)Math.Clamp(gauge / 1000, 0, 1), 1f);
+        float b = 0.08f * (1 - (float)Math.Exp(-(gauge - 1000) / 10_000));
+        return (1 + b, 1 + b);
+    }
+
+    /// <summary>
+    /// How fast a gas leaves a hole for a pressure difference (Pa): the speed grows as the square root of it (Bernoulli)
+    /// and is held at 1 atmosphere's (choked) by the hiss, from a gentle 0.4 m/s drift to 3 m/s. The one rule for a
+    /// room's leak, a door's rush and a safety valve's plume, so a harder push always throws farther.
+    /// </summary>
+    public static float JetSpeed(double deltaPa) => 0.4f + 2.6f * (float)Math.Sqrt(Math.Clamp(Math.Abs(deltaPa) / 101_325, 0, 1));
+
+    /// <summary>The smallest 1-2-5 step (times a power of ten) at which <paramref name="range"/> holds no more than <paramref name="most"/> marks.</summary>
+    public static double NiceStep(double range, int most)
+    {
+        if (range <= 0) return 1;
+        double mag = Math.Pow(10, Math.Floor(Math.Log10(range / most)));
+        foreach (double m in new[] { 1, 2, 5, 10 })
+            if (range / (m * mag) <= most + 1e-9) return m * mag;
+        return 10 * mag;
+    }
+
+    /// <summary>One merged mesh of box bars in a single flat colour with its own unlit material: a vessel's marks, a dial's ticks.</summary>
+    public static MeshInstance3D Bars(IEnumerable<(Vector3 Centre, Vector3 Size)> bars, Color color)
+    {
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        foreach (var (c, size) in bars)
+            st.AppendFrom(new BoxMesh { Size = size }, 0, new Transform3D(Basis.Identity, c));
+        var mat = Shapes.Mat(color, roughness: 1, outline: false);
+        mat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
+        return new MeshInstance3D { Mesh = st.Commit(), MaterialOverride = mat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
     }
 }

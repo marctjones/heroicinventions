@@ -61,7 +61,15 @@ public partial class MachineView
             hinge.RotationDegrees = new Vector3(0, 90 * (float)door.Open, 0);
             double flow = Math.Abs(door.Flow);
             rush.Emitting = flow > 1e-6;
-            if (rush.Emitting) rush.AmountRatio = (float)Math.Clamp(flow / full, 0.1, 1);
+            if (rush.Emitting)
+            {
+                rush.AmountRatio = (float)Math.Clamp(flow / full, 0.1, 1);
+                if (rush.ProcessMaterial is ParticleProcessMaterial pm)   // the one jet rule (Skins.JetSpeed)
+                {
+                    float speed = Skins.JetSpeed(door.A.Pressure - door.B.Pressure);
+                    pm.InitialVelocityMin = speed * 0.8f; pm.InitialVelocityMax = speed * 1.2f;
+                }
+            }
         }
         foreach (var (pump, wheel, label) in _gasPumpViews)
         {
