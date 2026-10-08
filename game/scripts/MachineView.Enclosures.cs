@@ -93,11 +93,12 @@ public partial class MachineView
             float taut = (float)Math.Clamp(gauge / 1000, 0, 1);
             if (v.Membrane) v.Walls.Scale = new Vector3(1, 0.12f + 0.88f * taut, 1);
             float frost = (float)Math.Clamp(-room.Temperature / 5, 0, 1);
-            v.Skin.AlbedoColor = v.Wall.Lerp(new Color(0.97f, 0.98f, 1f), frost) with { A = 0.22f + 0.2f * frost };
+            v.Skin.AlbedoColor = Skins.Warmed(v.Wall.Lerp(new Color(0.97f, 0.98f, 1f), frost), room.Temperature) with { A = 0.22f + 0.2f * frost };   // frost whitens it, warmth washes it (#169)
             v.Hiss.Emitting = room.Flow > 0;
             if (room.Flow > 0) v.Hiss.AmountRatio = (float)Math.Clamp(room.Flow / v.FullFlow, 0.1, 1);
             if (v.Heater?.MaterialOverride is StandardMaterial3D hm)
             {
+                Skins.Warm(hm, room.Heater > 0 ? 1100 : room.Temperature);   // an unlit heater is as warm as the room
                 Skins.Glow(hm, room.Heater > 0 ? 1100 : room.Temperature);   // a lit heater glows bright orange, as iron does at 1,100 °C
             }
             string o2 = room.TotalMoles > 0 ? $"{room.Moles[0] / room.TotalMoles * 100:0.#}% O₂" : "empty";
