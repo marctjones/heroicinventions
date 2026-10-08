@@ -79,7 +79,7 @@ public partial class Main : Node3D
         ["ball-ramp"] = new(new Vector3(4.5f, 1.6f, -1.4f), new Vector3(0f, 0.2f, -2.0f), 55),
         ["wake-clock"] = new(new Vector3(0.2f, 0.9f, 3.2f), new Vector3(0f, 0.45f, 0), 50),
         ["sand-timer"] = new(new Vector3(0.6f, 1.25f, 2.9f), new Vector3(0.6f, 0.7f, 0), 50),   // close enough that the three timers, not the scale figure, fill the frame (#190)
-        ["ratchet-windlass"] = new(new Vector3(4.3f, 1.6f, -1.5f), new Vector3(0f, 1.08f, -1.5f), 55),
+        ["ratchet-windlass"] = new(new Vector3(1.55f, 1.7f, 4.2f), new Vector3(1.55f, 1.1f, 0), 55),   // from the front: four windlasses in a row, ratchets facing the lens (#192)
         ["trip-hammer"] = new(new Vector3(0.9f, 1.1f, 2.4f), new Vector3(0.7f, 0.65f, 0), 55),   // the two rigs side by side, peg wheels face on (#192)
         ["tunnel-test"] = new(new Vector3(0f, 1.6f, 4.5f), new Vector3(0f, 1f, 0), 50),
         ["crate-tongs"] = new(new Vector3(1f, 1.4f, 3.2f), new Vector3(1f, 0.68f, 0), 55),

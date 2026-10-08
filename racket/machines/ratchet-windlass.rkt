@@ -33,6 +33,11 @@
 ;;           1.21 m to the floor in sqrt(2 x 1.21 / 7.883) = 0.555 s.
 ;;   controls  click a wheel to stop its crank (drive-rpm), Shift+click to reverse
 ;;           it; click a ratchet to lift its pawl or drop it again.
+;; The four stand in a row 1 m apart along x, seen from the front, ratchets and all (#192). One behind the other along
+;; their axles they shared one axle line, so they were drawn as one axle under one label of four stacked names. Moved
+;; along x, the held and free windlasses run the same to 6e-5 m/s; the two pawls that are let go (wind, lower) catch
+;; a tick earlier or later than before on rounding, so the held sag differs by up to 5 mm and the loads reach the floor
+;; a tick apart, but every number above is unchanged.
 (define drum-r (cm 10))
 (define block-size (cm 19.5))
 (define hang (m 1.0))                        ; the block's middle, above the floor
@@ -50,19 +55,19 @@
   (block hold-load #:at (drum-r hang 0) #:size block-size #:material granite)
   (rope hold-rope #:wind-on hold-drum #:to (hold-load 0 (/ block-size 2) 0) #:length rope-length)
   ;; no pawl
-  (wheel free-drum #:shape (drum #:radius drum-r #:length (cm 30)) #:at (0 axle-height (m -1.5)) #:material oak)
-  (block free-load #:at (drum-r hang (m -1.5)) #:size block-size #:material granite)
+  (wheel free-drum #:shape (drum #:radius drum-r #:length (cm 30)) #:at ((m 1) axle-height 0) #:material oak)
+  (block free-load #:at ((+ (m 1) drum-r) hang 0) #:size block-size #:material granite)
   (rope free-rope #:wind-on free-drum #:to (free-load 0 (/ block-size 2) 0) #:length rope-length)
   ;; cranked, with a pawl
-  (wheel wind-drum #:shape (drum #:radius drum-r #:length (cm 30)) #:at (0 axle-height (m -3)) #:material oak
+  (wheel wind-drum #:shape (drum #:radius drum-r #:length (cm 30)) #:at ((m 2) axle-height 0) #:material oak
          #:drive-rpm 6 #:drive-torque 40)
-  (ratchet wind-pawl #:at (0 axle-height (m -3)) #:on wind-drum #:teeth 12 #:radius (cm 15))
-  (block wind-load #:at (drum-r hang (m -3)) #:size block-size #:material granite)
+  (ratchet wind-pawl #:at ((m 2) axle-height 0) #:on wind-drum #:teeth 12 #:radius (cm 15))
+  (block wind-load #:at ((+ (m 2) drum-r) hang 0) #:size block-size #:material granite)
   (rope wind-rope #:wind-on wind-drum #:to (wind-load 0 (/ block-size 2) 0) #:length rope-length)
   ;; held by a pawl that is lifted 2 s in
-  (wheel lower-drum #:shape (drum #:radius drum-r #:length (cm 30)) #:at (0 axle-height (m -4.5)) #:material oak)
-  (ratchet lower-pawl #:at (0 axle-height (m -4.5)) #:on lower-drum #:teeth 12 #:radius (cm 15))
-  (block lower-load #:at (drum-r hang (m -4.5)) #:size block-size #:material granite)
+  (wheel lower-drum #:shape (drum #:radius drum-r #:length (cm 30)) #:at ((m 3) axle-height 0) #:material oak)
+  (ratchet lower-pawl #:at ((m 3) axle-height 0) #:on lower-drum #:teeth 12 #:radius (cm 15))
+  (block lower-load #:at ((+ (m 3) drum-r) hang 0) #:size block-size #:material granite)
   (rope lower-rope #:wind-on lower-drum #:to (lower-load 0 (/ block-size 2) 0) #:length rope-length)
   ;; the pawl of the fourth lifted 2 s in; the crank of the third let go at 5 s, held by its pawl until the pawl is lifted at 10 s (issue #157)
   (operator (at 2 (lower-pawl pawl 0))
