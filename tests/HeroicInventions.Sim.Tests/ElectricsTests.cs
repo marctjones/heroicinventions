@@ -348,6 +348,26 @@ public class ElectricsTests
         Assert.Equal(rt.GetField("hot", "charge"), again.GetField("hot", "charge"), 9);
     }
 
+
+    private static string ElectricsText() => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "machines", "found-electrics.machine"));
+
+    [Fact]
+    public void TheGeneratorKnowsWhatDrivesItByWalkingTheTrainBackToThePrimeMover()
+    {
+        // found-electrics: the rotor's arbor, three meshes and an arbor lead back to the windmill
+        Assert.Equal("wind", new MachineRuntime(MachineDef.Parse(ElectricsText()), Materials).Generators["motor"].DrivenBy);
+        // the same train with the sails taken off the first arbor: nothing in it turns by itself, so "shaft"
+        string noSails = ElectricsText().Replace("(arbor (parts sails wheel-a)", "(arbor (parts wheel-a)");
+        Assert.Equal("shaft", new MachineRuntime(MachineDef.Parse(noSails), Materials).Generators["motor"].DrivenBy);
+        // and a rope winding onto the first wheel, a weight on its far end: a falling weight
+        string rope = noSails.Replace("(arbor (parts pinion-d rotor-disc)",
+            "(rope fall (from wheel-a 0.0 0.0 0.0) (to world 0.0 0.0 0.0) (length 3.0) (over) (wind-on wheel-a) (release-deg #f) (material hemp) (diameter 0.02) (nocked #f) (turns #f) (bar #f) (mu #f))\n  (arbor (parts pinion-d rotor-disc)");
+        Assert.Equal("falling-weight", new MachineRuntime(MachineDef.Parse(rope), Materials).Generators["motor"].DrivenBy);
+        // and a name given on the part wins
+        string named = noSails.Replace("(driven-by #f)", "(driven-by aeolipile)");
+        Assert.Equal("aeolipile", new MachineRuntime(MachineDef.Parse(named), Materials).Generators["motor"].DrivenBy);
+    }
+
     // ---- the editor ----
 
     [Fact]

@@ -303,7 +303,12 @@ The design promises "the state is shown in the scene: a cold bank frosts, a stal
 | Galvanic jar spent | Iron rusts | existing |
 | Windmill, Stirling stalled | Motion stops | implicit only |
 
-**Not drawable yet, because the sim has no state for them:** a battery bank and its 0–45 °C charging window ("a cold bank frosts"), a generator ("a stalled generator stops"), heat leaking through a lid ("a leaky lid glows"), and pipes freezing. These need model work before any look.
+| Battery bank charging | A fill column in the armoured case rises with the charge; green while it takes charge | `found-electrics` frames in `/tmp/fe` (not filed) |
+| Bank cold or hot | Column blue-grey below 0 °C, red above 45 °C; amber when full but out of range | `bank-bench` |
+| Bank full and warm, called | Cyan with a faint glow (a state cue), a column of light stands over it once the call has gone out | `found-electrics` |
+| Generator | A motor can on the axle with a dial (a needle over the rated current) and a stripe that turns with the rotor; a copper line to the bank | `found-electrics` |
+
+**Not drawable yet, because the sim has no state for them:** heat leaking through a lid ("a leaky lid glows"), and pipes freezing. These need model work before any look. (The bank and generator of #64 are drawn as above: the case, column, dial and wire are drawn 2 to 3 times a real pack's size, since the scene they sit in is a 5 m windmill; the physics is the sim's. Their labels are the largest on screen so that the declutter keeps them over a vault's.)
 
 ### 12.6 Recognisable machines (2026-10-07, #167)
 
