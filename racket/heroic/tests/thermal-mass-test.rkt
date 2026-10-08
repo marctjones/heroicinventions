@@ -139,14 +139,17 @@
   (check-= (value-at run 'wide-rock.capacity 1) 9.24 1e-9 "11 kg x 840"))
 
 (test-case "A store heated by power P rises at P / (m c): 40 kg of basalt under a 4 m² heliostat"
-  ;; the sun held at 17:00 (15.1 degrees up): the mirror delivers 383.09 W (read from the run), m c = 40 x 840 = 33,600 J/K,
-  ;; so 383.09 / 33,600 = 0.011401 K/s: 0.6841 K in 60 s, 1.3682 K in 120 s (the rock starts at the air's temperature, so the air gives it nothing)
+  ;; the sun held at 17:00 (15.1 degrees up, 188.26 W/m² of beam): the mirror delivers I A rho cos(theta/2) = 188.26 x 4 x 0.85 x 0.7248 = 463.9 W,
+  ;; m c = 40 x 840 = 33,600 J/K, so 463.9 / 33,600 = 0.013807 K/s: 0.8284 K in 60 s, 1.6568 K in 120 s (the rock starts at the air's
+  ;; temperature, so the air gives it next to nothing)
   (define run (simulate 'night-heat #:seconds 600 #:step 1 #:sample-dt 60 #:set '((scene clock-rate 0))))
-  (define p (value-at run 'sun-heliostat.power 60))
-  (check-= p 383.09 0.05)
-  (check-= (- (value-at run 'sunrock.temperature 60) -24) (/ (* p 60) 33600) 0.005 "60 s")
-  (check-= (- (value-at run 'sunrock.temperature 120) -24) (/ (* p 120) 33600) 0.01 "120 s")
-  (check-= (value-at run 'sunrock.gained 600) (/ (* p 600) 1e6) 1e-6 "and the energy that landed is what the mirror gave"))
+  (define (v k t) (value-at run k t))
+  (define p (* (v 'scene.irradiance 60) 4 0.85 (v 'sun-heliostat.cosine 60)))
+  (check-= (v 'sun-heliostat.power 60) p 1e-6 "the mirror's power is beam x area x reflectivity x cosine")
+  (check-= p 463.9 0.05)
+  (check-= (- (v 'sunrock.temperature 60) -24) (/ (* p 60) 33600) 0.005 "60 s")
+  (check-= (- (v 'sunrock.temperature 120) -24) (/ (* p 120) 33600) 0.01 "120 s")
+  (check-= (v 'sunrock.gained 600) (/ (* p 600) 1e6) 1e-6 "and the energy that landed is what the mirror gave"))
 
 ;; ---------------------------------------------------------------------------
 ;; The DSL checks what it is given.

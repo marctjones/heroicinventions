@@ -40,7 +40,8 @@
 ;;           156.8 C and 89.0 C, traced 157.0 C and 89.0 C. The leak is what warms the bank, so the lid must leak 0.1 W/K or
 ;;           less: at 0.1 the bank never passes the thermostat's 40 C (peak 40.4 C on sol 3, 13-19 C from sol 5 to 12);
 ;;           at 0.5 it is 50 C by sol 5, 62 C on sol 7, 82 C on sol 12, past the 45 C a lithium bank may charge at.
-;;   sun     a heliostat's power P on 40 kg of basalt warms it P / (m c): 383.1 W / 33.6 kJ/K = 0.01140 K/s (0.684 K a minute).
+;;   sun     a heliostat's power P on 40 kg of basalt warms it P / (m c): 188.3 W/m2 x 4 m2 x 0.85 x cos(theta/2) 0.7248 = 463.9 W
+;;           over 33.6 kJ/K = 0.01381 K/s (0.828 K a minute), the sun held at 17:00 (15.1 degrees up).
 
 (define-machine night-heat
   #:source "Thermal mass: a regolith vault, a rock heat store and a lidded bin"
