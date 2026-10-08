@@ -37,6 +37,9 @@ public sealed class WorldSave
     /// <summary>The fine patches of ground the rover has dug and heaped (issue #199): <c>(worked 1 (patch …) …)</c>, or null. An older save has none, and loads as before.</summary>
     public SList? Worked { get; init; }
 
+    /// <summary>The rover itself (issue #201): <c>(rover 1 (chassis …) (wheel K …) (drive …) (bucket …) (arm …))</c>, which the game reads back; or null. An older save has none, and the world file's rover stands where it puts it.</summary>
+    public SList? Rover { get; init; }
+
     /// <summary>Everything the person (or a demo operator, or a replay) has done to the run so far (issue #153), in order; empty when nothing was done.</summary>
     public IReadOnlyList<OperatorAction> Operated { get; init; } = [];
     /// <summary>True once the person has taken a control: a blueprint's demo operator stays stopped after loading.</summary>
@@ -63,6 +66,7 @@ public sealed class WorldSave
         if (Ground is { } g) items.Add(new SList([new SSymbol("ground"), g]));
         if (Boulders is { } bs) items.Add(bs);
         if (Worked is { } wk) items.Add(wk);
+        if (Rover is { } rv) items.Add(rv);
         if (Sleep is { } s)
         {
             static SExpr Term(WakeTerm t) => new SList([new SSymbol(t.Target), new SSymbol(t.Field), new SSymbol(t.Above ? "above" : "below"), new SNumber(t.Value)]);
@@ -75,7 +79,7 @@ public sealed class WorldSave
                 new SList([new SSymbol("events"), .. s.Plan.Events.Select(Term)])]));
         }
         return ";; A saved world. Loading rebuilds the machines from their own files and lays this running state on them.\n"
-               + SExprWriter.Print(new SList(items)).Replace(" (machine ", "\n  (machine ").Replace(" (sleep ", "\n  (sleep ").Replace(" (operator-log ", "\n  (operator-log ").Replace(" (ground ", "\n  (ground ").Replace(" (boulders ", "\n  (boulders ").Replace(" (worked ", "\n  (worked ") + "\n";
+               + SExprWriter.Print(new SList(items)).Replace(" (machine ", "\n  (machine ").Replace(" (sleep ", "\n  (sleep ").Replace(" (operator-log ", "\n  (operator-log ").Replace(" (ground ", "\n  (ground ").Replace(" (boulders ", "\n  (boulders ").Replace(" (worked ", "\n  (worked ").Replace(" (rover ", "\n  (rover ") + "\n";
     }
 
     public static WorldSave Parse(string text)
@@ -101,7 +105,7 @@ public sealed class WorldSave
                 new WakeSpec("sleep", Terms(sl.Field("when")), sl.Field("join")?.Items.ElementAtOrDefault(1) is not SSymbol { Name: "or" }, Num("limit", 3600), Terms(sl.Field("events"))),
                 Num("started", 0), sl.Field("predicted")?.Items.ElementAtOrDefault(1) is SNumber pr ? pr.Value : null);
         }
-        return new WorldSave { Kind = Sym("kind"), Name = Sym("name"), Machines = machines, Sleep = sleep, Ground = root.Field("ground")?.Items.ElementAtOrDefault(1) as SList, Boulders = root.Field("boulders"), Worked = root.Field("worked"),
+        return new WorldSave { Kind = Sym("kind"), Name = Sym("name"), Machines = machines, Sleep = sleep, Ground = root.Field("ground")?.Items.ElementAtOrDefault(1) as SList, Boulders = root.Field("boulders"), Worked = root.Field("worked"), Rover = root.Field("rover"),
             Operated = (root.Field("operator-log")?.Items.Skip(1) ?? []).Select(OperatorLog.FromForm).OfType<OperatorAction>().ToList(),
             OperatorTaken = root.Field("operator-log")?.Field("taken")?.Items.ElementAtOrDefault(1) is SBool { Value: true } };
     }
