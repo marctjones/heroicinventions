@@ -87,6 +87,11 @@ public partial class Main
     private void BuildFileMenu()
     {
         var m = NewMenu("File", _menuBar);
+        m.Add("New Game...", ShowScenarios);
+        int cont = m.Add("Continue", Continue);
+        m.Add("Main Menu", () => { if (_screen == Screen.None) { if (MachineOnScreen) DeselectMachine(); ShowTitle(); } });
+        int rlog = m.Add("Rover Log (I)", ShowRoverLog);
+        m.Popup.AddSeparator();
         int save = m.Add("Save", () => SaveWorld(auto: false), Key.S);
         int load = m.Add("Load Latest Save", LoadLatestSave, Key.O);
         m.Popup.AddSeparator();
@@ -96,6 +101,8 @@ public partial class Main
 
         m.Popup.AboutToPopup += () =>
         {
+            m.Enable(cont, NewestSave() is not null);
+            m.Enable(rlog, RoverIsPlayer);
             m.Enable(save, MachineOnScreen);
             m.Enable(load, MachineOnScreen);
             m.Enable(back, MachineOnScreen);

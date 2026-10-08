@@ -41,6 +41,39 @@ public static class HudTheme
 
     public static Theme Get() => _theme ??= Build();
 
+    // ---- the front end's screens (title, scenario select, opening, ending, rover log; Main.FrontEnd.cs) ----
+
+    /// <summary>The dim behind a full-screen page: the panel colour, nearly opaque, so the page reads over any scene.</summary>
+    public static readonly Color Backdrop = new(0.12f, 0.105f, 0.095f, 0.94f);
+
+    /// <summary>A heading in the bronze accent, with the labels' dark outline so it reads over a scene as well as a panel.</summary>
+    public static Label Heading(string text, int size, bool centred = false)
+    {
+        var l = new Label { Text = text, AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        l.AddThemeFontSizeOverride("font_size", size);
+        l.AddThemeColorOverride("font_color", Bronze);
+        if (centred) l.HorizontalAlignment = HorizontalAlignment.Center;
+        return l;
+    }
+
+    /// <summary>Running text in cream (or dimmed cream), wrapped.</summary>
+    public static Label Body(string text, int size = 16, bool dim = false, bool centred = false)
+    {
+        var l = new Label { Text = text, AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        l.AddThemeFontSizeOverride("font_size", size);
+        l.AddThemeColorOverride("font_color", dim ? CreamDim : Cream);
+        if (centred) l.HorizontalAlignment = HorizontalAlignment.Center;
+        return l;
+    }
+
+    /// <summary>A raised card (a scenario, a save): the button colour with a bronze edge.</summary>
+    public static PanelContainer Card()
+    {
+        var c = new PanelContainer();
+        c.AddThemeStyleboxOverride("panel", Box(PanelRaised, Color.FromHtml("#5A4A38"), 4, 12));
+        return c;
+    }
+
     private static StyleBoxFlat Box(Color fill, Color? border = null, int radius = 3, int margin = 6, int borderWidth = 1)
     {
         var s = new StyleBoxFlat { BgColor = fill };
