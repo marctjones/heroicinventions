@@ -1192,8 +1192,8 @@ public partial class MachineView : Node3D
         }
         _hinges[body] = (V(part.At), axis);
 
-        // A wheel riding on another's arbor is locked to it (BuildArbors),
-        // not hinged to the world, and any drive belongs to the arbor's first.
+        // A wheel riding on another's arbor is locked to it (BuildArbors) and
+        // turns freely in its own bearing; any drive belongs to the arbor's first.
         // (a water wheel, windmill or jet wheel on an arbor is turned by the sim: the first Jolt wheel leads)
         bool rides = Runtime.Def.Arbors.Any(a => a.Parts.Contains(part.Id) && ArborLead(a) != part.Id);
         double rpm = rides ? 0 : part.Number("drive-rpm", 0);
@@ -1210,6 +1210,16 @@ public partial class MachineView : Node3D
                 _driveJoints.Add((joint, drive));
                 ApplyDrive(joint, drive);
             }
+        }
+        else
+        {
+            // its own bearing on the axle line, free and undriven: the shaft is carried in bearings, so a heavy
+            // wheel on a light lead (the Antikythera d2, 56 g, on a 3 g pinion) doesn't hang its weight through
+            // the arbor's lock and the lead's one hinge — Jolt let that chain sag 1.3 mm and a millimetre gear's
+            // teeth ride over its partner's (#85). The lock (BuildArbors) still makes them turn as one.
+            var bearing = new HingeJoint3D { Transform = new Transform3D(toAxis, V(part.At)) };
+            AddChild(bearing);
+            bearing.NodeB = bearing.GetPathTo(body);
         }
 
         var box = mesh.GetAabb();

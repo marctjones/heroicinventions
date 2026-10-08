@@ -162,6 +162,27 @@ public partial class MachineView
         }
 
         BuildDrivenTrains(leader, edges, factor.Keys.ToHashSet());
+        foreach (var m in Runtime.Def.Meshes)
+            _meshTeeth.Add((m, _bodiesById[m.A], _bodiesById[m.B], Runtime.Def.Part(m.A)!.Number("teeth"), Runtime.Def.Part(m.B)!.Number("teeth")));
+    }
+
+    /// <summary>Each mesh's two bodies and tooth counts, to read where its teeth stand (#85).</summary>
+    private readonly List<(MeshSpec Mesh, RigidBody3D A, RigidBody3D B, double TeethA, double TeethB)> _meshTeeth = [];
+
+    /// <summary>
+    /// How far a mesh's second gear stands from its partner's gaps as the bodies are now, degrees of its turn
+    /// (<see cref="GearPhase.ErrorDegrees"/>): 0 tooth in gap, ±180/z tooth on tooth. Read from the bodies'
+    /// own frames, a generated gear's tooth on its local +X, so it shows the teeth as drawn, at rest or turning.
+    /// </summary>
+    private static double MeshError(RigidBody3D a, RigidBody3D b, double za, double zb)
+    {
+        static double Toward(RigidBody3D from, RigidBody3D to)
+        {
+            var local = from.GlobalTransform.Basis.Inverse() * (to.GlobalPosition - from.GlobalPosition);
+            return Math.Atan2(local.Y, local.X);
+        }
+        double sense = a.GlobalTransform.Basis.Z.Dot(b.GlobalTransform.Basis.Z) >= 0 ? 1 : -1;
+        return GearPhase.ErrorDegrees(za, 0, Toward(a, b), zb, 0, Toward(b, a), sense);
     }
 
     /// <summary>The trains no crank turns (issue #113): their meshes, and the sim parts keyed on their arbors, as ShaftLinks.</summary>
@@ -346,7 +367,9 @@ public partial class MachineView
     /// <summary>
     /// Couples the driven trains for one tick: after the sim has stepped its
     /// turning parts, before Jolt steps its bodies. Meshes between Jolt wheels
-    /// are pulled back onto the ratio's angle as well as its speed.
+    /// are pulled back onto the ratio's angle as well as its speed; the trains'
+    /// bearings rub before the exchange, so it shares their friction out and
+    /// every gear starts Jolt's step on its ratio (#85).
     /// </summary>
     private void CoupleDrivenTrains(double dt)
     {
@@ -366,8 +389,8 @@ public partial class MachineView
             double most = 0.1 * Math.Abs(d.Link.Ratio * d.Link.From.AngularVelocity);
             d.Link.Bias = Math.Clamp(20 * (d.Link.Ratio * d.FromAngle - d.ToAngle), -most, most);
         }
-        ShaftLink.StepAll(_drivenShaftLinks, dt, 8);
         FrictionDrivenTrains(dt);
+        ShaftLink.StepAll(_drivenShaftLinks, dt, 8);
     }
 
     private void DrawGearTrains()
@@ -390,6 +413,9 @@ public partial class MachineView
     /// </summary>
     private IEnumerable<(string Key, double Value)> GearTraceFields()
     {
+        // where each mesh's teeth stand (#85): degrees the second gear is off its partner's gaps
+        foreach (var (m, a, b, za, zb) in _meshTeeth)
+            yield return ($"{m.B}.mesh-error", MeshError(a, b, za, zb));
         foreach (var d in _drivenLinks)
         {
             yield return ($"{d.ToId}.drive-torque", d.Link.Torque);
@@ -401,5 +427,6 @@ public partial class MachineView
     /// <summary>For telemetry: each driven gear's turns against what its ratio says.</summary>
     private IEnumerable<string> GearReport() =>
         _gearFollowers.Select(g => $"{g.Body.Name} turned {g.Angle / Math.Tau:F3} (ratio says {g.Factor * g.RootAngle / Math.Tau:F3})")
-            .Concat(_drivenLinks.Select(d => $"{d.FromId}->{d.ToId} {d.Link.To.AngularVelocity * 60 / Math.Tau:F2}rpm τ={d.Link.Torque:F3}N·m driver τ={d.Link.DriverTorque:F3}N·m"));
+            .Concat(_drivenLinks.Select(d => $"{d.FromId}->{d.ToId} {d.Link.To.AngularVelocity * 60 / Math.Tau:F2}rpm τ={d.Link.Torque:F3}N·m driver τ={d.Link.DriverTorque:F3}N·m"))
+            .Concat(_meshTeeth.Select(t => $"{t.Mesh.A}/{t.Mesh.B} teeth {MeshError(t.A, t.B, t.TeethA, t.TeethB):F3}° off the gaps (half a tooth is {180 / t.TeethB:F2}°)"));
 }

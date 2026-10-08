@@ -61,8 +61,8 @@ public partial class MachineView
     }
 
     /// <summary>
-    /// The bearings in driven gear trains (#113), once the trains are coupled for the
-    /// tick: each reads the speed the whole train turns its shaft at
+    /// The bearings in driven gear trains (#113), as the trains are coupled for the
+    /// tick, between the angle pull and the mesh exchange: each reads the speed the whole train turns its shaft at
     /// (<see cref="TrainSpeed"/>; not the one its own wheel was braked to in the last
     /// step, which a light shaft overshoots, nor its angle pull) and is clamped
     /// against the inertia of everything geared to it, so dry friction stops the
@@ -72,15 +72,29 @@ public partial class MachineView
     {
         foreach (var f in _axleFriction)
             if (TrainInertia(f.Body) is { } inertia)
-                Rub(f, TrainSpeed(f.Body)!.Value, inertia, dt);
+            {
+                // as an impulse now, before the mesh exchange (#85): the exchange then shares it out over the
+                // train, its efficiency and all, and Jolt steps every gear already on its ratio. Given as a
+                // torque through Jolt's step, the light brake shaft alone took it and the next tick's exchange
+                // gave it back: a 10-tooth pinion ran 10° behind its gear's gaps (of the 18° that is tooth on tooth).
+                double omega = TrainSpeed(f.Body)!.Value;
+                double impulse = inertia * (f.Bearing.Slow(omega, inertia, BearingLoad(f), dt) - omega);
+                var shaft = _arborMates.GetValueOrDefault(f.Body, []).Prepend(f.Body).ToList();
+                double total = shaft.Sum(b => (double)InertiaAbout(b, f.Hinge));
+                foreach (var b in shaft)
+                    PhysicsServer3D.BodyGetDirectState(b.GetRid())
+                        .ApplyTorqueImpulse(f.Hinge.Axis.Normalized() * (float)(impulse * InertiaAbout(b, f.Hinge) / total));
+            }
     }
+
+    /// <summary>What presses a bearing's pin: the part's own weight, and any wheels fixed on its arbor.</summary>
+    private double BearingLoad(AxleFriction f) =>
+        (f.Body.Mass + _arborMates.GetValueOrDefault(f.Body, []).Sum(m => m.Mass)) * Runtime.Outside.Gravity;
 
     private void Rub(AxleFriction f, double omega, double inertia, double dt)
     {
         var axis = f.Hinge.Axis.Normalized();
-        // the part's own weight, and any wheels fixed on its arbor
-        double load = (f.Body.Mass + _arborMates.GetValueOrDefault(f.Body, []).Sum(m => m.Mass)) * Runtime.Outside.Gravity;
-        double slowed = f.Bearing.Slow(omega, inertia, load, dt);
+        double slowed = f.Bearing.Slow(omega, inertia, BearingLoad(f), dt);
         f.Body.ApplyTorque(axis * (float)(inertia * (slowed - omega) / dt));
     }
 
