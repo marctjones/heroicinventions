@@ -82,6 +82,7 @@ public static class RktExporter
                       $"#:set ({f.Target} {f.Field}) #:low {F(f.Low)} #:high {F(f.High)})\n");
 
         foreach (var j in m.Joints) sb.Append($"  {JointCommand(j, F)}\n");
+        if (m.Operator.Count > 0) sb.Append($"  (operator {string.Join(' ', m.Operator.Select(a => $"(at {F(a.At)} ({a.Target} {a.Field} {F(a.Value)}))"))})\n");
 
         sb.Append(")\n");
         return sb.ToString();

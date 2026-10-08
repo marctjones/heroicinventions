@@ -51,6 +51,7 @@
          (struct-out pipe-spec) (struct-out connect-spec) (struct-out air-spec)
          (struct-out rope-spec) (struct-out arbor-spec) (struct-out mesh-spec) (struct-out lift-spec) (struct-out cylinder-spec)
          (struct-out inflow-spec) (struct-out channel-spec) (struct-out trigger-spec) (struct-out follow-spec) (struct-out belt-spec) (struct-out wake-spec) (struct-out joint-spec)
+         (struct-out operator-spec)
          take-registered-machines
          planet make-planet planet? planet-field planet-name earth-planet?
          (all-from-out "weather.rkt"))
@@ -58,7 +59,7 @@
 ;; ---------------------------------------------------------------------------
 ;; Runtime representation
 
-(struct machine (name source ambient sun planet weather parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers follows belts wakes joints) #:transparent)
+(struct machine (name source ambient sun planet weather parts pipes connects airs ropes arbors meshes lifts cylinders inflows channels triggers follows belts wakes joints operators) #:transparent)
 ;; kind: 'tank | 'boiler | 'rotor | 'block
 ;; at: (list x y z); props: (listof (cons symbol value)); loc: #(file line column)
 (struct part (id kind material at props ports loc) #:transparent)
@@ -91,6 +92,9 @@
 ;; Something to sleep until (issue #59): `terms` and `events` are lists of (list target field 'above|'below value);
 ;; `all?` is #t to need every term (and), #f for any (or); `limit` is the most seconds it will sleep.
 (struct wake-spec (id terms all? limit events loc) #:transparent)
+;; A demo operator (issue #153): what a person's hand would do, each (list seconds target field value).
+;; They play when nobody else acts, and stop the moment the person takes a control.
+(struct operator-spec (actions loc) #:transparent)
 ;; An open belt between two drums a and b (wheel part ids), pretensioned to `tension` N,
 ;; gripping as far as the friction of `material` allows.
 (struct belt-spec (id a b tension material loc) #:transparent)
@@ -499,7 +503,8 @@
            (filter follow-spec? items)
            (filter belt-spec? items)
            (filter wake-spec? items)
-           (filter joint-spec? items)))
+           (filter joint-spec? items)
+           (filter operator-spec? items)))
 
 ;; Machines register themselves when their module runs, so the build
 ;; script can collect every machine in a file without knowing their names.
@@ -2111,6 +2116,13 @@
       #:attr info #f
       #:with expr #`(wake-spec 'id (list (list 'wt 'wf 'wmode wv) ...) (~? (eq? 'join 'and) #t) (~? limit-v 3600)
                                (~? (list (list 'et 'ef 'emode ev) ...) '()) #,(loc-of this-syntax)))
+
+    ;; A demo operator (issue #153): (operator (at 400 (bleed open 1)) (at 600 (bleed open 0)) ...), the timed
+    ;; settings a person's hand would make, each (at seconds (part field value)). The game plays them while nobody
+    ;; else is acting. Matched by name, so it needs no keyword binding of its own.
+    (pattern ((~datum operator) ((~datum at) ot:expr (otg:id ofl:id ov:expr)) ...)
+      #:attr info #f
+      #:with expr #`(operator-spec (list (list ot 'otg 'ofl ov) ...) #,(loc-of this-syntax)))
 
     ;; A mesh carries torque both ways (issue #113): a load on the driven
     ;; gear is felt by the driver, scaled by the inverse of the speed ratio,

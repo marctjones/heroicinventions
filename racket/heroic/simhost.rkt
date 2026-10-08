@@ -10,9 +10,9 @@
 ;; levers, ramps and other pendulums are pure Jolt rigid-body physics and
 ;; only exist inside the Godot game; they stay covered by the
 ;; HEROIC_AUTORUN headless-Godot smoke test instead.
-(require racket/system racket/port racket/runtime-path racket/path
+(require racket/system racket/port racket/runtime-path racket/path racket/file
          racket/string racket/list)
-(provide simulate sleep-until max-of min-of final-of values-of)
+(provide simulate sleep-until max-of min-of final-of values-of actions->path)
 
 (define-runtime-path repo "../..")
 (define machines-dir (build-path repo "game" "machines"))
@@ -71,6 +71,23 @@
   (flush-output (link-in l))
   (read (link-out l)))
 
+;; An operator log (issue #153) is a file of (at seconds (part field value)) forms, one per line. #:actions takes
+;; the path of one, or the forms themselves, which are written to a temporary file for the host to read.
+(define (actions->path actions)
+  (cond
+    [(or (path? actions) (string? actions))
+     (unless (file-exists? actions) (error 'actions "no such operator log: ~a" actions))
+     (path->string (path->complete-path actions))]
+    [(list? actions)
+     (for ([a actions])
+       (unless (and (list? a) (= (length a) 3) (eq? (car a) 'at) (real? (cadr a))
+                    (list? (caddr a)) (= (length (caddr a)) 3) (real? (caddr (caddr a))))
+         (error 'actions "an action is (at seconds (part field value)), got ~s" a)))
+     (define file (make-temporary-file "heroic-actions-~a.log"))
+     (call-with-output-file file #:exists 'truncate (λ (out) (for ([a actions]) (write a out) (newline out))))
+     (path->string file)]
+    [else (error 'actions "#:actions is a path or a list of (at seconds (part field value)), got ~s" actions)]))
+
 ;; (simulate 'herons-fountain #:seconds 60) → an opaque `run`: a list of
 ;; frames, each (time (target.field value) ...). The real physics steps
 ;; every #:step seconds; a frame is recorded only every #:sample-dt
@@ -79,7 +96,7 @@
 ;; standing in for what the game's engine side supplies: '((lift rpm 12)),
 ;; or at a given time, as a player's hand would: '((tap opening 0.04 120)).
 (define (simulate machine-name #:seconds seconds #:step [step 0.01] #:sample-dt [sample-dt step]
-                  #:set [settings '()] #:save [save #f] #:resume [resume #f])
+                  #:set [settings '()] #:save [save #f] #:resume [resume #f] #:actions [actions #f])
   (define path (build-path machines-dir (format "~a.machine" machine-name)))
   (unless (file-exists? path)
     (error 'simulate "no such machine file: ~a (run `racket racket/build.rkt` first?)" path))
@@ -93,7 +110,9 @@
                            ;; #:save (cons "path" at-seconds) writes the running state to a save file once the clock reaches at-seconds;
                            ;; #:resume "path" lays a saved state on the machine before the first step (issue #67)
                            (if save (list (list 'save (path->string (car save)) (exact->inexact (cdr save)))) '())
-                           (if resume (list (list 'resume (path->string resume))) '()))))
+                           (if resume (list (list 'resume (path->string resume))) '())
+                           ;; #:actions replays an operator log as timed settings (issue #153)
+                           (if actions (list (list 'actions (actions->path actions))) '()))))
   (cond
     [(and (pair? reply) (eq? (car reply) 'run)) (cdr reply)]
     [(and (pair? reply) (eq? (car reply) 'error)) (error 'simulate "~a" (cadr reply))]

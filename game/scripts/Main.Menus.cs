@@ -176,7 +176,7 @@ public partial class Main
         var m = NewMenu("Simulation", _menuBar);
         int run = m.Add("Pause", () => SetRunning(!_running));
         int restart = m.Add("Restart", RestartCurrent);
-        int fire = m.Add("Fire / Fuel", () => _current?.ToggleFire());
+        int fire = m.Add("Fire / Fuel", OperateFire);
         m.Popup.AddSeparator();
 
         var speed = NewMenu("Speed", m.Popup);
