@@ -56,6 +56,7 @@ public partial class TerrainView
                 MakePatch(p);
             }
             // the map's own mesh loses its squares under the patches, and its body is sunk there
+            GD.Print($"[terrain] {_patches.Count} worked patch(es) drawn, {_patches.Sum(p => p.Ground.Nx * p.Ground.Nz)} nodes");
             _mesh!.ClearSurfaces();
             PutMesh();
             _mesh.SurfaceSetMaterial(0, _groundMaterial);

@@ -1,3 +1,5 @@
+using HeroicInventions.Sim.Machines;
+
 namespace HeroicInventions.Sim.Fluids;
 
 /// <summary>
@@ -284,5 +286,100 @@ public sealed class WorkedGround
                 Floor[k] = Hard(k) ? Fine.Heights[k] : double.NegativeInfinity;
             }
         Fine.Touch();
+    }
+
+    // ---------------------------------------------------------------- saving (#199)
+
+    internal const int SaveVersion = 1;
+
+    /// <summary>
+    /// The patch as a save holds it: <c>(patch (box I0 J0 I1 J1) (dug V) (dumped V) (heights …) (carry (k original ceiling) …) (rock (k level) …) (soil (value count) …) (loose k …))</c>.
+    /// Heights are all written; a node's original height and carry ceiling only where they differ from its height (an untouched
+    /// node has all three the same), the floor only where it is not minus infinity (bedrock), the soil as runs, loose flags as the nodes that are.
+    /// Numbers are written to the digit that reads back as the same double.
+    /// </summary>
+    internal SList Save()
+    {
+        static SList L(string head, IEnumerable<SExpr> v) => new([new SSymbol(head), .. v]);
+        static SExpr N(double v) => new SNumber(v);
+        var h = Fine.Heights;
+        var carry = new List<SExpr>();
+        var rock = new List<SExpr>();
+        var loose = new List<SExpr>();
+        var soil = new List<SExpr>();
+        for (int k = 0; k < h.Length; k++)
+        {
+            if (Original[k] != h[k] || Fine.Ceiling![k] != h[k]) carry.Add(new SList([N(k), N(Original[k]), N(Fine.Ceiling![k])]));
+            if (!double.IsNegativeInfinity(Floor[k])) rock.Add(new SList([N(k), N(Floor[k])]));
+            if (Fine.Loose[k]) loose.Add(N(k));
+        }
+        for (int k = 0, run; k < h.Length; k += run)
+        {
+            for (run = 1; k + run < h.Length && Fine.Soil[k + run] == Fine.Soil[k]; run++) { }
+            soil.Add(new SList([N(Fine.Soil[k]), N(run)]));
+        }
+        return new SList([new SSymbol("patch"),
+            L("box", new[] { Bi0, Bj0, Bi1, Bj1 }.Select(x => N(x))),
+            L("dug", [N(Dug)]), L("dumped", [N(Dumped)]),
+            L("heights", h.Select(N)), L("carry", carry), L("rock", rock), L("soil", soil), L("loose", loose)]);
+    }
+
+    /// <summary>A patch rebuilt from <see cref="Save"/>'s form over <paramref name="ground"/> (whose own heights and soils are already the saved ones).</summary>
+    internal static WorkedGround Load(Terrain ground, SList saved)
+    {
+        double[] Nums(string f) => saved.Field(f)?.Items.Skip(1).Select(e => e is SNumber n ? n.Value : throw new FormatException($"a worked patch's ({f} …) holds only numbers")).ToArray()
+            ?? throw new FormatException($"a worked patch needs ({f} …)");
+        var box = Nums("box").Select(x => (int)x).ToArray();
+        if (box.Length != 4 || box[0] < 0 || box[1] < 0 || box[2] <= box[0] || box[3] <= box[1] || box[2] >= ground.Nx || box[3] >= ground.Nz)
+            throw new FormatException("a worked patch's (box I0 J0 I1 J1) lies outside its map");
+        var w = new WorkedGround(ground, box[0], box[1], box[2], box[3]);
+        var heights = Nums("heights");
+        if (heights.Length != w.Fine.Heights.Length) throw new FormatException($"a worked patch has {heights.Length} heights for {w.Fine.Heights.Length} nodes");
+        Array.Copy(heights, w.Fine.Heights, heights.Length);
+        Array.Copy(heights, w.Original, heights.Length);
+        Array.Copy(heights, w.Fine.Ceiling!, heights.Length);
+        Array.Fill(w.Floor, double.NegativeInfinity);
+        Array.Fill(w.Fine.Loose, false);
+        int Node(double k) => k >= 0 && k < heights.Length && k == Math.Floor(k) ? (int)k : throw new FormatException("a worked patch names a node it does not have");
+        foreach (var e in saved.Field("carry")!.Items.Skip(1).OfType<SList>())
+        {
+            if (e.Items is not [SNumber k, SNumber original, SNumber ceiling]) throw new FormatException("a carry entry is (NODE ORIGINAL CEILING)");
+            (w.Original[Node(k.Value)], w.Fine.Ceiling![Node(k.Value)]) = (original.Value, ceiling.Value);
+        }
+        foreach (var e in saved.Field("rock")!.Items.Skip(1).OfType<SList>())
+        {
+            if (e.Items is not [SNumber k, SNumber level]) throw new FormatException("a rock entry is (NODE LEVEL)");
+            w.Floor[Node(k.Value)] = level.Value;
+        }
+        int at = 0;
+        foreach (var e in saved.Field("soil")!.Items.Skip(1).OfType<SList>())
+        {
+            if (e.Items is not [SNumber value, SNumber count] || value.Value < 0 || value.Value >= ground.Soils.Count || at + count.Value > heights.Length)
+                throw new FormatException("a soil run is (SOIL COUNT) over the patch's nodes");
+            for (int n = 0; n < (int)count.Value; n++) w.Fine.Soil[at++] = (int)value.Value;
+        }
+        if (at != heights.Length) throw new FormatException("a worked patch's soil runs do not cover its nodes");
+        foreach (var e in saved.Field("loose")!.Items.Skip(1)) w.Fine.Loose[Node(e is SNumber k ? k.Value : -1)] = true;
+        w.Dug = Nums("dug")[0]; w.Dumped = Nums("dumped")[0];
+        w.Fine.Touch();
+        return w;
+    }
+}
+
+public sealed partial class Terrain
+{
+    /// <summary>The worked patches as a save holds them: <c>(worked 1 (patch …) …)</c>, or null if the rover has dug nowhere.</summary>
+    public SList? SaveWorked() => Worked.Count == 0 ? null
+        : new SList([new SSymbol("worked"), new SNumber(WorkedGround.SaveVersion), .. Worked.Select(w => (SExpr)w.Save())]);
+
+    /// <summary>Puts back the patches a save holds in place of any there are now; a view sees <see cref="WorkedPatches"/> change and rebuilds its meshes and bodies.</summary>
+    public void LoadWorked(SList saved)
+    {
+        if (saved.Items.ElementAtOrDefault(1) is not SNumber v || v.Value != WorkedGround.SaveVersion)
+            throw new FormatException($"the save's worked ground is version {(saved.Items.ElementAtOrDefault(1) as SNumber)?.Value}; this game reads version {WorkedGround.SaveVersion}");
+        var made = saved.Items.Skip(2).OfType<SList>().Where(e => e.Head == "patch").Select(e => WorkedGround.Load(this, e)).ToList();
+        Worked.Clear();
+        Worked.AddRange(made);
+        WorkedPatches++;
     }
 }
