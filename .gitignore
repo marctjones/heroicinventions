@@ -1,7 +1,6 @@
 # Godot
 .godot/
 *.translation
-export_presets.cfg
 game/android/
 
 # .NET
@@ -22,3 +21,9 @@ compiled/
 
 # Standard-parts catalogue meshes: rebuilt by racket/build.rkt, not committed
 game/meshes/catalogue/
+
+# Release builds (tools/release.sh)
+dist/
+# Imported-mesh settings Godot writes on import; the cache is rebuilt by tools/release.sh
+game/meshes/*.import
+game/meshes/catalogue/*.import
