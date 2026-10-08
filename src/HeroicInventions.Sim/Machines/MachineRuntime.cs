@@ -575,13 +575,14 @@ public sealed class MachineRuntime
             {
                 Focusing = burning,
                 Image = burning ? part.Number("image") : part.Number("area"),
+                ReceiverRadius = Math.Max(0.5, targetPart.Number("radius", 0) * 2),
             };
             _mirrors[part.Id] = mirror;
             // a crucible's spot takes only the share of the mirror's image that falls on it
-            if (target is Crucible c) AddHeatSource(target, () => mirror.Power * Math.Min(1, c.Spot / mirror.Image));
+            if (target is Crucible c) AddHeatSource(target, () => mirror.Delivered * Math.Min(1, c.Spot / mirror.Image));
             // likewise a hot-air engine's aperture
-            else if (target is StirlingEngine se) AddHeatSource(target, () => mirror.Power * Math.Min(1, se.Aperture / mirror.Image));
-            else AddHeatSource(target, () => mirror.Power);
+            else if (target is StirlingEngine se) AddHeatSource(target, () => mirror.Delivered * Math.Min(1, se.Aperture / mirror.Image));
+            else AddHeatSource(target, () => mirror.Delivered);
         }
         foreach (var (_, h) in _hearths) AddHeatSource(h.Target, () => h.HeatOut);
         foreach (var part in def.Parts.Where(p => p.Kind == "plants"))
@@ -1390,7 +1391,10 @@ public sealed class MachineRuntime
             _getters[$"{id}.tapped"] = () => tank.Tapped * 1000;               // L drawn off all told
         }
         foreach (var (id, hopper) in _hoppers)
+        {
             _setters[$"{id}.turn"] = _ => hopper.Turn();                       // turn the timer over: any value
+            _getters[$"{id}.turns"] = () => hopper.Turns;                      // times turned over (#162): odd, the glass stands upside down
+        }
     }
 
     private void RegisterFields()
@@ -1594,13 +1598,31 @@ public sealed class MachineRuntime
         }
         foreach (var (id, m) in _mirrors)
         {
-            _getters[$"{id}.power"] = () => m.Power;                   // W onto the target
+            _getters[$"{id}.power"] = () => m.Delivered;               // W onto the receiver (0 while a person has it aimed elsewhere)
+            _getters[$"{id}.sunlit"] = () => m.Power;                  // W it reflects at its aim, on the receiver or not (#162)
+            _getters[$"{id}.hit"] = () => m.OnReceiver ? 1 : 0;        // its light lands on the receiver it lights
             _getters[$"{id}.cosine"] = () => m.Cosine;                 // cos(θ/2)
             _getters[$"{id}.collected"] = () => m.Collected / 1000;    // kJ so far
             _getters[$"{id}.area"] = () => m.Area;
             _getters[$"{id}.dust"] = () => m.Dust;                     // share of its light dust stops; 0 clean
             _setters[$"{id}.dust"] = d => m.Dust = d;                  // clean it: 0
             _setters[$"{id}.area"] = a => m.Area = Math.Max(0, a);     // cover it: 0
+            // aimed by hand (#162): a point as an offset from the mirror (so a machine moved in a world keeps its aim), or a part by its place in the part list; tracking off holds the plate where it stands
+            _getters[$"{id}.aim-dx"] = () => m.Target.X - m.At.X;
+            _getters[$"{id}.aim-dy"] = () => m.Target.Y - m.At.Y;
+            _getters[$"{id}.aim-dz"] = () => m.Target.Z - m.At.Z;
+            _setters[$"{id}.aim-dx"] = v => m.Target = m.Target with { X = m.At.X + v };
+            _setters[$"{id}.aim-dy"] = v => m.Target = m.Target with { Y = m.At.Y + v };
+            _setters[$"{id}.aim-dz"] = v => m.Target = m.Target with { Z = m.At.Z + v };
+            _setters[$"{id}.aim-part"] = n =>
+            {
+                int k = (int)Math.Round(n);
+                if (k < 0 || k >= Def.Parts.Count) return;
+                var p = Def.Parts[k];
+                m.Target = new Vec3(p.At.X, p.At.Y + p.Number("height", p.Number("size-y", 0)) / 2, p.At.Z);
+            };
+            _getters[$"{id}.track"] = () => m.Track ? 1 : 0;
+            _setters[$"{id}.track"] = v => m.SetTracking(Math.Abs(v) > 1e-12);
         }
         foreach (var (id, tank) in _tanks)
         {
@@ -1872,6 +1894,11 @@ public sealed class MachineRuntime
             _getters[$"{id}.done"] = () => d.Done ? 1 : 0;
             _getters[$"{id}.power"] = () => d.Power;                   // W the gang works at
             _setters[$"{id}.power"] = w => d.Power = Math.Max(0, w);
+            // where the gang works (#162): setting either restarts the trench there, from the ground as it is
+            _getters[$"{id}.site-x"] = () => d.X0;
+            _getters[$"{id}.site-z"] = () => d.Z0;
+            _setters[$"{id}.site-x"] = x => d.MoveTo(x, d.Z0);
+            _setters[$"{id}.site-z"] = z => d.MoveTo(d.X0, z);
         }
         foreach (var (id, p) in _pendulums)
         {

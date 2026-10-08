@@ -20,6 +20,9 @@ public partial class MachineView
         public required Vector3 Floor;              // the middle of the hopper's floor, the orifice
         public required float Side, StartLevel;
         public required MeshInstance3D Grain, Plate, Stream, Heap, Band;
+        public required Node3D Glass;               // the walls and the collar that marks the end it was built with on top; turns over (#162)
+        public float Turned;                        // radians the glass has swung so far; heads for pi per turn
+        public float Half;                          // half the glass's height
     }
 
     private readonly List<HopperView> _hopperViews = [];
@@ -35,8 +38,14 @@ public partial class MachineView
             var glass = Shapes.Glass();
             glass.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
             var walls = Shapes.Box(new Vector3(side + 0.01f, start * 1.15f + 0.05f, side + 0.01f), glass);
-            walls.Position = floor + new Vector3(0, (start * 1.15f + 0.05f) / 2, 0);
-            AddChild(walls);
+            float half = (start * 1.15f + 0.05f) / 2;
+            // the glass turns over about its middle (#162): its walls, and a collar of oak at the end it was built with on top
+            var glassNode = new Node3D { Position = floor + new Vector3(0, half, 0) };
+            AddChild(glassNode);
+            glassNode.AddChild(walls);
+            var collar = Shapes.Box(new Vector3(side + 0.04f, 0.03f, side + 0.04f), Surface("oak"));
+            collar.Position = new Vector3(0, half + 0.015f, 0);
+            glassNode.AddChild(collar);
             var sand = Shapes.Mat(new Color(0.82f, 0.7f, 0.42f), roughness: 1);
             var grain = Shapes.Box(Vector3.One, sand);
             var plate = Shapes.Box(new Vector3(side * 0.94f, 0.012f, side * 0.94f), Shapes.Mat(new Color(0.45f, 0.35f, 0.2f)));
@@ -46,7 +55,7 @@ public partial class MachineView
             band.Position = floor + new Vector3(0, -0.006f, 0);
             foreach (var n in new Node3D[] { grain, plate, stream, heap, band }) AddChild(n);
             AddLabel(id, floor + new Vector3(0, start * 1.15f + 0.15f, 0));
-            _hopperViews.Add(new HopperView { Hopper = hopper, Floor = floor, Side = side, StartLevel = start, Grain = grain, Plate = plate, Stream = stream, Heap = heap, Band = band });
+            _hopperViews.Add(new HopperView { Hopper = hopper, Floor = floor, Side = side, StartLevel = start, Grain = grain, Plate = plate, Stream = stream, Heap = heap, Band = band, Glass = glassNode, Half = half });
         }
     }
 
@@ -55,6 +64,11 @@ public partial class MachineView
         foreach (var v in _hopperViews)
         {
             var h = v.Hopper;
+            // a glass turned over swings through half a turn about its middle and stays upside down; the sand (swapped by the
+            // sim at the turn) is drawn where the sim has it
+            float goal = Mathf.Pi * h.Turns;
+            v.Turned = Mathf.Abs(goal - v.Turned) < 0.01f ? goal : Mathf.MoveToward(v.Turned, goal, 0.25f);
+            v.Glass.Rotation = new Vector3(0, 0, v.Turned);
             float level = (float)h.Level;
             v.Grain.Visible = level > 0.001f;
             v.Grain.Scale = new Vector3(v.Side * 0.98f, Mathf.Max(level, 0.001f), v.Side * 0.98f);

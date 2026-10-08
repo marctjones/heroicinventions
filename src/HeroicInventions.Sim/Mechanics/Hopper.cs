@@ -61,7 +61,14 @@ public sealed class Hopper
     /// what was above is now below. The flow does not depend on the depth (Beverloo), so a timer turned part-way
     /// runs for exactly the time it has already run, and the whole sand again for its full time.
     /// </summary>
-    public void Turn() => (Mass, Drained) = (Drained, Mass);
+    public void Turn()
+    {
+        (Mass, Drained) = (Drained, Mass);
+        Turns++;
+    }
+
+    /// <summary>How many times it has been turned over (#162): odd, and the glass stands upside down from how it was built.</summary>
+    public int Turns { get; private set; }
 
     public void Step(double dt)
     {
