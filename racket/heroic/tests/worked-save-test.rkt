@@ -2,9 +2,10 @@
 ;; Issue #199: the rover's trenches and heaps (#63) survive a save, through the game's own save and load (headless Godot, Jolt, 120 Hz)
 ;; in the crater world. Predictions: the same dig run straight through (a backhoe cycle, the rover put back on the same spot, a second
 ;; cycle) and run as cycle, SAVE, quit, LOAD, the rover put on the same spot, a second cycle must leave the same worked ground, node
-;; for node (the save writes numbers that read back as the same double, so the difference worked out beforehand is 0): heights, carry
-;; ceilings, loose flags, rock and soil. The first cycle digs 0.2 m3 and tips it (dug 0.2, dumped 0.2); the second digs 0.2 more and
-;; is refused a dump 0.12 m above where it was dug (the ceiling rule survives): dug 0.4, dumped 0.2. After the load the rover, put
+;; for node (the save writes numbers that read back as the same double, so the difference worked out beforehand is 0): heights,
+;; original heights, loose flags, rock and soil. The first cycle digs 0.2 m3 and tips it (dug 0.2, dumped 0.2); the second digs 0.2
+;; more and tips it 0.12 m above where it was dug, which #63's carry ceiling refused and #72's rule of 2026-10-08 allows (soil goes
+;; wherever the arm reaches): dug 0.4, dumped 0.4. After the load the rover, put
 ;; on the dug ground, stands tilted otherwise than on the undug ground (pitch 9.4 undisturbed, -2.8 on the hole): the view rebuilt
 ;; the patch's body.
 ;;
@@ -47,7 +48,8 @@
   (define put "rover place 190 140 270")
 
   (define kept (run-game (string-append "wait 120; " put "; wait 120; " cycle "; wait 2400; " put "; wait 120; rover; " cycle "; wait 3000; rover; quit")
-                         #:env `(("HEROIC_SAVE" . ,(p "kept.save")) ("HEROIC_SAVE_AT" . "40"))))
+                         ;; saved at 50 s: the second cycle starts at about 35 s and tips at about 45 (the arm's cycle is 11.6 s)
+                         #:env `(("HEROIC_SAVE" . ,(p "kept.save")) ("HEROIC_SAVE_AT" . "50"))))
   (define first-half (run-game (string-append "wait 120; rover; " put "; wait 120; " cycle "; wait 3000; quit")
                                #:env `(("HEROIC_SAVE" . ,(p "s1.save")) ("HEROIC_SAVE_AT" . "20"))))
   (define loaded (run-game (string-append "wait 120; " put "; wait 120; rover; " cycle "; wait 4000; rover; quit")
@@ -77,13 +79,14 @@
     (define a (worked-of (p "kept.save")))
     (define b (worked-of (p "s2.save")))
     (check-= (car (numbers-after a "dug")) 0.4 1e-9)
-    (check-= (car (numbers-after a "dumped")) 0.2 1e-9 "the second dump was refused: the ceiling rule")
+    (check-= (car (numbers-after a "dumped")) 0.4 1e-9 "the second dump, above where it was dug, was tipped: no ceiling")
     (check-equal? (numbers-after b "dug") (numbers-after a "dug"))
     (check-equal? (numbers-after b "dumped") (numbers-after a "dumped"))
     (check-equal? (numbers-after b "heights") (numbers-after a "heights") "heights identical")
-    (for ([f '("carry" "rock" "soil" "loose")])
+    (for ([f '("original" "rock" "soil" "loose")])
       (check-equal? (field b f) (field a f) f))
-    (check-true (for/or ([l (rover-lines loaded)]) (regexp-match? #rx"won't dump" l)) "refused above where it was dug, after the load"))
+    (check-false (regexp-match? #rx"\\(carry " a) "a save written now holds no carry ceilings")
+    (check-true (regexp-match? #rx"arm: Dumped 0.20" (last (rover-lines loaded))) "tipped above where it was dug, after the load"))
 
   ;; ---- #201: the rover itself ----
   (define (rover-of path)
@@ -103,10 +106,10 @@
   (define plain (run-game "wait 120; rover; quit"))
   (define old-loaded (run-game "wait 120; rover; quit" #:env `(("HEROIC_LOAD" . ,(p "old.save")))))
 
-  (test-case "a save made mid-carry holds the rover: pose, bucket load, carry ceiling and the arm's place in its cycle"
+  (test-case "a save made mid-carry holds the rover: pose, bucket load and the arm's place in its cycle (and no carry ceiling)"
     (define r (rover-of (p "mid.save")))
     (check-= (rnum r "carried") 0.2 1e-9 "0.2 m3 in the bucket")
-    (check-true (< (rnum r "ceiling") -60 ) "a finite carry ceiling, the level of the soil it took")
+    (check-false (regexp-match? #rx"\\(ceiling " r) "the bucket's load has no carry ceiling now")
     (check-equal? (rnum r "step") 4.0 "Swinging is the fifth step of the cycle")
     (check-true (> (rnum r "time") 0.2) "and the arm is a quarter second into it")
     (check-equal? (length (regexp-match* #rx"\\(wheel " r)) 6 "six wheels")
@@ -133,7 +136,7 @@
     (check-equal? (numbers-after b "dumped") (numbers-after a "dumped"))
     (check-equal? (numbers-after b "dug") (numbers-after a "dug"))
     (check-equal? (numbers-after b "heights") (numbers-after a "heights") "heights identical, node for node")
-    (for ([f '("carry" "rock" "soil" "loose")]) (check-equal? (field b f) (field a f) f))
+    (for ([f '("original" "rock" "soil" "loose")]) (check-equal? (field b f) (field a f) f))
     (define ra (rover-of (p "kept2.save"))) (define rb (rover-of (p "loaded2.save")))
     (for ([tag '("chassis" "wheel 0.0" "wheel 1.0" "wheel 2.0" "wheel 3.0" "wheel 4.0" "wheel 5.0")])
       (define d (apply max (map (λ (x y) (abs (- x y))) (xf-of ra tag) (xf-of rb tag))))

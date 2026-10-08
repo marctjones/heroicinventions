@@ -3,7 +3,7 @@
 ;; game/scenes/RoverEval.tscn, which prints "EVAL <name> <value>" lines. Checked here against the numbers
 ;; worked out beforehand (game/scripts/Rover.cs, RoverSpec): 2 m/s game speed, a steepest climb of 30 degrees set by the
 ;; tyres' grip (tan 30 = 0.577) and the same on a box, a triangle mesh and a height map (#198), a brake that holds up to it,
-;; and the backhoe's volumes (what is dug is what is dumped; never upward; never bedrock).
+;; and the backhoe's volumes (what is dug is what is dumped, uphill too; never bedrock).
 ;; Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -79,11 +79,11 @@
     (check-= (v "dig.ground-volume-change") 0 1e-9 "the ground has the volume it began with")
     (check-equal? (v "dig.cycles") 1))
 
-  (test-case "it will not dump above where it dug (#72), and keeps the soil in the bucket"
-    (check-= (v "dig-uphill.dumped") 0 1e-9)
-    (check-= (v "dig-uphill.carried") bucket 1e-9)
-    (check-= (v "dig-uphill.ground-volume-change") (- bucket) 1e-9 "the volume is in the bucket, not lost")
-    (check-true (string-prefix? (v "dig-uphill.status") "Kept")))
+  (test-case "it dumps above where it dug (#72, owner decision 2026-10-08: soil goes wherever the arm reaches)"
+    (check-= (v "dig-uphill.dumped") bucket 1e-9)
+    (check-= (v "dig-uphill.carried") 0 1e-9)
+    (check-= (v "dig-uphill.ground-volume-change") 0 1e-9 "the ground has the volume it began with")
+    (check-true (string-prefix? (v "dig-uphill.status") "Dumped")))
 
   (test-case "it cannot cut bedrock"
     (check-= (v "dig-bedrock.dug") 0 1e-9)

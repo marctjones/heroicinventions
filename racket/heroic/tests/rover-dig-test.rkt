@@ -9,8 +9,12 @@
 ;;    make a ramp of about 24 degrees from foot to crest, and the rover then climbs it;
 ;;  - the rover's grade is its tyres' grip, tan 30 = 0.577 (#198): on the fine ground (a height map) it climbs 29 degrees from rest
 ;;    and not 31, as on a box; at 30 degrees grip and weight balance (0.577 cos 30 = sin 30), so a run-up carries it at a steady speed.
+;;  - in the opening (lonely-rover-opening), the slide's rubble over the battery bank is soil the backhoe digs (#72, 2026-10-08):
+;;    it came down on the bedrock apron, and the patch used to read it as bedrock, refusing every bucket. Twelve bucketfuls dug
+;;    from beside the crate all come up full, and the crate's cover (measured to its top, at its middle) goes down: 3.98 m at the
+;;    start, about 3.3 m after twelve (the hole is a bucket's width; the crate lies under one side of it).
 ;; Skipped when Godot is not installed.
-(require rackunit racket/system racket/port racket/string racket/runtime-path
+(require rackunit racket/system racket/port racket/string racket/list racket/file racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
 
 (define-runtime-path game-dir "../../../game")
@@ -64,4 +68,31 @@
     (check-= (v "ramp.net-volume") 0 1e-9)
     (check-true (< 20 (v "ramp.ramp-mean-grade-deg") 30) "worked: 1.0 m in 2.5 m is 21.8 degrees; measured with the heaps' own rise")
     (check-= (v "ramp.after.on-top") 1 0)
-    (check-= (v "ramp.after.rescues") 0 0)))
+    (check-= (v "ramp.after.rescues") 0 0))
+
+  ;; ---- the opening's rubble ----
+  (define dir (make-temporary-file "opening-dig~a" 'directory))
+  (define trace (path->string (build-path dir "t")))
+  (define opening
+    (let ([env (environment-variables-copy (current-environment-variables))]
+          [script (string-join (append '("wait 1200")
+                                       (for/list ([i 12]) "rover place 262.0 143.0 270; wait 60; key b; wait 60; rover until Stowed; rover")
+                                       '("quit")) "; ")])
+      (environment-variables-set! env #"HEROIC_WORLD" #"lonely-rover-opening")
+      (environment-variables-set! env #"HEROIC_INPUT" (string->bytes/utf-8 script))
+      (environment-variables-set! env #"HEROIC_TRACE" (string->bytes/utf-8 trace))
+      (environment-variables-set! env #"HEROIC_TRACE_DT" #"2")
+      (string-split (parameterize ([current-directory game-dir] [current-environment-variables env])
+                      (with-output-to-string (λ () (system* godot-binary "--headless" "--fixed-fps" "120" "--path" ".")))) "\n")))
+  (define covers   ; the battery bank's cover, m, row by row of its trace
+    (for/list ([l (in-list (string-split (call-with-input-file (string-append trace ".battery-bank") port->string) "\n"))]
+               #:when (regexp-match? #rx"crate\\.cover" l))
+      (string->number (cadr (regexp-match #rx"\\(crate\\.cover ([^)]*)\\)" l)))))
+  (test-case "the opening's rubble over the battery bank is soil the backhoe digs, and the crate's cover goes down"
+    (define arm (filter (λ (l) (string-prefix? l "[view] rover:")) opening))
+    (check-equal? (length arm) 12)
+    (check-false (for/or ([l arm]) (regexp-match? #rx"too hard|Dug nothing" l)) "no bucket refused")
+    (check-true (regexp-match? #rx"dug 2.400 dumped 2.400" (last arm)) "twelve full buckets, all tipped")
+    (define left (list-ref covers 5))   ; at 10 s, the slide come to rest and no bucket dug yet (rows every 2 s)
+    (check-= left 3.98 0.01 "the cover the slide left")
+    (check-true (< (last covers) (- left 0.5)) (format "cover ~a m after twelve buckets" (last covers)))))

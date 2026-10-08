@@ -9,7 +9,8 @@ namespace HeroicInventions;
 /// so reading them back gives the very same floats. The axle joints keep no state of their own: the spring's stretch, the wheel's
 /// turn and the motor's target all follow from the two bodies' poses and the drive state, so putting the bodies back puts the
 /// joints back, and the rover lands sprung. (What Jolt cannot hand over is a constraint's warm-start impulse, which it works up
-/// again within a tick or two.) The bucket is its load, its carry ceiling (#72/#63) and its running totals; the arm is the cycle's
+/// again within a tick or two.) The bucket is its load and its running totals (a save from before #72's 2026-10-08 rule also holds the
+/// load's carry ceiling, which is read past: soil now goes wherever the arm reaches); the arm is the cycle's
 /// step and how far into it, with the poses it is moving between, so a cycle resumes where it was.
 /// </summary>
 public sealed partial class Rover
@@ -50,7 +51,6 @@ public sealed partial class Rover
         for (int k = 0; k < _wheels.Count; k++) items.Add(BodyForm("wheel", _wheels[k], k));
         items.Add(new SList([new SSymbol("drive"), Form("command", Command.Forward, Command.Turn), Form("speed", _speedCmd), Form("turn", _turnCmd), Form("rescues", Rescues)]));
         items.Add(new SList([new SSymbol("bucket"), Form("carried", Carried),
-            double.IsPositiveInfinity(_loadCeiling) ? new SList([new SSymbol("ceiling"), new SSymbol("none")]) : Form("ceiling", _loadCeiling),
             Form("soil", _carriedSoil), Form("dug", Dug), Form("dumped", Dumped), Form("cycles", Cycles),
             Form("dig-at", V(_lastDigAt)), Form("dump-at", V(_lastDumpAt))]));
         items.Add(new SList([new SSymbol("arm"), Form("step", _step), Form("time", _stepTime), new SList([new SSymbol("refused"), new SBool(_refused)]),
@@ -84,7 +84,6 @@ public sealed partial class Rover
         Command = (cmd[0], cmd[1]);
         _speedCmd = Num(drive, "speed"); _turnCmd = Num(drive, "turn"); Rescues = (int)Num(drive, "rescues");
         Carried = Num(bucket, "carried");
-        _loadCeiling = bucket.Field("ceiling")?.Items.ElementAtOrDefault(1) is SNumber c ? c.Value : double.PositiveInfinity;
         _carriedSoil = (int)Num(bucket, "soil"); Dug = Num(bucket, "dug"); Dumped = Num(bucket, "dumped"); Cycles = (int)Num(bucket, "cycles");
         _lastDigAt = V3(Nums(bucket, "dig-at")); _lastDumpAt = V3(Nums(bucket, "dump-at"));
         _step = step; _stepTime = Num(arm, "time");

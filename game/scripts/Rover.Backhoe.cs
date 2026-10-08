@@ -13,9 +13,11 @@ namespace HeroicInventions;
 /// gets a 30 m patch of 0.25 m cells (<see cref="WorkedGround"/>) and the bucket scrapes those: at the end of the dig stroke the
 /// bucket's volume is taken from the nodes within 0.45 m of the teeth (never from bedrock), a third of a metre deep, and where
 /// the bucket tips it is put back on the nodes there. The two volumes are the same, so what is dug is dumped, and the heap and
-/// the hole then settle by Mohr–Coulomb as the rest of the ground does. It dumps only at or below the level it dug from (#72: free
-/// effort must not be able to store energy by lifting soil up a hill; a heap remembers the level its soil came from, so soil can't
-/// be walked uphill by digging a mound and dumping on it), and a bucket that can't dump keeps its load.
+/// the hole then settle by Mohr–Coulomb as the rest of the ground does. It digs and dumps wherever the arm reaches, a hole down to
+/// bedrock and a heap on a heap (#72, owner decision 2026-10-08: soil is not a load). What it won't do is raise the ground under or
+/// against a body: a dig or a dump whose ground, the slide after it included, would rise into anything loose but the rover itself is
+/// refused and the ground left as it was (<see cref="WorkedGround.Try"/>), so piling soil never lifts or shoves a load. A bucket
+/// that can't dump keeps its load.
 /// </summary>
 public sealed partial class Rover
 {
@@ -224,17 +226,19 @@ public sealed partial class Rover
         if (ground.WorkAt(at.X, at.Z) is not { } work) { Refuse("Dug nothing: too near the edge of the map or of the ground that can be worked here"); return; }
         TickProfile.Stop("backhoe-patch", t);
         t = TickProfile.Start();
-        // the bucket scrapes the fine cells under the teeth; the load may be carried no higher than the mean of the levels of the soil it took (#72)
-        if (work.Scoop(at.X, at.Z, room) is not { } scooped) { Refuse($"Dug nothing: {soil.Material} under the teeth is too hard for the backhoe"); return; }
+        // the bucket scrapes the fine cells under the teeth, and a bank dug steeper than the soil stands slumps into the hole (#44);
+        // a slump that would rise under or against a body is refused, and the ground is left as it was (#72)
+        WorkedGround.Scooped? took = null;
+        string? inTheWay = null;
+        bool kept = work.Try(() => { took = work.Scoop(at.X, at.Z, room); if (took is not null) work.Settle(GroundGravity); },
+                             raised => (inTheWay = BodyInTheWay(raised)) is null);
         TickProfile.Stop("backhoe-scoop", t);
-        _loadCeiling = Carried > 1e-9 ? (_loadCeiling * Carried + scooped.Ceiling * scooped.Volume) / (Carried + scooped.Volume) : scooped.Ceiling;
+        if (!kept) { Refuse($"Dug nothing: the slide would heap soil against the {inTheWay}"); return; }
+        if (took is not { } scooped) { Refuse($"Dug nothing: {soil.Material} under the teeth is too hard for the backhoe"); return; }
         _carriedSoil = scooped.Soil;
         Carried += scooped.Volume;
         Dug += scooped.Volume;
         ArmStatus = $"Dug {scooped.Volume:0.00} m³ of {soil.Material}";
-        t = TickProfile.Start();
-        work.Settle(GroundGravity);   // a bank dug steeper than the soil stands slumps into the hole (#44)
-        TickProfile.Stop("backhoe-settle", t);
     }
 
     private void DumpHere()
@@ -245,29 +249,55 @@ public sealed partial class Rover
         if (Ground is not { } ground) { Carried = 0; return; }
         if (ground.CellAt(at.X, at.Z) is null) { Refuse("Kept the load: off the map"); return; }
         if (ground.WorkAt(at.X, at.Z) is not { } work) { Refuse("Kept the load: too near the edge of the ground that can be worked here"); return; }
-        // free effort must not store energy (#72): soil goes down or along, never up, however it has been passed from heap to heap
+        // soil goes wherever the arm reaches, up or down (#72); loose soil heaped steeper than it stands slides (#44). A heap, or its
+        // slide, that would rise under or against a body is refused: raising a body on soil is lifting a load by the back door
         double m3 = Carried;
         long t = TickProfile.Start();
-        if (work.Pour(at.X, at.Z, m3, _carriedSoil, _loadCeiling) is not { } landed)
-        {
-            double above = (work.LandingSurface(at.X, at.Z) ?? _loadCeiling) - _loadCeiling;
-            Refuse($"Kept {Carried:0.00} m³: won't dump {above:0.00} m above where it was dug");
-            return;
-        }
+        double? landed = null;
+        string? inTheWay = null;
+        bool kept = work.Try(() => { landed = work.Pour(at.X, at.Z, m3, _carriedSoil); if (landed is not null) work.Settle(GroundGravity); },
+                             raised => (inTheWay = BodyInTheWay(raised)) is null);
         TickProfile.Stop("backhoe-pour", t);
+        if (!kept) { Refuse($"Kept {Carried:0.00} m³: it would heap soil under or against the {inTheWay}"); return; }
+        if (landed is null) { Refuse("Kept the load: no ground to tip it on"); return; }
         Dumped += m3;
         Carried = 0;
         Cycles++;
         ArmStatus = $"Dumped {m3:0.00} m³";
-        t = TickProfile.Start();
-        work.Settle(GroundGravity);   // loose soil heaped steeper than it stands slides (#44)
-        TickProfile.Stop("backhoe-settle", t);
+    }
+
+    /// <summary>m: how far below a node's old height a body's underside may reach and still be found (Jolt lets a resting body sink
+    /// into the ground by up to its penetration slop, 0.02 m), and how far above the new height the ground must stay clear of one.</summary>
+    private const float BodySlack = 0.03f, BodyClearance = 0.05f;
+
+    /// <summary>
+    /// The name of the first loose body (a rigid body, frozen or not, other than the rover's own chassis and wheels) that the ground,
+    /// risen at these nodes, would reach: a column a fine cell across over each node, from just under its old height to a little over
+    /// its new one. Null if there is none. (#72: the rover may move soil anywhere, but not lift or push a load with it.)
+    /// </summary>
+    private string? BodyInTheWay(IReadOnlyList<WorkedGround.Raised> raised)
+    {
+        if (!IsInsideTree()) return null;
+        var space = GetWorld3D().DirectSpaceState;
+        var exclude = new Godot.Collections.Array<Rid> { Chassis.GetRid() };
+        foreach (var w in _wheels) exclude.Add(w.GetRid());
+        var box = new BoxShape3D();
+        var query = new PhysicsShapeQueryParameters3D { Shape = box, CollideWithAreas = false, CollideWithBodies = true, Exclude = exclude };
+        float cell = (float)WorkedGround.FineCell;
+        foreach (var r in raised)
+        {
+            float lo = (float)r.Before - BodySlack, hi = (float)r.After + BodyClearance;
+            box.Size = new Vector3(cell, hi - lo, cell);
+            query.Transform = new Transform3D(Basis.Identity, new Vector3((float)r.X, (lo + hi) / 2, (float)r.Z));
+            foreach (var hit in space.IntersectShape(query, 32))
+                if (hit["collider"].AsGodotObject() is RigidBody3D body) return body.Name;   // frozen too: it would be shoved when let go
+        }
+        return null;
     }
 
     private bool _refused;   // this cycle's dig or dump was refused: its reason is what the status keeps saying until the arm is stowed
 
     private void Refuse(string why) { ArmStatus = why; _refused = true; }
 
-    private double _loadCeiling = double.PositiveInfinity;   // m, the level the load may be carried to
     private int _carriedSoil;
 }

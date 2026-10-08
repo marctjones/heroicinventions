@@ -18,12 +18,11 @@ namespace HeroicInventions.Sim.Fluids;
 /// <see cref="Margin"/> m inside it. The coarse heights and soils are as they were; the water on the map cells wholly inside the
 /// patch moves onto the patch's own fine grid (<see cref="PatchWater"/>, #200), every drop of it. A world where no one digs is untouched.
 ///
-/// Free effort must not make energy (#72), but a backhoe lifts spoil out of its own hole. Every cell remembers the level its top soil may be carried to
-/// (<see cref="Terrain.Ceiling"/>): ground never covered is the level it had when the patch was made (so spoil may be lifted out of a hole
-/// to its rim, no more than <see cref="ArmReach"/> above where it was scraped); spoil is the lower of the level it was dug from and
-/// the one it landed on, and soil that slides down keeps the lower of the two. A bucket's load takes the mean of what it
-/// scraped, and is dumped only where the surface is no higher than that, so soil can be moved down or along, never up, however
-/// it is passed from heap to heap.
+/// The rover moves soil wherever its arm reaches (#72, owner decision 2026-10-08): it digs down to bedrock and tips spoil on any
+/// ground, a heap on a heap, so a pile grows bucket by bucket until its sides stand at repose. Soil is not a load, and lifting it
+/// is the backhoe's job. What it must not do is hand energy to a body by a quirk of the model: a dump or a dig whose ground (the
+/// slide after it included) would rise under or into a body is refused (<see cref="Try"/>, the view's check), so raising soil
+/// never lifts or shoves a load by the back door.
 /// </summary>
 public sealed class WorkedGround
 {
@@ -53,7 +52,8 @@ public sealed class WorkedGround
 
     /// <summary>The heights the patch started with (or was last shaped to): what a dug or heaped cell is measured against.</summary>
     public double[] Original { get; }
-    /// <summary>The lowest each node may be cut: bedrock is never cut, and ground that was bedrock keeps its level under any spoil on it.</summary>
+    /// <summary>The lowest each node may be cut: bedrock is never cut, ground that was bedrock keeps its level under any spoil on it, and
+    /// rubble a slide left on rock (<see cref="Terrain.Covering"/>) is soil down to the rock's top as it was.</summary>
     public double[] Floor { get; }
 
     /// <summary>The water standing on the patch (#200), on a grid of its fine cells nested in the map's; null until the map's water first steps with the patch there.</summary>
@@ -70,7 +70,7 @@ public sealed class WorkedGround
     public double NodeZ(int j) => MinZ + j * FineCell;
     private double Area => Fine.Cell * Fine.Cell;
 
-    private bool Hard(int node) => Fine.SoilOf(node).Cohesion >= 1e7;
+    private bool Hard(int node) => Fine.SoilOf(node).Cohesion >= Terrain.RockCohesion;
 
     /// <summary>A patch over coarse nodes [bi0, bi1] × [bj0, bj1] of <paramref name="ground"/>, the ground as it stands.</summary>
     public WorkedGround(Terrain ground, int bi0, int bj0, int bi1, int bj1)
@@ -84,12 +84,17 @@ public sealed class WorkedGround
         MinZ = ground.CellZ(bj0); MaxZ = ground.CellZ(bj1);
         var heights = new double[nx * nz];
         var soil = new int[nx * nz];
+        var rock = new double[nx * nz];   // the rock's top under rubble a slide left on it (#72), else NaN
         for (int j = 0; j < nz; j++)
             for (int i = 0; i < nx; i++)
             {
                 double x = MinX + i * cf, z = MinZ + j * cf;
-                heights[i + j * nx] = ground.CoarseSurfaceAt(x, z);
-                soil[i + j * nx] = ground.Soil[ground.CellAt(x, z)!.Value];
+                int k = i + j * nx, cell = ground.CellAt(x, z)!.Value;
+                heights[k] = ground.CoarseSurfaceAt(x, z);
+                soil[k] = ground.Soil[cell];
+                rock[k] = double.NaN;
+                if (ground.Covering(cell) is { } covered && heights[k] > covered.RockTop)
+                    (soil[k], rock[k]) = (covered.Soil, covered.RockTop);
             }
         Fine = new Terrain
         {
@@ -98,10 +103,9 @@ public sealed class WorkedGround
             Soils = ground.Soils.Select(s => s with { Boulders = null }).ToList(),   // a bucketful leaves no boulders
             OpenEdges = false, Roughness = ground.Roughness,
         };
-        Fine.Ceiling = (double[])heights.Clone();   // ground never covered may be lifted to the level it has now
         Original = (double[])heights.Clone();
         Floor = new double[nx * nz];
-        for (int k = 0; k < Floor.Length; k++) Floor[k] = Hard(k) ? heights[k] : double.NegativeInfinity;
+        for (int k = 0; k < Floor.Length; k++) Floor[k] = !double.IsNaN(rock[k]) ? rock[k] : Hard(k) ? heights[k] : double.NegativeInfinity;
     }
 
     /// <summary>A patch made by merging <paramref name="parts"/> (all of one map, on its lattice) over the nodes given: each node is taken from the part that has it, else from the map.</summary>
@@ -118,7 +122,6 @@ public sealed class WorkedGround
                     w.Fine.Heights[to] = p.Fine.Heights[from];
                     w.Fine.Soil[to] = p.Fine.Soil[from];
                     w.Fine.Loose[to] = p.Fine.Loose[from];
-                    w.Fine.Ceiling![to] = p.Fine.Ceiling![from];
                     w.Original[to] = p.Original[from];
                     w.Floor[to] = p.Floor[from];
                 }
@@ -180,15 +183,6 @@ public sealed class WorkedGround
         return Math.Clamp(i, 0, Nx - 1) + Math.Clamp(j, 0, Nz - 1) * Nx;
     }
 
-    /// <summary>m, the backhoe's reach (boom 0.8 + stick 0.7 + bucket 0.3, Rover.BoomLength etc.): soil is lifted out of a hole no more than this above where it was scraped.</summary>
-    public const double ArmReach = 1.8;
-
-    /// <summary>
-    /// The level the soil on top of a node may be carried to: for ground never covered with spoil, the level it had when the patch was
-    /// made (so soil may be lifted out of the rover's own hole to its rim); for spoil, the lower of the levels it came from and landed on.
-    /// </summary>
-    private double Eff(int k) => Fine.Ceiling![k];
-
     private List<int> Within(double x, double z, double radius)
     {
         var nodes = new List<int>();
@@ -203,14 +197,13 @@ public sealed class WorkedGround
         return nodes;
     }
 
-    /// <summary>What a bucket took: its volume (m³), the level it may be carried to, and the soil.</summary>
-    public readonly record struct Scooped(double Volume, double Ceiling, int Soil, double MeanSurface);
+    /// <summary>What a bucket took: its volume (m³), the mean level (m) of the soil it took as it lay (weighted by what each node gave), the soil, and the mean surface it left.</summary>
+    public readonly record struct Scooped(double Volume, double Level, int Soil, double MeanSurface);
 
     /// <summary>
     /// A bucket scrapes the ground within <see cref="DigRadius"/> of a point to one depth, deeper where it must to fill, but not
     /// below bedrock (a node of bedrock gives nothing) and not past <paramref name="volume"/> m³. Returns what it took, or null
-    /// if there was nothing to take. The level the load may be carried to is the mean, weighted by what each node gave, of the
-    /// levels their soil may be carried to.
+    /// if there was nothing to take.
     /// </summary>
     public Scooped? Scoop(double x, double z, double volume)
     {
@@ -218,14 +211,13 @@ public sealed class WorkedGround
         if (nodes.Count == 0 || volume <= 0) return null;
         var avail = nodes.Select(k => Math.Max(0, Fine.Heights[k] - Floor[k])).ToArray();
         double depth = FillDepth(avail, volume / Area);
-        double taken = 0, level = 0, from = 0;
+        double taken = 0, from = 0;
         for (int n = 0; n < nodes.Count; n++)
         {
             double d = Math.Min(depth, avail[n]);
             if (d <= 0) continue;
             int k = nodes[n];
-            level += d * Eff(k);
-            from += d * Fine.Heights[k];
+            from += d * (Fine.Heights[k] - d / 2);   // the middle of the slab it gave
             taken += d;
             Fine.Heights[k] -= d;
         }
@@ -233,7 +225,7 @@ public sealed class WorkedGround
         Fine.Touch();
         double m3 = taken * Area;
         Dug += m3;
-        return new Scooped(m3, Math.Min(level / taken, from / taken + ArmReach), Fine.Soil[Node(x, z)], nodes.Average(k => Fine.Heights[k]));
+        return new Scooped(m3, from / taken, Fine.Soil[Node(x, z)], nodes.Average(k => Fine.Heights[k]));
     }
 
     /// <summary>The depth d at which the sum of min(d, available) over the nodes is <paramref name="total"/> (m, cell-depths): all of it if it is less.</summary>
@@ -260,20 +252,17 @@ public sealed class WorkedGround
     }
 
     /// <summary>
-    /// Tips <paramref name="m3"/> of loose soil onto the ground within <see cref="PourRadius"/> of a point, level over its nodes. It is
-    /// done only if the ground there is no higher than <paramref name="ceiling"/> (the level the load may be carried to);
-    /// otherwise nothing changes. Returns the surface it landed on, or null if refused.
+    /// Tips <paramref name="m3"/> of loose soil onto the ground within <see cref="PourRadius"/> of a point, level over its nodes,
+    /// whatever its height. Returns the surface it landed on, or null if there is no workable ground there.
     /// </summary>
-    public double? Pour(double x, double z, double m3, int soil, double ceiling)
+    public double? Pour(double x, double z, double m3, int soil)
     {
         var nodes = Within(x, z, PourRadius);
         if (nodes.Count == 0 || m3 <= 0) return null;
         double surface = nodes.Average(k => Fine.Heights[k]);
-        if (surface > ceiling + 1e-9) return null;
         double rise = m3 / (nodes.Count * Area);
         foreach (int k in nodes)
         {
-            Fine.Ceiling![k] = Math.Min(Eff(k), ceiling);
             Fine.Heights[k] += rise;
             Fine.Loose[k] = true;
             if (Hard(k)) Fine.Soil[k] = soil;   // spoil on bedrock is soil, not rock (the rock under it is still there: Floor)
@@ -281,6 +270,35 @@ public sealed class WorkedGround
         Fine.Touch();
         Dumped += m3;
         return surface;
+    }
+
+    /// <summary>A node a change to the ground raised: where it is (m), and its height before and after.</summary>
+    public readonly record struct Raised(double X, double Z, double Before, double After);
+
+    /// <summary>
+    /// Makes <paramref name="change"/> to the ground (a dig or a dump, and the slide after it) and keeps it only if
+    /// <paramref name="allow"/> lets it, given every node the change raised by more than a micron (the relaxation's own
+    /// cut-off); otherwise the ground is put back as it was, to the bit: heights, loose flags, soils, the totals and the
+    /// version, so a view sees no change. Returns whether the change was kept. (#72: a dump or a slide that would lift or
+    /// shove a body is the rover lifting a load by the back door; the view knows where the bodies are, so it decides.)
+    /// </summary>
+    public bool Try(Action change, Func<IReadOnlyList<Raised>, bool> allow)
+    {
+        var heights = (double[])Fine.Heights.Clone();
+        var loose = (bool[])Fine.Loose.Clone();
+        var soil = (int[])Fine.Soil.Clone();
+        var (dug, dumped, version) = (Dug, Dumped, Fine.Version);
+        change();
+        var raised = new List<Raised>();
+        for (int k = 0; k < heights.Length; k++)
+            if (Fine.Heights[k] > heights[k] + 1e-6) raised.Add(new Raised(NodeX(k % Nx), NodeZ(k / Nx), heights[k], Fine.Heights[k]));
+        if (raised.Count == 0 || allow(raised)) return true;
+        Array.Copy(heights, Fine.Heights, heights.Length);
+        Array.Copy(loose, Fine.Loose, loose.Length);
+        Array.Copy(soil, Fine.Soil, soil.Length);
+        (Dug, Dumped) = (dug, dumped);
+        Fine.PutBack(version);
+        return false;
     }
 
     /// <summary>Lets the patch settle: loose soil steeper than its repose slides, cut faces taller than their soil's critical height fail, until it stands.</summary>
@@ -297,7 +315,6 @@ public sealed class WorkedGround
             {
                 int k = i + j * Nx;
                 Fine.Heights[k] = Original[k] = surface(NodeX(i), NodeZ(j));
-                Fine.Ceiling![k] = Fine.Heights[k];
                 Fine.Loose[k] = false;
                 Floor[k] = Hard(k) ? Fine.Heights[k] : double.NegativeInfinity;
             }
@@ -309,9 +326,9 @@ public sealed class WorkedGround
     internal const int SaveVersion = 1;
 
     /// <summary>
-    /// The patch as a save holds it: <c>(patch (box I0 J0 I1 J1) (dug V) (dumped V) (heights …) (carry (k original ceiling) …) (rock (k level) …) (soil (value count) …) (loose k …) [(water (k depth qx qz) …)])</c>.
-    /// Heights are all written; a node's original height and carry ceiling only where they differ from its height (an untouched
-    /// node has all three the same), the floor only where it is not minus infinity (bedrock), the soil as runs, loose flags as the nodes that are,
+    /// The patch as a save holds it: <c>(patch (box I0 J0 I1 J1) (dug V) (dumped V) (heights …) (original (k level) …) (rock (k level) …) (soil (value count) …) (loose k …) [(water (k depth qx qz) …)])</c>.
+    /// Heights are all written; a node's original height only where it differs from its height (an untouched node has the two
+    /// the same), the floor only where it is not minus infinity (bedrock), the soil as runs, loose flags as the nodes that are,
     /// and the water standing on it (#200), cell by cell of its grid where there is any (a dry patch has no water field).
     /// Numbers are written to the digit that reads back as the same double.
     /// </summary>
@@ -320,13 +337,13 @@ public sealed class WorkedGround
         static SList L(string head, IEnumerable<SExpr> v) => new([new SSymbol(head), .. v]);
         static SExpr N(double v) => new SNumber(v);
         var h = Fine.Heights;
-        var carry = new List<SExpr>();
+        var original = new List<SExpr>();
         var rock = new List<SExpr>();
         var loose = new List<SExpr>();
         var soil = new List<SExpr>();
         for (int k = 0; k < h.Length; k++)
         {
-            if (Original[k] != h[k] || Fine.Ceiling![k] != h[k]) carry.Add(new SList([N(k), N(Original[k]), N(Fine.Ceiling![k])]));
+            if (Original[k] != h[k]) original.Add(new SList([N(k), N(Original[k])]));
             if (!double.IsNegativeInfinity(Floor[k])) rock.Add(new SList([N(k), N(Floor[k])]));
             if (Fine.Loose[k]) loose.Add(N(k));
         }
@@ -338,13 +355,17 @@ public sealed class WorkedGround
         var items = new List<SExpr> { new SSymbol("patch"),
             L("box", new[] { Bi0, Bj0, Bi1, Bj1 }.Select(x => N(x))),
             L("dug", [N(Dug)]), L("dumped", [N(Dumped)]),
-            L("heights", h.Select(N)), L("carry", carry), L("rock", rock), L("soil", soil), L("loose", loose) };
+            L("heights", h.Select(N)), L("original", original), L("rock", rock), L("soil", soil), L("loose", loose) };
         if (Water?.Water.WetCells().Select(c => (SExpr)new SList([N(c.Cell), N(c.H), N(c.Qx), N(c.Qz)])).ToList() is { Count: > 0 } wet)
             items.Add(L("water", wet));
         return new SList(items);
     }
 
-    /// <summary>A patch rebuilt from <see cref="Save"/>'s form over <paramref name="ground"/> (whose own heights and soils are already the saved ones).</summary>
+    /// <summary>
+    /// A patch rebuilt from <see cref="Save"/>'s form over <paramref name="ground"/> (whose own heights and soils are already the saved ones).
+    /// A save made before #72's 2026-10-08 rule holds <c>(carry (k original ceiling) …)</c> in place of <c>(original …)</c>: its
+    /// original heights are read and its carry ceilings, which nothing uses now, are dropped.
+    /// </summary>
     internal static WorkedGround Load(Terrain ground, SList saved)
     {
         double[] Nums(string f) => saved.Field(f)?.Items.Skip(1).Select(e => e is SNumber n ? n.Value : throw new FormatException($"a worked patch's ({f} …) holds only numbers")).ToArray()
@@ -357,14 +378,15 @@ public sealed class WorkedGround
         if (heights.Length != w.Fine.Heights.Length) throw new FormatException($"a worked patch has {heights.Length} heights for {w.Fine.Heights.Length} nodes");
         Array.Copy(heights, w.Fine.Heights, heights.Length);
         Array.Copy(heights, w.Original, heights.Length);
-        Array.Copy(heights, w.Fine.Ceiling!, heights.Length);
         Array.Fill(w.Floor, double.NegativeInfinity);
         Array.Fill(w.Fine.Loose, false);
         int Node(double k) => k >= 0 && k < heights.Length && k == Math.Floor(k) ? (int)k : throw new FormatException("a worked patch names a node it does not have");
-        foreach (var e in saved.Field("carry")!.Items.Skip(1).OfType<SList>())
+        var originals = saved.Field("original") ?? saved.Field("carry") ?? throw new FormatException("a worked patch needs (original …)");
+        foreach (var e in originals.Items.Skip(1).OfType<SList>())
         {
-            if (e.Items is not [SNumber k, SNumber original, SNumber ceiling]) throw new FormatException("a carry entry is (NODE ORIGINAL CEILING)");
-            (w.Original[Node(k.Value)], w.Fine.Ceiling![Node(k.Value)]) = (original.Value, ceiling.Value);
+            if (e.Items is not [SNumber k, SNumber original, ..] || e.Items.Count > 3 || e.Items.Count == 3 && e.Items[2] is not SNumber)
+                throw new FormatException("an original entry is (NODE LEVEL)");
+            w.Original[Node(k.Value)] = original.Value;
         }
         foreach (var e in saved.Field("rock")!.Items.Skip(1).OfType<SList>())
         {
