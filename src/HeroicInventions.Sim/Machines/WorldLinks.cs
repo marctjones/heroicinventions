@@ -110,6 +110,8 @@ public sealed class ShaftLink(IShaft from, IShaft to, double ratio, double effic
             {
                 impulse[links[i].To] += given[i];
                 impulse[links[i].From] += taken[i];
+                if (given[i] != 0) omega[links[i].To] += given[i] / inertia[links[i].To];   // the speeds after the exchange, as the sweeps leave them (a Locked link reads them)
+                if (taken[i] != 0) omega[links[i].From] += taken[i] / inertia[links[i].From];
             }
         }
         else
