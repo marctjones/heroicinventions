@@ -141,8 +141,11 @@ public partial class Main
 
     /// <summary>
     /// HEROIC_FRAMING_REPORT=1: how much of the clear area a machine fills once framed (its profile, then
-    /// <see cref="CentreInClearArea"/>), and how much of its bounds is still outside it. Bounds include ponds, channels
-    /// and the ground a buried part sits in, so a number is a flag to look at a frame, not a verdict.
+    /// <see cref="CentreInClearArea"/>), and how much of it is still outside: of the one box round it all (the old measure)
+    /// and of its parts' own boxes (what the eye sees). Bounds include ponds, channels and the ground a buried part sits
+    /// in, so a number is a flag to look at a frame, not a verdict. History: re-framing from bounds was tried in #86 and
+    /// withdrawn, because the box round a machine holds its ponds and launch arcs; it came back in #190 capped at
+    /// <see cref="MostPullBack"/> x the profile's distance, measured on the parts, and skipped for throwers.
     /// </summary>
     private void CheckFraming(string name, Node3D view)
     {

@@ -259,3 +259,129 @@ Still true, none of it new (all in the audit): **buried-crate** alone falls fore
 ## Issue
 
 Fix list filed as https://github.com/marctjones/heroicinventions/issues/190, milestone "7 Look and readability" (the "1 Sandbox world" milestone no longer exists: it was renamed "1 Build mode and UX"; this is a look review, so 7 fits better). Already in #148 and not duplicated: buried-crate, the catapult/trebuchet/falling-stones/dam-break framing, bellows-forge, crane-hoist.
+
+## Re-sweep, 2026-10-08 (branch wave4/framing, after waves 1-3)
+
+All 103 machines (three new since the first pass: cart-push, roman-crane-reload, roman-crane-reload-gang) shot again in a hidden real window, `tools/gui-check.sh --hidden HEROIC_AUTOSELECT=<m> HEROIC_AUTORUN=1 HEROIC_FRAMING_REPORT=1 -- "wait 200; shot a; wait 400; shot b; quit"`, each at its default framing and speed, once on the base (2eb643a) and once on this branch, and looked at on contact sheets. The changes are in `docs/art-direction.md` §12.13; frames in `docs/art/review/framing-2026-10-08.jpg`, `labels-action-2026-10-08.jpg`, `throwers-2026-10-08.jpg`.
+
+**Counts: GOOD 97, FIX 5, BROKEN 1 (buried-crate opened alone).**
+
+How the numbers were taken. `HEROIC_FRAMING_REPORT=1` at selection, both builds measured against the same clear area (296..1220 of the 1600-unit viewport: the base's own report used 230..1300, window pixels read as viewport units, which is why its numbers looked better than its frames). *box outside*: the share of the one box round the whole machine that projects outside the clear area (the old measure). *parts outside*: the same for the union of each part's own projected box, which is what the eye sees; the big box's near corners stand in empty air in front of a deep machine, so "box" figures such as newcomen-engine's 79% are projection artefacts, not verdicts. The base's parts figure does not leave out deep parts (the branch leaves out anything over 3 m underground), so newcomen-engine and -hearth's 79% -> 0% is partly that. "n/a": part of the box is behind the camera at selection (falling-stones and tunnel-test drop from 300-350 m), or the machine had no profile. *parts fill*: how much of the clear area the parts cover; machines that overflowed get smaller, on purpose.
+
+| # | machine | parts outside, before -> after | box outside, before -> after | parts fill | verdict | what is left / what changed |
+|---|---|---|---|---|---|---|
+| 1 | `aeolipile` | 0% -> 0% | 7% -> 5% | 37% -> 37% | GOOD | close-up by design; kettle base and sphere in frame now (was cut) |
+| 2 | `airlock` | 0% -> 0% | 1% -> 1% | 37% -> 37% | GOOD | door labels (inner, outer, bleed) now placed |
+| 3 | `antikythera-lunar-train` | 1% -> 0% | 9% -> 5% | 53% -> 53% | GOOD | reference; three more gear labels placed |
+| 4 | `archimedes-screw` | 33% -> 0% | 40% -> 1% | 66% -> 36% | GOOD | whole run between the panels (was 33% out) |
+| 5 | `axle-friction` | 0% -> 0% | 6% -> 2% | 25% -> 24% | GOOD | busy but every label legible |
+| 6 | `baghdad-battery` | 0% -> 0% | 0% -> 1% | 20% -> 19% | GOOD | jars small; labels back after the dial filter was narrowed |
+| 7 | `ball-ramp` | 0% -> 0% | 0% -> 0% | 8% -> 8% | GOOD | camera follows the balls off the foot, then returns to the ramp when they roll on |
+| 8 | `bar-crane` | 1% -> 0% | 3% -> 2% | 36% -> 37% | GOOD |  |
+| 9 | `battering-rams` | 14% -> 0% | 19% -> 0% | 39% -> 30% | GOOD | third ram out from under the panel |
+| 10 | `bearing-friction` | 0% -> 0% | 0% -> 0% | 34% -> 34% | GOOD |  |
+| 11 | `bellows-forge` | 0% -> 0% | 0% -> 0% | 16% -> 16% | GOOD | whole; labels clear of the bubbles |
+| 12 | `belt-drive` | 0% -> 0% | 0% -> 0% | 26% -> 26% | GOOD | drive labels stepped aside |
+| 13 | `boiler-safety` | 0% -> 0% | 0% -> 0% | 22% -> 22% | GOOD |  |
+| 14 | `boiler-shells` | 0% -> 0% | 4% -> 1% | 17% -> 16% | GOOD | rating labels no longer under the panel or on each other |
+| 15 | `boulder` | 64% -> 0% | 64% -> 0% | 2% -> 5% | GOOD |  |
+| 16 | `branca-steam-wheel` | 32% -> 0% | 44% -> 14% | 80% -> 83% | GOOD | wheel and its label in frame (were cut at the top) |
+| 17 | `buried-crate` | 44% -> 0% | 56% -> 13% | 81% -> 74% | BROKEN alone | no ground when opened bare: the crate falls for ever (dig-out world frames it; see coordinator note) |
+| 18 | `capstans` | 0% -> 0% | 0% -> 0% | 32% -> 32% | GOOD | two-turns label out from under the panel |
+| 19 | `cargo-crate` | 0% -> 0% | 0% -> 0% | 8% -> 8% | GOOD |  |
+| 20 | `cart-push` | 0% -> 0% | 0% -> 0% | 8% -> 8% | GOOD |  |
+| 21 | `carts` | 0% -> 0% | 0% -> 0% | 13% -> 9% | GOOD | side-on; both carts and the slope stay in frame as they roll (was: carts gone) |
+| 22 | `castellum-aquae` | 0% -> 0% | 2% -> 4% | 21% -> 21% | GOOD | whole aqueduct, baths end just inside the panel |
+| 23 | `cistern` | 0% -> 0% | 0% -> 0% | 15% -> 15% | GOOD |  |
+| 24 | `cistern-and-trough` | 0% -> 0% | 0% -> 0% | 30% -> 30% | GOOD |  |
+| 25 | `cistern-drain` | 19% -> 0% | 25% -> 0% | 51% -> 35% | GOOD | cistern out from under the panel (world part; '200 L' is the buried cistern) |
+| 26 | `component-gallery` | 2% -> 0% | 11% -> 3% | 8% -> 7% | GOOD | all five benches in; small by nature |
+| 27 | `constant-head` | 54% -> 0% | 85% -> 0% | 84% -> 34% | GOOD | whole (was 54% of parts outside, receivers cut) |
+| 28 | `crane-hoist` | 0% -> 0% | 0% -> 0% | 35% -> 34% | GOOD |  |
+| 29 | `crank-slider` | 0% -> 0% | 0% -> 0% | 15% -> 15% | GOOD | figure beside it at true scale |
+| 30 | `crate` | 0% -> 0% | 0% -> 0% | 8% -> 8% | GOOD |  |
+| 31 | `crate-tongs` | 0% -> 0% | 0% -> 0% | 38% -> 38% | FIX | tongs too small to read beside the crates: part size, not framing |
+| 32 | `dam-break` | 30% -> 0% | 40% -> 3% | 14% -> 8% | GOOD | whole 65 m: pond, gate, race and low pond in frame (parts 30% -> 0% out); small |
+| 33 | `drop-test` | 0% -> 0% | 0% -> 0% | 4% -> 4% | GOOD |  |
+| 34 | `dry-mill` | 0% -> 0% | 0% -> 0% | 30% -> 30% | GOOD |  |
+| 35 | `earth-machines-on-mars` | 8% -> 0% | 34% -> 34% | 62% -> 66% | GOOD | windmill whole |
+| 36 | `fall-and-swing` | 0% -> 0% | 0% -> 0% | 35% -> 35% | GOOD |  |
+| 37 | `falling-stones` | n/a -> n/a | n/a -> n/a | n/a -> n/a | FIX | 10 cm balls dropped from 350 m: landing view shows the readouts, the balls are out of frame (blueprint/profile) |
+| 38 | `field-windmill` | 0% -> 0% | 0% -> 0% | 47% -> 47% | GOOD |  |
+| 39 | `fire-and-water` | 0% -> 0% | 0% -> 0% | 20% -> 20% | GOOD |  |
+| 40 | `floats` | 36% -> 0% | 43% -> 0% | 60% -> 29% | GOOD | tank out from under the panel |
+| 41 | `free-sails` | 0% -> 0% | 0% -> 0% | 31% -> 31% | GOOD |  |
+| 42 | `geared-brake` | 0% -> 0% | 0% -> 0% | 38% -> 38% | GOOD |  |
+| 43 | `glass-rooms` | 6% -> 0% | 6% -> 0% | 17% -> 14% | GOOD | all four rooms in; the membrane readout fades for want of room (L shows it) |
+| 44 | `greenhouse` | 0% -> 0% | 0% -> 0% | 33% -> 32% | GOOD |  |
+| 45 | `gristmill` | 21% -> 0% | 25% -> 0% | 20% -> 13% | GOOD | third bed in |
+| 46 | `hama-noria` | 0% -> 0% | 8% -> 8% | 32% -> 32% | GOOD | weir and spring in |
+| 47 | `hanging-chain` | 1% -> 0% | 1% -> 0% | 59% -> 60% | GOOD |  |
+| 48 | `heading-rig` | 4% -> 0% | 7% -> 0% | 18% -> 15% | GOOD | small but whole |
+| 49 | `hearth-engine` | 38% -> 0% | 45% -> 0% | 70% -> 66% | GOOD |  |
+| 50 | `heliostats` | 0% -> 0% | 0% -> 1% | 19% -> 18% | GOOD |  |
+| 51 | `heron-temple-doors` | 0% -> 0% | 0% -> 0% | 21% -> 21% | GOOD |  |
+| 52 | `herons-fountain` | 0% -> 0% | 0% -> 0% | 18% -> 18% | GOOD | reference; supply's 8 cm off its dial |
+| 53 | `hierapolis-sawmill` | 11% -> 0% | 29% -> 11% | 76% -> 60% | GOOD | header tank and spring in (were under the panel) |
+| 54 | `hillside-pond` | 0% -> 0% | 0% -> 0% | 20% -> 20% | GOOD | world: flood-plain opening frame set |
+| 55 | `holy-water` | 31% -> 0% | 42% -> 2% | 69% -> 36% | GOOD | basin in |
+| 56 | `inclined-plane-demo` | 0% -> 0% | 0% -> 0% | 33% -> 33% | GOOD |  |
+| 57 | `kitchen-smoke-jack` | 0% -> 0% | 0% -> 0% | 19% -> 19% | GOOD |  |
+| 58 | `kongming-lantern` | 0% -> 0% | 0% -> 0% | 13% -> 13% | GOOD | follows the lantern up |
+| 59 | `kongming-lantern-mars` | 0% -> 0% | 0% -> 0% | 8% -> 8% | GOOD |  |
+| 60 | `lever-demo` | 29% -> 0% | 40% -> 6% | 60% -> 50% | GOOD | both ends in |
+| 61 | `mars-sols` | 0% -> 0% | 0% -> 0% | 16% -> 17% | GOOD |  |
+| 62 | `mars-stirling` | 0% -> 0% | 5% -> 4% | 11% -> 11% | GOOD | reference; all three groups in, two more mirror labels |
+| 63 | `material-samples` | 100% -> 100% | 100% -> 100% | 0% -> 0% | GOOD | profile aims at the landing; left alone |
+| 64 | `newcomen-engine` | 79% -> 0% | 79% -> 79% | 74% -> 60% | GOOD | framed at the shaft's head (bounds run 48 m down) |
+| 65 | `newcomen-hearth` | 79% -> 0% | 80% -> 80% | 74% -> 60% | GOOD | as newcomen-engine |
+| 66 | `newtons-cradle` | 7% -> 0% | 7% -> 0% | 60% -> 64% | GOOD | reference; frame no longer cut |
+| 67 | `pendulum-demo` | 2% -> 0% | 2% -> 0% | 58% -> 58% | GOOD |  |
+| 68 | `placer-sluice` | 0% -> 0% | 3% -> 0% | 19% -> 17% | GOOD | from higher; riffles readout rises off the gold |
+| 69 | `post-and-lintel-crane` | 0% -> 0% | 0% -> 0% | 25% -> 24% | GOOD | figure beside it, not in front; no pull-out seen |
+| 70 | `rail-wagons` | n/a -> 0% | n/a -> 0% | n/a -> 8% | GOOD | side-on; wagons run across the screen |
+| 71 | `rain-house` | 0% -> 0% | 0% -> 0% | 38% -> 38% | GOOD |  |
+| 72 | `ratchet-windlass` | 19% -> 0% | 21% -> 0% | 48% -> 35% | FIX | whole now, but its four drum names stack in a column above the drums |
+| 73 | `roman-crane` | 0% -> 0% | 0% -> 1% | 74% -> 73% | GOOD | reference |
+| 74 | `roman-crane-reload` | n/a -> 0% | n/a -> 3% | n/a -> 74% | GOOD | new profile (camera had stood inside the wheel) |
+| 75 | `roman-crane-reload-gang` | n/a -> 0% | n/a -> 3% | n/a -> 74% | GOOD | new profile (as above) |
+| 76 | `rope-over-bars` | 0% -> 0% | 0% -> 0% | 45% -> 45% | GOOD |  |
+| 77 | `sand-timer` | 0% -> 0% | 0% -> 5% | 32% -> 59% | GOOD | closer: timers fill the frame (parts 32% -> 59%) |
+| 78 | `shaduf` | 0% -> 0% | 0% -> 0% | 48% -> 48% | GOOD |  |
+| 79 | `sluice-demo` | 0% -> 0% | 6% -> 0% | 23% -> 21% | GOOD |  |
+| 80 | `solar-furnace` | 0% -> 0% | 4% -> 4% | 21% -> 21% | GOOD |  |
+| 81 | `solar-steam-wheel` | 25% -> 0% | 66% -> 25% | 68% -> 47% | GOOD | pot and wheel visible past the mirrors |
+| 82 | `spill-tank` | 0% -> 0% | 0% -> 0% | 51% -> 51% | GOOD |  |
+| 83 | `steam-engines-mars` | 0% -> 0% | 0% -> 2% | 25% -> 24% | GOOD |  |
+| 84 | `stove-rooms` | 0% -> 0% | 2% -> 5% | 23% -> 23% | GOOD | third stove in |
+| 85 | `suction-limit` | 1% -> 0% | 1% -> 1% | 63% -> 64% | GOOD | busy but legible |
+| 86 | `tank-leaks` | 0% -> 0% | 3% -> 1% | 21% -> 19% | GOOD | fourth barrel in |
+| 87 | `torsion-catapult` | 0% -> 0% | 0% -> 0% | 3% -> 6% | GOOD | side-on; follows the throw, lands in frame with the machine, returns for the reload |
+| 88 | `trebuchet` | 0% -> 0% | 4% -> 0% | 20% -> 6% | GOOD | as torsion-catapult; small at home (6% of the clear area) to leave room for the throw |
+| 89 | `trench-crew` | 0% -> 0% | 0% -> 0% | 23% -> 23% | GOOD | framing; alone it has no ground (its home is the trench world) |
+| 90 | `trip-hammer` | 0% -> 0% | 0% -> 0% | 9% -> 10% | FIX | two rigs one behind the other: wheel and hammer labels stack; figure dominates |
+| 91 | `trip-sluice` | 1% -> 0% | 7% -> 1% | 54% -> 48% | GOOD |  |
+| 92 | `trough` | 0% -> 0% | 0% -> 0% | 19% -> 19% | GOOD |  |
+| 93 | `tunnel-test` | n/a -> n/a | n/a -> n/a | n/a -> n/a | FIX | bolts dropped from 300 m bounce out of sight; only planks and readouts in frame |
+| 94 | `two-modules` | 46% -> 0% | 66% -> 0% | 67% -> 69% | GOOD | both modules in (were 46% of parts out); readouts large but clear |
+| 95 | `universal-joint` | 2% -> 0% | 4% -> 0% | 43% -> 44% | GOOD |  |
+| 96 | `vitruvian-catapulta` | 47% -> 5% | 54% -> 11% | 14% -> 5% | GOOD | side-on; bolt's 36.5 m flight and the machine in one frame; returns for the reload |
+| 97 | `wake-clock` | 15% -> 0% | 20% -> 0% | 55% -> 43% | GOOD | spring tank in |
+| 98 | `walkers-wheel` | 0% -> 0% | 0% -> 0% | 41% -> 41% | GOOD |  |
+| 99 | `water-clock` | 0% -> 0% | 0% -> 0% | 48% -> 48% | GOOD |  |
+| 100 | `water-mill-race` | 25% -> 0% | 33% -> 2% | 19% -> 12% | GOOD | both ends in |
+| 101 | `water-wheels` | 0% -> 0% | 0% -> 0% | 16% -> 16% | GOOD | reference |
+| 102 | `windmills` | 16% -> 0% | 17% -> 0% | 50% -> 37% | GOOD | gale mill in |
+| 103 | `winter-night` | 0% -> 0% | 0% -> 0% | 22% -> 22% | GOOD |  |
+
+### #190 checklist, re-swept
+
+- Framing under the panels (castellum-aquae, glass-rooms, solar-furnace, sluice-demo, mars-stirling, fire-and-water, water-wheels, hama-noria, constant-head, floats, gristmill, windmills, tank-leaks, stove-rooms, battering-rams, capstans, hierapolis-sawmill, wake-clock, water-mill-race, archimedes-screw, lever-demo, holy-water, heading-rig, cistern-drain): done, every one 0% of parts outside.
+- dam-break: done, the whole 65 m in frame (parts 30% -> 0%).
+- Throwers (trebuchet, torsion-catapult, vitruvian-catapulta): done; side-on, the machine and the landing in one frame, back to the machine for the reload, a fresh trail each throw; the figure beside the machine.
+- Labels over gauges and each other (herons-fountain, placer-sluice, boiler-shells, capstans, belt-drive, bellows-forge): done by the general rule in `Main.Labels.cs`. Still stacked: ratchet-windlass, trip-hammer.
+- Things leaving the frame: ball-ramp, carts, rail-wagons done. falling-stones and tunnel-test still open (bodies dropped from 300-350 m).
+- Too close / cut off (aeolipile, branca-steam-wheel, newtons-cradle, pendulum-demo, kitchen-smoke-jack, hearth-engine): done by the fit.
+- Panel title wraps: done before this pass (`Wrap(_hudTitle)`), seen on airlock, glass-rooms, greenhouse, mars-sols, rain-house, earth-machines-on-mars.
+- Missing profiles: roman-crane-reload, roman-crane-reload-gang (new); worlds flood-plain and dig-out have opening frames.
+- Still open, not framing: crate-tongs' tongs too small; bare buried-crate has no ground; falling-stones and tunnel-test bodies out of frame.
