@@ -47,7 +47,7 @@
 (define bar-x (+ jib-x jib-reach))
 (define bar-y (- jib-height bar-r))
 (define stone-x (+ bar-x bar-r))
-(define stone-y (+ (/ stone-size 2) (mm 5)))
+(define stone-y (/ stone-size 2))
 ;; three points on the bar: its top, 45 degrees round, its far side
 (define over-pts
   (for/list ([deg '(90 45 0)])

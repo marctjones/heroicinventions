@@ -45,7 +45,7 @@
 (define pulley-r (cm 15))
 (define pulley-at (list (+ (car jib-base) jib-reach) (- jib-height pulley-r) rope-z))
 (define stone-size (m 0.6))              ; granite: 583 kg
-(define stone-at (list (+ (car pulley-at) pulley-r) (+ (/ stone-size 2) (mm 5)) rope-z))
+(define stone-at (list (+ (car pulley-at) pulley-r) (/ stone-size 2) rope-z))
 
 ;; The rope runs from the drum over the pulley's top and down its far side
 ;; to the stone; its length is that path, so it starts just taut.

@@ -241,7 +241,14 @@
     (define tc (/ I-eff (* 0.2 I)))
     (check-= I 1822.7 1 "kg m2")
     (check-= tc 5.1 0.05 "s")
-    (define (rise t) (* r w-inf (- t (* tc (- 1 (exp (- (/ t tc))))))))
+    ;; the stone rests on the ground (#148), so the ground holds it while the drum winds in the rope's stretch: the
+    ;; wheel spins up nearly unloaded (1545.1 / 1822.7 = 0.85 rad/s2) to w0 before the rope takes the 5.7 kN, and from
+    ;; there follows the damped-wheel law: w(t) = w-inf - (w-inf - w0) e^(-t/tc). w0 is read at the first sample;
+    ;; w0^2 / (2 x 0.85) x r is the stretch wound in (about 1.4 mm)
+    (define w0 (value run 'tympanus.omega 0.25))
+    (check-true (< 0.03 w0 0.15) (format "w0 ~a rad/s: the stretch is wound in unloaded" w0))
+    (check-= (* r (/ (sqr w0) (* 2 (/ 1545.1 I)))) 0.0014 0.001 "m of rope stretch wound in before the stone lifts")
+    (define (rise t) (* r (- (* w-inf t) (* (- w-inf w0) tc (- 1 (exp (- (/ t tc))))))))
     (define y0 (value run 'stone.y 0))
     (check-= (value run 'stone.y 18) (+ y0 (rise 18)) 0.04 "rising as the damped wheel predicts")
     (define top (value run 'stone.y 21))

@@ -92,20 +92,10 @@
     ;; so the two ropes agree, within 0.2% (it was 2.25%)
     (define shortfall (/ (- one-1 split-1) one-1))
     (check-= shortfall 0 2e-3 (format "the split crane is ~a% slower" (* 100 shortfall)))
-    ;; and the stone rises as the one machine's does once both are at the cap, from a fixed offset. The split's
-    ;; stone rests on the ground (crane-hoist.rkt, 0.300 m: #148) and the one machine's still starts 5 mm up
-    ;; (roman-crane.rkt, 0.305 m). A resting stone is lifted only after the drum has wound the rope's stretch in, and
-    ;; until then the walkers turn the wheel and drum unloaded (1545 / 1822.8 = 0.85 rad/s2), so the split's spin-up
-    ;; leads and its stone has risen further by the time both are at the cap (traced 7.7 cm at 20 s): the start-up is
-    ;; no longer the same, only the rate.
-    (define hoist (hash-ref world 'hoist))
-    (check-= (value-at hoist 'stone.y 0) 0.300 1e-4 "the split's stone rests on the ground")
-    (check-= (value-at one 'stone.y 0) 0.305 1e-4 "the one machine's starts 5 mm up")
-    (define offset (- (value-at hoist 'stone.y 25) (value-at one 'stone.y 25)))
-    (check-= offset 0.077 0.003 "the split's stone is 7.7 cm further up")
-    (for ([f1 one] [f2 hoist] #:when (>= (car f1) 25))
-      (check-= (- (cadr (assq 'stone.y (cdr f2))) (cadr (assq 'stone.y (cdr f1)))) offset 1e-4
-               (format "the same rate at ~a s" (car f1))))
+    ;; and the stone is where the one machine's is, start-up and all
+    (for ([f1 one] [f2 (hash-ref world 'hoist)])
+      (check-= (cadr (assq 'stone.y (cdr f2))) (cadr (assq 'stone.y (cdr f1))) 1e-4
+               (format "stone at ~a s" (car f1))))
     ;; and the speed the game runs at changes none of it
     (check-= one-20 one-1 1e-6 "one machine, 20x as 1x")
     (check-= split-20 split-1 1e-6 "split, 20x as 1x")))

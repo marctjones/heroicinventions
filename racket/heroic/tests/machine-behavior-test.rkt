@@ -1796,21 +1796,15 @@
     (define cap (* 3 2 pi 1/60))
     (check-= omega cap 1e-5 "at 20 s, the walkers' 3 rpm")
     (check-= (value-at links '(axle driven-rpm) 20) (value-at links '(axle rpm) 20) 1e-9 "one speed both sides")
-    ;; The split's stone rests on the ground with its rope just taut (#148; the one machine's, roman-crane.rkt, still
-    ;; starts 5 mm up and hangs from its rope at once). A resting stone is lifted only once the drum has wound the
-    ;; rope's stretch in, and until then the walkers' 1545 N·m has only the wheel and drum to turn, 1545 / 1822.8 =
-    ;; 0.85 rad/s^2 against the 117 N·m surplus loaded. So the split spins up ahead of the one machine and the lead
-    ;; fades as both come to the 3 rpm cap (traced lead: 0.055 rad/s at 1 s, 0.0087 at 10 s, 0.0035 at 15 s, 0 at 20 s);
-    ;; the stone has risen more by 20 s (1.285 m against 1.203).
-    (define (omega-at m t) (value-at m '(tympanus omega) t))
-    (check-true (> (- (omega-at walkers 1) (omega-at one 1)) 0.03) "the split's wheel leads the one machine's at 1 s")
-    (for ([t (in-range 1 15)])
-      (check-true (>= (omega-at walkers t) (omega-at one t)) (format "the lead holds at ~a s" t)))
-    (check-= (omega-at walkers 15) (omega-at one 15) 0.005 "and has faded by 15 s")
-    (check-= (omega-at walkers 20) (omega-at one 20) 1e-5 "and gone at the 3 rpm cap")
+    ;; the spin-up's time constant: w(10) / w(5) = 1 + e^(-5/tau)
+    (define tau (/ 1859.3 (* 0.2 1822.8)))
+    (check-= (/ (value-at walkers '(tympanus omega) 10) (value-at walkers '(tympanus omega) 5)) (+ 1 (exp (/ -5 tau))) 0.01)
+    ;; and the same spin-up as the one machine's, second by second
+    (for ([t (in-range 1 21)])
+      (check-= (value-at walkers '(tympanus omega) t) (value-at one '(tympanus omega) t) 1e-5
+               (format "the treadwheel at ~a s, split as one" t)))
     (define rise-rate (/ (- (value-at hoist '(stone y) 20) (value-at hoist '(stone y) 10)) 10))
-    (define one-rate (/ (- (value-at one '(stone y) 20) (value-at one '(stone y) 10)) 10))
-    (check-= rise-rate one-rate (* 0.02 one-rate) "from 10 to 20 s the stone rises within 2% as in the one machine")))
+    (check-= rise-rate (/ (- (value-at one '(stone y) 20) (value-at one '(stone y) 10)) 10) 1e-5 "the stone rises as in the one machine")))
 
 (test-case "A live edit of a linked machine (#78): the pipe takes hold of the rebuilt cistern and the flow runs on unbroken"
   (when (godot-available?)

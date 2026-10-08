@@ -28,7 +28,7 @@
 (define pulley-at (list (+ (car jib-base) jib-reach) (- jib-height pulley-r) rope-z))
 (define stone-size (m 0.6))              ; granite: 583 kg
 (define big-size (m 0.6934))             ; granite: 900 kg
-(define stone-at (list (+ (car pulley-at) pulley-r) (+ (/ stone-size 2) (mm 5)) rope-z))
+(define stone-at (list (+ (car pulley-at) pulley-r) (/ stone-size 2) rope-z))
 
 ;; The rope runs from the drum over the pulley's top and down its far side
 ;; to the stone; its length is that path, so it starts just taut.
@@ -55,7 +55,7 @@
          #:at ((car pulley-at) (cadr pulley-at) rope-z) #:material bronze)
   (block stone #:at ((car stone-at) (cadr stone-at) rope-z) #:size stone-size #:material granite)
   (block stone-b #:at ((car stone-at) (cadr stone-at) (+ rope-z (m 0.8))) #:size stone-size #:material granite)
-  (block stone-c #:at ((car stone-at) (+ (/ big-size 2) (mm 5)) (- rope-z (m 0.8))) #:size big-size #:material granite)
+  (block stone-c #:at ((car stone-at) (/ big-size 2) (- rope-z (m 0.8))) #:size big-size #:material granite)
   (rope hoist #:wind-on drum #:to (stone 0 (/ stone-size 2) 0) #:length rope-length
         #:over (((car over-top) (cadr over-top) rope-z) ((car over-side) (cadr over-side) rope-z))
         #:diameter (cm 4) #:turns pulley)))
