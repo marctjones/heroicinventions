@@ -243,7 +243,7 @@ public sealed class MachineDef
     /// turn every part's axis, which is written as a symbol (x, z) and only
     /// quarter-turns map cleanly.
     /// </summary>
-    public MachineDef Translated(Vec3 offset, string? name = null)
+    public MachineDef Translated(Vec3 offset, string? name = null, Planet? planet = null)
     {
         Vec3 Move(Vec3 v) => new(v.X + offset.X, v.Y + offset.Y, v.Z + offset.Z);
         return new MachineDef
@@ -252,7 +252,7 @@ public sealed class MachineDef
             Source = Source,
             Ambient = Ambient,
             Sun = Sun,
-            Planet = Planet,
+            Planet = planet ?? Planet,
             Weather = Weather,
             Parts = Parts.Select(p => p with { At = Move(p.At) }).ToList(),
             Pipes = Pipes,

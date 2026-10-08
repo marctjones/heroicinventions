@@ -199,13 +199,13 @@ public sealed partial class MachineRuntime
     private readonly Dictionary<string, Bearing> _axleBearings = [];
 
     /// <summary>The bearing a part's #:bearing-radius, -mu, -drag and -wear describe, or none.</summary>
-    private static Bearing? BearingOf(PartSpec part) =>
+    private Bearing? BearingOf(PartSpec part) =>
         part.Props.GetValueOrDefault("bearing-radius") is SNumber journal
             ? new Bearing(journal.Value)
             {
                 Mu = part.Number("bearing-mu", 0),
                 Drag = part.Number("bearing-drag", 0),
-                WearRate = part.Number("bearing-wear", 0),
+                WearRate = part.Number("bearing-wear", 0) * Tuning.Wear,    // the scenario's wear multiplier (#60)
             }
             : null;
 
@@ -314,8 +314,16 @@ public sealed partial class MachineRuntime
 
     private readonly MaterialLibrary _materials;
 
-    public MachineRuntime(MachineDef def, MaterialLibrary materials)
+    /// <summary>
+    /// The scenario's tuning (issue #60): numbers read where a formula takes them, never a change of formula. Real (every multiplier 1,
+    /// nothing set) where a scene has none, and then a run is the untuned run exactly.
+    /// </summary>
+    public ScenarioTuning Tuning { get; }
+
+    public MachineRuntime(MachineDef def, MaterialLibrary materials, ScenarioTuning? tuning = null)
     {
+        Tuning = tuning ?? ScenarioTuning.Real;
+        if (Tuning.Gravity is { } g && g != def.Planet.Gravity) def = def.Translated(new Vec3(0, 0, 0), planet: def.Planet with { Gravity = g });   // Advanced: the planet's g
         Def = def;
         _materials = materials;
         _ambient = def.Ambient;
@@ -629,7 +637,7 @@ public sealed partial class MachineRuntime
             _ponds[part.Id] = new Pond(part.Id, tank, TemperatureOr(part, "temperature"))
             {
                 Heater = part.Number("heater", 0),
-                Coefficient = part.Number("coefficient", Pond.DefaultCoefficient),
+                Coefficient = part.Number("coefficient", Pond.DefaultCoefficient) * Tuning.Evaporation,   // the scenario's evaporation multiplier (#60)
             };
         }
         foreach (var part in def.Parts.Where(p => p.Kind == "drain"))

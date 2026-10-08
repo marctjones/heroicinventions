@@ -56,11 +56,13 @@ public sealed partial class MachineRuntime
             double capacityWh = part.Number("capacity", 4000), chargeWh = part.Number("charge", 0);
             if (!(capacityWh > 0) || chargeWh < 0 || chargeWh > capacityWh)
                 throw new MachineFormatException($"battery-bank {part.Id}: #:capacity must be above 0 Wh and #:charge from 0 to the capacity", part.Location);
+            capacityWh *= Tuning.BankCapacity;                    // the scenario's capacity multiplier (#60)
+            chargeWh = Math.Min(chargeWh, capacityWh);
             // the pass the call goes out on: the scene's own relay pass nearest 03:00 (the pre-dawn pass) and its length, unless the bank names its own;
             // a scene with no weather has no passes, and the bank calls at 03:00 for 10 minutes
             double hour = part.Props.GetValueOrDefault("call-hour") is SNumber ch ? ch.Value
                 : def.Weather is { Passes.Count: > 0 } wx ? wx.Passes.OrderBy(h => Math.Min(((h - 3) % 24 + 24) % 24, ((3 - h) % 24 + 24) % 24)).First() : 3;
-            double minutes = part.Props.GetValueOrDefault("call-minutes") is SNumber cm ? cm.Value : def.Weather?.PassMinutes ?? 10;
+            double minutes = (part.Props.GetValueOrDefault("call-minutes") is SNumber cm ? cm.Value : def.Weather?.PassMinutes ?? 10) * Tuning.CallWindow;   // x the scenario's call-window multiplier (#60)
             double volts = part.Number("volts", 28);
             if (!(volts > 0) || hour < 0 || hour >= 24 || !(minutes > 0))
                 throw new MachineFormatException($"battery-bank {part.Id}: #:volts and #:call-minutes must be above 0 and #:call-hour a local solar hour in [0, 24)", part.Location);
@@ -71,7 +73,8 @@ public sealed partial class MachineRuntime
             _banks[part.Id] = new BatteryBank(part.Id, capacityWh * BatteryBank.JoulesPerWattHour, chargeWh * BatteryBank.JoulesPerWattHour)
             {
                 Volts = volts, CallHour = hour, CallMinutes = minutes, Sensed = sensed,
-                CallAnyTime = part.Props.GetValueOrDefault("call-any-time") is SBool { Value: true },
+                CallAnyTime = Tuning.CallAnyTime || part.Props.GetValueOrDefault("call-any-time") is SBool { Value: true },
+                MinChargeC = Tuning.BankMinChargeC ?? 0, MaxChargeC = Tuning.BankMaxChargeC ?? 45,   // Advanced (#60)
             };
         }
         foreach (var part in def.Parts.Where(p => p.Kind == "generator"))
@@ -82,6 +85,10 @@ public sealed partial class MachineRuntime
             double eff = part.Number("efficiency", 0.8), cut = part.Number("cut-in-rpm", 1500), rated = part.Number("rated-rpm", 2500), torque = part.Number("rated-torque", 12);
             if (!(eff > 0 && eff <= 1) || !(cut > 0) || !(rated > cut) || !(torque > 0))
                 throw new MachineFormatException($"generator {part.Id}: #:efficiency must be in (0, 1], #:cut-in-rpm above 0, #:rated-rpm over the cut-in and #:rated-torque above 0", part.Location);
+            // the scenario's numbers (#60): the cut-in multiplier (the rated speed is lifted over a cut-in that passes it), and Advanced eta
+            cut *= Tuning.GeneratorCutIn;
+            if (!(rated > cut)) rated = cut * 1.5;
+            if (Tuning.GeneratorEfficiency is { } tunedEta) eff = tunedEta;
             string driven = part.Symbol("driven-by", "");
             var gen = new Generator(part.Id)
             {

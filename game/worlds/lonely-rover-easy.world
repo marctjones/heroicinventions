@@ -1,0 +1,17 @@
+;; The Lonely Rover, easy (issue #60): the opening's crater and cargo, exactly (the rim comes down on the same crates), with the
+;; doc's easy setting and a kinder set of numbers. Every one is a number fed into an unchanged formula, so the physics the player
+;; learns is the same: a smaller (1 kWh) bank fills in a fifth of the time, the salvaged motor starts charging at 750 rpm, not 1,500,
+;; the call may go out whenever the bank is full and warm (no waiting for the pre-dawn relay pass), bearings wear a quarter as fast
+;; and a sleep runs ahead four times as fast. The Advanced constants (gravity, eta, the charging temperatures) stay the planet's.
+(world lonely-rover-easy
+  (scenario
+    (title "The Lonely Rover, easy")
+    (description "The same crater and cargo, kinder numbers: a 1 kWh bank, a motor that charges from 750 rpm, the call at any hour once the bank is full and warm, slower wear and faster sleep. The physics is the real physics.")
+    (tuning (bank-capacity 0.2) (generator-cut-in 0.5) (call-any-time #t) (wear 0.25) (sleep-speed 4)))
+  (map victoria)
+  (rover (at 190.0 140.0) (heading 270))
+  (place battery-bank cargo-crate (at 264.0 0 143.0))
+  (place solar-panels cargo-crate (at 254.62 0 147.0))
+  (place gas-cylinders cargo-crate (at 249.42 0 144.0))
+  (place hand-tools cargo-crate (at 242.49 0 140.0))
+  (place spares cargo-crate (at 233.83 0 135.0)))

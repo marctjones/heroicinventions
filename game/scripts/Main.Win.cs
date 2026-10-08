@@ -33,7 +33,7 @@ public partial class Main
         {
             string name = _byName.FirstOrDefault(kv => kv.Value == view).Key is { } m ? $"{b.Name} ({m})" : b.Name;
             double watts = view.Runtime.Generators.Values.Where(g => g.Bank == b).Sum(g => g.Delivered);
-            lines.Add($"{name}: {b.ChargeWh:0.0} of {b.CapacityWh:0.0} Wh ({b.Fraction * 100:0}%) at {b.Temperature:0.0} °C");
+            lines.Add($"{name}: {b.ChargeWh:0.0} of {b.CapacityWh:0.0} Wh ({b.Fraction * 100:0}%) at {b.Temperature:0.0} °C" + TunedNote("bank-capacity"));
             string state = b.Won ? $"The call went out on sol {b.WonAtSol}. The game is won."
                 : b.Ready ? "Full and warm enough: ready to call."
                 : b.Full ? $"Full, but {b.Temperature:0.#} °C is outside {b.MinChargeC:0} to {b.MaxChargeC:0} °C: the call would not go."
@@ -47,7 +47,7 @@ public partial class Main
             {
                 double sunTime = view.Runtime.Sun.Time;
                 lines.Add(b.CallAnyTime ? "The call may go at any hour (easy setting)."
-                    : b.InWindow(sunTime) ? $"The relay pass is open ({MachineView.HoursText(b.CallHour)} + {b.CallMinutes:0} min)."
+                    : b.InWindow(sunTime) ? $"The relay pass is open ({MachineView.HoursText(b.CallHour)} + {b.CallMinutes:0} min)." + TunedNote("call-window")
                     : $"Next relay pass at {MachineView.HoursText(b.CallHour)}, in {HoursIn((b.CallHour - sunTime + 24) % 24)} of local time.");
             }
         }
