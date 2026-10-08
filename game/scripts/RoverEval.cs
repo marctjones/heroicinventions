@@ -56,7 +56,7 @@ public partial class RoverEval : Node3D
 
     private string Backhoe(Rover r)
     {
-        double after = _terrain!.Heights.Sum() * _terrain.Cell * _terrain.Cell;
+        double after = _terrain!.Heights.Sum() * _terrain.Cell * _terrain.Cell + _terrain.Worked.Sum(w => w.Net());   // the fine ground the backhoe works (#63) is volume too
         return $"EVAL {_runs[_run].Name}.dug {F(r.Dug)}\nEVAL {_runs[_run].Name}.dumped {F(r.Dumped)}\nEVAL {_runs[_run].Name}.carried {F(r.Carried)}\n" +
                $"EVAL {_runs[_run].Name}.ground-volume-change {F(after - _volumeBefore)}\nEVAL {_runs[_run].Name}.cycles {r.Cycles}\nEVAL {_runs[_run].Name}.status {r.ArmStatus.Replace(' ', '_')}";
     }

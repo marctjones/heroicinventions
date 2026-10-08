@@ -1,0 +1,7 @@
+;; The rover in front of a 45 degree, 1 m bank (racket/maps/dig-bank.rkt, issue #63): it can't climb it, but it can dig from the bank
+;; beside its path and tip the soil at the foot until what is there is a ramp it can. The ground's own physics holds the heaps at the
+;; soil's angle of repose, and the backhoe never tips soil above where it was dug from. (A world needs one machine: a crate, off to the side.)
+(world rover-dig-bank
+  (map dig-bank)
+  (rover (at 24.0 30.0) (heading 270))
+  (place crate cargo-crate (at 20.0 0 40.0)))

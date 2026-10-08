@@ -44,6 +44,7 @@ public partial class TerrainView : Node3D
         _water = water;
         _startHeights = (double[])ground.Heights.Clone();
         foreach (var c in GetChildren()) c.QueueFree();
+        _patches.Clear(); _shownPatches = 0; _indices = null;
         AddChild(_groundMesh = new MeshInstance3D { Mesh = GroundMesh(), Name = "Ground" });
         AddChild(_body = Collision());
         _shownVersion = ground.Version;
@@ -151,18 +152,21 @@ public partial class TerrainView : Node3D
     private void PutMesh()
     {
         int nx = _ground.Nx, nz = _ground.Nz;
-        // the mesh in one call from arrays (SurfaceTool's per-vertex calls cost tens of ms on a 170 x 170 crater)
-        if (_indices is null || _indices.Length != (nx - 1) * (nz - 1) * 6)
+        // the mesh in one call from arrays (SurfaceTool's per-vertex calls cost tens of ms on a 170 x 170 crater); the squares
+        // under a patch of worked ground are left out, the patch's own finer mesh being the ground there (#63)
+        if (_indices is null || _indicesFor != _ground.WorkedPatches)
         {
-            _indices = new int[(nx - 1) * (nz - 1) * 6];
-            int t = 0;
+            _indicesFor = _ground.WorkedPatches;
+            var indices = new List<int>((nx - 1) * (nz - 1) * 6);
             for (int j = 0; j + 1 < nz; j++)
                 for (int i = 0; i + 1 < nx; i++)
                 {
+                    if (_ground.Worked.Count > 0 && InPatch(i, j)) continue;
                     int a = i + j * nx, b = a + 1, c = a + nx, d = c + 1;
-                    _indices[t++] = a; _indices[t++] = b; _indices[t++] = c;
-                    _indices[t++] = b; _indices[t++] = d; _indices[t++] = c;
+                    indices.Add(a); indices.Add(b); indices.Add(c);
+                    indices.Add(b); indices.Add(d); indices.Add(c);
                 }
+            _indices = indices.ToArray();
         }
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
@@ -245,6 +249,7 @@ public partial class TerrainView : Node3D
     private int _meshChecks, _meshMismatches;
 
     private int[]? _indices;
+    private int _indicesFor = -1;
 
     /// <summary>
     /// Two passes of a 3×3 box blur over a cell field, edges clamped: a staircase edge becomes a smooth one. The
@@ -295,6 +300,7 @@ public partial class TerrainView : Node3D
                 uniform sampler2D wet : filter_linear, repeat_disable;                   // 1 where water stands
                 uniform vec2 origin;   // the map's corner (X0, Z0)
                 uniform vec2 size;     // and its width and depth
+                uniform float patch = 0.0;   // 1 on a patch of worked ground (#63): COLOR.g is how far it has been dug (dark) or heaped (pale)
                 varying float height;
                 varying vec2 at;
                 void vertex() {
@@ -316,7 +322,12 @@ public partial class TerrainView : Node3D
                     // wet ground darker and glossy, as wet sand is: water seeping shows before it pools
                     float damp = texture(wet, at).r;
                     vec3 soil = cell.rgb * (1.0 - 0.4 * damp);
-                    ALBEDO = soil * COLOR.r * (1.0 - 0.16 * fine - 0.32 * heavy);   // COLOR.r: the hillshade
+                    vec3 lit = soil;
+                    if (patch > 0.5) {
+                        float tint = (COLOR.g - 0.5) * 2.0;
+                        lit = tint < 0.0 ? soil * (1.0 + 0.55 * tint) : mix(soil, vec3(0.98, 0.95, 0.85), 0.45 * tint);
+                    }
+                    ALBEDO = lit * COLOR.r * (1.0 - 0.16 * fine - 0.32 * heavy);   // COLOR.r: the hillshade
                     ROUGHNESS = mix(cell.a, 0.25, damp);
                     SPECULAR = 0.5 * (1.0 - ROUGHNESS);
                 }
@@ -351,6 +362,14 @@ public partial class TerrainView : Node3D
         int nx = _ground.Nx, nz = _ground.Nz;
         var data = new float[nx * nz];
         for (int k = 0; k < data.Length; k++) data[k] = (float)_ground.Heights[k];
+        // Under a patch of worked ground the patch's own body is the ground, which a dig can take below the map's: the
+        // coarse body is sunk there, below the patch's lowest point, or the rover would ride the old surface over a trench (#63).
+        foreach (var w in _ground.Worked)
+        {
+            float floor = (float)(w.Fine.Heights.Min() - 20);
+            for (int j = w.Bj0 + 1; j < w.Bj1; j++)
+                for (int i = w.Bi0 + 1; i < w.Bi1; i++) data[i + j * nx] = floor;
+        }
         var shape = new HeightMapShape3D { MapWidth = nx, MapDepth = nz, MapData = data };
         var body = new StaticBody3D { Name = "GroundBody", CollisionLayer = GroundLayer, CollisionMask = 0 };
         float cell = (float)_ground.Cell;
@@ -376,6 +395,9 @@ public partial class TerrainView : Node3D
             _tick++;
         }
         long t = TickProfile.Start();
+        SyncWorked();
+        TickProfile.Stop("worked", t);
+        t = TickProfile.Start();
         Boulders();
         TickProfile.Stop("boulders", t);
         if ((_sinceDrawn += dt) < 0.2) { TickProfile.Stop("refresh", whole); return; }

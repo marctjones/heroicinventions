@@ -9,19 +9,23 @@ namespace HeroicInventions;
 /// solved so the teeth meet the ground wherever it is, on a slope too), draws it in curling the bucket, lifts, swings to the
 /// side, lowers and tips it out, swings back and folds away.
 ///
-/// The earthworks are real where the ground can be edited: at the end of the dig stroke the bucket's volume is taken out of
-/// the ground's cell under the teeth with <see cref="Terrain.Dig"/> (never from bedrock), and where the bucket tips it is put
-/// back with <see cref="Terrain.Heap"/>. The two volumes are the same, so what is dug is dumped. It dumps only at or below the
-/// elevation it dug from (#72: free effort must not be able to store energy by lifting soil up a hill), and a bucket that
-/// can't dump keeps its load. The ground here is 5 m cells, so a 0.2 m³ bucket is 8 mm of one cell: the bucket shows its load
-/// (a mound of soil in it), because the heap on the ground is too small to see until the ground has finer cells near the rover.
+/// The earthworks are real where the ground can be edited: the ground here is 5 m cells, so where the teeth first dig the map
+/// gets a 30 m patch of 0.25 m cells (<see cref="WorkedGround"/>) and the bucket scrapes those: at the end of the dig stroke the
+/// bucket's volume is taken from the nodes within 0.45 m of the teeth (never from bedrock), a third of a metre deep, and where
+/// the bucket tips it is put back on the nodes there. The two volumes are the same, so what is dug is dumped, and the heap and
+/// the hole then settle by Mohr–Coulomb as the rest of the ground does. It dumps only at or below the level it dug from (#72: free
+/// effort must not be able to store energy by lifting soil up a hill; a heap remembers the level its soil came from, so soil can't
+/// be walked uphill by digging a mound and dumping on it), and a bucket that can't dump keeps its load.
 /// </summary>
 public sealed partial class Rover
 {
     /// <summary>m³ one bucket holds (a small backhoe's is 0.1 to 0.3; Opportunity's scoop is a few cm³, but the game's arm is the player's tool).</summary>
     public const double BucketVolume = 0.2;
 
-    private const float BoomLength = 0.8f, StickLength = 0.7f, BucketLength = 0.3f;
+    /// <summary>m, the boom, stick and bucket (their sum is the arm's reach from the turntable); public so Rover.cs can read them instead of copying the numbers.</summary>
+    public const float BoomLength = 0.8f, StickLength = 0.7f, BucketLength = 0.3f;
+    /// <summary>The turntable's place on the chassis (x, y, z): at the front, 0.7 m ahead of the centre.</summary>
+    public static readonly Vector3 TurntableLocal = new(0, 0.34f, -0.7f);
 
     private readonly record struct Pose(double Swing, double A1, double A2, double A3);
 
@@ -67,7 +71,6 @@ public sealed partial class Rover
     /// <summary>Which part of the cycle the arm is in: Stowed, Reaching, Lowering, Digging, Lifting, Swinging, Placing, Dumping, SwingingBack, Stowing.</summary>
     public string PhaseName => _step < 0 ? nameof(Phase.Stowed) : Cycle[_step].Phase.ToString();
 
-    private double _digElevation;     // m, the ground's height at the cell dug from
     private Vector3 _lastDigAt, _lastDumpAt;
     public Vector3 LastDigAt => _lastDigAt;
     public Vector3 LastDumpAt => _lastDumpAt;
@@ -75,7 +78,7 @@ public sealed partial class Rover
     private void BuildBackhoe()
     {
         var arm = Arm;
-        _swing = new Node3D { Name = "ArmTurntable", Position = new Vector3(0, 0.34f, -0.7f) };
+        _swing = new Node3D { Name = "ArmTurntable", Position = TurntableLocal };
         Chassis.AddChild(_swing);
         Part(_swing, "arm-turntable", Shapes.Cylinder(0.1f, 0.1f, Shapes.Mat(arm, metallic: 0.3f, roughness: 0.5f)), new Vector3(0, 0.03f, 0));
         _boom = new Node3D { Name = "Boom", Position = new Vector3(0, 0.1f, 0) };
@@ -107,6 +110,7 @@ public sealed partial class Rover
     {
         if (_step >= 0) return false;
         _step = 0;
+        _refused = false;
         _stepTime = 0;
         _from = _pose;
         ArmStatus = "Backhoe reaching out";
@@ -169,9 +173,10 @@ public sealed partial class Rover
 
     private void BeginOf(Phase phase)
     {
+        if (_refused && phase != Phase.Lowering) return;   // keep the reason
         switch (phase)
         {
-            case Phase.Lowering: _digStart = DigStart with { A1 = SolveBoomToGround() }; _digEnd = DigEnd with { A1 = _digStart.A1 + 4 }; break;
+            case Phase.Lowering: _digStart = DigStart with { A1 = SolveBoomToGround(DigStart) }; _digEnd = DigEnd with { A1 = SolveBoomToGround(DigEnd) }; break;
             case Phase.Digging: ArmStatus = "Backhoe digging"; break;
             case Phase.Swinging: ArmStatus = Carried > 0 ? "Backhoe swinging the load round" : "Backhoe swinging round (nothing in the bucket)"; break;
             case Phase.Placing: if (Carried > 0) ArmStatus = "Backhoe lowering the load to the ground"; break;
@@ -191,13 +196,13 @@ public sealed partial class Rover
     }
 
     /// <summary>The boom angle that puts the teeth on the ground ahead, whatever its height: the highest angle at which the teeth are at or below it.</summary>
-    private double SolveBoomToGround()
+    private double SolveBoomToGround(Pose pose)
     {
-        if (Ground is not { } ground) return DigStart.A1;
+        if (Ground is not { } ground) return pose.A1;
         double best = -30;
-        for (double a1 = 60; a1 >= -30; a1 -= 1)
+        for (double a1 = 60; a1 >= -30; a1 -= 0.5)
         {
-            Apply(DigStart with { A1 = a1 });
+            Apply(pose with { A1 = a1 });
             var tip = _tip.GlobalPosition;
             if (tip.Y <= ground.HeightAt(tip.X, tip.Z) + 0.02) { best = a1; break; }
         }
@@ -209,19 +214,27 @@ public sealed partial class Rover
     {
         var at = _tip.GlobalPosition;
         _lastDigAt = at;
-        if (Ground is not { } ground) { ArmStatus = "Dug nothing: no ground to dig (visual only)"; return; }
-        if (ground.CellAt(at.X, at.Z) is not { } cell) { ArmStatus = "Dug nothing: off the map"; return; }
+        if (Ground is not { } ground) { Refuse("Dug nothing: no ground to dig (visual only)"); return; }
+        if (ground.CellAt(at.X, at.Z) is not { } cell) { Refuse("Dug nothing: off the map"); return; }
         double room = BucketVolume - Carried;
-        if (room < 1e-6) { ArmStatus = "Dug nothing: the bucket is full"; return; }
-        if (at.Y > ground.HeightAt(at.X, at.Z) + 0.15) { ArmStatus = "Dug nothing: the teeth didn't reach the ground"; return; }
-        var soil = ground.SoilOf(cell);
-        if (soil.Cohesion >= 1e7) { ArmStatus = $"Dug nothing: {soil.Material} is too hard for the backhoe"; return; }   // bedrock: never
-        _digElevation = ground.HeightAt(at.X, at.Z);   // the ground at the teeth, not the cell's centre: the cells are 5 m
-        double taken = ground.Dig(cell, room / (ground.Cell * ground.Cell));
-        Carried += taken;
-        Dug += taken;
-        ArmStatus = $"Dug {taken:0.00} m³ of {soil.Material}";
-        Relax(ground, cell);
+        if (room < 1e-6) { Refuse("Dug nothing: the bucket is full"); return; }
+        if (at.Y > ground.HeightAt(at.X, at.Z) + 0.15) { Refuse($"Dug nothing: the teeth didn't reach the ground ({at.Y - ground.HeightAt(at.X, at.Z):0.00} m above it)"); return; }
+        var soil = ground.SoilOf(cell);   // (bedrock is never cut: the patch's nodes of rock give nothing, and spoil tipped on rock is soil again)
+        long t = TickProfile.Start();
+        if (ground.WorkAt(at.X, at.Z) is not { } work) { Refuse("Dug nothing: too near the edge of the map or of the ground that can be worked here"); return; }
+        TickProfile.Stop("backhoe-patch", t);
+        t = TickProfile.Start();
+        // the bucket scrapes the fine cells under the teeth; the load may be carried no higher than the mean of the levels of the soil it took (#72)
+        if (work.Scoop(at.X, at.Z, room) is not { } scooped) { Refuse($"Dug nothing: {soil.Material} under the teeth is too hard for the backhoe"); return; }
+        TickProfile.Stop("backhoe-scoop", t);
+        _loadCeiling = Carried > 1e-9 ? (_loadCeiling * Carried + scooped.Ceiling * scooped.Volume) / (Carried + scooped.Volume) : scooped.Ceiling;
+        _carriedSoil = scooped.Soil;
+        Carried += scooped.Volume;
+        Dug += scooped.Volume;
+        ArmStatus = $"Dug {scooped.Volume:0.00} m³ of {soil.Material}";
+        t = TickProfile.Start();
+        work.Settle(GroundGravity);   // a bank dug steeper than the soil stands slumps into the hole (#44)
+        TickProfile.Stop("backhoe-settle", t);
     }
 
     private void DumpHere()
@@ -230,22 +243,31 @@ public sealed partial class Rover
         _lastDumpAt = at;
         if (Carried < 1e-9) return;
         if (Ground is not { } ground) { Carried = 0; return; }
-        if (ground.CellAt(at.X, at.Z) is not { } cell) { ArmStatus = "Kept the load: off the map"; return; }
-        // free effort must not store energy (#72): soil goes down or sideways, never up
-        double here = ground.HeightAt(at.X, at.Z);
-        if (here > _digElevation + 0.05) { ArmStatus = $"Kept {Carried:0.00} m³: won't dump {here - _digElevation:0.0} m above where it dug"; return; }
+        if (ground.CellAt(at.X, at.Z) is null) { Refuse("Kept the load: off the map"); return; }
+        if (ground.WorkAt(at.X, at.Z) is not { } work) { Refuse("Kept the load: too near the edge of the ground that can be worked here"); return; }
+        // free effort must not store energy (#72): soil goes down or along, never up, however it has been passed from heap to heap
         double m3 = Carried;
-        ground.Heap(cell, m3);
+        long t = TickProfile.Start();
+        if (work.Pour(at.X, at.Z, m3, _carriedSoil, _loadCeiling) is not { } landed)
+        {
+            double above = (work.LandingSurface(at.X, at.Z) ?? _loadCeiling) - _loadCeiling;
+            Refuse($"Kept {Carried:0.00} m³: won't dump {above:0.00} m above where it was dug");
+            return;
+        }
+        TickProfile.Stop("backhoe-pour", t);
         Dumped += m3;
         Carried = 0;
         Cycles++;
         ArmStatus = $"Dumped {m3:0.00} m³";
-        Relax(ground, cell);
+        t = TickProfile.Start();
+        work.Settle(GroundGravity);   // loose soil heaped steeper than it stands slides (#44)
+        TickProfile.Stop("backhoe-settle", t);
     }
 
-    private void Relax(Terrain ground, int cell)
-    {
-        int i = cell % ground.Nx, j = cell / ground.Nx;
-        ground.Relax(i - 2, j - 2, i + 2, j + 2, GroundGravity);   // loose soil heaped steeper than it stands slides (#44)
-    }
+    private bool _refused;   // this cycle's dig or dump was refused: its reason is what the status keeps saying until the arm is stowed
+
+    private void Refuse(string why) { ArmStatus = why; _refused = true; }
+
+    private double _loadCeiling = double.PositiveInfinity;   // m, the level the load may be carried to
+    private int _carriedSoil;
 }
