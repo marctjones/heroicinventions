@@ -272,6 +272,10 @@ public static class RktExporter
                 return $"  (heat-bin {p.Id} {At()} #:holds {Sym("holds", "?")} #:leak {F(N("leak", 0.1))} #:open {F(N("open"))}" +
                        (p.Props.GetValueOrDefault("sense") is SSymbol sense ? $" #:sense {sense.Name} #:open-below {F(N("open-below", 5))} #:close-above {F(N("close-above", 40))}" : "") +
                        $" {Mat()})\n";
+            case "bimetal":
+                return $"  (bimetal {p.Id} {At()} #:senses {Sym("senses", "?")} #:drives {Sym("drives", "?")} #:layers ({Sym("high", "brass")} {Sym("low", "steel")}) " +
+                       $"#:length {F(N("length", 0.1))} #:thickness {F(N("thickness", 0.001))} #:width {F(N("width", 0.01))} #:high-share {F(N("high-share", 0.5))} " +
+                       $"#:shut-at {F(N("shut-at", 40))} #:straight-at {F(N("straight-at", 20))} #:travel {F(N("travel", 0.0021))} #:contact {F(N("contact", 10))} {Mat()})\n";
             case "burning-mirror":
                 return $"  (burning-mirror {p.Id} {At()} #:area {F(N("area"))} #:image {F(N("image"))} #:onto {Sym("onto", "?")} #:reflectivity {F(N("reflectivity", 0.85))} {Mat()})\n";
             case "pane":

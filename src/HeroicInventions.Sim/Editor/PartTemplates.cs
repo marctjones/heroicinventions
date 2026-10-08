@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "envelope", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "drain", "roof", "stirling", "ball", "plants", "melter", "electrolyser", "galvanic-jar", "heat-store", "heat-bin"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "envelope", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "drain", "roof", "stirling", "ball", "plants", "melter", "electrolyser", "galvanic-jar", "heat-store", "heat-bin", "bimetal"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -225,6 +225,15 @@ public static class PartTemplates
             {
                 ["holds"] = new SSymbol("?"), ["leak"] = new SNumber(0.1), ["open"] = new SNumber(0), ["sense"] = new SBool(false),
                 ["open-below"] = new SNumber(5), ["close-above"] = new SNumber(40),
+            },
+            [], null),
+        // two metals bonded, clamped at one end: senses a heat store or an enclosure and works a heat bin's lid, shut at 40 °C and wide open 2.1 mm of tip movement later (#97)
+        "bimetal" => new PartSpec(id, "bimetal", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["senses"] = new SSymbol("?"), ["drives"] = new SSymbol("?"), ["high"] = new SSymbol("brass"), ["low"] = new SSymbol("steel"),
+                ["length"] = new SNumber(0.1), ["thickness"] = new SNumber(0.001), ["width"] = new SNumber(0.01), ["high-share"] = new SNumber(0.5),
+                ["shut-at"] = new SNumber(40), ["straight-at"] = new SNumber(20), ["travel"] = new SNumber(0.0021), ["contact"] = new SNumber(10),
             },
             [], null),
         // a 10 cm square grate in the ground over a pipe into a tank (#90): set #:into to the tank

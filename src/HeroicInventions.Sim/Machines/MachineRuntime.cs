@@ -53,6 +53,7 @@ public sealed class MachineRuntime
     private readonly Dictionary<string, Crucible> _crucibles = [];
     private readonly Dictionary<string, HeatStore> _heatStores = [];
     private readonly Dictionary<string, HeatBin> _heatBins = [];
+    private readonly Dictionary<string, BimetalStrip> _bimetals = [];
     private readonly Dictionary<string, Envelope> _envelopes = [];
     private readonly Dictionary<string, Pane> _panes = [];
     private readonly Dictionary<string, Pond> _ponds = [];
@@ -141,6 +142,8 @@ public sealed class MachineRuntime
     /// <summary>Heat stores (rock beds, blocks, tanks of hot water) and the lidded bins round them (issue #71).</summary>
     public IReadOnlyDictionary<string, HeatStore> HeatStores => _heatStores;
     public IReadOnlyDictionary<string, HeatBin> HeatBins => _heatBins;
+    /// <summary>Bimetal strips (issue #97): the thermostats that work heat bins' lids.</summary>
+    public IReadOnlyDictionary<string, BimetalStrip> Bimetals => _bimetals;
     /// <summary>Crucibles of sand at a focal spot, melting to glass (issue #56).</summary>
     public IReadOnlyDictionary<string, Crucible> Crucibles => _crucibles;
 
@@ -461,6 +464,7 @@ public sealed class MachineRuntime
                     break;
                 }
                 case "heat-bin": break;   // built once the store it holds exists
+                case "bimetal": break;    // built once the bin it works exists
                 case "door":
                 {
                     Zone a = ZoneNamed(part.Symbol("from", ""), part), b = ZoneNamed(part.Symbol("to", ""), part);
@@ -584,6 +588,35 @@ public sealed class MachineRuntime
                     : throw new MachineFormatException($"heat-bin {part.Id} senses {sense}, which is not a heat-store", part.Location);
             held.Bin = bin;
             _heatBins[part.Id] = bin;
+        }
+        foreach (var part in def.Parts.Where(p => p.Kind == "bimetal"))
+        {
+            string senses = part.Symbol("senses", ""), drives = part.Symbol("drives", "");
+            MaterialDef Layer(string key)
+            {
+                string name = part.Symbol(key, "");
+                return materials.TryGet(name, out var m) && m.Expansion is not null ? m
+                    : throw new MachineFormatException($"bimetal {part.Id}: {name} is not a material of the table with an expansion coefficient (brass, steel, iron, copper, bronze, tin, lead)", part.Location);
+            }
+            double length = part.Number("length", 0.1), thickness = part.Number("thickness", 0.001), width = part.Number("width", 0.01),
+                   share = part.Number("high-share", 0.5), travel = part.Number("travel", 0.0021), contact = part.Number("contact", 10);
+            if (!(length > 0 && thickness > 0 && width > 0 && travel > 0 && contact > 0 && share > 0 && share < 1))
+                throw new MachineFormatException($"bimetal {part.Id}: #:length, #:thickness, #:width, #:travel and #:contact must be above 0 and #:high-share between 0 and 1", part.Location);
+            if (!_heatBins.TryGetValue(drives, out var lid))
+                throw new MachineFormatException($"bimetal {part.Id} drives {drives}, which is not a heat-bin", part.Location);
+            if (_bimetals.Values.Any(o => o.Bin == lid))
+                throw new MachineFormatException($"heat-bin {drives} already has a bimetal strip on its lid", part.Location);
+            Func<double> sensed = _heatStores.TryGetValue(senses, out var store) ? () => store.Temperature
+                : _enclosures.TryGetValue(senses, out var room) ? () => room.Temperature
+                : throw new MachineFormatException($"bimetal {part.Id} senses {senses}, which is not a heat-store or an enclosure", part.Location);
+            var strip = new BimetalStrip(part.Id, Layer("high"), Layer("low"), length, thickness, width)
+            {
+                HighShare = share, Contact = contact, Travel = travel, ShutAt = part.Number("shut-at", 40), StraightAt = part.Number("straight-at", 20),
+                Sensed = sensed, Bin = lid,
+            };
+            strip.Reset();
+            lid.Sense = null;   // a strip on the lid takes the place of the ideal switch
+            _bimetals[part.Id] = strip;
         }
         foreach (var part in def.Parts.Where(p => p.Kind == "pond"))
         {
@@ -1634,6 +1667,19 @@ public sealed class MachineRuntime
             _getters[$"{id}.power"] = () => b.Store.Exchange;                  // W the bin gives its room
             _getters[$"{id}.temperature"] = () => b.Store.Temperature;         // °C of what it holds
         }
+        foreach (var (id, b) in _bimetals)
+        {
+            _getters[$"{id}.temperature"] = () => b.Temperature;               // °C of the strip itself, lagging what it senses
+            _getters[$"{id}.deflection"] = () => b.Deflection * 1000;          // mm, the tip's movement toward the low-expansion layer
+            _getters[$"{id}.curvature"] = () => b.NowCurvature;                // 1/m
+            _getters[$"{id}.open"] = () => b.Opening;                          // 0 … 1, the lid it commands
+            _getters[$"{id}.tau"] = () => b.TimeConstant;                      // s, C / (h A)
+            _getters[$"{id}.span"] = () => b.Span;                             // K from lid shut to wide open
+            _getters[$"{id}.shut-at"] = () => b.ShutAt;
+            _setters[$"{id}.shut-at"] = t => b.ShutAt = t;                     // the adjusting screw, °C
+            _getters[$"{id}.travel"] = () => b.Travel * 1000;                  // mm of tip movement from shut to wide open
+            _setters[$"{id}.travel"] = mm => b.Travel = Math.Max(1e-6, mm / 1000);
+        }
         foreach (var (id, e) in _enclosures)
         {
             if (e.Wall is not { } wall) continue;
@@ -2055,7 +2101,8 @@ public sealed class MachineRuntime
         foreach (var h in _hearths.Values) h.Step(dt);
         foreach (var m in _mirrors.Values) m.Step(dt);
         foreach (var (target, sources) in _heatSources) target.HeatInput = _ownHeat[target] + sources.Sum(w => w());
-        foreach (var b in _heatBins.Values) b.Step();                // a thermostat works the lid
+        foreach (var b in _heatBins.Values) b.Step();                // an ideal thermostat works the lid
+        foreach (var b in _bimetals.Values) b.Step(dt);              // a bimetal strip, lagging its store, works the lid
         foreach (var h in _heatStores.Values) h.Absorb(dt);          // what mirrors and fires aimed at them give
         foreach (var e in _enclosures.Values) e.Step(dt);            // rooms with stores and walls solve them together
         foreach (var h in _heatStores.Values) if (h.Zone is not Enclosure) h.StepOpen(dt);   // the rest are in the open air
