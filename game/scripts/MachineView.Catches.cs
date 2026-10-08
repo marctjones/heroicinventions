@@ -12,6 +12,9 @@ namespace HeroicInventions;
 ///           blueprint's own stops put back when the field <c>catch</c> goes to 0. Holding at the angle,
 ///           not stopping one way, means no one has to work out which way the load pushes. Set to 1 again it
 ///           waits for the arm to come back to that angle (a latch that drops in), not yanks it there.
+///           With #:catch-side (#161) it holds one way only, as a pawl does: it replaces only the stop on that side
+///           with one at the catch's angle, so a windlass can wind the arm back past it, and set while the arm is
+///           anywhere behind it, it drops in at once.
 ///   tether  a rope (#:tether) whose field <c>tether</c> 0 lets go of both its ends.
 ///   pawl    see <see cref="DriveRatchets"/>: a ratchet's pawl lifted clear of its teeth.
 ///
@@ -34,7 +37,7 @@ public partial class MachineView
         public required StandardMaterial3D LatchMaterial;
         public required Label3D Label;
         public double Angle, LastRaw;
-        public bool Applied;
+        public bool Applied, Pinned;   // engaged; and (a one-way catch) holding both ways, the arm pushed into it
     }
 
     private sealed record TetherView(Catch Catch, Rope Rope);
@@ -96,19 +99,46 @@ public partial class MachineView
             v.Angle += Unwrap(raw - v.LastRaw);
             v.LastRaw = raw;
             bool held = v.Catch.HeldAt(Runtime.Time);
+            int side = v.Catch.Side;
             if (held && !v.Applied)
             {
-                // the latch drops in only where the arm is at its angle (or has just passed it)
-                bool there = Math.Abs(v.Angle - v.Hold) < Mathf.DegToRad(0.5f) || Math.Sign(before - v.Hold) != Math.Sign(v.Angle - v.Hold);
-                if (there) SetStops(v, v.Hold, v.Hold);
+                // the latch drops in only where the arm is at its angle (or has just passed it); a one-way catch
+                // anywhere behind it too, where it then stops the arm coming forward past it
+                bool there = Math.Abs(v.Angle - v.Hold) < Mathf.DegToRad(0.5f) || Math.Sign(before - v.Hold) != Math.Sign(v.Angle - v.Hold)
+                             || (side != 0 && side * (v.Angle - v.Hold) < 0);
+                if (there)
+                {
+                    SetStops(v, v.Hold, v.Hold, true);   // pinned, until the one-way catch below finds the arm being wound back
+                    v.Pinned = true;
+                    if (side != 0) GD.Print($"catch {v.Catch.Id} set at {Runtime.Time:F2}s, the arm {Mathf.RadToDeg((float)v.Angle):F1} deg against its {Mathf.RadToDeg(v.Hold):F1}");
+                }
             }
             else if (!held && v.Applied)
             {
-                SetStops(v, v.Lower, v.Upper);
+                SetStops(v, v.Lower, v.Upper, false);
                 v.Body.Sleeping = false;
                 GD.Print($"catch {v.Catch.Id} let go at {Runtime.Time:F2}s, carrying {Math.Abs(v.Catch.Load):F1} N·m");
             }
-            v.Catch.Carry(v.Applied ? -TorqueAboutHinge(v) : 0);
+            float tau = v.Applied ? TorqueAboutHinge(v) : 0;   // everything on the arm but the catch, in the arm's sense
+            if (v.Applied && side != 0)
+            {
+                // A one-way catch is a pawl: while the arm lies on it and is pushed forward into it, it holds as firmly as a
+                // two-way one, both stops pinned at its angle (one stop alone, Jolt lets a light arm under a strong skein
+                // through it by degrees in a tick and only slowly pushes it back); pulled back off it (a windlass winding the
+                // arm past it), only the forward stop is there, so it turns back freely and the pawl drops in behind it.
+                bool resting = side * (v.Angle - v.Hold) > -Mathf.DegToRad(0.5f);
+                bool pin = resting && side * tau >= 0;
+                if (pin != v.Pinned)
+                {
+                    if (pin) SetStops(v, v.Hold, v.Hold, true);
+                    else if (side > 0) SetStops(v, v.Lower, v.Hold, true);
+                    else SetStops(v, v.Hold, v.Upper, true);
+                    v.Pinned = pin;
+                }
+            }
+            // a one-way catch carries only what pushes the arm into it; wound back off it, nothing
+            float load = v.Applied && (side == 0 || v.Pinned) ? -tau : 0;
+            v.Catch.Carry(load);
             v.LatchMaterial.AlbedoColor = v.Applied ? new Color(0.9f, 0.3f, 0.2f) : new Color(0.6f, 0.6f, 0.65f);
             v.Label.Text = v.Applied ? $"catch {Math.Abs(v.Catch.Load):0} N·m" : held ? "catch set" : "catch open";
         }
@@ -139,12 +169,12 @@ public partial class MachineView
         }
     }
 
-    /// <summary>Pins the hinge's stops at [lower, upper] in the arm's sense (the hinge measures the other way: see BuildLever).</summary>
-    private static void SetStops(CatchView v, float lower, float upper)
+    /// <summary>Sets the hinge's stops at [lower, upper] in the arm's sense (the hinge measures the other way: see BuildLever).</summary>
+    private static void SetStops(CatchView v, float lower, float upper, bool applied)
     {
         v.Joint.SetParam(HingeJoint3D.Param.LimitUpper, -lower);
         v.Joint.SetParam(HingeJoint3D.Param.LimitLower, -upper);
-        v.Applied = lower == upper;
+        v.Applied = applied;
     }
 
     /// <summary>Every torque on the held arm about its hinge but the catch's, N·m, in the arm's sense.</summary>

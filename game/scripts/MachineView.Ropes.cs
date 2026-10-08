@@ -104,6 +104,7 @@ public partial class MachineView
         }
         if (spec.Bar is { } barMat && rope.Over.Count > 0) BuildBar(rope, barMat);
         _ropes.Add(rope);
+        AddSeat(rope);  // a sling's pouch or a bowstring's nock, where a stone or bolt is laid again (#161)
         AddEye(rope);   // a crane's load hangs from a lifting eye (#160)
         DrawRope(rope);
     }

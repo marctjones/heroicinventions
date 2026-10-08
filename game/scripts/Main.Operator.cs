@@ -60,7 +60,8 @@ public partial class Main
         public void RecordHook(MachineView view, string rope, string action, string? load, Vector3 point)
         {
             main.TakeControl();
-            if (view == main._current) main.LogOperatorAction(new OperatorAction(view.Runtime.Time, rope, "hook", action == "hook" ? 1 : 0));
+            // a stone laid in a sling's pouch (#161) is its own field, SLING load 1
+            if (view == main._current) main.LogOperatorAction(new OperatorAction(view.Runtime.Time, rope, action == "load" ? "load" : "hook", action == "unhook" ? 0 : 1));
         }
     }
 

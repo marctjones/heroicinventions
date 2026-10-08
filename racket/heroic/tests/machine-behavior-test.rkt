@@ -983,7 +983,8 @@
     (define run (godot-simulate 'trebuchet #:seconds 12 #:sample-dt 1/120 #:set '((arm catch 0))))   ; let go at once (#155)
     (define energy (values-of run '(scene mechanical)))
     (define start (car energy))
-    (check-= start 856.24 0.01 "73 kg of granite 0.81 m up on a 7 kg arm, at rest")
+    ;; and (#161) the windlass's oak drum, 10.25 L, its axle 0.2 m up: 720 x 0.010254 x 9.81 x 0.2 = 14.49 J
+    (check-= start (+ 856.24 14.49) 0.01 "73 kg of granite 0.81 m up on a 7 kg arm, and the windlass drum, at rest")
     (check-true (<= (apply max energy) (+ start 1e-6)) (format "never above the start: peak ~a J against ~a J" (apply max energy) start))
     (define climb (for/fold ([worst 0] [lowest +inf.0] #:result worst) ([e energy]) (values (max worst (- e lowest)) (min lowest e))))
     (check-true (< climb (* 0.01 start)) (format "the most it climbed above its lowest so far: ~a J" climb))

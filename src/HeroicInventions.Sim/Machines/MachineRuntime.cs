@@ -844,7 +844,8 @@ public sealed class MachineRuntime
             string id = part.Id;
             if (part.Kind == "lever" && part.Props.GetValueOrDefault("catch-deg") is SNumber)
             {
-                var c = _catches[id] = new Catch(id, "catch", After(part));
+                int side = part.Props.GetValueOrDefault("catch-side") is SNumber sd ? Math.Sign(sd.Value) : 0;   // #161: one way only
+                var c = _catches[id] = new Catch(id, "catch", After(part), side);
                 _getters[$"{id}.catch"] = () => c.HeldAt(Time) ? 1 : 0;           // 1 holds the arm at #:catch-deg, 0 lets it go
                 _setters[$"{id}.catch"] = c.Command;
                 _getters[$"{id}.catch-load"] = () => Math.Abs(c.Load);            // N·m the catch carries

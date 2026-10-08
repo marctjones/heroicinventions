@@ -9,11 +9,17 @@ namespace HeroicInventions.Sim.Mechanics;
 /// The view owns the joint, pawl or rope that does the holding; it reads <see cref="HeldAt"/> every tick and
 /// writes back the load it carried.
 /// </summary>
-public sealed class Catch(string id, string kind, double releaseAt)
+public sealed class Catch(string id, string kind, double releaseAt, int side = 0)
 {
     public string Id { get; } = id;
     /// <summary>"catch", "pawl" or "tether": the field it answers to.</summary>
     public string Kind { get; } = kind;
+    /// <summary>
+    /// Which way a lever's catch stops the arm (#161): 0 both ways, pinned at its angle; +1 only from turning past it
+    /// toward larger angles, −1 toward smaller, while the arm turns freely the other way, as a ratchet's pawl lets a
+    /// windlass wind an arm back past the catch and then holds it there (#:catch-side).
+    /// </summary>
+    public int Side { get; } = Math.Sign(side);
     /// <summary>The last command: held, or let go.</summary>
     public bool Set = true;
     /// <summary>Seconds into the run it lets go by itself; +∞ for never.</summary>
