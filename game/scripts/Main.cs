@@ -542,6 +542,7 @@ public partial class Main : Node3D
         ScanMachineFiles();
         BuildUI();
         BuildTuningPanel();   // the scenario's numbers, F3 (Main.Tuning.cs, #60)
+        BuildFrontEnd();   // the title page, New game, Continue, the rover log's button (Main.FrontEnd.cs, #95)
         ApplyCamera(MenuCamera);
 
         if (OS.GetEnvironment(LiveLinkServer.EnableEnvVar) == "1")
@@ -1544,6 +1545,7 @@ public partial class Main : Node3D
     public override void _UnhandledInput(InputEvent @event)
     {
         if (_buildMode is not null) return; // build mode handles its own camera, keys and clicks
+        if (FrontEndInput(@event)) return;   // a front-end page takes every key and click; I opens the rover log (Main.FrontEnd.cs, #95)
         if (RoverInput(@event)) return;   // the game: the rover's keys (Main.Rover.cs)
         if (!RoverIsPlayer && AimInput(@event)) return;   // dragging a mirror's spot, Alt+click, a click on the ground for a digger (Main.Aim.cs): a machine run's; the rover digs with its own backhoe
         OperateInput(@event);   // hover, click-to-operate, right-click list (Main.Operate.cs); consumes nothing. In the game every action passes the rover's capability check (#163)
@@ -1655,12 +1657,12 @@ public partial class Main : Node3D
             case "pick": PrintPick(new Vector2(float.Parse(w[1]), float.Parse(w[2]))); return ScriptedInput.Step.Next;   // which part is drawn at that pixel (#151)
             case "pickworld": PrintPick(_camera.UnprojectPosition(new Vector3(float.Parse(w[1]), float.Parse(w[2]), float.Parse(w[3])))); return ScriptedInput.Step.Next;   // ... or where that point of the world is drawn
         }
-        return OperatorStep(w) ?? ClickStep(w) ?? AimStep(w) ?? RoverStep(w);   // aim spots and the digger (Main.Aim.cs); operate / waitsim (Main.Operator.cs), hovered (Main.Operate.cs)
+        return OperatorStep(w) ?? ClickStep(w) ?? AimStep(w) ?? RoverStep(w) ?? FrontEndStep(w);   // aim spots and the digger (Main.Aim.cs); operate / waitsim (Main.Operator.cs), hovered (Main.Operate.cs)
     }
 
     public override void _Process(double delta)
     {
-        bool roverDrives = RoverProcess(delta);   // the game: held keys drive the rover, the camera follows it (Main.Rover.cs)
+        bool roverDrives = FrontEndTick(delta) || RoverProcess(delta);   // a front-end page holds the rover and the camera (Main.FrontEnd.cs); else   // the game: held keys drive the rover, the camera follows it (Main.Rover.cs)
         if (_buildMode is null && !roverDrives) _orbit.ProcessKeys(delta, GetViewport());
         // the haze stays behind whatever the camera is looking at, at any scale
         float d = Mathf.Max(_orbit.Distance, 2);

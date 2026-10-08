@@ -1,0 +1,8 @@
+;; The front end's checks (issue #95): the rover on the flood plain beside the found-electrics bench (a windmill geared 125:1 to a
+;; salvaged motor charging a 10 Wh bank), for the ending and the rover log. HEROIC_SET "bank charge 9; bank call-any-time 1" leaves
+;; 1 Wh for the wind to put in, so the call goes out soon after the windmill has reached the generator's cut-in, and the bank's own
+;; record has one source, the wind. Used by racket/heroic/tests/frontend-test.rkt.
+(world front-end-check
+  (map flood-plain)
+  (rover (at 0.0 8.0) (heading 0))
+  (place plant found-electrics (at 0 0 -20)))
