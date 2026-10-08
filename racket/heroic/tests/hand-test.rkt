@@ -68,7 +68,8 @@
 ;; ---- #159 a recorded drag replays to the same trace
 ;; A drag made with the mouse (tools/gui-check.sh, cart-push, press on the cart's bed, drag 100 px to the right across the view, hold, let go)
 ;; printed the line below ([hand] HEROIC_DRAG=...). Replayed headless it takes the cart to the same places the live drag did:
-;; -0.74823 m at 1 s, -0.69563 m at 2 s (read from the live run's trace).
+;; -0.74823 m at 1 s, -0.69563 m at 2 s (read from the live run's trace). With the ground a plane (#186) the wheels' contact
+;; normals are exact and the cart settles 1.2 mm nearer: -0.69439 m at 2 s (the live run has not been redone).
 (test-case "Drag: a drag recorded from the mouse, replayed, reproduces the live trace"
   (when (godot-available?)
     (define run (godot-simulate 'cart-push #:seconds 4 #:sample-dt 0.25
@@ -80,7 +81,7 @@
                                   "to 0.149252 0.189992 -0.843722 at 1.3"
                                   "release at 1.3")))
     (check-= (value-at run 'disc-cart.z 1.0) -0.74823 1e-3)
-    (check-= (value-at run 'disc-cart.z 2.0) -0.69563 1e-3)))
+    (check-= (value-at run 'disc-cart.z 2.0) -0.69439 1e-3)))
 
 (test-case "Drag: the same drag text twice gives the same trace"
   (when (godot-available?)
