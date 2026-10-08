@@ -2775,7 +2775,7 @@
 ;; compiled machine. The brake's heat is the energy that reached it: all the
 ;; train's spin through the perfect mesh, and only 0.9 of the flywheel arbor's
 ;; through the lossy one.
-(require racket/runtime-path)
+(require racket/runtime-path (only-in racket/file file->string))
 (define-runtime-path compiled-machines "../../../game/machines")
 (define (machine-inertia machine part)
   ;; density x inertia-z of a part, from the compiled .machine file
@@ -2902,3 +2902,90 @@
   (check-= (at 54000 'drops.power) 0 1e-9 "spent")
   (check-= (at 54000 'drops.filament) 20 1e-9 "cold")
   (check-= (at 54000 'one-jar.filament) (filament 75) 1e-6 "the full jar still lights it"))
+
+;; ---- #154 driven wheels a person can start, stop, slow, reverse and let go
+;; The roman crane (roman-crane.rkt) lifts its granite at 3 rpm x 0.25 m = 7.85 cm/s. The people at the wheel
+;; are a hinge motor, and a field set at run time changes it: here a trigger sets it as the stone passes 1.2 m
+;; (a test-only copy of the blueprint with one trigger clause added, written beside the others and removed).
+;; Worked out before the first run, with the bodies' inertias from the blueprint:
+;;   m = 2700 x 0.6^3 = 583.2 kg; r = 0.25 m; I_wheel + I_drum = 720 x (2.5254 + 0.0061957) = 1822.7 kg m2;
+;;   the pulley (bronze, 5.18e-5 x 8800 = 0.456 kg m2 on 0.15 m) adds 20.3 kg to the stone's;
+;;   a = m g r^2 / (m r^2 + I) with the pulley: 583.2 x 9.81 / (583.2 + 1822.7/0.0625 + 20.3) = 0.1922 m/s2
+;;   (the issue's formula without the pulley: 0.1923). The axle's 0.2 /s bearing damping slows both wheel and
+;;   drum: v' = -a - k v with k = 0.2 x 29,164 / 29,767 = 0.196 /s, and the stone is still rising at 7.85 cm/s
+;;   when the walkers let go, so v(0.4 s) = -a/k + (v0 + a/k) e^(-0.4 k) = -0.0014 m/s.
+;;   Holding still needs m g r = 1430.3 N m; the walkers give 1545.1. At a torque of 1300 the 130 N m left over,
+;;   at 0.25 m, is 520 N on 29,767 kg: 0.0175 m/s2, ~7.9 cm in 3 s less the stopping.
+;;   Reversed at -3 rpm it lowers at 3 x 2 pi / 60 x 0.25 = 7.854 cm/s.
+(define (with-crane-variant name actions proc)
+  (define source (file->string (build-path compiled-machines "roman-crane.machine")))
+  (define body (string-trim source #:left? #f))
+  (define text
+    (string-append (string-replace (substring body 0 (sub1 (string-length body))) "(machine roman-crane" (format "(machine ~a" name) #:all? #f)
+                   (format "\n  (trigger at-top (at 3.35 1.2 1.05) (size 0.5 0.1 0.5) (body stone) (when) (do ~a) (srcloc \"test\" 1 1)))\n" actions)))
+  (define file (build-path compiled-machines (format "~a.machine" name)))
+  (dynamic-wind (λ () (call-with-output-file file (λ (out) (write-string text out)) #:exists 'truncate))
+                (λ () (proc))
+                (λ () (when (file-exists? file) (delete-file file)))))
+(define (first-time run key pred)
+  (for/first ([f run] #:when (let ([v (assq key (cdr f))]) (and v (pred (cadr v))))) (car f)))
+
+(test-case "Roman crane: with the walkers let go the stone back-drives the wheel and falls at a = m g / (m + I/r^2); held at 0 rpm it hangs; reversed it lowers at 7.85 cm/s"
+  (when (godot-available?)
+    (define g 9.81) (define m (* 2700 0.6 0.6 0.6)) (define r 0.25)
+    (define I (+ (machine-inertia 'roman-crane 'tympanus) (machine-inertia 'roman-crane 'drum)))
+    (define pulley (/ (machine-inertia 'roman-crane 'pulley) (sqr 0.15)))
+    (define a (/ (* m g) (+ m (/ I (sqr r)) pulley)))
+    (check-= a 0.1922 0.0002 "the hand figure")
+    (define k (/ (* 0.2 (/ I (sqr r))) (+ m (/ I (sqr r)) pulley)))
+    (define v0 (* 3 (/ (* 2 pi) 60) r))
+    (define (y-at run t) (value-at-key run 'stone.y t))
+    (define (vy-at run t) (value-at-key run 'stone.vy t))
+    ;; --- let go
+    (with-crane-variant 'crane-let-go "(tympanus drive-torque 0.0)"
+      (λ ()
+        (define run (godot-simulate 'crane-let-go #:seconds 24 #:sample-dt 1/120))
+        (define t0 (first-time run 'tympanus.drive-torque zero?))
+        (check-true (and t0 (< 9 t0 20)) (format "the walkers let go at ~a s, as the stone passes 1.2 m" t0))
+        (check-= (vy-at run (- t0 0.2)) v0 0.003 "it was rising at 7.85 cm/s")
+        (define predicted (+ (- (/ a k)) (* (+ v0 (/ a k)) (exp (* -0.4 k)))))
+        (check-= (vy-at run (+ t0 0.4)) predicted 0.004 (format "0.4 s after it is falling back: v = ~a, predicted ~a" (vy-at run (+ t0 0.4)) predicted))
+        (check-true (< (y-at run (+ t0 4)) (- (y-at run t0) 0.5)) "and in four seconds it has dropped more than half a metre")
+        ;; the fall is the free-wheel acceleration, damped: v(3) = -a/k (1 - e^-3k) + v0 e^-3k
+        (check-= (vy-at run (+ t0 3)) (+ (* (/ a k) (- (exp (* -3 k)) 1)) (* v0 (exp (* -3 k)))) 0.01)))
+    ;; --- held still
+    (with-crane-variant 'crane-hold "(tympanus drive-rpm 0.0)"
+      (λ ()
+        (define run (godot-simulate 'crane-hold #:seconds 24 #:sample-dt 1/120))
+        (define t0 (first-time run 'tympanus.drive-rpm zero?))
+        (check-true (and t0 (< 9 t0 20)))
+        (check-= (y-at run (+ t0 4)) (y-at run (+ t0 0.3)) 0.01 "1545 N m against 1430: the stone hangs still")))
+    ;; --- held with less torque than the stone's 1430 N m
+    (with-crane-variant 'crane-slip "(tympanus drive-rpm 0.0) (tympanus drive-torque 1300.0)"
+      (λ ()
+        (define run (godot-simulate 'crane-slip #:seconds 24 #:sample-dt 1/120))
+        (define t0 (first-time run 'tympanus.drive-torque (λ (v) (< v 1400))))
+        (check-true (> (- (y-at run (+ t0 0.3)) (y-at run (+ t0 3.3))) 0.03)
+                    (format "1300 N m is not enough: it slips ~a m in 3 s" (- (y-at run (+ t0 0.3)) (y-at run (+ t0 3.3)))))))
+    ;; --- reversed
+    (with-crane-variant 'crane-lower "(tympanus drive-rpm -3.0)"
+      (λ ()
+        (define run (godot-simulate 'crane-lower #:seconds 24 #:sample-dt 1/120))
+        (define t0 (first-time run 'tympanus.drive-rpm (λ (v) (< v 0))))
+        (check-= (vy-at run (+ t0 3)) (- v0) 0.002 "lowers at 7.85 cm/s")
+        (check-= (- (y-at run (+ t0 3)) (y-at run (+ t0 2))) (- v0) 0.003)))))
+
+;; The gristmill's weak wheel gives 200 N m against stones set to 267, so it never turns (its header says to
+;; set weak.grind-torque in the console). Set to 150, the 50 N m left over spins the stone up: alpha = 50 / I
+;; with I the stone's own inertia from the blueprint (about 175 kg m2, 0.286 rad/s2), so it takes 12.566 / 0.286
+;; = 44 s to reach its 120 rpm = 12.566 rad/s; after that the stones grind 150 x 12.566 = 1885 W x 54 kg/kWh =
+;; 0.02828 kg/s of flour: 0.283 kg in 10 s.
+(test-case "Gristmill: the weak stone's grind-torque set to 150 at run time lets the 200 N m wheel turn it, and it grinds"
+  (when (godot-available?)
+    (define run (godot-simulate 'gristmill #:seconds 60 #:sample-dt 5 #:set '((weak grind-torque 150))))
+    (define w (* 120 (/ (* 2 pi) 60)))
+    (define alpha (/ 50 (machine-inertia 'gristmill 'weak)))
+    (check-= (value-at-key run 'weak.omega 20) (* alpha 20) (* 0.01 (* alpha 20)) (format "spinning up at ~a rad/s2" alpha))
+    (check-= (final-of-key run 'weak.omega) w 0.05 "then up to 120 rpm")
+    (check-= (final-of-key run 'weak.grinding-power) (* 150 w) 10)
+    (check-= (- (final-of-key run 'weak.flour) (value-at-key run 'weak.flour 50)) (* 10 150 w (/ 54 3.6e6)) 0.005)))

@@ -757,6 +757,7 @@ public sealed class MachineRuntime
         BuildCams(def);
         BuildRatchets(def);
         BuildHoppers(def);
+        RegisterOperatorFields(def);   // after the tanks, boilers, sources and hoppers it sets
         BuildTriggers(def);
         BuildFollows(def);
         BuildWakes(def);
@@ -1294,6 +1295,60 @@ public sealed class MachineRuntime
             default:
                 throw new MachineFormatException($"lift {spec.Id}: {spec.By} is a {by.Symbol("shape", by.Kind)}, which can't lift water (a screw or a noria can)", spec.Location);
         }
+    }
+
+    // ---- Operating fields: fill, drain, shut-off, and the driven hinge (issues #154, #156) ----
+
+    private readonly Dictionary<string, HingeDrive> _drives = [];
+    /// <summary>The settings of each driven hinge (and millstone), by wheel id; the view that owns the hinge applies them to its motor every tick.</summary>
+    public IReadOnlyDictionary<string, HingeDrive> Drives => _drives;
+
+    /// <summary>
+    /// The fields a person operates a machine with that no other part owns: a driven wheel's speed and torque
+    /// (the walkers start, stop, slow, reverse or let go) and a millstone's grind; a boiler's water (a stoker
+    /// fills it); a spring's inflow (a sluice at the head); a tank's tap; a sand timer turned over.
+    /// </summary>
+    private void RegisterOperatorFields(MachineDef def)
+    {
+        // a wheel on another's arbor is turned by it, so only the arbor's lead has a motor (the view's rule: the first not turned by the sim)
+        bool SimTurned(string id) => _wheels.ContainsKey(id) || _windmills.ContainsKey(id) || _jetWheels.ContainsKey(id);
+        var rides = def.Arbors.SelectMany(a => a.Parts.Where(p => p != a.Parts.FirstOrDefault(q => !SimTurned(q)))).ToHashSet();
+        foreach (var part in def.Parts.Where(p => p.Kind is "wheel" or "screw"))
+        {
+            double rpm = part.Number("drive-rpm", 0), grind = part.Number("grind-torque", 0);
+            bool driven = rpm != 0 && !rides.Contains(part.Id);
+            if (!driven && grind == 0) continue;
+            double torque = part.Props.GetValueOrDefault("drive-torque") is SNumber t ? t.Value : HingeDrive.Unlimited;
+            var drive = _drives[part.Id] = new HingeDrive(driven ? rpm : 0, torque, grind) { Driven = driven };
+            string id = part.Id;
+            if (driven)
+            {
+                _getters[$"{id}.drive-rpm"] = () => drive.Rpm;
+                _setters[$"{id}.drive-rpm"] = v => drive.Rpm = v;              // signed; 0 holds it still
+                _getters[$"{id}.drive-torque"] = () => drive.Torque;           // N·m the drive gives at most
+                _setters[$"{id}.drive-torque"] = v => drive.Torque = Math.Max(0, v);   // 0 lets go
+            }
+            if (grind != 0)
+            {
+                _getters[$"{id}.grind-torque"] = () => drive.Grind;            // N·m the stones resist with
+                _setters[$"{id}.grind-torque"] = v => drive.Grind = Math.Max(0, v);    // set them lighter
+            }
+        }
+        foreach (var (id, boiler) in _boilers)
+            _setters[$"{id}.water"] = kg => boiler.SetWater(kg, boiler.AmbientTemperature);   // fill (cold feed mixes in) or bleed
+        foreach (var (id, src) in _sources)
+        {
+            _getters[$"{id}.inflow"] = () => src.Rate * 1000;                  // L/s offered, before any float valve
+            _setters[$"{id}.inflow"] = ls => src.Rate = Math.Max(0, ls / 1000);   // open or shut the sluice at the head: 0
+        }
+        foreach (var (id, tank) in _tanks)
+        {
+            _getters[$"{id}.tap"] = () => tank.TapRate * 1000;                 // L/s drawn off
+            _setters[$"{id}.tap"] = ls => tank.TapRate = Math.Max(0, ls / 1000);   // open the tap: the cistern can be drawn
+            _getters[$"{id}.tapped"] = () => tank.Tapped * 1000;               // L drawn off all told
+        }
+        foreach (var (id, hopper) in _hoppers)
+            _setters[$"{id}.turn"] = _ => hopper.Turn();                       // turn the timer over: any value
     }
 
     private void RegisterFields()
@@ -1851,6 +1906,7 @@ public sealed class MachineRuntime
         for (int i = 0; i < n; i++)
         {
             foreach (var src in _sources.Values) src.Step(dt / n);
+            foreach (var tank in _tanks.Values) tank.RunTap(dt / n);
             foreach (var ch in _channels.Values) ch.Step(dt / n);
             foreach (var w in _wheels.Values) w.Step(dt / n);
         }

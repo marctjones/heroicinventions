@@ -1200,16 +1200,11 @@ public partial class MachineView : Node3D
             AddChild(joint);
             joint.NodeB = joint.GetPathTo(body);
             _axleJoints[part.Id] = joint;
-            if (rpm != 0)
+            // the motor is set from the part's drive (speed, torque), and again every tick (ApplyDrives), so a person can change it
+            if (Runtime.Drives.TryGetValue(part.Id, out var drive) && drive.Driven)
             {
-                joint.SetFlag(HingeJoint3D.Flag.EnableMotor, true);
-                // Negated for the same reason as BuildLever's spin: the motor's
-                // positive sense runs opposite to a positive turn about the axle.
-                joint.SetParam(HingeJoint3D.Param.MotorTargetVelocity, -(float)(rpm * Math.Tau / 60));
-                // #:drive-torque caps the motor: the most torque it can give
-                // in one physics tick is that torque times the tick's length.
-                double torque = part.Props.GetValueOrDefault("drive-torque") is SNumber t ? t.Value : 1e8;
-                joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, (float)(torque / Engine.PhysicsTicksPerSecond));
+                _driveJoints.Add((joint, drive));
+                ApplyDrive(joint, drive);
             }
         }
 
@@ -1471,6 +1466,7 @@ public partial class MachineView : Node3D
         DetectImpacts();
         ResolveBobImpacts();
         ResolveRopes();
+        ApplyDrives();
         DriveGearTrains();
         DriveLifts();
         DrivePistons();
