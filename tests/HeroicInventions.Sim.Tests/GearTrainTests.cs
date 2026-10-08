@@ -109,4 +109,71 @@ public class GearTrainTests
         double energy = 0.5 * (1.0 * a.AngularVelocity * a.AngularVelocity + 0.01 * b.AngularVelocity * b.AngularVelocity + 0.001 * c.AngularVelocity * c.AngularVelocity);
         Assert.True(energy <= 0.5 + 1e-9);
     }
+
+    /// <summary>
+    /// Issue #187: generator-train.rkt's 125:1 train, sim-side. The windmill's sails (1,667 kg·m²) are keyed to a
+    /// 0.0877 kg·m² wheel by a link of ratio 1, and three 5:1 meshes step up to a rotor. Solved link by link,
+    /// eight sweeps moved the far shafts a few percent of the way a tick (each sweep moves only a link's own two
+    /// ends, and the light wheel between the heavy sails and the rest passed little along); solved together, one
+    /// call puts every shaft on its ratio, and the train's angular momentum seen from the sails is kept.
+    /// </summary>
+    [Fact]
+    public void AHeavyDriverBehindALightWheelPutsAThreeStageTrainOnItsRatiosInOneTick()
+    {
+        var sails = new Spinner(1666.67, 1.4);
+        var wheel = new Spinner(0.0877, 0);
+        var b = new Spinner(0.0899, 0);   // a 20-tooth iron pinion keyed to a 100-tooth oak wheel
+        var c = new Spinner(0.0899, 0);
+        var rotor = new Spinner(0.0984, 0);
+        var links = new[] { new ShaftLink(sails, wheel, 1), new ShaftLink(wheel, b, -5), new ShaftLink(b, c, -5), new ShaftLink(c, rotor, -5) };
+        double momentum = 1666.67 * 1.4;
+        ShaftLink.StepAll(links, 1.0 / 120, 8);
+        double w = sails.AngularVelocity;
+        Assert.Equal(w, wheel.AngularVelocity, precision: 9);
+        Assert.Equal(-5 * w, b.AngularVelocity, precision: 9);
+        Assert.Equal(25 * w, c.AngularVelocity, precision: 8);
+        Assert.Equal(-125 * w, rotor.AngularVelocity, precision: 7);
+        // seen from the sails each shaft's momentum counts k I ω, k its speed over the sails'
+        double after = 1666.67 * w + 0.0877 * wheel.AngularVelocity - 5 * 0.0899 * b.AngularVelocity
+                       + 25 * 0.0899 * c.AngularVelocity - 125 * 0.0984 * rotor.AngularVelocity;
+        Assert.Equal(momentum, after, precision: 6);
+        // the rotor at 125 x: the sails' 1.4 rad/s, less what spinning up the train's 1,596 kg·m² (seen from them) took
+        Assert.Equal(1.4 * 1666.67 / (1666.67 + 0.0877 + 25 * 0.0899 + 625 * 0.0899 + 15625 * 0.0984), w, precision: 6);
+    }
+
+    /// <summary>
+    /// The same train turned by the windmill in a 3 m/s wind against 2 N·m at the rotor, through meshes of η 0.97,
+    /// stepped as the game steps it: the sails under the wind, the rotor under its load, then the exchange. The
+    /// machine's header: the sails settle where τ*(2 − λ/λ*) = 125 × 2 / 0.97³ = 273.92 N·m, τ* = 255.34, at
+    /// 1.39086 rad/s, and the rotor turns at 173.86 rad/s (1,660 rpm).
+    /// </summary>
+    [Fact]
+    public void AWindmillGeared125ToOneSettlesWhereItsTorqueMeetsTheLoadOverTheTrainsEfficiency()
+    {
+        const double dt = 1.0 / 120, eta = 0.97;
+        var sails = new Windmill("sails", 5, 200 * 25 / 3.0) { Wind = 3 };
+        var wheel = new Spinner(0.0877, 0);
+        var b = new Spinner(0.0899, 0);
+        var c = new Spinner(0.0899, 0);
+        var rotor = new Spinner(0.0984, 0);
+        var trainInertia = 0.0984 + 0.0899 / 25 + 0.0899 / 625 + (0.0877 + sails.MomentOfInertia) / 15625;   // seen from the rotor
+        var load = new Brake(rotor, 2, trainInertia);
+        var links = new[] { new ShaftLink(sails, wheel, 1), new ShaftLink(wheel, b, -5, eta), new ShaftLink(b, c, -5, eta), new ShaftLink(c, rotor, -5, eta) };
+        for (double t = 0; t < 240; t += dt)
+        {
+            sails.Step(dt);
+            load.Step(dt);
+            ShaftLink.StepAll(links, dt, 8);
+        }
+        double tauStar = 0.5 * Physics.AirDensity * Math.PI * 25 * 9 * 5 * 0.3 / 2.5;
+        Assert.Equal(255.34, tauStar, precision: 2);
+        double reflected = 125 * 2 / (eta * eta * eta);
+        double omega = (2 - reflected / tauStar) * 2.5 * 3 / 5;
+        Assert.Equal(1.39086, omega, precision: 5);
+        Assert.Equal(omega, sails.AngularVelocity, 1e-4);
+        Assert.Equal(-125 * sails.AngularVelocity, rotor.AngularVelocity, 1e-6);
+        Assert.Equal(-reflected, links[0].DriverTorque, 0.01);                 // the sails held back by 273.92 N·m
+        Assert.Equal(2.0, Math.Abs(links[3].Torque), 0.01);                    // and the rotor turned with its load's 2
+        Assert.Equal(reflected * eta / 5, Math.Abs(links[1].Torque), 0.01);   // 53.14 N·m on the first pinion
+    }
 }

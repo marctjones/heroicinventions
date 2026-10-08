@@ -1075,8 +1075,9 @@
   (when (godot-available?)
     (define run (godot-simulate 'vitruvian-catapulta #:seconds 20 #:sample-dt 0.5))
     (check-true (> (min-of run '(bolt y)) -0.1) (format "bolt fell to y = ~a" (min-of run '(bolt y))))
+    ;; the header's working (#187): it leaves at 33.3 m/s, skips to 22.4 m at 30.2 m/s and slides 103.3 m at mu g
     (define z (final-of run '(bolt z)))
-    (check-true (< 10 z 100) (format "bolt at rest at z = ~a" z))
+    (check-= z 125.7 (* 0.05 125.7) (format "bolt at rest at z = ~a" z))
     (check-true (< (final-of run '(bolt speed)) 0.1) "and it has stopped")))
 
 (test-case "Roman crane: two walkers in the treadwheel lift the granite block"
@@ -1826,7 +1827,7 @@
   ;; the belt carries F = 2 T0 tanh(mu theta / 2) = 1.2109 T0 -- 6.054 N at 5 N, 12.109 N at 10 N --
   ;; against a 1.0 N.m motor on a 10 cm pulley, which needs 10 N: the loose belt cannot carry it
   (when (godot-available?)
-    (define run (godot-simulate 'belt-drive #:seconds 3 #:sample-dt 0.25))
+    (define run (godot-simulate 'belt-drive #:seconds 30 #:sample-dt 0.25))
     (check-= (final-of run '(tight-belt wrap)) 160.8 0.1)
     (check-= (final-of run '(tight-belt capacity)) 12.109 0.01)
     (check-= (final-of run '(loose-belt capacity)) 6.054 0.01)
@@ -1836,19 +1837,24 @@
     (for ([t (in-list '(0.25 0.5 1.0 2.0 3.0))])
       (check-= (value-at run '(loose-belt force) t) 6.054 0.05 (format "loose belt force at ~a s" t))
       (check-true (> (value-at run '(loose-belt slip) t) 0.5) (format "loose belt slipping at ~a s" t)))
-    ;; with the engine's default damping gone (#33) the big pulley has only its own 0.2/s: the small one at its
-    ;; 47.1 rad/s cap (4.712 m/s at the rim) and the big at 41.1 (1 - e^(-0.2 t)) rad/s (20 cm rim), the rims
-    ;; differ by 4.712 - 8.22 (1 - e^(-0.2 t)) = 1.003 m/s at 3 s, and 3.22 at 1 s
+    ;; with the engine's default damping gone (#33) each drum has only its bearing's 0.2/s: the small one at
+    ;; 428 (1 - e^(-0.2 t)) rad/s until the motor's 2000 rpm, 209.4 rad/s, at 3.36 s, and the big at 41.1 (1 - e^(-0.2 t))
+    ;; (20 cm rim): the rims differ by 34.58 (1 - e^(-0.2 t)) m/s, 6.27 at 1 s and 15.60 at 3 s, then by 20.94 - 8.22 (1 -
+    ;; e^(-0.2 t)), 12.74 at 30 s. (Until #187 the engine capped every body at 47.1 rad/s, and the small pulley with it.)
     (for ([t (in-list '(1.0 3.0))])
-      (check-= (value-at run '(loose-belt slip) t) (- 4.712 (* 0.2 41.1 (- 1 (exp (* -0.2 t))))) 0.15
+      (check-= (value-at run '(loose-belt slip) t) (* 34.58 (- 1 (exp (* -0.2 t)))) 0.15
                (format "loose belt's slip at ~a s" t)))
-    ;; before the engine's 47.1 rad/s cap on any body: the small pulley at 85.6 rad/s2 (21.4 at 0.25 s), the
+    (check-= (value-at run '(loose-driver omega) 3.0) (* 428.4 (- 1 (exp -0.6))) 2.0 "the small pulley racing, 193.1 rad/s")
+    (for ([t (in-list '(4.0 30.0))])
+      (check-= (value-at run '(loose-driver omega) t) (* 2000 2 pi 1/60) 0.01 (format "at the motor's 2000 rpm at ~a s" t)))
+    (check-= (value-at run '(loose-belt slip) 30.0) (- 20.944 (* 8.22 (- 1 (exp -6)))) 0.15 "still slipping at 30 s")
+    ;; at 0.25 s: the small pulley at 85.6 rad/s2 less its damping (20.9 at 0.25 s), the
     ;; big one at about 2 rad/s, a ratio of 0.09 and not the 0.5 of a belt that holds
     (check-= (value-at run '(loose-driver omega) 0.25) 21.4 1.0)
     (check-= (value-at run '(loose-driven omega) 0.25) 2.0 0.4)
     (check-true (< (/ (value-at run '(loose-driven omega) 0.25) (value-at run '(loose-driver omega) 0.25)) 0.15))
-    ;; tight: never slips, carries less than its limit until the drums reach the engine's speed cap, and the
-    ;; big pulley turns at half the small one's speed, a little under while they are slow (the belt is a tick behind)
+    ;; tight: never slips, carries less than its limit, and the big pulley turns at half the small one's speed, a
+    ;; little under (the belt is a tick behind)
     (for ([t (in-list '(0.5 1.0 1.5 2.0 2.5))])
       (check-= (value-at run '(tight-belt slip) t) 0 1e-9 (format "tight belt slip at ~a s" t))
       (check-true (< (value-at run '(tight-belt force) t) 12.109) (format "tight belt inside its limit at ~a s" t)))
@@ -1857,8 +1863,10 @@
       (check-= ratio 0.5 (* 0.5 0.12) (format "tight belt ratio at ~a s" t))
       (check-true (<= ratio 0.5001)))
     (check-= (/ (value-at run '(tight-driven omega) 3.0) (value-at run '(tight-driver omega) 3.0)) 0.5 0.03)
-    ;; and they speed up together, near 24.1 rad/s2 less the bearings' drag: 22 rad/s at 1 s
-    (check-= (value-at run '(tight-driver omega) 1.0) 22.3 1.5)))
+    ;; and they speed up together, near 24.1 rad/s2 less the bearings' drag: 22 rad/s at 1 s, and settle where the
+    ;; bearings take the motor's whole 1.0 N.m: 1.0 / (0.2 (I1 + 0.985 I2 / 4)) = 122.3 rad/s, short of its 2000 rpm
+    (check-= (value-at run '(tight-driver omega) 1.0) 22.3 1.5)
+    (check-= (value-at run '(tight-driver omega) 30.0) (* 122.3 (- 1 (exp -6))) 1.0 "the tight pair's top speed")))
 ;; ---------------------------------------------------------------------------
 ;; Two inflated modules on Mars (issue #39). Working in racket/machines/two-modules.rkt.
 
@@ -2977,6 +2985,47 @@
       (check-= (value-at run (list (string->symbol (format "~a-gear" name)) 'load-torque) (/ T 2)) (* I1 (/ w0 T)) 0.01 "N m")
       ;; the heat: 1/2 (eta I_1 + n^2 I_2) w0^2
       (check-= (final-of run (list brake 'heat)) (* 1/2 (+ (* eta I1) (* 100 I2)) w0 w0) 0.05 "J"))))
+
+;; ---- #187: fast shafts (generator-train.rkt). Worked in the machine's header before the run: a windmill in a
+;; 3 m/s wind geared 125:1 through three 0.97 meshes into a 2 N m load settles where its torque, 255.34 (2 - lambda /
+;; lambda*), meets 125 x 2 / 0.97^3 = 273.92 N m: 1.39086 rad/s (13.28 rpm), the rotor at 173.86 rad/s (1,660 rpm, over
+;; a generator's 1,500 rpm cut-in), Jolt's spin limit raised from 47.1 to 314.16 rad/s (100 pi) for it.
+(test-case "Generator train (#187): a windmill geared 125:1 turns a 2 N m load at 1,660 rpm, and the torques balance"
+  (when (godot-available?)
+    (define run (godot-simulate 'generator-train #:seconds 240 #:sample-dt 1))
+    (define (at k) (value-at run k 240))
+    (define w-sails (* (at '(sails rpm)) 2 pi 1/60))
+    (check-= (at '(sails rpm)) 13.282 0.01 "1.39086 rad/s")
+    ;; read at the start of each step, before the load slows it within it: 2 x (1/120) / 0.0984 = 0.17 rad/s over the ratio
+    (check-= (at '(generator omega)) (+ (* 125 w-sails) 0.17) 0.05 "125 x the sails")
+    (check-= (at '(generator omega)) 173.86 (* 0.002 173.86) "rad/s")
+    (check-true (> (at '(generator omega)) (* 1500 2 pi 1/60)) "over the 1,500 rpm cut-in")
+    ;; the torque at each stage: what the next asks, x 5 / 0.97, from the rotor's 2 N m back to the sails' 273.92
+    (check-= (abs (at '(pinion-d drive-torque))) 2.000 0.005)
+    (check-= (abs (at '(pinion-c drive-torque))) 10.309 0.02)
+    (check-= (abs (at '(pinion-b drive-torque))) 53.14 0.1)
+    (check-= (at '(wheel-a load-torque)) 273.92 0.3 "N m on the sails: 125 x 2 / 0.97^3")
+    (check-= (at '(sails torque)) (at '(wheel-a load-torque)) 0.1 "the sails give what the train takes: steady")
+    ;; power: the sails take Cp 0.2984 of the wind's 1,276.7 W, 381.0 W; the load gets 0.97^3 of it
+    (check-= (* (at '(sails torque)) w-sails) 381.0 0.6 "W in")
+    (check-= (at '(generator grinding-power)) (* 0.97 0.97 0.97 381.0) 1.0 "W out")
+    ;; every pair of meshed teeth still in its gaps (half a tooth is 9 degrees on the pinions)
+    (for ([g '(pinion-b pinion-c pinion-d)]) (check-true (< (abs (at (list g 'mesh-error))) 1.0) (format "~a's teeth" g)))))
+
+(test-case "Generator train (#187): a geared pair let go at 300 and 1,500 rpm keeps its energy for 240 s"
+  ;; 1/2 x 0.08774 x 31.416^2 + 1/2 x 0.002211 x 157.08^2 = 70.57 J, nothing to slow it (a driven train's bodies are undamped)
+  (when (godot-available?)
+    (define run (godot-simulate 'generator-train #:seconds 240 #:sample-dt 1))
+    (define Iw (machine-inertia 'generator-train 'free-wheel))
+    (define Ip (machine-inertia 'generator-train 'free-pinion))
+    (define (energy f) (let ([w (cadr (assq 'free-wheel.omega (cdr f)))] [p (cadr (assq 'free-pinion.omega (cdr f)))])
+                         (* 1/2 (+ (* Iw w w) (* Ip p p)))))
+    (define e0 (* 1/2 (+ (* Iw (sqr (* 2 pi 5))) (* Ip (sqr (* 2 pi 25))))))
+    (check-= e0 70.57 0.01 "J")
+    (for ([f run])
+      (check-= (energy f) e0 (* 1e-4 e0) (format "J at ~a s" (car f)))
+      (check-= (cadr (assq 'free-pinion.omega (cdr f))) (* 5 (cadr (assq 'free-wheel.omega (cdr f)))) 1e-3 "5 to 1"))
+    (check-= (final-of run '(free-pinion omega)) 157.08 0.01 "rad/s, 1,500 rpm, 240 s on")))
 
 ;; ---- #122 on #113: the Hierapolis sawmill (hierapolis-sawmill.rkt)
 ;; Worked before the run (the machine's header): an overshot wheel fed
