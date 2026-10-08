@@ -13,7 +13,7 @@ namespace HeroicInventions;
 /// <item><b>Reach</b>: <see cref="Rover.ArmReach"/> (1.8 m: boom 0.8 + stick 0.7 + bucket 0.3) from the arm's pivot on the rover's deck.
 /// A part (or the point of a body a hand takes hold of) farther than that is refused with "Out of reach: drive N m closer", N the
 /// shortfall; a hand dragged beyond it stops at it.</item>
-/// <item><b>Force</b>: <see cref="RoverSpec.PushForce"/>, the lesser of the wheels' measured pull (907 N) and the tyres' grip μ m g (685 N on
+/// <item><b>Force</b>: <see cref="RoverSpec.PushForce"/>, the lesser of the wheels' measured pull (907 N) and the tyres' grip μ m g (396 N on
 /// Mars). A body that takes more than that to slide (μ m g with its own friction, 0.6 if it has none) is refused:
 /// "Too heavy for the rover's arm: 21.6 t". A hand pulls with no more than that, so a load held by a heavier one stalls.</item>
 /// <item><b>Direction</b>: the hand never goes more than <see cref="RoverSpec.LiftSlack"/> (5 cm) above where it took hold: "The rover
