@@ -66,11 +66,11 @@ public sealed class WorldSave
         if (Operated.Count > 0 || OperatorTaken)
             items.Add(new SList([new SSymbol("operator-log"), .. (OperatorTaken ? [new SList([new SSymbol("taken"), new SBool(true)])] : Array.Empty<SExpr>()),
                                  .. Operated.Select(a => (SExpr)OperatorLog.ToForm(a))]));
+        if (Goals is { } gl) items.Add(gl);   // (before the ground: the rover stays the last form of a save, as worked-save-test builds an older save by blanking its line)
         if (Ground is { } g) items.Add(new SList([new SSymbol("ground"), g]));
         if (Boulders is { } bs) items.Add(bs);
         if (Worked is { } wk) items.Add(wk);
         if (Rover is { } rv) items.Add(rv);
-        if (Goals is { } gl) items.Add(gl);
         if (Sleep is { } s)
         {
             static SExpr Term(WakeTerm t) => new SList([new SSymbol(t.Target), new SSymbol(t.Field), new SSymbol(t.Above ? "above" : "below"), new SNumber(t.Value)]);
