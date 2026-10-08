@@ -29,7 +29,7 @@ public class WorkedGroundTests
         return t;
     }
 
-    /// <summary>Tips a load on the lowest ground the rule lets it onto, trying a grid of spots round a point; false if nowhere will take it.</summary>
+    /// <summary>Tips a load on the lowest workable ground round a point, trying a grid of spots; false if there is none.</summary>
     private static bool Place(WorkedGround w, double x, double z, WorkedGround.Scooped s, double reach = 4)
     {
         var spots = new List<(double X, double Z, double H)>();
@@ -37,7 +37,7 @@ public class WorkedGroundTests
             for (double dz = -reach; dz <= reach; dz += 0.5)
                 if (w.Inside(x + dx, z + dz, WorkedGround.Margin) && w.LandingSurface(x + dx, z + dz) is { } h) spots.Add((x + dx, z + dz, h));
         foreach (var (px, pz, _) in spots.OrderBy(p => p.H))
-            if (w.Pour(px, pz, s.Volume, s.Soil, s.Ceiling) is not null) return true;
+            if (w.Pour(px, pz, s.Volume, s.Soil) is not null) return true;
         return false;
     }
 
@@ -70,7 +70,7 @@ public class WorkedGroundTests
         Assert.InRange(deepest, 0.25, 0.45);                // 0.2 m³ over the ten or so nodes of a 0.45 m disc: about a third of a metre
         Assert.True(deepest > 30 * (0.2 / 25), "the same bucket from one 5 m cell is 8 mm: this is thirty-odd times that");
         // tipped two metres off, it piles and slumps to repose
-        Assert.NotNull(w.Pour(2, 0, load.Volume, load.Soil, load.Ceiling));
+        Assert.NotNull(w.Pour(2, 0, load.Volume, load.Soil));
         w.Settle(G);
         Assert.InRange(w.Fine.Heights.Max(), 0.3, 0.46);   // the cone's 0.455 m, lower on a square grid whose diagonals hold it round
         AssertStands(w);
@@ -119,64 +119,14 @@ public class WorkedGroundTests
         Assert.Null(w.Scoop(0, 0, 0.2));
         Assert.All(w.Fine.Heights, h => Assert.Equal(0, h));
         // soil tipped on it is soil (a bucketful of it can be dug up again), but the rock under it stays
-        Assert.NotNull(w.Pour(0, 0, 0.1, 0, 10));
+        Assert.NotNull(w.Pour(0, 0, 0.1, 0));
         w.Settle(G);
         var back = w.Scoop(0, 0, 0.1)!.Value;
         Assert.InRange(back.Volume, 0.05, 0.1);
         Assert.All(w.Fine.Heights, h => Assert.True(h >= -1e-9, "never below the rock"));
     }
 
-    [Fact]
-    public void AMoundRemembersWhereItsSoilWasDugSoItCannotBeWalkedUpAHill()
-    {
-        // a 6 degree hillside, rising with x; bucketfuls dug at the foot and dumped as far up as the rule allows, then dug from
-        // the mound they made and dumped up again, round after round (what the 5 cm ground-level rule would let climb)
-        var t = Map(0.1);
-        var w = t.WorkAt(0, 0)!;
-        double startX = -5;
-        double ceiling = t.CoarseSurfaceAt(startX, 0);
-        var first = w.Scoop(startX, 0, 0.2)!.Value;
-        Assert.True(first.Ceiling <= ceiling + 1e-9);
-        // dumping 1.5 m up the hill: the ground there is 0.15 m higher than where it was dug: refused
-        Assert.Null(w.Pour(startX + 1.5, 0, first.Volume, first.Soil, first.Ceiling));
-        // dumped beside the pit at the same level, it makes a mound
-        Assert.NotNull(w.Pour(startX, 1.5, first.Volume, first.Soil, first.Ceiling));
-        w.Settle(G);
-        double mound = w.HeightAt(startX, 1.5);
-        Assert.True(mound > t.CoarseSurfaceAt(startX, 1.5) + 0.1, "a mound stands higher than the hill under it");
-        // dug from the mound's top, the load is still not allowed higher than the level it first came from
-        double bestX = startX, highest = double.NegativeInfinity;
-        for (int round = 0; round < 60; round++)
-        {
-            var s = w.Scoop(bestX, 1.5, 0.2);
-            if (s is null) break;
-            // the highest ground up the hill, within 2.5 m, that the rule lets it land on
-            double? landed = null;
-            for (double dx = 2.5; dx > 0 && landed is null; dx -= 0.25)
-                if (w.Pour(bestX + dx, 1.5, s.Value.Volume, s.Value.Soil, s.Value.Ceiling) is { } l) { landed = l; highest = Math.Max(highest, Math.Max(l, s.Value.Ceiling)); bestX += dx; }
-            if (landed is null && !Place(w, bestX, 1.5, s.Value)) break;   // it stays in the bucket
-            w.Settle(G);
-        }
-        // The soil may be passed along the trench it digs for itself (its floor stays level, so x can advance), but it never gains
-        // elevation: no load was ever carried to, or tipped on, ground more than a hair above the level it was first dug from.
-        Assert.True(highest < ceiling + 0.05, $"soil was carried to {highest:0.000} m, {highest - ceiling:0.000} m above where it was first dug");
-        // the mound's soil may be carried to the level it was dug from, give or take what a footprint that crept onto higher native
-        // ground brought in (a bucket takes the mean of what it scraped: the credit is soil that really did come down from there)
-        double over = 0;
-        for (int k = 0; k < w.Fine.Heights.Length; k++)
-            if (w.Fine.Loose[k] && w.Fine.Ceiling![k] < w.Original[k] - 1e-9) over = Math.Max(over, w.Fine.Ceiling![k] - ceiling);
-        Assert.True(over < 0.1, $"spoil's ceiling crept {over:0.000} m above the level it was dug from");
-    }
-
-    /// <summary>
-    /// Why lifting spoil out of the rover's own hole is allowed and carrying spoil uphill is not (#72, owner decision 2026-10-08). A
-    /// backhoe's effort is free, so digging a hole and putting its spoil on the rim is the job: the soil comes back up to the level the
-    /// ground had before the hole, no more than the arm's reach (1.8 m) above where it was scraped. That raises soil by at most the
-    /// hole's own depth, once, and the ground has nowhere higher to take it than where it began, so there is nothing to ratchet: the
-    /// energy a hole and its heap hold is bounded by the volume dug times its depth. Spoil already on a mound, or tipped on ground
-    /// above where it came from, is different: each hop could be repeated from the new mound, so soil would climb a hill by free
-    /// effort without limit. Those loads keep the level they were dug from, and the next test shows the walk still cannot climb.
-    /// </summary>
+    /// <summary>A hole dug bucket by bucket goes down as far as the soil lets the arm take it (there is no carry ceiling, #72), its spoil on the rim.</summary>
     [Fact]
     public void AHoleADepthDeepDugByRepeatedBucketsHasItsSpoilOnTheRim()
     {
@@ -193,10 +143,9 @@ public class WorkedGroundTests
         {
             var s = w.Scoop(0, 0, 0.2)!.Value;
             buckets++;
-            Assert.True(s.Ceiling > -0.01, $"soil lifted out of a hole may go to the rim (ceiling {s.Ceiling:0.00})");
             bool put = false;
             foreach (var (x, z) in rim)
-                if (w.LandingSurface(x, z) is { } h && Math.Abs(h) < 0.02 && w.Pour(x, z, s.Volume, s.Soil, s.Ceiling) is not null) { put = true; break; }
+                if (w.LandingSurface(x, z) is { } h && Math.Abs(h) < 0.02 && w.Pour(x, z, s.Volume, s.Soil) is not null) { put = true; break; }
             if (!put) inBucket += s.Volume;
             w.Settle(G);
         }
@@ -206,11 +155,60 @@ public class WorkedGroundTests
         Assert.InRange(buckets, 9, 14);                                    // worked: 10.7
         Assert.Equal(-inBucket, w.Net(), 8);
         Assert.True(w.Fine.Heights.Max() > 0.2, "the spoil stands on the rim");
-        Assert.True(w.PotentialEnergy(G, -5) > 0, "a hole and its heap hold energy: the rover's free effort put it there (bounded by volume x depth)");
+        Assert.True(w.PotentialEnergy(G, -5) > 0, "a hole and its heap hold energy: the soil's own, which the backhoe paid for");
+    }
+
+    /// <summary>
+    /// The rover moves soil wherever its arm reaches (#72, owner decision 2026-10-08, superseding #63's carry ceiling): a pile grows
+    /// by dump after dump on itself, as high as its sides stand at repose. Worked first: twenty bucketfuls, 4 m³, tipped on one spot
+    /// make a cone at repose 0.7 of V = π (h/0.7)² h / 3, h = (3 V 0.49 / π)^(1/3) = 1.23 m (lower on a square grid, whose
+    /// diagonals round it off).
+    /// </summary>
+    [Fact]
+    public void APileGrowsByDumpAfterDumpOnItselfAsHighAsItsSidesStand()
+    {
+        var t = Map();
+        var w = t.WorkAt(0, 0)!;
+        double top = 0;
+        for (int n = 0; n < 20; n++)
+        {
+            var s = w.Scoop(-6 + (n % 5) * 0.9, -6 + (n / 5) * 0.9, 0.2)!.Value;
+            Assert.NotNull(w.Pour(4, 4, s.Volume, s.Soil));   // on the pile's own top, every time
+            w.Settle(G);
+            double now = w.HeightAt(4, 4);
+            Assert.True(now >= top - 1e-9, $"the pile grows: {now:0.000} after {top:0.000}");
+            top = now;
+        }
+        Console.WriteLine($"PILE top {top:0.000} m");
+        Assert.InRange(top, 0.9, 1.25);
+        AssertStands(w);
+        Assert.Equal(0, w.Net(), 9);
     }
 
     [Fact]
-    public void SoilIsLiftedNoMoreThanTheArmsReachOutOfAHole()
+    public void SoilIsCarriedUpAHillBucketByBucket()
+    {
+        // a 6 degree hillside: a bucketful dug at the foot is tipped 1.5 m up it, 0.15 m higher, then dug from that heap and
+        // tipped further up, round after round: what #63's carry ceiling forbade, and what the rover may now do
+        var t = Map(0.1);
+        var w = t.WorkAt(0, 0)!;
+        double x = -5;
+        var s = w.Scoop(x, 0, 0.2)!.Value;
+        Assert.NotNull(w.Pour(x + 1.5, 0, s.Volume, s.Soil));
+        w.Settle(G);
+        for (int round = 0; round < 6; round++)
+        {
+            x += 1.5;
+            var load = w.Scoop(x, 0, 0.2)!.Value;
+            Assert.NotNull(w.Pour(x + 1.5, 0, load.Volume, load.Soil));
+            w.Settle(G);
+        }
+        Assert.True(w.HeightAt(x + 1.5, 0) > t.CoarseSurfaceAt(x + 1.5, 0) + 0.1, "a heap stands 10 m up the hill from where the first soil was dug");
+        Assert.Equal(0, w.Net(), 9);
+    }
+
+    [Fact]
+    public void SoilFromADeepPitIsTippedOnTheRimOrAnywhereTheArmReaches()
     {
         var t = Map();
         var w = t.WorkAt(0, 0)!;
@@ -218,81 +216,87 @@ public class WorkedGroundTests
             for (int i = 0; i < w.Nx; i++)
                 if (Math.Sqrt(w.NodeX(i) * w.NodeX(i) + w.NodeZ(j) * w.NodeZ(j)) < 3) w.Fine.Heights[i + j * w.Nx] = -3;
         var s = w.Scoop(0, 0, 0.2)!.Value;
-        Assert.Equal(-3 + WorkedGround.ArmReach, s.Ceiling, 6);          // not the rim at 0: 1.8 m above where it was scraped
-        Assert.Null(w.Pour(5, 0, s.Volume, s.Soil, s.Ceiling));          // refused on the rim
-        Assert.NotNull(w.Pour(1, 0, s.Volume, s.Soil, s.Ceiling));       // tipped back lower in the pit
+        Assert.InRange(s.Level, -3.4, -3);                                // the soil's middle, below the pit's floor
+        Assert.NotNull(w.Pour(5, 0, s.Volume, s.Soil));                   // on the rim, 3 m up: no ceiling now
+        var t2 = Map(0.2);
+        var w2 = t2.WorkAt(0, 0)!;
+        var s2 = w2.Scoop(-3, 0, 0.2)!.Value;
+        double before = w2.Fine.Heights.Sum();
+        Assert.NotNull(w2.Pour(3, 0, s2.Volume, s2.Soil));               // up a 11 degree slope, 1.2 m higher
+        Assert.Equal(before + s2.Volume / (w2.Fine.Cell * w2.Fine.Cell), w2.Fine.Heights.Sum(), 9);
     }
 
+    /// <summary>
+    /// The soil's own energy ledger: every bucket's lift is what the backhoe paid for, and nothing else gives the soil energy. Each
+    /// dig takes ρ g V (Level + 5) out of the patch's potential energy (Level the middle of the slabs it scraped, weighted; 5 m the
+    /// datum's depth), each dump puts in ρ g V (s + r/2 + 5) (s the mean surface it lands on, r the rise), exactly; settling only
+    /// lowers it. So the energy the patch gains over 200 random digs and dumps is the lifts paid for, less what the slides let go.
+    /// </summary>
     [Fact]
-    public void WithoutTheMoundRememberingItsOriginTheSameWalkClimbsTheHill()
-    {
-        // the rule as the ground's height at the teeth alone would give it: dig the mound's top (0.4 m above the hill), dump
-        // up the hill where the hill is only a little above where the mound stands. This is the walk the memory stops.
-        var t = Map(0.1);
-        var w = t.WorkAt(0, 0)!;
-        double x = -5;
-        var s = w.Scoop(x, 0, 0.2)!.Value;
-        Assert.NotNull(w.Pour(x, 1.5, s.Volume, s.Soil, s.Ceiling));
-        w.Settle(G);
-        double mx = x;
-        for (int round = 0; round < 12; round++)
-        {
-            double top = w.HeightAt(mx, 1.5);                          // the surface at the teeth: the mound's top
-            var load = w.Scoop(mx, 1.5, 0.2)!.Value;
-            bool moved = false;
-            for (double dx = 2.5; dx > 0 && !moved; dx -= 0.25)
-                moved = w.Pour(mx + dx, 1.5, load.Volume, load.Soil, top) is not null;   // ceiling: the surface it was dug from
-            if (moved) mx += 0; else break;
-            w.Settle(G);
-            // follow the mound up the hill
-            double best = mx; double bestH = double.NegativeInfinity;
-            for (double px = mx; px <= mx + 3; px += 0.25) if (w.HeightAt(px, 1.5) - t.CoarseSurfaceAt(px, 1.5) > 0.2 && px > best) { best = px; bestH = w.HeightAt(px, 1.5); }
-            mx = best;
-        }
-        Assert.True(mx > x + 3, $"the rule without memory lets the mound walk {mx - x:0.0} m up the hill");
-    }
-
-    [Fact]
-    public void EveryDumpLandsNoHigherThanTheLoadWasDugFromAndSettlingOnlyLowersEnergy()
+    public void ThePatchsEnergyIsTheBucketsPaidLiftsLessWhatSlidesLetGo()
     {
         var t = Map(0.08);
         var w = t.WorkAt(0, 0)!;
         var rng = new Random(11);
-        double lift = 0;    // J: ρ g V (landing level - carried-to level), summed over every dump that was allowed
+        double paid = 0, released = 0, start = w.PotentialEnergy(G, -5);
         for (int n = 0; n < 200; n++)
         {
             double x = rng.NextDouble() * 12 - 6, z = rng.NextDouble() * 12 - 6;
+            double e0 = w.PotentialEnergy(G, -5);
             var s = w.Scoop(x, z, 0.2);
             if (s is null) continue;
+            double e1 = w.PotentialEnergy(G, -5);
+            Assert.Equal(-1500 * G * s.Value.Volume * (s.Value.Level + 5), e1 - e0, 6);
             double px = x + rng.NextDouble() * 5 - 2.5, pz = z + rng.NextDouble() * 5 - 2.5;
-            if (w.Inside(px, pz, WorkedGround.Margin) && w.LandingSurface(px, pz) is { } landing)
+            if (!w.Inside(px, pz, WorkedGround.Margin)) (px, pz) = (x, z + 1.5);
+            double landing = w.LandingSurface(px, pz)!.Value;
+            int nodes = 0;
+            for (int k = 0; k < w.Fine.Heights.Length; k++)
             {
-                if (w.Pour(px, pz, s.Value.Volume, s.Value.Soil, s.Value.Ceiling) is not null)
-                    lift += 1500 * G * s.Value.Volume * (landing - s.Value.Ceiling);
-                    else Place(w, x, z, s.Value);
+                double dx = w.NodeX(k % w.Nx) - px, dz = w.NodeZ(k / w.Nx) - pz;
+                if (dx * dx + dz * dz <= WorkedGround.PourRadius * WorkedGround.PourRadius + 1e-9 && k % w.Nx is > 0 && k % w.Nx < w.Nx - 1 && k / w.Nx is > 0 && k / w.Nx < w.Nz - 1) nodes++;
             }
-            else Place(w, x, z, s.Value);
-            double before = w.PotentialEnergy(G, -5);
+            Assert.NotNull(w.Pour(px, pz, s.Value.Volume, s.Value.Soil));
+            double rise = s.Value.Volume / (nodes * w.Fine.Cell * w.Fine.Cell);
+            double e2 = w.PotentialEnergy(G, -5);
+            Assert.Equal(1500 * G * s.Value.Volume * (landing + rise / 2 + 5), e2 - e1, 6);
+            paid += e2 - e0;                   // ρ g V (where it lies now − where it lay): the bucket's lift
             w.Settle(G);
-            Assert.True(w.PotentialEnergy(G, -5) <= before + 1e-6, "slumping lowers the ground's energy, never raises it");
+            double e3 = w.PotentialEnergy(G, -5);
+            Assert.True(e3 <= e2 + 1e-6, "slumping lowers the ground's energy, never raises it");
+            released += e2 - e3;
         }
-        Assert.True(lift <= 1e-6, $"no allowed dump raised its load: {lift} J");
+        Assert.Equal(paid - released, w.PotentialEnergy(G, -5) - start, 4);
+        Assert.True(released > 0);
     }
 
+    /// <summary>
+    /// <see cref="WorkedGround.Try"/>: a change the check refuses leaves the ground as it was, to the bit (heights, loose flags,
+    /// soils, totals and version, so a view has nothing to redraw); one it allows stays, and the check is shown every node the
+    /// change raised, the slide's skirt included.
+    /// </summary>
     [Fact]
-    public void ADumpAboveWhereItWasDugIsRefusedAndChangesNothing()
+    public void ATriedChangeThatIsRefusedLeavesTheGroundAsItWasToTheBit()
     {
-        var t = Map(0.2);
+        var t = Map(0, (5, 5));
         var w = t.WorkAt(0, 0)!;
-        var s = w.Scoop(-3, 0, 0.2)!.Value;
-        var before = (double[])w.Fine.Heights.Clone();
-        Assert.Null(w.Pour(3, 0, s.Volume, s.Soil, s.Ceiling));       // 1.2 m higher
-        Assert.Equal(before, w.Fine.Heights);
-        Assert.Null(w.Pour(-2, 0, s.Volume, s.Soil, s.Ceiling));      // 0.2 m higher
-        var flat = Map(0.05).WorkAt(0, 0)!;
-        var f = flat.Scoop(-3, 0, 0.2)!.Value;
-        Assert.Null(flat.Pour(-2, 0, f.Volume, f.Soil, f.Ceiling));   // 5 cm higher: there is no 5 cm allowance
-        Assert.NotNull(w.Pour(-3, 0.5, s.Volume, s.Soil, s.Ceiling)); // along the contour: level
+        var s = w.Scoop(3, 3, 0.2)!.Value;
+        w.Settle(G);
+        var (h, l, soil, v, dug, dumped) = ((double[])w.Fine.Heights.Clone(), (bool[])w.Fine.Loose.Clone(), (int[])w.Fine.Soil.Clone(), w.Version, w.Dug, w.Dumped);
+        IReadOnlyList<WorkedGround.Raised>? seen = null;
+        Assert.False(w.Try(() => { w.Pour(-2, -2, s.Volume, s.Soil); w.Settle(G); }, r => { seen = r; return false; }));
+        Assert.Equal(h, w.Fine.Heights);
+        Assert.Equal(l, w.Fine.Loose);
+        Assert.Equal(soil, w.Fine.Soil);   // spoil tipped on the rock had made it soil
+        Assert.Equal((v, dug, dumped), (w.Version, w.Dug, w.Dumped));
+        // the heap and its skirt: more nodes than the five the bucket tips on, each raised from where it was
+        Assert.True(seen!.Count > 5, $"{seen.Count} nodes raised");
+        Assert.All(seen, r => Assert.True(r.After > r.Before));
+        Assert.Contains(seen, r => Math.Sqrt((r.X + 2) * (r.X + 2) + (r.Z + 2) * (r.Z + 2)) > WorkedGround.PourRadius + 0.1);
+        // allowed, it stays; a change that raises nothing is never put to the check
+        Assert.True(w.Try(() => { w.Pour(-2, -2, s.Volume, s.Soil); w.Settle(G); }, _ => true));
+        Assert.True(w.Fine.Heights.Max() > 0.3);
+        Assert.True(w.Try(() => w.Scoop(-6, -6, 0.2), _ => false));
     }
 
     [Fact]
@@ -301,7 +305,7 @@ public class WorkedGroundTests
         var t = Map();
         var a = t.WorkAt(-15, 0)!;
         var s = a.Scoop(-15, 0, 0.2)!.Value;
-        a.Pour(-15, 1.5, s.Volume, s.Soil, s.Ceiling);
+        a.Pour(-15, 1.5, s.Volume, s.Soil);
         a.Settle(G);
         double peak = a.Fine.Heights.Max();
         Assert.Single(t.Worked);
@@ -323,7 +327,7 @@ public class WorkedGroundTests
         var worked = Map(0.1);
         var w = worked.WorkAt(0, 0)!;
         var s = w.Scoop(0, 0, 0.2)!.Value;
-        w.Pour(0, 2, s.Volume, s.Soil, s.Ceiling);
+        w.Pour(0, 2, s.Volume, s.Soil);
         Assert.Equal(plain.Heights, worked.Heights);
         Assert.Equal(plain.Version, worked.Version);
         Assert.Equal(plain.HeightAt(-20, 20), worked.HeightAt(-20, 20));

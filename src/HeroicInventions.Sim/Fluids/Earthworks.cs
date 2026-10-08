@@ -29,17 +29,13 @@ public sealed partial class Terrain
     /// <summary>Goes up by one each time the ground's shape changes, so a view knows to redraw it.</summary>
     public int Version { get; private set; }
 
-    /// <summary>
-    /// For ground the rover works (#63), null elsewhere: the highest level (m) the soil on top of each cell may be carried
-    /// to: for ground never covered with spoil, the level it had before the rover worked it. Soil that is dumped, or slides down,
-    /// gets the lower of the levels it came from and the one it lands on, so a mound remembers where its soil was dug.
-    /// </summary>
-    public double[]? Ceiling { get; set; }
-
     public SoilSpec SoilOf(int cell) => Soils[Soil[cell]];
 
     /// <summary>Marks the ground's shape as changed (water moving its bed, #53).</summary>
     public void Touch() => Version++;
+
+    /// <summary>Gives the ground back the version it had, when a change that was tried has been undone to the bit (<see cref="WorkedGround.Try"/>).</summary>
+    internal void PutBack(int version) => Version = version;
 
     /// <summary>Takes <paramref name="depth"/> m off a cell's top; returns the m³ taken.</summary>
     public double Dig(int cell, double depth)
@@ -177,11 +173,6 @@ public sealed partial class Terrain
                         failed?.Add(a);
                     }
                     double shift = (drop - repose) / 2;
-                    if (Ceiling is { } ceiling)
-                    {
-                        // soil that slides down rests lower, and may be carried no higher than where it now lies (#63)
-                        ceiling[b] = Math.Min(ceiling[a], ceiling[b]);
-                    }
                     Heights[a] -= shift;
                     Heights[b] += shift;
                     loose[b] = true;

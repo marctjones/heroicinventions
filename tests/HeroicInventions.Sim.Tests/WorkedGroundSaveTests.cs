@@ -6,7 +6,8 @@ namespace HeroicInventions.Sim.Tests;
 /// <summary>
 /// Issue #199: the rover's worked ground (#63) survives a save. A run is saved mid-dig, loaded into a fresh copy of the map, and both
 /// go on with the same dig, dump and settle steps: every node of every patch must come out the same, exactly (the save writes
-/// numbers to the digit that reads back as the same double), and the carry ceilings must still stop spoil climbing.
+/// numbers to the digit that reads back as the same double). A save from before #72's 2026-10-08 rule, with its carry ceilings,
+/// still loads: the ceilings are dropped and the spoil goes wherever the arm reaches.
 /// </summary>
 public class WorkedGroundSaveTests
 {
@@ -35,7 +36,7 @@ public class WorkedGroundSaveTests
             for (double dz = -4; dz <= 4; dz += 0.5)
                 if (w.Inside(x + dx, z + dz, WorkedGround.Margin) && w.LandingSurface(x + dx, z + dz) is { } h) spots.Add((x + dx, z + dz, h));
         foreach (var (px, pz, _) in spots.OrderBy(p => p.H))
-            if (w.Pour(px, pz, s.Volume, s.Soil, s.Ceiling) is not null) return true;
+            if (w.Pour(px, pz, s.Volume, s.Soil) is not null) return true;
         return false;
     }
 
@@ -64,7 +65,7 @@ public class WorkedGroundSaveTests
             Assert.Equal(p.Dug, q.Dug, tol);
             Assert.Equal(p.Dumped, q.Dumped, tol);
             for (int k = 0; k < p.Fine.Heights.Length; k++)
-                foreach (var (x, y) in new[] { (p.Fine.Heights[k], q.Fine.Heights[k]), (p.Fine.Ceiling![k], q.Fine.Ceiling![k]), (p.Original[k], q.Original[k]), (p.Floor[k], q.Floor[k]) })
+                foreach (var (x, y) in new[] { (p.Fine.Heights[k], q.Fine.Heights[k]), (p.Original[k], q.Original[k]), (p.Floor[k], q.Floor[k]) })
                 {
                     if (double.IsNegativeInfinity(x)) { Assert.Equal(x, y); continue; }
                     worst = Math.Max(worst, Math.Abs(x - y));
@@ -117,27 +118,39 @@ public class WorkedGroundSaveTests
         Assert.True(seen > 0);
     }
 
+    /// <summary>
+    /// A save written before the carry ceiling was dropped holds <c>(carry (k original ceiling) …)</c> in place of
+    /// <c>(original (k level) …)</c>. It loads to the same ground (originals included), and the spoil on its mound may then be tipped
+    /// up the hill, which the ceiling it carried would have refused.
+    /// </summary>
     [Fact]
-    public void SpoilFromAMoundStillCannotBeTippedAboveWhereItWasDugAfterALoad()
+    public void AnOlderSaveWithCarryCeilingsLoadsAndItsCeilingsAreDropped()
     {
         var t = Map();
         var w = t.WorkAt(0, 0)!;
-        double dugFrom = w.HeightAt(0, 0);
         var s = w.Scoop(0, 0, 0.2)!.Value;
-        Assert.True(Place(w, 0, 0, s));                                     // a mound, on the lowest ground the rule allows
+        Assert.True(Place(w, 0, 0, s));
         w.Settle(G);
-        int top = Enumerable.Range(0, w.Fine.Heights.Length).MaxBy(k => w.Fine.Heights[k] - w.Original[k]);
-        double mx = w.NodeX(top % w.Nx), mz = w.NodeZ(top / w.Nx);
-        var loaded = RoundTrip(t).WorkAt(0, 0)!;
-        for (int k = 0; k < w.Fine.Heights.Length; k++) Assert.Equal(w.Fine.Ceiling![k], loaded.Fine.Ceiling![k]);
-        // a load from the loaded mound's top keeps the lower level, so ground higher than where the soil began is refused (and unchanged)
+        // the save as #199 wrote it: each node whose height or ceiling differed, with a ceiling (here the level it was dug from)
+        var saved = t.SaveWorked()!;
+        var patch = (SList)saved.Items[2];
+        var old = new SList([.. patch.Items.Select(e => e is SList { Head: "original" } o
+            ? new SList([new SSymbol("carry"), .. o.Items.Skip(1).OfType<SList>().Select(n => (SExpr)new SList([n.Items[0], n.Items[1], new SNumber(-0.25)]))])
+            : e)]);
+        var text = new WorldSave { Kind = "world", Name = "m", Machines = [], Worked = new SList([saved.Items[0], saved.Items[1], old]) }.ToText();
+        Assert.Contains("(carry (", text);
+        var fresh = Map();
+        fresh.LoadWorked(WorldSave.Parse(text).Worked!);
+        AssertSame(t, fresh, 0);
+        var loaded = fresh.WorkAt(0, 0)!;
+        int top = Enumerable.Range(0, loaded.Fine.Heights.Length).MaxBy(k => loaded.Fine.Heights[k] - loaded.Original[k]);
+        double mx = loaded.NodeX(top % loaded.Nx), mz = loaded.NodeZ(top / loaded.Nx);
         var again = loaded.Scoop(mx, mz, 0.2)!.Value;
-        Assert.True(again.Ceiling <= dugFrom + 0.15, $"carry ceiling {again.Ceiling:0.000} against the dug-from level {dugFrom:0.000}");
-        double before = loaded.Fine.Heights.Sum();
         double uphill = mx + 8;                                             // the slope rises 0.1 m a metre: 0.8 m above
-        Assert.True(loaded.HeightAt(uphill, mz) > again.Ceiling + 0.3);
-        Assert.Null(loaded.Pour(uphill, mz, again.Volume, again.Soil, again.Ceiling));
-        Assert.Equal(before, loaded.Fine.Heights.Sum(), 12);
+        Assert.True(loaded.HeightAt(uphill, mz) > again.Level + 0.5);
+        Assert.NotNull(loaded.Pour(uphill, mz, again.Volume, again.Soil));
+        // and a save written now has no ceilings in it
+        Assert.DoesNotContain("(carry", new WorldSave { Kind = "world", Name = "m", Machines = [], Worked = fresh.SaveWorked() }.ToText());
     }
 
     [Fact]
