@@ -31,7 +31,7 @@
 
 (test-case "A part dragged out of the palette is placed where it is let go, and the list lets go of the mouse"
   (when (godot-available?)
-    (define states (run-editor "wait 40; palette-drag boiler 760 420; wait 5; log; palette-drag hearth 600 470; wait 5; log"))
+    (define states (run-editor "wait 40; show-all; wait 5; palette-drag boiler 760 420; wait 5; log; palette-drag hearth 600 470; wait 5; log"))
     (check-equal? (length states) 2)
     (check-true (has-part? (first states) "boiler_1") "the boiler is placed")
     (check-true (has-part? (second states) "hearth_2") "a second drag still works: the list didn't keep the mouse")))
