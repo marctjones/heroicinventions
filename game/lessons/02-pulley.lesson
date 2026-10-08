@@ -1,0 +1,78 @@
+;; Lesson 2: a pulley lifting a weight (#183). Read by src/HeroicInventions.Sim/Editor/Lessons.cs;
+;; the format is described there.
+;;
+;; The numbers, worked by hand before writing the steps (materials.rktd densities,
+;; the starter block a 10 cm cube = 0.001 m³, the catalogue's 10 cm pulley sheave):
+;;   granite block  2700 kg/m³ × 0.001 m³ = 2.7 kg  (the heavy one)
+;;   oak block       720 kg/m³ × 0.001 m³ = 0.72 kg (the light one)
+;;
+;; A rope from one block, up over a fixed pulley, down to the other: when one block
+;; goes down the other goes up by exactly as much, and both speed up together.
+;;   the sim's pulley                 a = g (m1 - m2) / (m1 + m2) = 9.81 × (2.7 - 0.72) / (2.7 + 0.72) = 5.68 m/s²
+;;   the rope then carries             T = 2 m1 m2 g / (m1 + m2) = 11.15 N
+;;                                     (the light block's own weight is only 0.72 × 9.81 = 7.06 N, so it is hauled up)
+;;   The engine's pulley turns to keep pace with the rope and does not slow it (it counts as weightless on the
+;;   rope; an oak sheave's real inertia, 4.6e-3 kg m², would act like 0.46 kg more on the rim and make it 5.0).
+;;   Traced (the lesson's own rig, 0.05 s samples): the stone's speed rises 5.679 m/s each second from 0.15 s
+;;   to 0.40 s, and the rope carries 11.152 N.
+;;   a fixed pulley only turns the pull around: its mechanical advantage is 1 (the rope's pull on the wood is the
+;;   same size as on the stone). The stone wins because it is heavier, not because the pulley helps.
+;; The stone is hung 0.55 m above the ground (its centre at 0.6 m; it comes to rest on the ground with its
+;; centre 0.05 m up), so it falls 0.55 m and the rope hauls the wood up exactly 0.55 m (the rope's length
+;; does not change). The Test's facts must show the wood ended 0.55 m up, within 0.08 m (the engine's own
+;; test of this rig, test-report-test.rkt, measures 0.55 ± 0.01; the wood overshoots to about 0.82 m when
+;; the stone lands and settles back). The fall takes sqrt(2 × 0.55 / 5.68) = 0.44 s, landing at sqrt(2 × 5.68 × 0.55) = 2.50 m/s.
+;; The pulley turns 0.55 / (2 π × 0.1 m) = 0.875 of a turn.
+;;
+;; Geometry: the pulley's centre 1.1 m up (on top of the 1 m post), radius 0.1 m, so the rope's two
+;; sides hang 0.1 m either side of the post's middle: the stone at x = -0.1, the wood at x = +0.1.
+;; The post is made 6 cm across so the blocks stand clear of it. The rope runs from the top of the
+;; stone (0.65 m up) 0.45 m to the pulley's left edge, round the top (four chords, 4 × 2 × 0.1 × sin 22.5° =
+;; 0.3061 m), and 1.0 m down to the top of the wood (0.1 m up): 1.7561 m of rope.
+
+(lesson pulley
+  (title "Lesson 2: the pulley")
+  (view 0 0.25 2.6 0 0.95 0)
+
+  (step
+    (text "A pulley needs something to hang from. Put up a post: pick Post in the parts list (it is lit up), then click on the green shape in the scene. The lesson makes it a slim one.")
+    (highlight post)
+    (target (kind post) (at 0 0 0) (within 0.5))
+    (check place (kind post) (as post)
+           (then "(set {id} #:size-x 0.06)")
+           (then "(set {id} #:size-z 0.06)")))
+
+  (step
+    (text "Now the pulley itself, on top of the post: a grooved wheel that a rope runs over. It is under Show all parts, which the lesson has opened for you. Pick Pulley (it is lit up); the card offers the 10 cm size, in oak. Click on the green shape.")
+    (highlight pulley)
+    (variant pulley-10cm)
+    (material oak)
+    (target (kind pulley-10cm) (at 0 1.1 0) (within 0.15))
+    (check place (kind wheel) (shape pulley) (radius 0.1) (as pulley)))
+
+  (step
+    (text "A light block goes on the ground to the right, under the pulley's right edge: click on the green block. Pick Block: this time the lesson has picked Oak on its card, so it is made of wood.")
+    (highlight block)
+    (material oak)
+    (target (kind block) (at 0.1 0.05 0) (within 0.12))
+    (check place (kind block) (category wood) (as light)))
+
+  (step
+    (text "And a heavy stone block on the ground to the left, under the pulley's left edge, on the green block. Pick Block again: this time it is granite.")
+    (highlight block)
+    (material granite)
+    (target (kind block) (at -0.1 0.05 0) (within 0.12))
+    (check place (kind block) (category stone) (as heavy)))
+
+  (step
+    (text "Tie the two blocks together with a rope. Pick Rope in the parts list (it is lit up), click the stone block, then the wood block. The lesson then runs the rope up and over the pulley and hangs the stone up {hoist} high, so it has room to fall.")
+    (highlight rope)
+    (check join (kind rope) (between heavy light) (over pulley) (hoist 0.55)))
+
+  (step
+    (text "Press Test it (lit, top left) and watch. The stone weighs {heavy.mass} and the wood only {light.mass}, so the stone pulls down harder than the wood pulls back: the stone falls and the rope hauls the wood up. Together they speed up at {accel}: gravity times the difference of the two weights, over their total. The rope does not stretch, so the wood must rise exactly as far as the stone falls: {hoist}.")
+    (highlight test)
+    (fail "The wood block rose {rise}, not the {expect} it should: the stone only falls as far as the rope lets it. Is the rope tied from the stone, over the pulley, to the wood? Is the stone really the heavier one? Press Test it again after you have changed it.")
+    (check lifted (part light) (about 0.55) (within 0.08)))
+
+  (done "The wood rose {rise}, just as far as the stone fell. The stone ({heavy.mass}) outweighs the wood ({light.mass}), so it sped downward at {accel} and hauled the wood up. A pulley fixed like this does not make you stronger, it only turns the pull around: the rope pulls on the wood exactly as hard as on the stone. To lift a heavy weight with a light one you need to be cleverer than that: a lever, or more pulleys."))

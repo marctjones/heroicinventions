@@ -234,6 +234,27 @@ public class TestReportTests
         Assert.Equal("The rope pulled went slack: nothing is pulling on it any more.", Assert.Single(TestReport.RopeSentences(facts)));
     }
 
+    /// <summary>
+    /// A ball let roll down a slope and on over flat ground (#184): it began at (0, -0.85), ends 3 m away along z, and went fastest, 1.9 m/s,
+    /// the moment it left the ramp; the facts say how far it got (across the ground, whatever its height) and how fast it ever went.
+    /// </summary>
+    [Fact]
+    public void ARollingBallReportsHowFarItWentAndHowFastAtTheMost()
+    {
+        var rec = new TestRecorder();
+        rec.Begin(new Dictionary<string, double> { ["ball"] = 0.3063 }, NoTanks);
+        for (int i = 0; i < 480; i++)
+        {
+            double along = i / 479.0;
+            rec.Tick(Tick(new Dictionary<string, BodySample> { ["ball"] = new(i < 100 ? 0.3063 - 0.2563 * i / 100 : 0.05, i < 200 ? 1.9 : 1.5, 30, 0, 0, -0.85 + 2.15 * along) }));
+        }
+        var rise = rec.Facts().RiseOf("ball")!;
+        Assert.Equal(-0.2563, rise.Metres, 6);
+        Assert.Equal(1.9, rise.TopSpeed, 9);
+        Assert.Equal(2.15, rise.Across, 3);   // from z = -0.85 (its first tick is already a step along) to z = 1.30
+        Assert.Contains("across=2.150 top=1.900", TestReport.DataLine(rec.Facts()));
+    }
+
     [Fact]
     public void ADataLineHasTheNumbersAScriptReads()
     {
