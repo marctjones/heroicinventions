@@ -77,7 +77,7 @@ public partial class Main
 
         var keep = PageButton("Keep playing", KeepPlaying);
         col.AddChild(keep);
-        col.AddChild(PageButton("Main menu", () => { CloseFront(); DeselectMachine(); ShowTitle(); }));
+        col.AddChild(PageButton("Main menu", () => { CloseFront(); LeaveToTitle(); }));
         keep.GrabFocus();
 
         GD.Print($"[frontend] ending: {bank.Name} sol {bank.WonAtSol} at {MachineView.HoursText(bank.WonAtHour)}, {bank.ChargeWh:0.00} of {bank.CapacityWh:0.00} Wh at {bank.Temperature:0.0} C, sources {bank.Sources.Count}");

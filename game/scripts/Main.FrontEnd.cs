@@ -59,7 +59,7 @@ public partial class Main
         _continueButton = BigButton("Continue");
         _continueButton.Pressed += Continue;
         var mainMenu = BigButton("Main menu");
-        mainMenu.Pressed += () => { if (_current is not null || _views.Count > 0) DeselectMachine(); ShowTitle(); };
+        mainMenu.Pressed += LeaveToTitle;
         _machineList.AddChild(newGame); _machineList.MoveChild(newGame, 0);
         _machineList.AddChild(_continueButton); _machineList.MoveChild(_continueButton, 1);
         _machineList.AddChild(mainMenu); _machineList.MoveChild(mainMenu, 2);
@@ -71,6 +71,14 @@ public partial class Main
         col.MoveChild(_logButton, _menuButton.GetIndex());
 
         if (FrontEndWanted()) ShowTitle();
+    }
+
+    /// <summary>Back to the title page from a running game or machine: autosaved first, so Continue finds it as it was left.</summary>
+    private void LeaveToTitle()
+    {
+        if (_screen is not (Screen.None or Screen.Ending)) return;
+        if (_current is not null || _views.Count > 0) { SaveWorld(auto: true); DeselectMachine(); }
+        ShowTitle();
     }
 
     private static bool FrontEndWanted()
@@ -385,7 +393,8 @@ public partial class Main
             if (!_hudControls.Text.Contains("I opens the rover log")) _hudControls.Text += "\nI opens the rover log";
         }
         if (_screen == Screen.Opening) OpeningTick(delta);
-        return holds && _screen != Screen.None;
+        if (_winBanner is not null) _winBanner.Visible = _screen == Screen.None;   // the old banner (Main.Win.cs) stays behind a page, and shows again after
+        return _screen != Screen.None;   // (read now: the ending or the end of the opening may have changed it this frame)
     }
 
     // ----------------------------------------------------------- scripted checks
@@ -407,7 +416,7 @@ public partial class Main
                 SaveWorld(auto: false);
                 return ScriptedInput.Step.Next;
             case "menu":
-                if (_screen == Screen.None) { if (MachineOnScreen) DeselectMachine(); ShowTitle(); }
+                LeaveToTitle();
                 return ScriptedInput.Step.Next;
             case "log":
                 if (_screen == Screen.Log) CloseRoverLog(); else ShowRoverLog();

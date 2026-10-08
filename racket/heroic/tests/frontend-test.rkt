@@ -10,7 +10,7 @@
 ;;   the win       front-end-check: a bank of 10 Wh set to 9 Wh with the call at any hour: the generator has to put in 1 Wh. The windmill takes about
 ;;                 10 s to reach the generator's cut-in, then 1 Wh / 278 W = 13 s: the call goes out about 23 s after 02:55, on sol 1, at "02:55"; the
 ;;                 bank's record is 1.000 Wh from the wind (10 - 9), and nothing else.
-;;   continue      a save of front-end-check, then the title page's Continue and Load game go to the rover with no opening.
+;;   continue      a save of front-end-check, then "menu" (the title page, autosaving) and the title page's Continue and Load game go to the rover with no opening.
 ;; Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list racket/file racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -88,12 +88,12 @@
     (define lines
       (run-game (string-append "wait 20; frontend save; frontend menu; wait 3; frontend press Continue; wait 20; frontend screen; rover;"
                                " frontend menu; wait 3; frontend press Load game; wait 3; frontend press front-end-check; wait 20; frontend screen; rover; quit")
-                #:env '(("HEROIC_WORLD" . "front-end-check"))))
-    ;; clean up what the run wrote into the user's saves
-    (for ([l (lines-with lines "[save] saved front-end-check to ")])
+                #:env '(("HEROIC_FRONTEND" . "0") ("HEROIC_WORLD" . "front-end-check"))))   ; no title page at launch: the world is on, and "menu" leaves it (autosaving)
+    ;; clean up what the run wrote into the user's saves ("saved" and "autosaved" lines both name the file)
+    (for ([l (filter (λ (l) (regexp-match? #rx"^\\[save\\] (auto)?saved front-end-check to " l)) lines)])
       (define path (cadr (regexp-match #rx" to (.*)$" l)))
-      (for ([f (list path (string-replace path ".save" ".autosave.save"))]) (when (file-exists? f) (delete-file f))))
+      (when (file-exists? path) (delete-file path)))
     (check-equal? (length (lines-with lines "[save] loaded front-end-check")) 2 "Continue, then Load game")
     (check-equal? (length (lines-with lines "[frontend] caption")) 0 "no opening")
-    (check-equal? (screens lines) '("Title" "None" "Title" "Load" "None") "the title page, the save loaded; again via the list")
+    (check-equal? (screens lines) '("Title" "None" "Title" "Load" "None") "menu leaves the world for the title page, Continue loads; again via Load game")
     (check-equal? (length (lines-with lines "[view] rover: at")) 2 "the rover is there each time")))

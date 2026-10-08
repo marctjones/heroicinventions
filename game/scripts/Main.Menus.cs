@@ -89,7 +89,7 @@ public partial class Main
         var m = NewMenu("File", _menuBar);
         m.Add("New Game...", ShowScenarios);
         int cont = m.Add("Continue", Continue);
-        m.Add("Main Menu", () => { if (_screen == Screen.None) { if (MachineOnScreen) DeselectMachine(); ShowTitle(); } });
+        m.Add("Main Menu", LeaveToTitle);
         int rlog = m.Add("Rover Log (I)", ShowRoverLog);
         m.Popup.AddSeparator();
         int save = m.Add("Save", () => SaveWorld(auto: false), Key.S);
