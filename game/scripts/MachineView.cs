@@ -152,6 +152,7 @@ public partial class MachineView : Node3D
         Pass(BuildFracture);
         Skins.FitJoints(this, Surface);   // a collar or ball wherever the physics joins two parts
         Skins.OrientGrain(this);
+        Skins.PlankSeams(this);        // dark seams on wide wooden boxes (#102)
         Skins.RecedeStructure(this);
         BuildTurnMarks();   // a stripe on everything that turns, a blur ring above 15 rev/s (#172)
         Skins.ScreenLabels(this);      // every label the same size on screen, near or far (#148)
@@ -301,6 +302,8 @@ public partial class MachineView : Node3D
                 shell.AddChild(Shapes.Rod(new Vector3(-hs, a * hh, b * hs), new Vector3(hs, a * hh, b * hs), e, frame));   // along X, top and bottom
                 shell.AddChild(Shapes.Rod(new Vector3(b * hs, a * hh, -hs), new Vector3(b * hs, a * hh, hs), e, frame));   // along Z, top and bottom
             }
+
+        Skins.HoopTank(shell, side, height, Surface("iron"));   // iron hoops, a few by its height (#102)
 
         // nearly opaque: water held in a vessel must read against a pale sky through its glass (readable first)
         var water = Shapes.Box(new Vector3(side * 0.96f, 1, side * 0.96f),
@@ -491,6 +494,7 @@ public partial class MachineView : Node3D
         body.Position = V(part.At) + new Vector3(0, height / 2, 0);
         AddChild(body);
         _boilerBodies[part.Id] = body;
+        Skins.BandBoiler(body, radius, height, Surface(part.Material == "iron" || part.Material == "steel" ? "bronze" : "iron"));   // bands (#102)
 
         var firePos = V(part.At) + new Vector3(0, -0.03f, 0);
         var emberMat = new StandardMaterial3D
@@ -1165,6 +1169,10 @@ public partial class MachineView : Node3D
         body.AddChild(new MeshInstance3D { Mesh = mesh, MaterialOverride = PartSurface(part, Mathf.Max(extent.X, extent.Y)) });
         // A round, evenly toothed wheel looks the same at every angle, so a gear turning at 27 rpm read as
         // frozen: it is marked with a stripe, painted on, by BuildTurnMarks (#172).
+        // a disc wheel stays a solid disc (that is the point of it) but gets a rim and a hub (#102)
+        // (not a millstone: stone and a grind torque make it a runner, which is a solid slab)
+        if (part.Symbol("shape", "") == "disc-wheel" && !part.Props.ContainsKey("grind-torque") && _materials[part.Material].Category != HeroicInventions.Sim.Materials.MaterialCategory.Stone)
+            Skins.RimWheel(body, Mathf.Min(extent.X, extent.Y) / 2, extent.Z, Surface(part.Material));
         AddChild(body);
         _freezable.Add(body);
         _bodiesById[part.Id] = body;

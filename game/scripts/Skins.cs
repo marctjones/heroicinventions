@@ -564,4 +564,112 @@ public static class Skins
         mat.NextPass = pass;
         return new TurnMark(pass);
     }
+
+    // ── layer 2b: made things (#102): detail rules, one per feature ─────────────────────────────────
+
+    /// <summary>
+    /// Iron hoops round a tank, a few to a tank by its height (about one a side-and-a-bit, one to four): a glass
+    /// box with a frame is a vessel, and hoops say it is a built one. Four flat strips make a ring; the ring is a
+    /// child of the shell, so a hung tank carries it. <paramref name="iron"/> is the hoops' own material.
+    /// </summary>
+    private static void Add(Node3D parent, string name, Vector3 size, Vector3 at, StandardMaterial3D mat)
+    {
+        var box = Shapes.Box(size, mat);
+        box.Name = name;
+        box.Position = at;
+        parent.AddChild(box);
+    }
+
+    public static void HoopTank(Node3D shell, float side, float height, StandardMaterial3D iron)
+    {
+        int n = Mathf.Clamp(Mathf.RoundToInt(height / (side * 0.9f)), 1, 4);
+        float d = Mathf.Clamp(side * 0.02f, 0.004f, 0.015f), band = Mathf.Clamp(side * 0.07f, 0.01f, 0.07f), hs = side / 2;
+        for (int i = 1; i <= n; i++)
+        {
+            float y = -height / 2 + height * i / (n + 1);
+            foreach (float sign in new[] { -1f, 1f })
+            {
+                Add(shell, "hoop", new Vector3(side + 2 * d, band, 2 * d), new Vector3(0, y, sign * hs), iron);
+                Add(shell, "hoop", new Vector3(2 * d, band * 0.98f, side), new Vector3(sign * hs, y, 0), iron);   // a hair slimmer: no coplanar tops
+            }
+        }
+    }
+
+    /// <summary>
+    /// Bands round a boiler: one near each end and a few between, spaced by the height against the radius (a tall
+    /// thin boiler gets more), each a short fat disc a little wider than the shell, so it stands out as a ring.
+    /// </summary>
+    public static void BandBoiler(MeshInstance3D body, float radius, float height, StandardMaterial3D band)
+    {
+        int inner = Mathf.Clamp(Mathf.RoundToInt(height / (radius * 1.4f)) - 1, 1, 4);
+        float wide = radius + Mathf.Clamp(radius * 0.05f, 0.006f, 0.03f), thick = Mathf.Clamp(height * 0.04f, 0.01f, 0.06f);
+        var shares = new List<float> { 0.06f, 0.94f };
+        for (int i = 1; i <= inner; i++) shares.Add(0.06f + 0.88f * i / (inner + 1));
+        foreach (float share in shares)
+        {
+            var ring = Shapes.Cylinder(wide, thick, band);
+            ring.Name = "band";
+            ring.Position = new Vector3(0, -height / 2 + height * share, 0);
+            body.AddChild(ring);
+        }
+    }
+
+    /// <summary>
+    /// A solid disc wheel given a made look: a rim bead round each face and a hub boss, of the wheel's own
+    /// material (the outline gives them their edge). Not spokes: a disc wheel is solid on purpose (the carts demo
+    /// compares it with a spoked one), and generated spoked wheels already have theirs. The axle is local Z.
+    /// </summary>
+    public static void RimWheel(Node3D wheel, float radius, float width, StandardMaterial3D mat)
+    {
+        float relief = Mathf.Clamp(radius * 0.05f, 0.002f, 0.02f);
+        var hub = Shapes.Cylinder(radius * 0.17f, width + relief * 3, mat);
+        hub.Name = "hub";
+        hub.Rotation = new Vector3(Mathf.Pi / 2, 0, 0);
+        wheel.AddChild(hub);
+        foreach (float side in new[] { 1f, -1f })
+            wheel.AddChild(new MeshInstance3D
+            {
+                Name = "rim",
+                Mesh = new TorusMesh { InnerRadius = radius * 0.86f, OuterRadius = radius * 1.01f, Rings = 24, RingSegments = 8 },
+                MaterialOverride = mat,
+                Position = new Vector3(0, 0, side * (width / 2 + relief * 0.4f)),
+                Rotation = new Vector3(Mathf.Pi / 2, 0, 0),
+            });
+    }
+
+    /// <summary>
+    /// Plank seams on wooden boxes: a board wider than about 0.3 m is laid from planks, so dark seams run along
+    /// its length, one plank to about 0.2 m of its width, on its two broad faces. Narrow stock (a beam, a post)
+    /// is one piece and gets none. Only a box of a wooden material, so a crate, a platform and a cart bed
+    /// qualify and a water box doesn't. Run once after a view is built.
+    /// </summary>
+    public static void PlankSeams(Node root)
+    {
+        foreach (var mesh in Meshes(root).ToList())
+        {
+            if (mesh.Mesh is not BoxMesh box || mesh.MaterialOverride is not StandardMaterial3D m || !m.HasMeta(MaterialMeta)) continue;
+            if (!Library.TryGet((string)m.GetMeta(MaterialMeta), out var def) || def.Category != MaterialCategory.Wood) continue;
+            if (mesh.Name.ToString().StartsWith("seam") || !mesh.Scale.IsEqualApprox(Vector3.One)) continue;
+            var size = new[] { box.Size.X, box.Size.Y, box.Size.Z };
+            var order = new[] { 0, 1, 2 }.OrderByDescending(i => size[i]).ToArray();   // long, wide, thin; a cube's ties go by axis
+            int along = order[0], across = order[1], thin = order[2];
+            float length = size[along], wide = size[across], depth = size[thin];
+            if (wide < 0.3f || depth < 0.04f) continue;
+            int planks = Mathf.Clamp(Mathf.RoundToInt(wide / 0.2f), 2, 6);
+            var dark = m.AlbedoColor * 0.38f;
+            var seamMat = Shapes.Mat(new Color(dark.R, dark.G, dark.B), roughness: 0.9f, outline: false);
+            float seamWidth = Mathf.Clamp(wide * 0.014f, 0.004f, 0.012f), lift = 0.0012f;
+            for (int i = 1; i < planks; i++)
+                foreach (float face in new[] { -1f, 1f })
+                {
+                    var dims = Vector3.Zero; var at = Vector3.Zero;
+                    dims[along] = length * 0.995f; dims[across] = seamWidth; dims[thin] = lift * 2;
+                    at[across] = -wide / 2 + wide * i / planks; at[thin] = face * (depth / 2);
+                    var seam = Shapes.Box(dims, seamMat);
+                    seam.Name = "seam";
+                    seam.Position = at;
+                    mesh.AddChild(seam);
+                }
+        }
+    }
 }

@@ -243,7 +243,7 @@ Re-measured (sd / sep): herons-fountain 17/−53 → 19/−56 at default framing
 - The fitting rides on one of the bodies, so it turns and swings with it.
 - `HEROIC_DEBUG_PHYSICS=1` logs each fitting: kind, material, pin size, host body.
 
-Frames: `docs/art/skins/joint-fittings.png`. Still to do for #102: bands on tanks, spokes and rims on generated wheels, plank seams.
+Frames: `docs/art/skins/joint-fittings.png`. The rest of #102 is in 12.10.
 
 ### 12.3 Terrain and haze (2026-10-07, #103; readable over realistic)
 
@@ -362,3 +362,18 @@ Used wherever the sim has a temperature for a part: every boiler's shell (`Boile
 - not marked: the fixed axle rods drawn behind a group of wheels (they do not turn in the view, and wheels on one rod may turn at different speeds), and the water wheels' and windmills' spoked frames (their spokes already show the turn).
 
 `HEROIC_MARKS_REPORT=1` prints each wheel's mark angle about its axle and the time the ring comes on, to check a frame against the trace. Frames: `docs/art/skins/warmth.png`, `docs/art/skins/turning-marks.png`.
+
+### 12.10 HUD theme and the rest of the part detail (2026-10-07, #106 and #102)
+
+**HUD theme.** `game/scripts/Theme.cs` (`HudTheme`) builds one Godot Theme in code: panels `#2B2724` (94% opaque) with a dim bronze edge, buttons raised warm grey (`#3B342F`) with a bronze edge on hover and solid bronze with ink text when pressed or on, cream `#F1E9D8` text with a panel-coloured 3 px outline (so the bottom help line still reads over a pale ground), bronze `#CC8F4A` for rules, scroll grabbers, carets and the window title. The build console, the only `RichTextLabel`, is the rover's ledger: ink `#2B2724` on paper `#E8DFC8`. Contrast: cream on panel 12.3:1, cream on a raised button 10.1:1, ink on pressed bronze 5.4:1, dimmed text `#B8AE9C` on panel 6.7:1, ink on paper 11.2:1; all above 4.5:1.
+- A theme does not cross a `CanvasLayer`, and there is no project theme to merge into at runtime (`ThemeDB.GetProjectTheme()` is null), so `HudTheme.Install(layer)` is called once per layer (one line each in `Main.BuildUI` and `BuildMode.BuildUi`) and themes every direct child of the layer, including ones added later, and dialogs. No per-widget styling is needed; the few overrides left only change size or alpha.
+- Font: Godot's bundled default, so no font was added and `docs/assets.md` needs no entry. Any font added later must be SIL OFL or equivalent and recorded there (section 8).
+- Frames: `docs/art/skins/hud-theme-run.png`, `docs/art/skins/hud-theme-build.png`.
+
+**Part detail rules** (all in `Skins.cs`, one per feature, drawn with extra primitives and never imported meshes):
+- `HoopTank`: flat iron hoops round a tank, one per 0.9 sides of height, 1 to 4 of them (4 strips each, children of the shell, so a hung tank carries them).
+- `BandBoiler`: a band near each end and 1 to 4 between, by height against radius; bronze on an iron or steel boiler, iron otherwise, so the bands read against the shell. Boilers with a rating still turn their own outline amber and red; the bands are separate meshes with their own material.
+- `RimWheel`: a rim bead on each face and a hub boss on a solid `disc-wheel`, not on a millstone (stone, or a grind torque). Deliberately no spokes on a disc wheel: it is solid on purpose (the carts demo compares it with a spoked one), and the generated spoked wheels (cart-wheel, noria, water wheels) already have theirs.
+- `PlankSeams`: wooden boxes wider than 0.3 m get dark seams along their length on their two broad faces, one plank to about 0.2 m of width (2 to 6 planks); a beam or post is one piece and gets none. Runs once after a view is built, so any wooden box qualifies, a crate, cart bed or platform.
+- Shared-material hazard respected: every detail uses its own material instance (made for the part), none replaces a builder's `MaterialOverride`, and seams carry no outline. The Kongming lantern envelope was done by another agent.
+- Frames: `docs/art/skins/detail-before-after.png` (crate, Heron's fountain, Newcomen's boiler, carts' wheels).

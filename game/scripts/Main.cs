@@ -493,6 +493,7 @@ public partial class Main : Node3D
     {
         var layer = new CanvasLayer();
         AddChild(layer);
+        HudTheme.Install(layer);
 
         var panel = _leftPanel = new PanelContainer();
         panel.SetAnchorsPreset(Control.LayoutPreset.LeftWide);
