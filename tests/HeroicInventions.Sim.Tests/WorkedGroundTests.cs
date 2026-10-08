@@ -299,6 +299,49 @@ public class WorkedGroundTests
         Assert.True(w.Try(() => w.Scoop(-6, -6, 0.2), _ => false));
     }
 
+    /// <summary>
+    /// The rubble of a slide is soil, whatever it came down on (#72, owner decision 2026-10-08: the rover digs wherever it goes).
+    /// Victoria's weakened rim collapses as the opening loads and runs out over the bedrock apron below it, burying the battery
+    /// bank's crate at (264, 143) under 4.74 m of sublimed regolith (the cell was −42.00 m, it is −37.26 after). The map still calls
+    /// that cell bedrock (it keeps one soil, so the slide comes out as it always has, bit for bit: SlideFinishTests); the patch the
+    /// rover lays over it reads the rubble as sublimed regolith down to the rock's old top. Before, every bucket there was refused as
+    /// bedrock. (A patch's nodes start intact, as everywhere: 16 kPa holds a cut 22 m high on Mars, so the shaft stands.) Worked:
+    /// the bucket takes the cell's centre down the full 4.74 m to the rock and no further, every bucket full until the last.
+    /// </summary>
+    [Fact]
+    public void RubbleASlideLeftOnBedrockIsSoilTheRoverDigsDownToTheRock()
+    {
+        var t = Terrain.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "maps", "victoria.map")), "victoria.map");
+        int cell = t.CellAt(264, 143)!.Value;
+        double was = t.Heights[cell];
+        Assert.Null(t.Covering(cell));
+        t.Settle(3.71);
+        Assert.Equal("bedrock", t.SoilOf(cell).Material);                       // the map's own soil, unchanged
+        var covered = t.Covering(cell)!.Value;
+        Assert.Equal(was, covered.RockTop, 12);
+        Assert.Equal("sublimed-regolith", t.Soils[covered.Soil].Material);
+        Assert.InRange(t.Heights[cell] - was, 4.5, 5.0);
+        var w = t.WorkAt(264, 143)!;
+        double x = t.CellX(cell % t.Nx), z = t.CellZ(cell / t.Nx);
+        int node = (int)Math.Round((x - w.MinX) / WorkedGround.FineCell) + (int)Math.Round((z - w.MinZ) / WorkedGround.FineCell) * w.Nx;
+        Assert.Equal(was, w.Floor[node], 12);                                   // the rock's top: never cut
+        Assert.Equal("sublimed-regolith", w.Fine.SoilOf(node).Material);
+        double top = w.HeightAt(x, z), last = top, dug = 0;
+        int buckets = 0;
+        while (buckets < 100 && w.Scoop(x, z, 0.2) is { } s)
+        {
+            buckets++;
+            dug += s.Volume;
+            w.Settle(3.71);
+            Assert.True(w.HeightAt(x, z) <= last + 1e-9, "the cover only goes down as it is dug");
+            last = w.HeightAt(x, z);
+        }
+        Console.WriteLine($"RUBBLE {buckets} buckets, {dug:F2} m3, the ground at the cell's centre from {top:F2} to {last:F2}, rock at {was:F2}");
+        Assert.Equal(was, last, 6);                                              // down to the rock, and not into it
+        Assert.InRange(buckets, 10, 20);
+        Assert.All(Enumerable.Range(0, w.Fine.Heights.Length), k => Assert.True(w.Fine.Heights[k] >= w.Floor[k] - 1e-9));
+    }
+
     [Fact]
     public void PatchesMergeAndKeepTheWorkAlreadyDone()
     {

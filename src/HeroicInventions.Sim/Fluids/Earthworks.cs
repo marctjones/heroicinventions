@@ -31,6 +31,39 @@ public sealed partial class Terrain
 
     public SoilSpec SoilOf(int cell) => Soils[Soil[cell]];
 
+    /// <summary>Pa: a soil this cohesive is rock. Nothing cuts it, and it never fails (bedrock is 5e7).</summary>
+    public const double RockCohesion = 1e7;
+
+    private bool IsRock(int cell) => SoilOf(cell).Cohesion >= RockCohesion;
+
+    private double[]? _rockTop;   // m, by cell: where a cell of rock had its top when loose soil first slid onto it (NaN: none has)
+    private int[]? _debris;       // by cell: the soil that lies on that rock
+
+    /// <summary>
+    /// Loose soil lying on rock (#72): where a slide has brought soil down onto a cell of rock (a crater's collapse runs its rubble
+    /// out over the bedrock apron below), the rock's top as it was and the soil now on it, or null for a cell no slide has covered.
+    /// A cell keeps one soil, so the map still calls such a cell rock (its relaxation, and every world's, is as it was); this is
+    /// what tells the rover's worked ground that the rubble over it is soil it can dig, down to that rock.
+    /// </summary>
+    public (double RockTop, int Soil)? Covering(int cell) =>
+        _rockTop is { } top && !double.IsNaN(top[cell]) ? (top[cell], _debris![cell]) : null;
+
+    /// <summary>Notes that soil from <paramref name="from"/> is coming to lie on rock at <paramref name="rock"/> (its top now, before it does).</summary>
+    private void Cover(int rock, int from)
+    {
+        int soil = IsRock(from) ? Covering(from)?.Soil ?? -1 : Soil[from];
+        if (soil < 0) return;   // rock sliding onto rock (a loose cell of it): still rock
+        if (_rockTop is null)
+        {
+            _rockTop = new double[Count];
+            Array.Fill(_rockTop, double.NaN);
+            _debris = new int[Count];
+        }
+        if (!double.IsNaN(_rockTop[rock])) return;
+        _rockTop[rock] = Heights[rock];
+        _debris![rock] = soil;
+    }
+
     /// <summary>Marks the ground's shape as changed (water moving its bed, #53).</summary>
     public void Touch() => Version++;
 
@@ -173,6 +206,7 @@ public sealed partial class Terrain
                         failed?.Add(a);
                     }
                     double shift = (drop - repose) / 2;
+                    if (IsRock(b)) Cover(b, a);   // rubble coming to lie on rock is soil, over the rock it covers
                     Heights[a] -= shift;
                     Heights[b] += shift;
                     loose[b] = true;

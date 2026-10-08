@@ -52,7 +52,8 @@ public sealed class WorkedGround
 
     /// <summary>The heights the patch started with (or was last shaped to): what a dug or heaped cell is measured against.</summary>
     public double[] Original { get; }
-    /// <summary>The lowest each node may be cut: bedrock is never cut, and ground that was bedrock keeps its level under any spoil on it.</summary>
+    /// <summary>The lowest each node may be cut: bedrock is never cut, ground that was bedrock keeps its level under any spoil on it, and
+    /// rubble a slide left on rock (<see cref="Terrain.Covering"/>) is soil down to the rock's top as it was.</summary>
     public double[] Floor { get; }
 
     /// <summary>The water standing on the patch (#200), on a grid of its fine cells nested in the map's; null until the map's water first steps with the patch there.</summary>
@@ -69,7 +70,7 @@ public sealed class WorkedGround
     public double NodeZ(int j) => MinZ + j * FineCell;
     private double Area => Fine.Cell * Fine.Cell;
 
-    private bool Hard(int node) => Fine.SoilOf(node).Cohesion >= 1e7;
+    private bool Hard(int node) => Fine.SoilOf(node).Cohesion >= Terrain.RockCohesion;
 
     /// <summary>A patch over coarse nodes [bi0, bi1] × [bj0, bj1] of <paramref name="ground"/>, the ground as it stands.</summary>
     public WorkedGround(Terrain ground, int bi0, int bj0, int bi1, int bj1)
@@ -83,12 +84,17 @@ public sealed class WorkedGround
         MinZ = ground.CellZ(bj0); MaxZ = ground.CellZ(bj1);
         var heights = new double[nx * nz];
         var soil = new int[nx * nz];
+        var rock = new double[nx * nz];   // the rock's top under rubble a slide left on it (#72), else NaN
         for (int j = 0; j < nz; j++)
             for (int i = 0; i < nx; i++)
             {
                 double x = MinX + i * cf, z = MinZ + j * cf;
-                heights[i + j * nx] = ground.CoarseSurfaceAt(x, z);
-                soil[i + j * nx] = ground.Soil[ground.CellAt(x, z)!.Value];
+                int k = i + j * nx, cell = ground.CellAt(x, z)!.Value;
+                heights[k] = ground.CoarseSurfaceAt(x, z);
+                soil[k] = ground.Soil[cell];
+                rock[k] = double.NaN;
+                if (ground.Covering(cell) is { } covered && heights[k] > covered.RockTop)
+                    (soil[k], rock[k]) = (covered.Soil, covered.RockTop);
             }
         Fine = new Terrain
         {
@@ -99,7 +105,7 @@ public sealed class WorkedGround
         };
         Original = (double[])heights.Clone();
         Floor = new double[nx * nz];
-        for (int k = 0; k < Floor.Length; k++) Floor[k] = Hard(k) ? heights[k] : double.NegativeInfinity;
+        for (int k = 0; k < Floor.Length; k++) Floor[k] = !double.IsNaN(rock[k]) ? rock[k] : Hard(k) ? heights[k] : double.NegativeInfinity;
     }
 
     /// <summary>A patch made by merging <paramref name="parts"/> (all of one map, on its lattice) over the nodes given: each node is taken from the part that has it, else from the map.</summary>
