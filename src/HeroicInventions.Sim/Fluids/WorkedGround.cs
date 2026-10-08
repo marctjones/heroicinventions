@@ -128,7 +128,7 @@ public sealed class WorkedGround
         // the water on the parts goes with them, cell for cell: their grids lie on the same lattice as the merged one's (#200)
         foreach (var p in parts)
         {
-            if (p.Water is not { } from) continue;
+            if (p.Water is not { Ci: > 0, Cj: > 0 } from) continue;
             var to = w.Water ??= new PatchWater(w);
             int di = (from.I0 - to.I0) * w.K, dj = (from.J0 - to.J0) * w.K;
             for (int j = 0; j < from.Bed.Nz; j++)

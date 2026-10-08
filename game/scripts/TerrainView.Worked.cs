@@ -176,6 +176,12 @@ public partial class TerrainView
     {
         var w = p.Ground;
         if (w.Water is not { } grid) return;
+        if (grid.Water.MaxDepth <= 0.003 && !RingWet(w))
+        {
+            // a dry patch (the rover's trenches before any water comes): nothing to draw, and no node to work out
+            if (p.Water is not null) p.Water.Mesh = null;
+            return;
+        }
         int nx = w.Nx, nz = w.Nz, n = nx * nz;
         var bed = grid.Bed;
         double cf = bed.Cell;
@@ -251,6 +257,19 @@ public partial class TerrainView
         var mesh = new ArrayMesh();
         mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
         p.Water.Mesh = mesh;
+    }
+
+    /// <summary>Whether any of the map's cells in the patch's outer half-cells (its box less the fine grid) holds water to draw.</summary>
+    private bool RingWet(WorkedGround w)
+    {
+        var depths = _water.Depths;
+        for (int j = w.Bj0; j <= w.Bj1; j++)
+            for (int i = w.Bi0; i <= w.Bi1; i++)
+            {
+                int c = i + j * _ground.Nx;
+                if (!_water.UnderPatch(c) && depths[c] > 0.003) return true;
+            }
+        return false;
     }
 
     private MeshInstance3D MakeWaterNode(Patch p)
