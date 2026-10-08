@@ -31,7 +31,7 @@ public sealed partial class Terrain
 
     /// <summary>
     /// For ground the rover works (#63), null elsewhere: the highest level (m) the soil on top of each cell may be carried
-    /// to, +infinity for ground never covered with spoil (then it is the surface itself). Soil that is dumped, or slides down,
+    /// to: for ground never covered with spoil, the level it had before the rover worked it. Soil that is dumped, or slides down,
     /// gets the lower of the levels it came from and the one it lands on, so a mound remembers where its soil was dug.
     /// </summary>
     public double[]? Ceiling { get; set; }
@@ -180,7 +180,7 @@ public sealed partial class Terrain
                     if (Ceiling is { } ceiling)
                     {
                         // soil that slides down rests lower, and may be carried no higher than where it now lies (#63)
-                        ceiling[b] = Math.Min(Math.Min(ceiling[a], Heights[a]), Math.Min(ceiling[b], Heights[b]));
+                        ceiling[b] = Math.Min(ceiling[a], ceiling[b]);
                     }
                     Heights[a] -= shift;
                     Heights[b] += shift;

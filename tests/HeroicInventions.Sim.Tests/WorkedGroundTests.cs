@@ -145,7 +145,7 @@ public class WorkedGroundTests
         double mound = w.HeightAt(startX, 1.5);
         Assert.True(mound > t.CoarseSurfaceAt(startX, 1.5) + 0.1, "a mound stands higher than the hill under it");
         // dug from the mound's top, the load is still not allowed higher than the level it first came from
-        double bestX = startX;
+        double bestX = startX, highest = double.NegativeInfinity;
         for (int round = 0; round < 60; round++)
         {
             var s = w.Scoop(bestX, 1.5, 0.2);
@@ -153,17 +153,74 @@ public class WorkedGroundTests
             // the highest ground up the hill, within 2.5 m, that the rule lets it land on
             double? landed = null;
             for (double dx = 2.5; dx > 0 && landed is null; dx -= 0.25)
-                if (w.Pour(bestX + dx, 1.5, s.Value.Volume, s.Value.Soil, s.Value.Ceiling) is { } l) { landed = l; bestX += dx; }
+                if (w.Pour(bestX + dx, 1.5, s.Value.Volume, s.Value.Soil, s.Value.Ceiling) is { } l) { landed = l; highest = Math.Max(highest, Math.Max(l, s.Value.Ceiling)); bestX += dx; }
             if (landed is null && !Place(w, bestX, 1.5, s.Value)) break;   // it stays in the bucket
             w.Settle(G);
         }
-        Assert.True(bestX < startX + 1.0, $"the mound walked {bestX - startX:0.0} m up the hill");
+        // The soil may be passed along the trench it digs for itself (its floor stays level, so x can advance), but it never gains
+        // elevation: no load was ever carried to, or tipped on, ground more than a hair above the level it was first dug from.
+        Assert.True(highest < ceiling + 0.05, $"soil was carried to {highest:0.000} m, {highest - ceiling:0.000} m above where it was first dug");
         // the mound's soil may be carried to the level it was dug from, give or take what a footprint that crept onto higher native
         // ground brought in (a bucket takes the mean of what it scraped: the credit is soil that really did come down from there)
         double over = 0;
         for (int k = 0; k < w.Fine.Heights.Length; k++)
-            if (w.Fine.Loose[k]) over = Math.Max(over, Math.Min(w.Fine.Ceiling![k], w.Fine.Heights[k]) - ceiling);   // ground never covered is its own surface
+            if (w.Fine.Loose[k] && w.Fine.Ceiling![k] < w.Original[k] - 1e-9) over = Math.Max(over, w.Fine.Ceiling![k] - ceiling);
         Assert.True(over < 0.1, $"spoil's ceiling crept {over:0.000} m above the level it was dug from");
+    }
+
+    /// <summary>
+    /// Why lifting spoil out of the rover's own hole is allowed and carrying spoil uphill is not (#72, owner decision 2026-10-08). A
+    /// backhoe's effort is free, so digging a hole and putting its spoil on the rim is the job: the soil comes back up to the level the
+    /// ground had before the hole, no more than the arm's reach (1.8 m) above where it was scraped. That raises soil by at most the
+    /// hole's own depth, once, and the ground has nowhere higher to take it than where it began, so there is nothing to ratchet: the
+    /// energy a hole and its heap hold is bounded by the volume dug times its depth. Spoil already on a mound, or tipped on ground
+    /// above where it came from, is different: each hop could be repeated from the new mound, so soil would climb a hill by free
+    /// effort without limit. Those loads keep the level they were dug from, and the next test shows the walk still cannot climb.
+    /// </summary>
+    [Fact]
+    public void AHoleADepthDeepDugByRepeatedBucketsHasItsSpoilOnTheRim()
+    {
+        // worked first: a loose crater to 1 m at repose 0.7 is a cone of radius 1/0.7 = 1.43 m, V = π r² h / 3 = 2.14 m³, 10.7 buckets
+        var t = Map();
+        var w = t.WorkAt(0, 0)!;
+        int buckets = 0;
+        var rng = new Random(2);
+        double inBucket = 0;
+        var rim = new List<(double X, double Z)>();
+        foreach (double r in new[] { 3.5, 4.5, 5.5 })
+            for (int a = 0; a < 16; a++) rim.Add((r * Math.Cos(a * Math.PI / 8), r * Math.Sin(a * Math.PI / 8)));
+        while (-w.Fine.Heights.Min() < 1.0 && buckets < 30)
+        {
+            var s = w.Scoop(0, 0, 0.2)!.Value;
+            buckets++;
+            Assert.True(s.Ceiling > -0.01, $"soil lifted out of a hole may go to the rim (ceiling {s.Ceiling:0.00})");
+            bool put = false;
+            foreach (var (x, z) in rim)
+                if (w.LandingSurface(x, z) is { } h && Math.Abs(h) < 0.02 && w.Pour(x, z, s.Volume, s.Soil, s.Ceiling) is not null) { put = true; break; }
+            if (!put) inBucket += s.Volume;
+            w.Settle(G);
+        }
+        Console.WriteLine($"HOLE buckets {buckets} depth {-w.Fine.Heights.Min():0.000} heap {w.Fine.Heights.Max():0.000}");
+        Assert.Equal(0, inBucket);
+        Assert.InRange(-w.Fine.Heights.Min(), 1.0, 1.3);
+        Assert.InRange(buckets, 9, 14);                                    // worked: 10.7
+        Assert.Equal(-inBucket, w.Net(), 8);
+        Assert.True(w.Fine.Heights.Max() > 0.2, "the spoil stands on the rim");
+        Assert.True(w.PotentialEnergy(G, -5) > 0, "a hole and its heap hold energy: the rover's free effort put it there (bounded by volume x depth)");
+    }
+
+    [Fact]
+    public void SoilIsLiftedNoMoreThanTheArmsReachOutOfAHole()
+    {
+        var t = Map();
+        var w = t.WorkAt(0, 0)!;
+        for (int j = 0; j < w.Nz; j++)                                   // a pit 3 m deep and 6 m across, as if dug
+            for (int i = 0; i < w.Nx; i++)
+                if (Math.Sqrt(w.NodeX(i) * w.NodeX(i) + w.NodeZ(j) * w.NodeZ(j)) < 3) w.Fine.Heights[i + j * w.Nx] = -3;
+        var s = w.Scoop(0, 0, 0.2)!.Value;
+        Assert.Equal(-3 + WorkedGround.ArmReach, s.Ceiling, 6);          // not the rim at 0: 1.8 m above where it was scraped
+        Assert.Null(w.Pour(5, 0, s.Volume, s.Soil, s.Ceiling));          // refused on the rim
+        Assert.NotNull(w.Pour(1, 0, s.Volume, s.Soil, s.Ceiling));       // tipped back lower in the pit
     }
 
     [Fact]

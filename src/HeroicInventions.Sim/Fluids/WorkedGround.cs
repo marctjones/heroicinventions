@@ -16,8 +16,9 @@ namespace HeroicInventions.Sim.Fluids;
 /// <see cref="Margin"/> m inside it. Nothing else of the map changes: the coarse heights, soils and water are as they were,
 /// so a world where no one digs is untouched.
 ///
-/// Free effort must not make energy (#72). Every cell remembers the level its top soil may be carried to
-/// (<see cref="Terrain.Ceiling"/>): ground never covered is the surface itself; spoil is the lower of the level it was dug from and
+/// Free effort must not make energy (#72), but a backhoe lifts spoil out of its own hole. Every cell remembers the level its top soil may be carried to
+/// (<see cref="Terrain.Ceiling"/>): ground never covered is the level it had when the patch was made (so spoil may be lifted out of a hole
+/// to its rim, no more than <see cref="ArmReach"/> above where it was scraped); spoil is the lower of the level it was dug from and
 /// the one it landed on, and soil that slides down keeps the lower of the two. A bucket's load takes the mean of what it
 /// scraped, and is dumped only where the surface is no higher than that, so soil can be moved down or along, never up, however
 /// it is passed from heap to heap.
@@ -92,7 +93,7 @@ public sealed class WorkedGround
             Soils = ground.Soils.Select(s => s with { Boulders = null }).ToList(),   // a bucketful leaves no boulders
             OpenEdges = false, Roughness = ground.Roughness,
         };
-        Fine.Ceiling = Enumerable.Repeat(double.PositiveInfinity, nx * nz).ToArray();
+        Fine.Ceiling = (double[])heights.Clone();   // ground never covered may be lifted to the level it has now
         Original = (double[])heights.Clone();
         Floor = new double[nx * nz];
         for (int k = 0; k < Floor.Length; k++) Floor[k] = Hard(k) ? heights[k] : double.NegativeInfinity;
@@ -161,7 +162,14 @@ public sealed class WorkedGround
         return Math.Clamp(i, 0, Nx - 1) + Math.Clamp(j, 0, Nz - 1) * Nx;
     }
 
-    private double Eff(int k) => Math.Min(Fine.Ceiling![k], Fine.Heights[k]);
+    /// <summary>m, the backhoe's reach (boom 0.8 + stick 0.7 + bucket 0.3, Rover.BoomLength etc.): soil is lifted out of a hole no more than this above where it was scraped.</summary>
+    public const double ArmReach = 1.8;
+
+    /// <summary>
+    /// The level the soil on top of a node may be carried to: for ground never covered with spoil, the level it had when the patch was
+    /// made (so soil may be lifted out of the rover's own hole to its rim); for spoil, the lower of the levels it came from and landed on.
+    /// </summary>
+    private double Eff(int k) => Fine.Ceiling![k];
 
     private List<int> Within(double x, double z, double radius)
     {
@@ -192,13 +200,14 @@ public sealed class WorkedGround
         if (nodes.Count == 0 || volume <= 0) return null;
         var avail = nodes.Select(k => Math.Max(0, Fine.Heights[k] - Floor[k])).ToArray();
         double depth = FillDepth(avail, volume / Area);
-        double taken = 0, level = 0;
+        double taken = 0, level = 0, from = 0;
         for (int n = 0; n < nodes.Count; n++)
         {
             double d = Math.Min(depth, avail[n]);
             if (d <= 0) continue;
             int k = nodes[n];
             level += d * Eff(k);
+            from += d * Fine.Heights[k];
             taken += d;
             Fine.Heights[k] -= d;
         }
@@ -206,7 +215,7 @@ public sealed class WorkedGround
         Fine.Touch();
         double m3 = taken * Area;
         Dug += m3;
-        return new Scooped(m3, level / taken, Fine.Soil[Node(x, z)], nodes.Average(k => Fine.Heights[k]));
+        return new Scooped(m3, Math.Min(level / taken, from / taken + ArmReach), Fine.Soil[Node(x, z)], nodes.Average(k => Fine.Heights[k]));
     }
 
     /// <summary>The depth d at which the sum of min(d, available) over the nodes is <paramref name="total"/> (m, cell-depths): all of it if it is less.</summary>
@@ -270,7 +279,7 @@ public sealed class WorkedGround
             {
                 int k = i + j * Nx;
                 Fine.Heights[k] = Original[k] = surface(NodeX(i), NodeZ(j));
-                Fine.Ceiling![k] = double.PositiveInfinity;
+                Fine.Ceiling![k] = Fine.Heights[k];
                 Fine.Loose[k] = false;
                 Floor[k] = Hard(k) ? Fine.Heights[k] : double.NegativeInfinity;
             }
