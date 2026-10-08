@@ -1,0 +1,15 @@
+;; The fastest route, end to end (issue #96; racket/heroic/tests/e2e-route-test.rkt, docs/e2e-route.md): the Lonely Rover's opening
+;; (lonely-rover-opening.world: the rim comes down on the cargo, the bank is under it) with the route's finished works standing on the
+;; crater floor 36 m from the rover: a windmill geared 125:1 to a salvaged motor, a bank in a tight regolith vault, and a heated rock in
+;; a bimetal-lidded bin (racket/machines/e2e-route.rkt). The works are placed first so that they are the world's first machine, the
+;; one a sleep, a setting and the run's clock address.
+;; The spot (180, 105) is the floor's flattest near the rover (2.9 degrees) on the notch's wind corridor (0.86 of its 6 m/s).
+(world lonely-rover-e2e
+  (map victoria)
+  (rover (at 190.0 140.0) (heading 270))
+  (place route e2e-route (at 180.0 0 105.0))
+  (place battery-bank cargo-crate (at 264.0 0 143.0))
+  (place solar-panels cargo-crate (at 254.62 0 147.0))
+  (place gas-cylinders cargo-crate (at 249.42 0 144.0))
+  (place hand-tools cargo-crate (at 242.49 0 140.0))
+  (place spares cargo-crate (at 233.83 0 135.0)))
