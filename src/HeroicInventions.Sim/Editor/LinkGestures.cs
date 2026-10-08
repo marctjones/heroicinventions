@@ -83,6 +83,46 @@ public static class LinkGestures
         }
     }
 
+
+    /// <summary>One part a selected part can join, how, and by which connection points (null when the join is of whole parts).</summary>
+    public sealed record Candidate(string PartId, string Via, string? OwnPort, string? TheirPort, string Words);
+
+    /// <summary>
+    /// The parts that <paramref name="id"/> can join, by the rules the join tools and the connection
+    /// points use (issue #179): each of its ports against every other part's compatible port
+    /// (<see cref="PortRules.Compatibility"/>, and one rotor to a boiler), and each whole-part tool
+    /// (gear mesh, belt, axle, shared air, cylinder) whose <see cref="Command"/> accepts the pair.
+    /// Rope and ball joint are left out: a rope takes any two parts, so it would light everything.
+    /// <paramref name="onlyPort"/> narrows it to one port (the one a click has started a pipe from).
+    /// </summary>
+    public static IReadOnlyList<Candidate> Candidates(EditorDocument doc, string id, string? onlyPort = null)
+    {
+        var found = new List<Candidate>();
+        if (!doc.Parts.TryGetValue(id, out var me)) return found;
+        foreach (var other in doc.Parts.Values.Where(p => p.Id != id))
+        {
+            foreach (var mine in me.Ports.Where(p => onlyPort is null || p.Name == onlyPort))
+                foreach (var theirs in other.Ports)
+                {
+                    var kind = PortRules.Compatibility(me, mine, other, theirs);
+                    if (kind == LinkKind.None) continue;
+                    if (kind == LinkKind.SteamConnect && PortRules.BoilerAlreadyFeedsARotor(doc.ToMachineDef(), me.Kind == "boiler" ? me.Id : other.Id)) continue;
+                    found.Add(new Candidate(other.Id, kind == LinkKind.Pipe ? "pipe" : "steam", mine.Name, theirs.Name, PortWords.Words(other, theirs)));
+                }
+            if (onlyPort is not null) continue;
+            foreach (var (tool, via) in WholePartTools)
+            {
+                try { Command(doc, tool, [id, other.Id]); }
+                catch (InvalidOperationException) { continue; }
+                found.Add(new Candidate(other.Id, via, null, null, via));
+            }
+        }
+        return found;
+    }
+
+    private static readonly (Kind Tool, string Via)[] WholePartTools =
+        [(Kind.Mesh, "gear mesh"), (Kind.Belt, "belt"), (Kind.Arbor, "axle"), (Kind.SealedAir, "shared air"), (Kind.Cylinder, "cylinder")];
+
     /// <summary>The links that name a part, with the command that takes each one away — what the inspector lists under the part.</summary>
     public static IReadOnlyList<(string Label, string Remove, string? RopeId)> LinksOn(EditorDocument doc, string id)
     {
