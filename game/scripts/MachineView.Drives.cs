@@ -27,6 +27,6 @@ public partial class MachineView
         // positive turn about the axle. Speed 0 is a motor that holds still, as men standing in the wheel do.
         joint.SetParam(HingeJoint3D.Param.MotorTargetVelocity, -(float)(drive.Rpm * Math.Tau / 60));
         // #:drive-torque caps the motor: the most torque it can give in one physics tick is that torque times the tick's length.
-        joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, (float)(drive.Torque / Engine.PhysicsTicksPerSecond));
+        joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, (float)(drive.Torque * Engine.TimeScale / Engine.PhysicsTicksPerSecond));
     }
 }

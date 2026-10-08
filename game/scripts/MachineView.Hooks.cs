@@ -29,11 +29,34 @@ public partial class MachineView
 
     /// <summary>
     /// Fields only the view has: <c>ROPE hook 0</c> lets the load go, <c>ROPE hook 1</c> hooks the hook to what is within its
-    /// reach. (A driven wheel's <c>drive-rpm</c> is the runtime's, #154, applied to the motor every tick.)
+    /// reach. <c>SLING load 1</c> fetches the stone (or bolt) a sling or bowstring threw and lays it in the pouch (#161). (A driven wheel's <c>drive-rpm</c> is the runtime's, #154, applied to the motor every tick.)
     /// False if this isn't one of those, so the caller goes on to the runtime's fields.
     /// </summary>
     public bool TrySetViewField(string target, string field, double value)
     {
+        // set as a field, the action is already the caller's to log (Operate, a demo, a replay): a HookChanged here would
+        // log it twice and, taken for a person's hand, end the demo operator that set it
+        _settingField = true;
+        try { return SetViewField(target, field, value); }
+        finally { _settingField = false; }
+    }
+
+    private bool _settingField;
+
+    private void NoteHand(string rope, string action, string? load, Vector3 point)
+    {
+        if (!_settingField) HookChanged?.Invoke(this, rope, action, load, point);
+    }
+
+    private bool SetViewField(string target, string field, double value)
+    {
+        if (field == "load" && _ropes.FirstOrDefault(r => r.Spec.Id == target) is { } sling)
+        {
+            if (!_seats.TryGetValue(sling, out var seat))
+                throw new MachineFormatException($"{target} has no pouch or nock to lay a load in: only a sling (#:release-deg) or a bowstring (#:nocked) has");
+            if (value != 0) LayIn(sling, seat.Load);
+            return true;
+        }
         if (field == "hook" && _ropes.FirstOrDefault(r => r.Spec.Id == target) is { } rope)
         {
             if (value == 0) Unhook(rope);
@@ -58,7 +81,7 @@ public partial class MachineView
         if (_eyes.Remove(rope, out var ring)) ring.QueueFree();
         rope.B = hook;
         rope.BLocal = Vector3.Zero;
-        HookChanged?.Invoke(this, rope.Spec.Id, "unhook", load.Name, eye);
+        NoteHand(rope.Spec.Id, "unhook", load.Name, eye);
     }
 
     private RigidBody3D MakeHook(string ropeId, Vector3 at, Vector3 velocity)
@@ -86,6 +109,7 @@ public partial class MachineView
     /// </summary>
     public bool DropHook(RigidBody3D body)
     {
+        if (DropInSeat(body)) return true;
         var (rope, _) = _hookOf.FirstOrDefault(kv => kv.Value == body);
         if (rope is null) return false;
         var at = body.GlobalPosition;
@@ -111,7 +135,7 @@ public partial class MachineView
         if (Hand?.Body == body) Hand = null;
         body.QueueFree();
         AddEye(rope);
-        HookChanged?.Invoke(this, rope.Spec.Id, "hook", best.Name, best.GlobalTransform * bestLocal);
+        NoteHand(rope.Spec.Id, "hook", best.Name, best.GlobalTransform * bestLocal);
         return true;
     }
 
@@ -166,5 +190,90 @@ public partial class MachineView
         ring.SetMeta("part_id", rope.Spec.Id);
         load.AddChild(ring);
         _eyes[rope] = ring;
+    }
+
+    // ------------------------------------------------------------------ reloading slings and bowstrings (#161)
+
+    /// <summary>
+    /// Where a sling's or a bowstring's load lies when the machine is set to throw: its pose in the frame of the part the
+    /// rope is tied to (the arm), taken from the blueprint, so the pouch is where it was whatever the arm's angle; and the
+    /// load and the point on it the rope was tied to.
+    /// </summary>
+    private sealed record Seat(RigidBody3D Load, Vector3 LoadLocal, RigidBody3D? Holder, Transform3D InHolder);
+
+    private readonly Dictionary<Rope, Seat> _seats = [];
+
+    /// <summary>How near a stone let go of by a hand must be to the pouch to drop into it, m.</summary>
+    public const float SeatReach = 0.25f;
+
+    private void AddSeat(Rope rope)
+    {
+        if ((rope.Spec.ReleaseDeg is null && !rope.Spec.Nocked) || rope.B is not { } load) return;
+        var inHolder = rope.A is { } holder ? holder.GlobalTransform.AffineInverse() * load.GlobalTransform : load.GlobalTransform;
+        _seats[rope] = new Seat(load, rope.BLocal, rope.A, inHolder);
+    }
+
+    private static Transform3D SeatPose(Seat seat) => seat.Holder is { } h ? h.GlobalTransform * seat.InHolder : seat.InHolder;
+
+    /// <summary>
+    /// Lays <paramref name="body"/> in a thrown sling's pouch (or on a loosed bowstring's nock) and ties the rope to it again:
+    /// the body set down at rest where the load lay, every released rope that held that load tied to it as it was (a
+    /// catapulta's two strings share one bolt), each with its release reset. A rope still holding its load is left alone.
+    /// </summary>
+    private bool LayIn(Rope rope, RigidBody3D body, bool quiet = false)
+    {
+        if (rope.Active || rope.Broken) return false;
+        var seat = _seats[rope];
+        var pose = SeatPose(seat);
+        // every rope that will hold it must reach it: a catapulta's strings reach the nock only with both arms drawn
+        foreach (var (r, s) in _seats)
+        {
+            if (s.Load != seat.Load || r.Active || r.Broken) continue;
+            var from = r.A is null ? r.ALocal : r.A.GlobalTransform * r.ALocal;
+            var points = new List<Vector3> { from };
+            points.AddRange(r.Over);
+            points.Add(pose * (body == s.Load ? s.LoadLocal : Vector3.Zero));
+            float length = 0;
+            for (int i = 1; i < points.Count; i++) length += points[i].DistanceTo(points[i - 1]);
+            if (length > r.Spec.Length + 0.01f)
+            {
+                if (quiet) return false;
+                throw new MachineFormatException($"{r.Spec.Id} doesn't reach where its load lies ({length:F2} m of {r.Spec.Length:F2}): span the machine first");
+            }
+        }
+        body.GlobalTransform = pose;
+        PhysicsServer3D.BodySetState(body.GetRid(), PhysicsServer3D.BodyState.Transform, pose);
+        body.LinearVelocity = body.AngularVelocity = Vector3.Zero;
+        body.Sleeping = false;
+        foreach (var (r, s) in _seats)
+        {
+            if (s.Load != seat.Load || r.Active || r.Broken) continue;
+            r.B = body;
+            r.BLocal = body == s.Load ? s.LoadLocal : Vector3.Zero;
+            r.Released = false;
+            r.ArmTurned = 0;
+            r.MostLag = 0;
+            r.Tension = r.TensionFrom = r.TensionTo = 0;
+            foreach (var seg in r.Segments) seg.Visible = true;
+            DrawRope(r);
+        }
+        GD.Print($"{rope.Spec.Id} loaded with {body.Name} at {Runtime.Time:F2}s");
+        NoteHand(rope.Spec.Id, "load", body.Name, pose.Origin);
+        return true;
+    }
+
+    /// <summary>A body let go of by a hand within <see cref="SeatReach"/> of an empty pouch or nock is laid in it. True if it was.</summary>
+    private bool DropInSeat(RigidBody3D body)
+    {
+        if (_hinges.ContainsKey(body) || _hookOf.ContainsValue(body)) return false;
+        foreach (var (rope, seat) in _seats)
+        {
+            if (rope.Active || rope.Broken || body == seat.Holder) continue;
+            if (body.GlobalPosition.DistanceTo(SeatPose(seat).Origin) > SeatReach) continue;
+            if (!LayIn(rope, body, quiet: true)) continue;
+            if (Hand?.Body == body) Hand = null;
+            return true;
+        }
+        return false;
     }
 }

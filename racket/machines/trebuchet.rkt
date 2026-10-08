@@ -59,14 +59,56 @@
 (define stone-y (/ stone-size 2))
 (define stone-at (list (+ (car tip) (sqrt (- (sqr sling) (sqr (- (cadr tip) stone-y))))) stone-y))
 
+;; The windlass that spans it again (issue #161): a 10 cm drum on the ground
+;; under the long arm, its rope tied 1 m out along the arm. Wound in at 15
+;; rpm it hauls the long end down and back past the catch, a one-way catch
+;; (#:catch-side 1) that lets the arm by going back and drops in behind it;
+;; paid out again (at -30 rpm for half as long), the 2.6 m rope lies slack,
+;; longer than the arm can pull it in a throw (2.32 m at its stop).
+;;
+;; Spanning, worked through: thrown, the arm comes to rest hanging with the
+;; short end straight down (+90 degrees; the counterweight's 19.7 kg.m beats
+;; the beam's 4.5 on the other side). Back on the catch at -50 the short end
+;; is 0.27 (sin 90 + sin 50) = 0.4768 m higher, and so the counterweight:
+;; 72.9 x 9.81 x 0.4768 = 341.0 J. The beam's middle comes down 0.63 (1 +
+;; sin 50) = 1.1126 m, giving back 7.13 x 9.81 x 1.1126 = 77.8 J; so the
+;; windlass does 263.2 J. Its rope comes in at 2 pi x 0.1 x 15/60 = 0.157 m/s;
+;; from 2.6 m to the 0.40 m it has with the arm at -52 is 2.20 m: 14 s, the
+;; last 1.86 m of it (from the 2.29 m the rope reaches with the arm hanging)
+;; hauling, 11.9 s. That is 263 J in 11.9 s, 22 W: a man at a windlass gives
+;; ~75 W for a while, so at his pace, not the drum's, 263/75 = 3.5 s. Its
+;; most, 100 N.m, is six times the ~16 N.m the rope asks (about 160 N at 0.1 m).
+;;
+;; Then the stone is laid in the sling's pouch again ((sling-rope load 1),
+;; or dragged there and let go) and the catch let go: it throws as the
+;; first did, first touching down 9.53 m from where it lay (the 13.1 m
+;; above is where it ends up, from the axle), within 2% every time -- once
+;; the counterweight has been steadied. Nothing in the chain damps it, and
+;; left swinging the 5-7 cm it keeps from the throw before, the next throw
+;; lands 5-7% further (traced 10.22 and 9.99 m); a hand holding it still for
+;; a moment puts every throw back at 9.526 m. The demo operator below does
+;; one cycle, without that hand.
+(define span-at 1.0)                                 ; m out along the long arm
+(define drum-r (cm 10))
+(define drum-at (list (* span-at (cos c)) (m 0.2)))  ; straight under the tie when cocked
+(define span-length (m 2.6))
+
 (define-machine trebuchet
   #:source "Classic mechanics demonstration (medieval; its lever is Archimedes')"
   (lever arm #:at ((car pivot) (cadr pivot) 0) #:length arm-length #:material oak
          #:pivot-fraction pivot-fraction #:start-angle-deg cocked-deg #:limit-deg 140 #:damping 0.2
-         #:catch-deg cocked-deg #:release-after 3)
+         #:catch-deg cocked-deg #:catch-side 1 #:release-after 3)
   (block counterweight #:at ((car cw-at) (cadr cw-at) 0) #:size cw-size #:material granite)
   (rope cw-chain #:from (arm (- short-arm) 0 0) #:to (counterweight 0 (/ cw-size 2) 0)
         #:length chain #:material iron #:diameter (cm 1.5))
   (block stone #:at ((car stone-at) (cadr stone-at) 0) #:size stone-size #:material granite)
   (rope sling-rope #:from (arm long-arm 0 0) #:to (stone 0 0 0) #:length sling
-        #:release-deg 60 #:diameter (cm 1)))
+        #:release-deg 60 #:diameter (cm 1))
+  (wheel windlass #:shape (drum #:radius drum-r #:length (cm 30)) #:at ((car drum-at) (cadr drum-at) 0) #:material oak
+         #:drive-rpm 15 #:drive-torque 0)
+  (rope span #:wind-on windlass #:to (arm span-at 0 0) #:length span-length #:diameter (cm 1.5))
+  ;; one full cycle (#161): loosed at 3 s by its catch; set the catch and wind it back down, pay the rope out,
+  ;; lay the stone in the sling and loose it again
+  (operator (at 12 (arm catch 1)) (at 12 (windlass drive-torque 100))
+            (at 26 (windlass drive-rpm -30)) (at 33 (windlass drive-rpm 0))
+            (at 33.5 (sling-rope load 1)) (at 36 (arm catch 0))))

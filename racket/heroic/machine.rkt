@@ -811,6 +811,11 @@
     ;; for the arm to come back to that angle and holds it there.
     ;; #:release-after s opens it by itself s seconds in (until demo
     ;; operators exist, #153); a command cancels that.
+    ;; #:catch-side 1 (or -1) makes it a one-way catch (issue #161), a pawl
+    ;; on the hinge: it stops the arm only from turning past #:catch-deg
+    ;; toward larger (or smaller) angles, and lets it turn freely the other
+    ;; way, so a windlass can wind the arm back past it and it drops in
+    ;; behind. Without it (0) the catch holds both ways.
     (pattern (lever id:id
                     (~alt (~once (~seq #:at at:vec3))
                           (~once (~seq #:length length-v:expr))
@@ -831,9 +836,14 @@
                           (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))
                           (~optional (~seq #:catch-deg catch-v:expr))
                           (~optional (~seq #:release-after after-v:expr))
+                          (~optional (~seq #:catch-side side-v:expr))
                           (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
                   "a lever's bearing needs a #:bearing-radius (its pin's radius, m)"
+      #:fail-when (and (attribute side-v) (not (attribute catch-v)) #'side-v)
+                  "#:catch-side is which way a lever's catch holds; give #:catch-deg too"
+      #:fail-when (and (attribute side-v) (not (memv (syntax-e #'side-v) '(-1 0 1))) #'side-v)
+                  "#:catch-side is 1 (it stops the arm turning toward larger angles), -1 (toward smaller) or 0 (both ways)"
       #:fail-when (and (attribute after-v) (not (attribute catch-v)) #'after-v)
                   "#:release-after is when a lever's catch opens by itself; give #:catch-deg too"
       #:attr info (pinfo #'id 'lever (attribute mat) '())
@@ -856,6 +866,7 @@
                                 ;; a catch (#155) only: other levers' clauses stay as they were
                                 (~@ . (~? ((cons 'catch-deg catch-v)) ()))
                                 (~@ . (~? ((cons 'release-after after-v)) ()))
+                                (~@ . (~? ((cons 'catch-side side-v)) ()))
                                 (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
