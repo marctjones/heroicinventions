@@ -11,7 +11,8 @@ namespace HeroicInventions;
 ///   godot --headless --fixed-fps 120 --path game res://scenes/RoverDigEval.tscn
 /// It prints "EVAL name value" lines; heroic/tests/rover-dig-test.rkt checks them against numbers worked out beforehand: the trench
 /// and the heap a few bucketfuls make on the fine ground, their volumes, the rover refusing a 35 degree bank and climbing the
-/// ramp it then builds, and what each step of the work costs a physics tick (8.33 ms).
+/// ramp it then builds, and what each step of the work costs a physics tick (8.33 ms). From rest on the fine ground's slope it
+/// climbs 29 degrees and not 31, as on a box: its grip, tan 30°, is the limit on any ground (#198).
 /// </summary>
 public partial class RoverDigEval : Node3D
 {
@@ -38,12 +39,18 @@ public partial class RoverDigEval : Node3D
     {
         PhysicsServer3D.AreaSetParam(GetViewport().FindWorld3D().Space, PhysicsServer3D.AreaParameter.Gravity, (float)RoverSpec.Gravity);
         if (OS.GetEnvironment("HEROIC_ONLY") != "ramp")
-        foreach (int deg in new[] { 30, 35, 41, 43, 45 })
+        foreach (int deg in new[] { 30, 31, 35, 41, 43, 45 })
         {
             int d = deg;
             _runs.Add(($"slope-{d}", () => Slope(d)));
             if (d is 30 or 35) _runs.Add(($"plane-{d}", () => Plane(d)));
         }
+        if (OS.GetEnvironment("HEROIC_ONLY") != "ramp")
+            foreach (int deg in new[] { 29, 31 })
+            {
+                int d = deg;
+                _runs.Add(($"rest-{d}", () => FromRest(d)));
+            }
         if (OS.GetEnvironment("HEROIC_ONLY") == "ramp") _runs.Clear();
         else
         {
@@ -240,7 +247,34 @@ public partial class RoverDigEval : Node3D
         var start = _rover.Chassis.GlobalPosition;
         _rover.Command = (1, 0);
         yield return Secs(8);
-        Say("travel", (_rover.Chassis.GlobalPosition - start).Length());
+        Say("travel", (_rover.Chassis.GlobalPosition - start).Dot(ahead));   // up the slope (+), or rolled back down it (-)
+    }
+
+    /// <summary>
+    /// #198: the rover standing still on the fine ground's slope of <paramref name="deg"/> (a height map), told to drive up it: the
+    /// stall from rest, with no run-up. Its grip gives tan θ = 0.577, 30 degrees.
+    /// </summary>
+    private IEnumerable<int> FromRest(int deg)
+    {
+        var work = _terrain.WorkAt(0, 0)!;
+        double tan = Math.Tan(deg * Math.PI / 180);
+        work.Shape((x, z) => Math.Clamp(x * tan, 0, 8));
+        yield return 2;   // the patch's body is rebuilt on the next refresh
+        const double x0 = 4;
+        _rover.Place(x0, 0, 270, x0 * tan, deg);
+        yield return Secs(0.5);
+        _rover.Command = (1, 0);
+        double best = x0;
+        for (int n = 0; n < Secs(8); n++)
+        {
+            best = Math.Max(best, _rover.Chassis.GlobalPosition.X);
+            if (n % Secs(1) == 0 && OS.GetEnvironment("HEROIC_EVAL_TRACE") == "1") { var c = _rover.Chassis.GlobalPosition; GD.Print($"TRACE rest-{deg} t={n / Hz:F0} x={c.X:F2} y={c.Y:F2} ground={_terrain.HeightAt(c.X, c.Z):F2} v={_rover.Speed:F2}"); }
+            yield return 1;
+        }
+        Say("travel", _rover.Chassis.GlobalPosition.X - x0);
+        Say("furthest", best - x0);
+        Say("final-speed", _rover.Speed);
+        Say("rescues", _rover.Rescues);
     }
 
     private IEnumerable<int> Bank()

@@ -8,13 +8,19 @@ namespace HeroicInventions;
 /// <list type="bullet">
 /// <item>Speed: <see cref="GameSpeed"/>. Opportunity's own top speed was 5 cm/s (and about 1 cm/s in practice): across the
 /// 850 m crater that is hours. 2 m/s crosses it in 7 minutes, and is the pace of a brisk walk (#60's tuning can scale it).</item>
-/// <item>Grade: the wheels' motors are torque-limited, and nothing forbids the climb. Each of the six hinge motors may give
-/// <see cref="WheelTorque"/>; on a slope steeper than the rover can hold with that, it can't climb and rolls back. As an ideal,
-/// 6 T / r would be the drive force at the ground and the steepest slope asin(6 T / (m g r)), but Jolt's hinge motor gives
-/// well under what it is told (measured by RoverEval: T = 24 stalls at about 26 degrees where the ideal says 32, T = 42 at
-/// 30 to 31 where the ideal says 67), so the cap is set by measurement: 42 N·m stalls at 30 to 31 degrees, the ~30 of tilt
-/// Opportunity was rated for (docs/lonely-rover.html). The tyres are "rough" (their friction of 1.0 is used, not the lower of
-/// tyre and ground: the ground's 0.6 alone slipped at about 25 degrees), so friction is not what stops it.</item>
+/// <item>Grade: <see cref="GradeDeg"/>, the ~30 degrees of tilt Opportunity was rated for (docs/lonely-rover.html), set by the
+/// tyres' grip and nothing else: nothing forbids the climb. On a slope θ the wheels can push up it with at most μ m g cos θ
+/// and gravity pulls back with m g sin θ, so the steepest it climbs is tan θ = μ; <see cref="TyreFriction"/> is tan 30° = 0.577
+/// for that (measured #198: it stalls at 29.9 degrees from rest on a box, a triangle mesh and a height map alike; the lightened
+/// front wheels take it a little under 30). The motors are not the limit: six of <see cref="WheelTorque"/> push 6 T / r = 1680 N,
+/// good for asin(1680 / 1815) = 68 degrees, and a single wheel on a hinge motor does give its cap (#198: 42 N·m stalls a wheel
+/// carrying 185 kg at 8.5 to 9 degrees, asin(280 / 1815) = 8.9). Torque well above the grip is what skid steering needs (with
+/// 22.7 N·m, enough for 30 degrees, it could not turn in place, nor on a 10 degree slope at all).
+/// Each wheel hangs on a stiff spring (<see cref="SpringRate"/>), standing for Opportunity's rocker-bogie, which keeps all six
+/// wheels loaded. Without it a rigid chassis on six rigid contacts is statically indeterminate: Jolt shared the weight
+/// unevenly, light wheels spun and the rover lost its grip at an angle that depended on the ground's triangles and the order
+/// the solver met the contacts (#198: with grip 1.0 it stalled at 29 degrees on a box, 30 to 31 on a 0.25 m mesh, 31 to 38 on
+/// height maps, where the balance says 45).</item>
 /// <item>Turning: skid steering, <see cref="TurnRate"/> rad/s, in place or under way.</item>
 /// </list>
 /// </summary>
@@ -28,18 +34,29 @@ public static class RoverSpec
     public const double GameSpeed = 2.0;                 // m/s top speed driving
     public const double TurnRate = 0.9;                  // rad/s
     public const double Accel = 2.5;                     // m/s² the commanded speed changes by, and rad/s² x1.2 for turning
-    public const double WheelTorque = 42;                // N·m each of the six wheels, at most (the cap on the hinge motors; see the grade note above)
     public const double Gravity = 9.81;                  // m/s², what the game's physics runs under (Main sets Jolt's area gravity)
+    public const double GradeDeg = 30;                   // degrees: the steepest slope the tyres' grip climbs (Opportunity's rated tilt; see the grade note above)
+    public const double WheelTorque = 42;                // N·m each of the six wheels' motors, at most: 1680 N at the ground against 907 N of grip at 30 degrees (see the grade note)
+    /// <summary>N/m of each wheel's spring, along the chassis's up: the chassis's share (95 kg x 9.81 / 6 = 155 N) sets it 1.5 cm.</summary>
+    public const double SpringRate = 10000;
+    /// <summary>Of the spring's critical damping, 2 sqrt(k m) with m the chassis's share.</summary>
+    public const double SpringDampingRatio = 0.7;
+    /// <summary>m each wheel may travel up or down on its spring.</summary>
+    public const double SpringTravel = 0.1;
 
     // ---- the rover's hands (#163): what its arm and wheels can do to the world, as numbers ----
     /// <summary>
-    /// N the wheels can pull or push with, from what was measured, not from the ideal 6 T / r = 1680 N: Jolt's hinge motors give
-    /// about half of that (see the grade note above), the rover stalls at 30 degrees, and there the wheels' pull is the weight's
-    /// share along the slope, m g sin 30° = 185 x 9.81 x 0.5 = 907 N.
+    /// N the wheels can pull or push with: the weight's share along the steepest slope it climbs, m g sin 30° = 185 x 9.81 x 0.5
+    /// = 907 N, which is what its grip passes to the ground there (measured: it stalls at 29.9 degrees, #198).
     /// </summary>
-    public static readonly double WheelPull = TotalMass * Gravity * Math.Sin(30 * Math.PI / 180);
-    /// <summary>Friction of the tyres on the ground (the "rough" tyre material of Rover.cs uses its own 1.0). Grip caps the push at μ m g, which on Mars (3.72 m/s²) is 685 N, below <see cref="WheelPull"/>.</summary>
-    public const double TyreFriction = 1.0;
+    public static readonly double WheelPull = TotalMass * Gravity * Math.Sin(GradeDeg * Math.PI / 180);
+    /// <summary>
+    /// Friction of the tyres on the ground, tan <see cref="GradeDeg"/> = 0.577: the design's number, chosen so that Coulomb grip
+    /// gives the 30 degrees (see the grade note), not a measured soil property. The tyre material is "rough", so its own friction
+    /// is used, not the lower of tyre and ground (the game's ground has 0.6, above it). Grip caps the push at μ m g, which on Mars
+    /// (3.71 m/s²) is 396 N, below <see cref="WheelPull"/>.
+    /// </summary>
+    public static readonly double TyreFriction = Math.Tan(GradeDeg * Math.PI / 180);
     /// <summary>N the rover can push or drag a load sideways with, under gravity <paramref name="g"/>: the lesser of the wheels' pull and the tyres' grip.</summary>
     public static double PushForce(double g) => Math.Min(WheelPull, TyreFriction * TotalMass * g);
     /// <summary>m above where a load was taken that its hand may go: the backhoe's own tolerance, not lifting (#72, Rover.Backhoe.cs dumps no more than 5 cm above where it dug).</summary>
@@ -52,10 +69,10 @@ public static class RoverSpec
 }
 
 /// <summary>
-/// The player's rover (issue #94): a Jolt body in the world. A chassis and six wheels, each wheel on a hinge with a motor, the
-/// same way the game's own machines are driven (MachineView.Drives.cs). It is not a VehicleBody3D: #34 measured that under
-/// Jolt a VehicleBody3D with no engine force stops dead and holds a slope, so it can't be asked how steep it climbs or what
-/// it does with the motors at their limit; hinge motors with a torque cap do, and the cap is the grade limit.
+/// The player's rover (issue #94): a Jolt body in the world. A chassis and six wheels, each wheel on an axle with a motor (a
+/// Generic6DofJoint3D: free to turn about the axle, sprung along the chassis's up, fixed otherwise). It is not a VehicleBody3D:
+/// #34 measured that under Jolt a VehicleBody3D with no engine force stops dead and holds a slope, so it can't be asked how
+/// steep it climbs or what it does with the motors at their limit; wheels driven by axle motors on real contacts can.
 ///
 /// Forward is -z, the way Godot's cameras look. Drive it with <see cref="Drive"/>; the arm and bucket are
 /// <see cref="Backhoe"/> (Rover.Backhoe.cs), the mesh Rover.Mesh.cs.
@@ -71,7 +88,7 @@ public sealed partial class Rover : Node3D
     /// <summary>The arm's pivot in the world now.</summary>
     public Vector3 ArmBase => Chassis.GlobalTransform * RoverSpec.ArmBaseLocal;
     private readonly List<RigidBody3D> _wheels = [];
-    private readonly List<HingeJoint3D> _hinges = [];
+    private readonly List<Generic6DofJoint3D> _axles = [];
     private readonly List<bool> _left = [];
 
     /// <summary>Asked for each tick: the ground's height at x, z (to set the rover back on it if it ever falls through).</summary>
@@ -81,6 +98,8 @@ public sealed partial class Rover : Node3D
     public (double Forward, double Turn) Command { get; set; }
     /// <summary>Scales the top speed (a tuning knob, #60); 1 is <see cref="RoverSpec.GameSpeed"/>.</summary>
     public double SpeedScale { get; set; } = 1;
+    /// <summary>N·m each wheel's motor may give: <see cref="RoverSpec.WheelTorque"/> (settable, so the grade can be measured against the torque).</summary>
+    public double WheelTorque { get; set; } = RoverSpec.WheelTorque;
 
     private double _speedCmd, _turnCmd;
     private bool _frozen;
@@ -142,7 +161,7 @@ public sealed partial class Rover : Node3D
         Chassis.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(1.0f, 0.18f, 1.5f) }, Position = new Vector3(0, 0.22f, 0) });
         AddChild(Chassis);
 
-        var tyre = new PhysicsMaterial { Friction = 1f, Bounce = 0f, Rough = true };   // rough: the tyre's friction is used, not the lower of the two surfaces'. Cleated wheels bite into regolith; against the ground's 0.6 alone the rover slipped at about 25 degrees
+        var tyre = new PhysicsMaterial { Friction = (float)RoverSpec.TyreFriction, Bounce = 0f, Rough = true };   // rough: the tyre's friction is used, not the lower of the two surfaces' (see RoverSpec.TyreFriction)
         for (int k = 0; k < 6; k++)
         {
             var wheel = new RigidBody3D
@@ -156,14 +175,25 @@ public sealed partial class Rover : Node3D
             // a sphere, not a cylinder: Jolt rounds a cylinder's edges and lets it sink 4 cm into the ground (measured: it rolled at 0.90 of omega r); a sphere rolls at exactly omega r
             wheel.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = (float)RoverSpec.WheelRadius } });
             AddChild(wheel);
-            // the hinge's axis is the joint's own z; turned onto x
-            var hinge = new HingeJoint3D { Name = $"Axle{k}", Transform = new Transform3D(Basis.FromEuler(new Vector3(0, Mathf.Pi / 2, 0)), WheelOffset(k)) };
-            AddChild(hinge);
-            hinge.NodeA = Chassis.GetPath();
-            hinge.NodeB = wheel.GetPath();
-            hinge.SetFlag(HingeJoint3D.Flag.EnableMotor, true);
+            // the joint's axes are the chassis's: it turns about x (the axle, with the motor), rides on a spring along y, and
+            // is held in z and the other two turns (Jolt's 6DOF constraint keeps a spring and a motor inside its step)
+            var axle = new Generic6DofJoint3D { Name = $"Axle{k}", Transform = new Transform3D(Basis.Identity, WheelOffset(k)) };
+            AddChild(axle);
+            axle.NodeA = Chassis.GetPath();
+            axle.NodeB = wheel.GetPath();
+            // the spring holds the chassis's share of the weight with the wheel where it is drawn: its rest point is that share's
+            // stretch below (the wheels' own weight doesn't go through it)
+            double share = (RoverSpec.TotalMass - 6 * RoverSpec.WheelMass) / 6;
+            axle.SetFlagY(Generic6DofJoint3D.Flag.EnableLinearSpring, true);
+            axle.SetParamY(Generic6DofJoint3D.Param.LinearSpringStiffness, (float)RoverSpec.SpringRate);
+            axle.SetParamY(Generic6DofJoint3D.Param.LinearSpringDamping, (float)(RoverSpec.SpringDampingRatio * 2 * Math.Sqrt(RoverSpec.SpringRate * share)));
+            axle.SetParamY(Generic6DofJoint3D.Param.LinearSpringEquilibriumPoint, (float)(-share * RoverSpec.Gravity / RoverSpec.SpringRate));
+            axle.SetParamY(Generic6DofJoint3D.Param.LinearLowerLimit, -(float)RoverSpec.SpringTravel);
+            axle.SetParamY(Generic6DofJoint3D.Param.LinearUpperLimit, (float)RoverSpec.SpringTravel);
+            axle.SetFlagX(Generic6DofJoint3D.Flag.EnableAngularLimit, false);
+            axle.SetFlagX(Generic6DofJoint3D.Flag.EnableMotor, true);
             _wheels.Add(wheel);
-            _hinges.Add(hinge);
+            _axles.Add(axle);
             _left.Add(k % 2 == 0);
         }
         BuildMesh();
@@ -177,19 +207,20 @@ public sealed partial class Rover : Node3D
         double v = Command.Forward * RoverSpec.GameSpeed * SpeedScale, w = Command.Turn * RoverSpec.TurnRate;
         _speedCmd = Slew(_speedCmd, v, RoverSpec.Accel * step);
         _turnCmd = Slew(_turnCmd, w, RoverSpec.Accel * 1.2 * step);
-        for (int k = 0; k < _hinges.Count; k++)
+        for (int k = 0; k < _axles.Count; k++)
         {
             // skid steering: a turn to the right runs the left wheels faster than the right
             double ground = _speedCmd + (_left[k] ? 1 : -1) * _turnCmd * RoverSpec.Track / 2;
-            var hinge = _hinges[k];
-            // the motor's sense is opposite to a turn about the axle (as MachineView.ApplyDrive notes); with no command it holds still: the brake
-            hinge.SetParam(HingeJoint3D.Param.MotorTargetVelocity, (float)MotorSign * (float)RoverSpec.WheelOmega(ground));
-            hinge.SetParam(HingeJoint3D.Param.MotorMaxImpulse, (float)(RoverSpec.WheelTorque * step));
+            var axle = _axles[k];
+            // with no command the motor holds the wheel still: the brake. The 6DOF motor's limit is a torque, not an impulse, so
+            // it needs no step length
+            axle.SetParamX(Generic6DofJoint3D.Param.AngularMotorTargetVelocity, (float)(MotorSign * RoverSpec.WheelOmega(ground)));
+            axle.SetParamX(Generic6DofJoint3D.Param.AngularMotorForceLimit, (float)WheelTorque);
         }
         KeepOnGround();
     }
 
-    /// <summary>+1 or -1: which way the hinge motor's target must point for a positive speed to roll the rover forward (found by RoverEval).</summary>
+    /// <summary>+1 or -1: which way the axle motor's target must point for a positive speed to roll the rover forward (found by RoverEval).</summary>
     public const int MotorSign = 1;
 
     private static double Slew(double now, double target, double most) =>
