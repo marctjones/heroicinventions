@@ -701,7 +701,7 @@ public static class Skins
             Code = """
                 shader_type spatial;
                 render_mode unshaded, cull_back, depth_draw_never;
-                uniform vec3 tint : source_color = vec3(0.80, 0.93, 1.0);
+                uniform vec3 tint : source_color = vec3(0.66, 0.90, 1.0);
                 uniform float length = 1.0;
                 uniform float pitch = 0.15;
                 uniform float phase = 0.0;
