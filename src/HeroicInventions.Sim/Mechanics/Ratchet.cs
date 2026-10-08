@@ -37,6 +37,11 @@ public sealed class Ratchet(string id, int teeth, double toothRadius, bool rever
     public bool Holding => Force > 0.5;
     /// <summary>Times the pawl has dropped over a tooth into the next valley (a click).</summary>
     public int Clicks => Steps;
+    /// <summary>
+    /// The pawl lifted clear of the teeth (issue #155, field <c>pawl</c> 0): the wheel runs back freely. Let down
+    /// again, it drops into the valley the wheel has reached, not the one it was lifted from.
+    /// </summary>
+    public bool Lifted { get; set; }
 
     /// <summary>
     /// Works the pawl for one tick with the wheel at angle θ (rad turned from the start, positive about its axis),
@@ -47,9 +52,10 @@ public sealed class Ratchet(string id, int teeth, double toothRadius, bool rever
     {
         double a = Sign * theta, w = Sign * omega;                    // in the allowed direction's sense
         Angle = a;
+        if (Lifted) Locked = Math.Floor(a / Pitch) * Pitch;            // clear of the teeth: the valley under it goes by
         while (a >= Locked + Pitch) { Locked += Pitch; Steps++; }      // the pawl drops into the next valley
         double impulse = 0;
-        if (a <= Locked && w < 0.05 && dt > 0)
+        if (!Lifted && a <= Locked && w < 0.05 && dt > 0)
         {
             // a tooth against the pawl: stop the wheel going back, and push it gently off the tooth if it has got into it
             double target = a < Locked ? Math.Min(1.0 * (Locked - a) / dt, 3.0) : 0;

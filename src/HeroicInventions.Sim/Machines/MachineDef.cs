@@ -145,6 +145,10 @@ public sealed record RopeSpec(
     public double? Mu { get; init; }
     /// <summary>A chain (issue #31): the rope built as this many rigid links pinned end to end, sagging and swinging as a real chain does; null, the lumped rope.</summary>
     public int? Links { get; init; }
+    /// <summary>A tether (issue #155): the rope holds until its field <c>tether</c> is set to 0, then lets go of both ends.</summary>
+    public bool Tether { get; init; }
+    /// <summary>A tether lets go by itself this many seconds into the run (until demo operators, #153); null: only on command.</summary>
+    public double? ReleaseAfter { get; init; }
 }
 
 /// <summary>One thing a trigger does when it fires: sets a runtime field, as <c>(target field value)</c>.</summary>
@@ -514,6 +518,8 @@ public sealed class MachineDef
             Bar = c.Field("bar")?.Items.ElementAtOrDefault(1) is SSymbol b ? b.Name : null,
             Mu = c.Field("mu")?.Items.ElementAtOrDefault(1) is SNumber mu ? mu.Value : null,
             Links = c.Field("links")?.Items.ElementAtOrDefault(1) is SNumber links ? (int)links.Value : null,
+            Tether = c.Field("tether")?.Items.ElementAtOrDefault(1) is SBool { Value: true },
+            ReleaseAfter = c.Field("release-after")?.Items.ElementAtOrDefault(1) is SNumber after ? after.Value : null,
         };
     }
 

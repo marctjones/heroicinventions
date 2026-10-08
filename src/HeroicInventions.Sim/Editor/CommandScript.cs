@@ -54,7 +54,8 @@ public static class CommandScript
                 (r.ReleaseDeg is { } d ? $" #:release-deg {N(d)}" : "") +
                 $" #:material {r.Material} #:diameter {N(r.Diameter)}" +
                 (r.Nocked ? " #:nocked #t" : "") +
-                (r.Links is { } links ? $" #:links {links}" : "") + ")");
+                (r.Links is { } links ? $" #:links {links}" : "") +
+                (r.Tether ? " #:tether #t" : "") + (r.ReleaseAfter is { } after ? $" #:release-after {N(after)}" : "") + ")");   // a tether (#155)
         }
         foreach (var s in m.Sources) Add($"(inflow {s.Id} #:into {s.Into} #:flow {N(s.Flow)})");
         foreach (var c in m.Channels)

@@ -885,6 +885,7 @@ public partial class MachineView : Node3D
         joint.SetFlag(HingeJoint3D.Flag.UseLimit, true);
         joint.SetParam(HingeJoint3D.Param.LimitUpper, Mathf.DegToRad(-lower));
         joint.SetParam(HingeJoint3D.Param.LimitLower, Mathf.DegToRad(-upper));
+        BuildCatch(part, body, joint, toAxis, axis, lower, upper, depth);   // #:catch-deg (#155): holds the arm until let go
 
         if (stiffness != 0)
             _springs.Add(new TorsionSpring
@@ -1479,6 +1480,7 @@ public partial class MachineView : Node3D
         DriveGrips(dt);
         DriveCams(dt);
         DriveRatchets(dt);
+        DriveCatches();
         TestTriggers();
         ApplyBuoyancy();
         ApplyLift();

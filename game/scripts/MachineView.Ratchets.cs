@@ -15,6 +15,7 @@ public partial class MachineView
     private sealed class RatchetView
     {
         public required Ratchet Ratchet;
+        public Catch? PawlField;               // its pawl's field (#155): 0 lifts it clear of the teeth
         public required RigidBody3D Wheel;
         public required Vector3 Axis;
         public required MeshInstance3D Pawl;
@@ -60,7 +61,7 @@ public partial class MachineView
             pawl.Rotation = new Vector3(0, 0, (float)Math.Atan2(u.Y, u.X) + (ratchet.Reverse ? 0.7f : -0.7f));
             AddChild(pawl);
             AddLabel(id, wheelPos + u * (float)(R + 0.1));
-            _ratchetViews.Add(new RatchetView { Ratchet = ratchet, Wheel = wheel, Axis = axis, Pawl = pawl, PawlMaterial = pawlMat, LastRaw = RawAngle(wheel, axis) });
+            _ratchetViews.Add(new RatchetView { Ratchet = ratchet, PawlField = Runtime.Catches.GetValueOrDefault(id), Wheel = wheel, Axis = axis, Pawl = pawl, PawlMaterial = pawlMat, LastRaw = RawAngle(wheel, axis) });
         }
     }
 
@@ -72,6 +73,9 @@ public partial class MachineView
             double raw = RawAngle(v.Wheel, v.Axis);
             v.Theta += Unwrap(raw - v.LastRaw);
             v.LastRaw = raw;
+            bool lifted = v.PawlField is { } p && !p.HeldAt(Runtime.Time);
+            if (lifted && !v.Ratchet.Lifted) v.Wheel.Sleeping = false;   // a drum held still has gone to sleep: wake it to run back
+            v.Ratchet.Lifted = lifted;
             double omega = v.Wheel.AngularVelocity.Dot(v.Axis);
             double impulse = v.Ratchet.Step(dt, v.Theta, omega, TurningInertia(v.Wheel));
             if (impulse != 0) v.Wheel.ApplyTorqueImpulse(v.Axis * (float)impulse);
@@ -91,6 +95,7 @@ public partial class MachineView
         foreach (var v in _ratchetViews)
         {
             v.Flash = Mathf.Max(0, v.Flash - 0.1f);
+            v.Pawl.Visible = !v.Ratchet.Lifted;   // lifted clear of the teeth (#155): gone from them
             v.PawlMaterial.AlbedoColor = v.Ratchet.Holding ? new Color(0.9f, 0.3f, 0.2f) : new Color(0.6f + 0.35f * v.Flash, 0.6f + 0.3f * v.Flash, 0.65f - 0.35f * v.Flash);
         }
     }

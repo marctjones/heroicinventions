@@ -1,5 +1,5 @@
 #lang heroic
-;; Three windlasses, alike but for their ratchets (issue #49). On each a 10 cm
+;; Four windlasses, alike but for their ratchets (issue #49). On each a 10 cm
 ;; drum on an oak axle winds a rope holding a 20 kg granite block (a 19.5 cm
 ;; cube, 20.0 kg). Working it through:
 ;;   hold    the first has a ratchet of 12 teeth on a 15 cm circle and no crank:
@@ -17,6 +17,14 @@
 ;;           0.314 m in 5 s; the pawl drops over a tooth every 30 degrees (360/12),
 ;;           5 s = 180 degrees = 6 teeth, 12 at 10 s; and clear of the pawl
 ;;           it carries nothing.
+;;   lower   the fourth is the first again, but its pawl is lifted 2 s in
+;;           (issue #155; the field (lower-pawl pawl), 0 lifts it). Then nothing
+;;           holds the drum and the block lowers itself, turning the drum as it
+;;           goes: m g = (m + I/r^2) a. The drum (shape drum: 10.25 L of oak with
+;;           its flanges, I = 720 x 6.798e-5 = 0.04894 kg.m2 about its axle) is
+;;           I/r^2 = 4.894 kg at the rope, so a = 20.02 x 9.81 / (20.02 + 4.89)
+;;           = 7.88 m/s2, not g: it reaches the floor 0.9 m down in
+;;           sqrt(2 (0.9) / 7.88) = 0.48 s, as the free one does from the start.
 (define drum-r (cm 10))
 (define block-size (cm 19.5))
 (define hang (m 1.0))                        ; the block's middle, above the floor
@@ -42,4 +50,9 @@
          #:drive-rpm 6 #:drive-torque 40)
   (ratchet wind-pawl #:at (0 axle-height (m -3)) #:on wind-drum #:teeth 12 #:radius (cm 15))
   (block wind-load #:at (drum-r hang (m -3)) #:size block-size #:material granite)
-  (rope wind-rope #:wind-on wind-drum #:to (wind-load 0 (/ block-size 2) 0) #:length rope-length))
+  (rope wind-rope #:wind-on wind-drum #:to (wind-load 0 (/ block-size 2) 0) #:length rope-length)
+  ;; held by a pawl that is lifted 2 s in
+  (wheel lower-drum #:shape (drum #:radius drum-r #:length (cm 30)) #:at (0 axle-height (m -4.5)) #:material oak)
+  (ratchet lower-pawl #:at (0 axle-height (m -4.5)) #:on lower-drum #:teeth 12 #:radius (cm 15) #:release-after 2)
+  (block lower-load #:at (drum-r hang (m -4.5)) #:size block-size #:material granite)
+  (rope lower-rope #:wind-on lower-drum #:to (lower-load 0 (/ block-size 2) 0) #:length rope-length))

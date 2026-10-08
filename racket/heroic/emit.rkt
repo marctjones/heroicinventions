@@ -112,6 +112,10 @@
                        (mu ,(let ([u (rope-spec-mu r)]) (if u (num (format "rope ~a #:mu" id) u) #f)))
                        ;; a chain of pinned links (issue #31) only: other ropes' clauses stay as they were
                        ,@(if (rope-spec-links r) `((links ,(rope-spec-links r))) '())
+                       ;; a tether (issue #155) only, likewise
+                       ,@(if (rope-spec-tether r) '((tether #t)) '())
+                       ,@(let ([s (rope-spec-release-after r)])
+                           (if s `((release-after ,(num (format "rope ~a #:release-after" id) s))) '()))
                        ,(loc->sexp (rope-spec-loc r) root)))
             ,@(for/list ([i (machine-inflows m)])
                 `(inflow ,(inflow-spec-id i) (into ,(inflow-spec-into i))

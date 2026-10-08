@@ -19,6 +19,15 @@
 ;; − rest). Vitruvius tunes a spring by ear — plucked, both should ring at
 ;; the same note — and gives no stiffness; 300 N·m per radian here is an
 ;; estimate, and what the bolt does with it is what the physics gives.
+;;
+;; A catch on each arm (issue #155) stands for the one claw on the slider
+;; that holds the string: (right-arm catch 1) and (left-arm catch 1) hold it
+;; drawn, 0 looses it. Held, each catch carries its spring's 300 x (60 + 40)
+;; degrees = 300 x 1.745 = 523.6 N.m: the arms turn about the vertical, so
+;; their weight puts no turn on them. For now both open at once (#:release-after
+;; 0), loosing it at the start as before: held any longer, the bolt falls
+;; through its channel (the frame's channel does not carry it; it is only
+;; ever driven along it), so it can start held once the channel does.
 (require racket/math)
 
 (define bolt-length (* 3 greek-span))
@@ -51,11 +60,13 @@
   ;; positive angles sweep it back (−z)
   (lever right-arm #:at (sx sy 0) #:length L #:material oak #:axis y #:pivot-fraction 0
          #:start-angle-deg drawn-deg #:limit-lower-deg (- stop-deg) #:limit-upper-deg (+ drawn-deg 5)
-         #:spring-stiffness k #:spring-rest-deg (- rest-deg) #:damping 0.1 #:section (g (quote arm-section)))
+         #:spring-stiffness k #:spring-rest-deg (- rest-deg) #:damping 0.1 #:section (g (quote arm-section))
+         #:catch-deg drawn-deg #:release-after 0)
   ;; left arm: mirrored, along −x
   (lever left-arm #:at ((- sx) sy 0) #:length L #:material oak #:axis y #:pivot-fraction 1
          #:start-angle-deg (- drawn-deg) #:limit-lower-deg (- (+ drawn-deg 5)) #:limit-upper-deg stop-deg
-         #:spring-stiffness k #:spring-rest-deg rest-deg #:damping 0.1 #:section (g (quote arm-section)))
+         #:spring-stiffness k #:spring-rest-deg rest-deg #:damping 0.1 #:section (g (quote arm-section))
+         #:catch-deg (- drawn-deg) #:release-after 0)
   (block bolt #:at (0 nock-y bolt-z) #:size bolt-section #:material oak
          #:dimensions (bolt-section bolt-section bolt-length))
   (rope string-right #:from (right-arm L 0 0) #:to (bolt 0 0 (/ bolt-length -2)) #:length string-len #:diameter (cm 1) #:nocked #t)
