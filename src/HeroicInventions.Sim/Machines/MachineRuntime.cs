@@ -16,7 +16,7 @@ namespace HeroicInventions.Sim.Machines;
 /// also be written by hand or by the in-game editor, so every reference is
 /// checked again here and reported against its source location.
 /// </summary>
-public sealed class MachineRuntime
+public sealed partial class MachineRuntime
 {
     private readonly Dictionary<string, Tank> _tanks = [];
     private readonly Dictionary<string, Pipe> _pipes = [];
@@ -260,6 +260,10 @@ public sealed class MachineRuntime
             if (room.Wall is { } wall && previous._enclosures.TryGetValue(id, out var was) && was.Wall is { } oldWall && baseline._enclosures.TryGetValue(id, out var fresh) && fresh.Wall is { } freshWall
                 && oldWall.Cells == wall.Cells)
                 StateCopy.Carry(oldWall, freshWall, wall);
+        // a bank keeps what it has charged from each source: a dictionary Carry does not enter
+        foreach (var (id, bank) in _banks)
+            if (previous._banks.TryGetValue(id, out var was))
+                foreach (var (source, joules) in was.Sources) bank.Sources[source] = joules;
         StateCopy.Carry(previous.Sun, baseline.Sun, Sun);
         StateCopy.Carry(previous.Fluids, baseline.Fluids, Fluids);
         // sealed air belongs to its tanks, in the order they were declared
@@ -465,6 +469,7 @@ public sealed class MachineRuntime
                 }
                 case "heat-bin": break;   // built once the store it holds exists
                 case "bimetal": break;    // built once the bin it works exists
+                case "battery-bank": case "generator": break;   // built last (BuildElectrics): they read the zones and shafts the rest make
                 case "door":
                 {
                     Zone a = ZoneNamed(part.Symbol("from", ""), part), b = ZoneNamed(part.Symbol("to", ""), part);
@@ -831,6 +836,7 @@ public sealed class MachineRuntime
         SetZones();
         Ambient = _ambient;   // hand it to every part now they all exist
         RegisterFields();
+        BuildElectrics(def);   // banks and generators: the zones, stores and sim-turned parts they read exist now
         // belts and grips register their own fields, which triggers and follows may watch and set: build them first
         BuildBelts(def);
         BuildGrips(def);
@@ -2092,6 +2098,7 @@ public sealed class MachineRuntime
 
     public void Step(double dt)
     {
+        PreStepElectrics();   // a generator's torque joins the load of the part that turns it
         Sun.Step(dt);
         if (Weather is { } wx)
         {
@@ -2155,6 +2162,7 @@ public sealed class MachineRuntime
             }
         foreach (var g in _grips.Values) if (g.Held) g.HeldFor += dt;
         foreach (var h in _hoppers.Values) { h.Gravity = ZoneOf(h.Id) is { } hz ? hz.Gravity : Outside.Gravity; h.Step(dt); }
+        PostStepElectrics(dt);   // charge the banks; the call goes out if it can
         Time += dt;
         StepFieldTriggers();
     }

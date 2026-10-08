@@ -44,7 +44,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar heat-store heat-bin bimetal
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar heat-store heat-bin bimetal generator battery-bank
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -451,6 +451,36 @@
       (unless (and (real? (prop k)) (> (prop k) -273.15)) (bad (format "#:~a must be a temperature in deg C, got ~e" k (prop k))))))
   parts)
 
+;; A generator's numbers are checked when the machine is built (#64).
+(define (check-generators parts)
+  (for ([p parts] #:when (eq? (part-kind p) 'generator))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what) (error 'define-machine "~a:~a:~a: generator ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (unless (and (real? (prop 'efficiency)) (< 0 (prop 'efficiency) 1.0000001))
+      (bad (format "#:efficiency must be in (0, 1], got ~e" (prop 'efficiency))))
+    (for ([k '(cut-in-rpm rated-torque)])
+      (unless (and (real? (prop k)) (> (prop k) 0)) (bad (format "#:~a must be above 0, got ~e" k (prop k)))))
+    (unless (and (real? (prop 'rated-rpm)) (> (prop 'rated-rpm) (prop 'cut-in-rpm)))
+      (bad (format "#:rated-rpm must be over the #:cut-in-rpm (~a), got ~e" (prop 'cut-in-rpm) (prop 'rated-rpm)))))
+  parts)
+
+;; A battery bank's numbers are checked when the machine is built (#64).
+(define (check-banks parts)
+  (for ([p parts] #:when (eq? (part-kind p) 'battery-bank))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what) (error 'define-machine "~a:~a:~a: battery-bank ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (unless (and (real? (prop 'capacity)) (> (prop 'capacity) 0)) (bad (format "#:capacity must be above 0 Wh, got ~e" (prop 'capacity))))
+    (unless (and (real? (prop 'charge)) (<= 0 (prop 'charge) (prop 'capacity)))
+      (bad (format "#:charge must be from 0 to the capacity (~a Wh), got ~e" (prop 'capacity) (prop 'charge))))
+    (unless (and (real? (prop 'volts)) (> (prop 'volts) 0)) (bad (format "#:volts must be above 0, got ~e" (prop 'volts))))
+    (unless (or (not (prop 'call-hour)) (and (real? (prop 'call-hour)) (<= 0 (prop 'call-hour)) (< (prop 'call-hour) 24)))
+      (bad (format "#:call-hour must be a local solar hour in [0, 24), got ~e" (prop 'call-hour))))
+    (unless (or (not (prop 'call-minutes)) (and (real? (prop 'call-minutes)) (> (prop 'call-minutes) 0)))
+      (bad (format "#:call-minutes must be above 0, got ~e" (prop 'call-minutes)))))
+  parts)
+
 ;; A mirror's numbers are checked when the machine is built.
 (define (check-mirrors parts)
   (for ([p parts] #:when (eq? (part-kind p) 'burning-mirror))
@@ -543,7 +573,7 @@
     (unless (and (real? time) (<= 0 time) (< time 24))
       (error 'define-machine "machine ~a: #:time must be solar hours in [0, 24), got ~e" name time)))
   (machine name source ambient sun planet-v weather-v
-           (check-panes (check-bimetals (check-heat-stores (check-zone-joins (check-enclosures (check-carried-wheels (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-floats (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))))))))))
+           (check-panes (check-generators (check-banks (check-bimetals (check-heat-stores (check-zone-joins (check-enclosures (check-carried-wheels (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-floats (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))))))))))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -577,7 +607,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar heat-store heat-bin bimetal
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar heat-store heat-bin bimetal generator battery-bank
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
   inflow channel off trigger follow belt wake joint)
 
@@ -637,6 +667,8 @@
   (struct zjinfo (id kind from to))
   (struct pninfo (id on))
   (struct bminfo (id senses drives))  ; a bimetal strip: what it senses (a heat-store or an enclosure), the heat-bin whose lid it works
+  (struct gdinfo (id on charges))     ; a generator: the shaft it is driven by, the battery bank it charges (#64)
+  (struct bkinfo (id in))             ; a battery bank: the heat store or enclosure whose temperature is its own (#64)
   (struct hbinfo (id holds sense))    ; a heat-bin: the heat-store it holds, the one that works its lid (or #f)
   (struct gninfo (id water store))    ; plants, a melter or an electrolyser: its water tank, the hearth its wood is stacked on (or #f)
   (struct rfinfo (id kind on gutter)) ; a pond (on a tank) or a roof (on an enclosure, with a gutter tank or #f)            ; a pane: the enclosure whose wall it is in  ; a door or air-pump: the zones it joins (enclosure ids or outside)  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
@@ -681,8 +713,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, envelope, burning-mirror, hopper, pane, pond, drain, roof, stirling, ball, plants, melter, electrolyser, galvanic-jar, heat-store, heat-bin, bimetal) or link (pipe, connect, sealed-air)"
-    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror pane pond drain roof plants melter electrolyser galvanic-jar heat-store heat-bin bimetal tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, envelope, burning-mirror, hopper, pane, pond, drain, roof, stirling, ball, plants, melter, electrolyser, galvanic-jar, heat-store, heat-bin, bimetal, generator, battery-bank) or link (pipe, connect, sealed-air)"
+    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror pane pond drain roof plants melter electrolyser galvanic-jar heat-store heat-bin bimetal generator battery-bank tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1590,6 +1622,56 @@
                                 (cons 'length (~? len-v 0.1)) (cons 'thickness (~? thick-v 0.001)) (cons 'width (~? wid-v 0.01))
                                 (cons 'high-share (~? share-v 0.5)) (cons 'shut-at (~? shut-v 40)) (cons 'straight-at (~? flat-v 20))
                                 (cons 'travel (~? trav-v 0.0021)) (cons 'contact (~? cont-v 10)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+;; A generator (issue #64): a salvaged cargo motor, driven backwards by the shaft it is #:on, charging bank #:charges. It is found, not built.
+    ;; #:on names what turns it: a wheel (an arbor's rotor, loaded like a millstone), or a windmill, water wheel, jet wheel or Stirling
+    ;; engine directly. P = tau w eta with #:efficiency eta (default 0.8). Below #:cut-in-rpm (default 1500) it gives nothing and loads
+    ;; the shaft with nothing; above, its torque rises in a straight line, tau = k (w - w_cut), up to #:rated-torque N.m (default 12) from
+    ;; #:rated-rpm (default 2500): a permanent-magnet machine into a battery of fixed voltage. A bank that will not take charge (full, or outside
+    ;; 0 to 45 deg C) is an open circuit and the shaft runs free. #:driven-by names what drives the shaft in the bank's record (wind,
+    ;; water-wheel, falling-weight, aeolipile, stirling ...); left out, it is read from the part that turns the shaft when that is wind,
+    ;; a water wheel, a jet wheel or a Stirling engine, else "shaft".
+    (pattern (generator id:id
+                        (~alt (~once (~seq #:at at:vec3))
+                              (~once (~seq #:on shaft:id))
+                              (~once (~seq #:charges bank-id:id))
+                              (~optional (~seq #:efficiency eff-v:expr))
+                              (~optional (~seq #:cut-in-rpm cut-v:expr))
+                              (~optional (~seq #:rated-rpm rrpm-v:expr))
+                              (~optional (~seq #:rated-torque rtq-v:expr))
+                              (~optional (~seq #:driven-by drv:id))
+                              (~optional (~seq #:material mat:id))) ...)
+      #:attr info (gdinfo #'id #'shaft #'bank-id)
+      #:with expr #`(part 'id 'generator '(~? mat iron) (list at.x at.y at.z)
+                          (list (cons 'on 'shaft) (cons 'charges 'bank-id) (cons 'efficiency (~? eff-v 0.8))
+                                (cons 'cut-in-rpm (~? cut-v 1500)) (cons 'rated-rpm (~? rrpm-v 2500)) (cons 'rated-torque (~? rtq-v 12))
+                                (cons 'driven-by '(~? drv #f)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+    ;; The battery bank (issue #64): found in the cargo, armoured against the landing, holding #:capacity Wh (default 4000, 16 kg of
+    ;; cells at 250 Wh/kg) with #:charge Wh in it (default 0). It sits #:in a heat-store (the cells, whose temperature is the bank's own)
+    ;; or an enclosure (its air), and takes charge only from 0 to 45 deg C of that temperature, and only until full; it holds charge
+    ;; and cannot be destroyed. #:volts (default 28) only turns watts into an amp readout. The call: at the relay pass, #:call-minutes
+    ;; after local solar hour #:call-hour, the game is won if the bank is full and 0 to 45 deg C; left out, the pass is the scene's own
+    ;; (#:weather #:passes: the one nearest 03:00, and #:pass-minutes), or 03:00 for 10 minutes in a scene with no weather.
+    ;; #:call-any-time #t is the easy setting that lets the call go at any hour.
+    (pattern (battery-bank id:id
+                           (~alt (~once (~seq #:at at:vec3))
+                                 (~once (~seq #:in zone:id))
+                                 (~optional (~seq #:capacity cap-v:expr))
+                                 (~optional (~seq #:charge chg-v:expr))
+                                 (~optional (~seq #:volts volt-v:expr))
+                                 (~optional (~seq #:call-hour hour-v:expr))
+                                 (~optional (~seq #:call-minutes min-v:expr))
+                                 (~optional (~seq #:call-any-time any-v:expr))
+                                 (~optional (~seq #:material mat:id))) ...)
+      #:attr info (bkinfo #'id #'zone)
+      #:with expr #`(part 'id 'battery-bank '(~? mat iron) (list at.x at.y at.z)
+                          (list (cons 'in 'zone) (cons 'capacity (~? cap-v 4000)) (cons 'charge (~? chg-v 0)) (cons 'volts (~? volt-v 28))
+                                (cons 'call-hour (~? hour-v #f)) (cons 'call-minutes (~? min-v #f)) (cons 'call-any-time (~? any-v #f)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -2694,6 +2776,21 @@
         (fail (format "~a is not a heat-store or an enclosure; a bimetal senses one" (syntax-e (bminfo-senses b))) (bminfo-senses b)))
       (unless (for/or ([h infos]) (and (hbinfo? h) (eq? (syntax-e (hbinfo-id h)) (syntax-e (bminfo-drives b)))))
         (fail (format "~a is not a heat-bin; a bimetal drives the lid of one" (syntax-e (bminfo-drives b))) (bminfo-drives b))))
+    (for ([b infos] #:when (bkinfo? b))
+      (define id (syntax-e (bkinfo-id b)))
+      (when (hash-ref parts id #f) (fail (format "there is already a part named ~a" id) (bkinfo-id b)))
+      (define zone (hash-ref parts (syntax-e (bkinfo-in b)) #f))
+      (unless (and zone (memq (pinfo-kind zone) '(heat-store enclosure)))
+        (fail (format "~a is not a heat-store or an enclosure; a battery bank sits in one (its temperature is that zone's)" (syntax-e (bkinfo-in b))) (bkinfo-in b))))
+    (for ([g infos] #:when (gdinfo? g))
+      (define id (syntax-e (gdinfo-id g)))
+      (when (hash-ref parts id #f) (fail (format "there is already a part named ~a" id) (gdinfo-id g)))
+      (define on (syntax-e (gdinfo-on g)))
+      (define p (hash-ref parts on #f))
+      (unless (or (and p (memq (pinfo-kind p) '(wheel windmill jetwheel stirling))) (memq on (for/list ([w infos] #:when (winfo? w)) (syntax-e (winfo-id w)))))
+        (fail (format "~a is not a wheel, windmill, water wheel, jet wheel or Stirling engine; a generator is driven by one" on) (gdinfo-on g)))
+      (unless (for/or ([b infos]) (and (bkinfo? b) (eq? (syntax-e (bkinfo-id b)) (syntax-e (gdinfo-charges g)))))
+        (fail (format "~a is not a battery-bank; a generator charges one" (syntax-e (gdinfo-charges g))) (gdinfo-charges g))))
     (for ([c infos] #:when (cpinfo? c))
       (define v (hash-ref parts (syntax-e (cpinfo-vessel c)) #f))
       (unless (and v (eq? (pinfo-kind v) 'tank))

@@ -52,6 +52,7 @@ public static class Controls
         Switch("melter", "power", "Switch off", "Switch on", 1000, 0, 5000, "W"),
         Switch("electrolyser", "power", "Switch off", "Switch on", 100, 0, 500, "W"),
         Switch("galvanic-jar", "on", "Disconnect", "Connect", 1),
+        Switch("battery-bank", "call-any-time", "Wait for the relay pass", "Call at any hour", 1),
         // water
         new(["tank"], "water", Style.Add, "Pour 10 L", "", 10, NotRover: "The rover can't pour water: it moves loads sideways or down, never up"),
         new(["tank"], "water", Style.Set, "Empty the tank", "", 0, Needs: v => v > 0),

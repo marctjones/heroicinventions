@@ -160,6 +160,8 @@ public partial class Main : Node3D
         ["night-heat"] = new(new Vector3(-1.4f, 2.6f, 8.5f), new Vector3(-1.4f, 0.35f, 0), 50),   // the three vaults and the rock in the sun, cut away at the front (+z)
         ["hot-water-night"] = new(new Vector3(0, 2.4f, 6.5f), new Vector3(0, 0.5f, 0), 50),
         ["bimetal-night"] = new(new Vector3(0.4f, 1.5f, 4.2f), new Vector3(0.4f, 0.3f, 0), 50),   // the strip vault in the middle, the ideal and warm ones at the sides, cut away at the front (+z)
+        ["found-electrics"] = new(new Vector3(3.2f, 7.4f, -7.5f), new Vector3(1.9f, 5.8f, -1.6f), 50),   // from behind the sails: the last stage, the motor with its dial, the wire and the bank on its shelf (#64)
+        ["bank-bench"] = new(new Vector3(7f, 6f, -16f), new Vector3(7f, 1.3f, -2.5f), 50),   // three windmills over their banks, and the five banks of the call below (#64)
     };
 
     /// <summary>
@@ -214,6 +216,8 @@ public partial class Main : Node3D
         ["night-heat"] = 20,         // the 03:00 pass is 10 local hours on: 31 minutes (sleep, or a trace, for less)
         ["hot-water-night"] = 20,    // a 12 h night in 36 minutes
         ["bimetal-night"] = 20,      // the 03:00 pass is 10 local hours on: 31 minutes
+        ["found-electrics"] = 4,     // 330 s: the bank fills in 140 s and the call goes out at 03:00, 300 s in (#64)
+        ["bank-bench"] = 10,         // the cold bank warms through 0 C at 1,297 s (#64)
     };
     private static readonly (int Width, int Height, string Label)[] WindowSizes =
         [(1152, 720, "Small"), (1600, 1000, "Medium"), (1920, 1200, "Large")];
@@ -327,6 +331,8 @@ public partial class Main : Node3D
         ["night-heat"] = "Night Heat (Regolith Vault and Rock Store)",
         ["hot-water-night"] = "Hot Water Through a Night (Tank and Room)",
         ["bimetal-night"] = "Bimetal Thermostat (Brass-Steel Strip on the Heat Bin)",
+        ["found-electrics"] = "Found Electrics: Windmill to Battery Bank and the Call",
+        ["bank-bench"] = "Battery Bank: Charges Only From 0 to 45 C",
     };
 
     private static readonly Dictionary<string, string> Descriptions = new()
@@ -438,6 +444,8 @@ public partial class Main : Node3D
         ["night-heat"] = "A battery bank frozen at -55 C buried in a regolith vault, kept warm through a Mars night by hot rock in a lidded bin. A fresh wall is at ground temperature all through and soaks heat up as 2 I dT sqrt(t/pi) (I = 216 J/(m2 K sqrt(s))): 2.8 MJ a square metre in a night, 16 times the steady loss, so 11 kg of 200 C rock in a 1 m cavity (left) leaves the bank at -50 C at 03:00, while 40 kg in a tight 0.5 m cavity (right) brings it to +4 C from night 1. The rock cools through its lid with tau = m c / leak (3.9 days at 0.1 W/K): a lid leaking 0.5 W/K lets the bank pass 45 C from sol 5 (leaky vault, far right; it takes sols: speed it up, and top the rock up to 200 C at each dusk). The rock in the sun at the far left warms at P / (m c). Walls show the warmth soaking in; the lid swings as the thermostat opens it at 5 C and shuts it at 40 C.",
         ["hot-water-night"] = "Three rooms losing 2 W/K to a night at -80 C, each warmed by a tank of water at 60 C through a 6 W/K film. Tank and room cool together with two time constants (375 s, and 8 h, 26 h or 52 h by tank size); 33 kg of water, the design doc's 7 MJ, leaves its room at -14 C at dawn and about 56 kg is needed to hold 0 C. The 10 kg tank reaches 0 C at 4.4 h and holds there, freezing, with its room at -20 C. Best at 20x.",
         ["bimetal-night"] = "Night Heat with the thermostat a strip of brass bonded to steel (100 x 10 x 1 mm, as in Harrison's H3 clock of 1759): the two metals grow by different amounts (19.9 and 11.7 millionths per K), so the strip bends, its tip moving 60 um per K (Timoshenko), and the lid opens as the tip moves back: shut at 40 C, wide open 2.1 mm later, at 5 C. The strip follows its bank with a lag of tau = 160 s. Left, the ideal 5/40 C switch; middle, the strip: the bank is +4.3 C at 03:00 either way, the lid open all night and the tip -0.95 mm from flat; right, a vault with a warm wall and a bank at 30 C, where the strip shuts the lid and holds the bank near 38 C, well under the 45 C it may charge at. The bend is drawn ten times too strong and the layers four times too thick; the red pin marks the tip with the lid shut, the blue one with it wide open.",
+        ["found-electrics"] = "The whole route to winning, small: generator-train's windmill (5 m sails, 3 m/s) geared 125 to 1 through three 5:1 meshes at 97% turns a salvaged motor, which charges the found battery bank. The motor gives nothing below its 1,500 rpm cut-in, then loads the shaft with 0.1146 N.m for every rad/s over it: the sails settle at 13.3 rpm instead of their free 28.6, the rotor at 1,666 rpm and 1.99 N.m, and the bank is charged at 0.8 x 347.9 W = 278.3 W (9.9 A on its 28 V pack); 91% of the sails' 381 W arrives at the motor. The bank holds 10 Wh, so it fills in 129 s of charging, about 140 s in. It is in a vault at 20 C, and takes charge only from 0 to 45 C. The clock starts at 02:55: the relay pass opens at 03:00, and the call goes out then, as the bank is full and warm (not at 02:59). Once it is full the motor is open circuit and the unloaded train races until the physics engine's 3,000 rpm limit brakes it.",
+        ["bank-bench"] = "The bank's rules on a bench of small windmills, each straight on a bench motor (30 rpm cut-in), each charging a 5 Wh bank: the warm one at 160 W in 113 s, the one at -10 C not at all until its cells warm through 0 C at 1,297 s, the one at 50 C not until they cool through 45 C at 583 s. Behind them, banks already full wait for the call: the warm one wins when the 03:00 pass opens and not at 02:59, one charged at 03:11 not until it is inside the window, the ones at 50 C and -5 C never, and the one with the easy setting at any hour. Set scene.time to move the clock.",
     };
 
     private MaterialLibrary _materials = null!;

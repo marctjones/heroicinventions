@@ -796,7 +796,7 @@ public sealed class BuildSession
     }
 
     /// <summary>Props whose value names another part, checked against the document when set.</summary>
-    private static readonly HashSet<string> PartReferenceKeys = ["on", "onto", "heats", "over", "from", "to", "vessel", "into", "tail", "race", "gutter", "water", "store", "holds", "sense", "senses", "drives"];
+    private static readonly HashSet<string> PartReferenceKeys = ["on", "onto", "heats", "over", "from", "to", "vessel", "into", "tail", "race", "gutter", "water", "store", "holds", "sense", "senses", "drives", "charges", "in"];
 
     private string Remove(SList cmd)
     {
