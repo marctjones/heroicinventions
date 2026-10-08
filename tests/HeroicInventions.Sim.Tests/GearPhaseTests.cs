@@ -118,10 +118,12 @@ public class GearPhaseTests
         Assert.Equal(bAngle, session.Document.Parts["b"].Number("angle-deg"), 9);
         Assert.Equal(0, Error(session.Document, "a", "b"), 6);
         Assert.Equal(0, Error(session.Document, "b", "c"), 6);
-        // the whole set turned to a heading: still interleaved
-        foreach (var g in new[] { "a", "b", "c" }) session.Execute($"(turn {g} 40)");
+        // a and b, one above the other, turned to a heading about the vertical their centres share: their axles
+        // stay parallel and square to the line of centres, so they still mesh, and stay interleaved
+        session.Execute("(unmesh b c)");
+        foreach (var g in new[] { "a", "b" }) session.Execute($"(turn {g} 40)");
+        Assert.Equal(40, session.Document.Parts["b"].Number("heading-deg"), 9);
         Assert.Equal(0, Error(session.Document, "a", "b"), 6);
-        Assert.Equal(0, Error(session.Document, "b", "c"), 6);
     }
 
     [Fact]
