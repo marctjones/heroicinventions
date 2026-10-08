@@ -1,4 +1,5 @@
 using HeroicInventions.Sim.Machines;
+using HeroicInventions.Sim.Mechanics;
 using HeroicInventions.Sim.Materials;
 
 namespace HeroicInventions.Sim.Editor;
@@ -409,7 +410,19 @@ public sealed class BuildSession
         if (!(efficiency > 0 && efficiency <= 1)) throw new FormatException("a mesh's #:efficiency is more than 0 and at most 1");
         Snapshot();
         Document.AddMesh(a, b, efficiency);
+        PhaseGears(a, b);
         return efficiency == 1 ? $"meshed {a} with {b}" : $"meshed {a} with {b}, {efficiency:0.##} efficient";
+    }
+
+    /// <summary>
+    /// Turns the gears of the trains these parts are in so every mesh's teeth fall in its partner's gaps (issue #85),
+    /// each by less than half a tooth: after a mesh is made, or a gear moved or turned. Part of the same edit, so one
+    /// undo takes both back. Only where the teeth stand changes; the ratio and torque are the tooth counts'.
+    /// </summary>
+    private void PhaseGears(params string[] touched)
+    {
+        foreach (var (id, deg) in GearPhase.Rephase(Document.Parts, Document.Meshes, touched))
+            Document.SetProp(id, "angle-deg", deg);
     }
 
     private string Unmesh(SList cmd)
@@ -719,6 +732,7 @@ public sealed class BuildSession
         var at = VecOf(cmd.Items[2], "move");
         Snapshot();
         Document.Move(id, at);
+        PhaseGears(id);
         return $"moved {id} to ({at.X} {at.Y} {at.Z})";
     }
 
@@ -738,6 +752,7 @@ public sealed class BuildSession
         double heading = ((MachineDef.HeadingOf(part) + degrees) % 360 + 360) % 360;
         Snapshot();
         Document.SetProp(id, "heading-deg", heading);
+        PhaseGears(id);
         return $"turned {id} to heading {heading}";
     }
 
