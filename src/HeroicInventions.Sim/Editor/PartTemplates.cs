@@ -19,7 +19,7 @@ namespace HeroicInventions.Sim.Editor;
 public static class PartTemplates
 {
     /// <summary>Part kinds the palette can place without a catalogue (no generated mesh).</summary>
-    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "envelope", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "drain", "roof", "stirling", "ball", "plants", "melter", "electrolyser", "galvanic-jar", "heat-store", "heat-bin", "bimetal"];
+    public static readonly IReadOnlyList<string> PrimitiveKinds = ["tank", "boiler", "hearth", "jetwheel", "smokejack", "rotor", "block", "pendulum", "lever", "ramp", "piston", "post", "sluice", "waterwheel", "counterpoise", "float-valve", "leak", "safety-valve", "pump", "bellows", "windmill", "capstan", "mirror", "enclosure", "grip", "door", "air-pump", "cam", "ratchet", "crucible", "envelope", "burning-mirror", "digger", "float", "sluice-box", "hopper", "pane", "pond", "drain", "roof", "stirling", "ball", "plants", "melter", "electrolyser", "galvanic-jar", "heat-store", "heat-bin", "bimetal", "generator", "battery-bank"];
 
     public static PartSpec Create(string kind, string id, Vec3 at, string material) => kind switch
     {
@@ -234,6 +234,22 @@ public static class PartTemplates
                 ["senses"] = new SSymbol("?"), ["drives"] = new SSymbol("?"), ["high"] = new SSymbol("brass"), ["low"] = new SSymbol("steel"),
                 ["length"] = new SNumber(0.1), ["thickness"] = new SNumber(0.001), ["width"] = new SNumber(0.01), ["high-share"] = new SNumber(0.5),
                 ["shut-at"] = new SNumber(40), ["straight-at"] = new SNumber(20), ["travel"] = new SNumber(0.0021), ["contact"] = new SNumber(10),
+            },
+            [], null),
+        // a salvaged motor driven backwards by the shaft #:on (a wheel, windmill, water wheel, jet wheel or Stirling engine), charging the bank #:charges: P = tau w eta above the cut-in (#64)
+        "generator" => new PartSpec(id, "generator", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["on"] = new SSymbol("?"), ["charges"] = new SSymbol("?"), ["efficiency"] = new SNumber(0.8), ["cut-in-rpm"] = new SNumber(1500),
+                ["rated-rpm"] = new SNumber(2500), ["rated-torque"] = new SNumber(12), ["driven-by"] = new SBool(false),
+            },
+            [], null),
+        // the found battery bank: 4 kWh, takes charge from 0 to 45 deg C of the heat store or enclosure it is #:in, holds it, cannot be destroyed; the call at the 03:00 relay pass wins (#64)
+        "battery-bank" => new PartSpec(id, "battery-bank", material, at,
+            new Dictionary<string, SExpr>
+            {
+                ["in"] = new SSymbol("?"), ["capacity"] = new SNumber(4000), ["charge"] = new SNumber(0), ["volts"] = new SNumber(28),
+                ["call-hour"] = new SNumber(3), ["call-minutes"] = new SNumber(10), ["call-any-time"] = new SBool(false),
             },
             [], null),
         // a 10 cm square grate in the ground over a pipe into a tank (#90): set #:into to the tank

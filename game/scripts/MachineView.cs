@@ -139,6 +139,7 @@ public partial class MachineView : Node3D
         Pass(BuildCrucibles);
         Pass(BuildHeatStores);
         Pass(BuildBimetals);
+        Pass(BuildElectrics);
         Pass(BuildEnvelopes);
         Pass(BuildPanes);
         Pass(BuildRainHouse);
@@ -1517,6 +1518,7 @@ public partial class MachineView : Node3D
         DriveSprings();
         RollCarriedWheels();
         GrindMillstones(dt);
+        LoadGenerators(dt);
         FrictionAxles(dt);
         DriveFollows();
         DriveBelts(dt);
@@ -1664,6 +1666,7 @@ public partial class MachineView : Node3D
         DrawCrucibles();
         DrawHeatStores();
         DrawBimetals();
+        DrawElectrics();
         DrawEnvelopes();
         DrawGalvanicJars();
         DrawPanes();

@@ -276,6 +276,14 @@ public static class RktExporter
                 return $"  (bimetal {p.Id} {At()} #:senses {Sym("senses", "?")} #:drives {Sym("drives", "?")} #:layers ({Sym("high", "brass")} {Sym("low", "steel")}) " +
                        $"#:length {F(N("length", 0.1))} #:thickness {F(N("thickness", 0.001))} #:width {F(N("width", 0.01))} #:high-share {F(N("high-share", 0.5))} " +
                        $"#:shut-at {F(N("shut-at", 40))} #:straight-at {F(N("straight-at", 20))} #:travel {F(N("travel", 0.0021))} #:contact {F(N("contact", 10))} {Mat()})\n";
+            case "generator":
+                return $"  (generator {p.Id} {At()} #:on {Sym("on", "?")} #:charges {Sym("charges", "?")} #:efficiency {F(N("efficiency", 0.8))} #:cut-in-rpm {F(N("cut-in-rpm", 1500))} " +
+                       $"#:rated-rpm {F(N("rated-rpm", 2500))} #:rated-torque {F(N("rated-torque", 12))}" +
+                       (p.Props.GetValueOrDefault("driven-by") is SSymbol drv ? $" #:driven-by {drv.Name}" : "") + $" {Mat()})\n";
+            case "battery-bank":
+                return $"  (battery-bank {p.Id} {At()} #:in {Sym("in", "?")} #:capacity {F(N("capacity", 4000))} #:charge {F(N("charge"))} #:volts {F(N("volts", 28))} " +
+                       $"#:call-hour {F(N("call-hour", 3))} #:call-minutes {F(N("call-minutes", 10))}" +
+                       (p.Props.GetValueOrDefault("call-any-time") is SBool { Value: true } ? " #:call-any-time #t" : "") + $" {Mat()})\n";
             case "burning-mirror":
                 return $"  (burning-mirror {p.Id} {At()} #:area {F(N("area"))} #:image {F(N("image"))} #:onto {Sym("onto", "?")} #:reflectivity {F(N("reflectivity", 0.85))} {Mat()})\n";
             case "pane":
