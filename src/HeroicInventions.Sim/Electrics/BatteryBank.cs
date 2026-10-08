@@ -24,6 +24,8 @@ public sealed class BatteryBank
     public const double JoulesPerWattHour = 3600;
 
     public string Name { get; }
+    /// <summary>The heat store or enclosure it sits in (its temperature is read from there).</summary>
+    public string InName { get; init; } = "";
     /// <summary>J the bank holds when full.</summary>
     public double Capacity { get; set; }
     /// <summary>J it holds now.</summary>

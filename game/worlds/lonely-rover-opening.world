@@ -8,6 +8,11 @@
 ;; them comes to rest on the rubble over it, and a backhoe that can't lift a boulder has to
 ;; get it off the bank some other way.
 (world lonely-rover-opening
+  ;; the scenario (#60): what this world is for, as the front end lists it. No tuning: every number is the real one.
+  (scenario
+    (title "The Lonely Rover")
+    (description "Mars, a crater, a storm that has brought a weakened rim down on your cargo. Dig out the battery bank, make electricity without panels, keep the bank warm through the night, and call Earth on the pre-dawn relay pass. The real numbers.")
+    (tuning))
   (map victoria)
   ;; the player's rover (#94): 45 m down the slope from the first crate, facing it (+x), where the floor is only ~7 degrees
   (rover (at 190.0 140.0) (heading 270))

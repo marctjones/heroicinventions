@@ -33,6 +33,10 @@ public sealed class Generator
     public BatteryBank? Bank { get; set; }
     /// <summary>What turns it: the key the bank files its charge under.</summary>
     public string DrivenBy { get; set; } = "shaft";
+    /// <summary>The shaft speed of the prime mover (rad/s) where the sim turns it (a windmill, water wheel, jet wheel, Stirling engine), else null.</summary>
+    public Func<double>? PrimeOmega { get; set; }
+    /// <summary>The speed ratio the train gives: the rotor's speed over the prime mover's (1 for a generator on the prime mover itself); null where the prime mover is not turned by the sim or is still.</summary>
+    public double? TrainRatio => PrimeOmega is { } p && Math.Abs(p()) > 1e-9 ? Omega / Math.Abs(p()) : null;
     public double Efficiency { get; set; } = 0.8;
     public double CutInRpm { get; set; } = 1500;
     public double RatedRpm { get; set; } = 2500;

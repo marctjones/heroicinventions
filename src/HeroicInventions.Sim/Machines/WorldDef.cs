@@ -32,6 +32,164 @@ public sealed record LinkSpec(string Id, string Kind, LinkEnd From, LinkEnd To, 
 public sealed record RoverStart(double X, double Z, double Heading);
 
 /// <summary>
+/// The game's tuning numbers (issue #60): numbers a scenario feeds into the sim's unchanged formulas, never a change to a formula.
+/// The labelled rate multipliers are 1 on real Mars (every one scales one input of one formula, so a tuned run states its numbers
+/// and the formula still gives the traced result); the Advanced numbers are the physical constants themselves, null where the
+/// machine's own (or the planet's) stands, and risky: they carry the game's lessons. A tuning with every number at its default is
+/// <see cref="IsReal"/>, and a run with it is the untuned run exactly.
+/// <code>
+/// (scenario (title "…") (description "…")
+///   (tuning (wear 0.25) (evaporation 5) (bank-capacity 0.2) (generator-cut-in 0.5) (call-window 6) (call-any-time #t) (sleep-speed 4))
+///   (advanced (gravity 9.81) (generator-efficiency 0.9) (bank-min-charge-c -10) (bank-max-charge-c 55)))
+/// </code>
+/// </summary>
+public sealed record ScenarioTuning
+{
+    // ---- labelled rate multipliers (1 = real) ----
+    /// <summary>x the specific wear rate of every bearing (mm3 per N.m): 0.25, bearings last four times as long.</summary>
+    public double Wear { get; init; } = 1;
+    /// <summary>x the rain-house's evaporation coefficient (kg per s per m2 per Pa).</summary>
+    public double Evaporation { get; init; } = 1;
+    /// <summary>x the battery bank's capacity (Wh); a small bank fills sooner.</summary>
+    public double BankCapacity { get; init; } = 1;
+    /// <summary>x the generator's cut-in speed (rpm); its rated speed stays, and is lifted over the cut-in if the product passes it.</summary>
+    public double GeneratorCutIn { get; init; } = 1;
+    /// <summary>x the length of the relay pass the call goes out on, minutes.</summary>
+    public double CallWindow { get; init; } = 1;
+    /// <summary>The easy setting: the call may go at any hour once the bank is full and warm enough.</summary>
+    public bool CallAnyTime { get; init; }
+    /// <summary>x the computing time a sleep gets each frame (it runs ahead faster, and takes the same steps, so the result is the same).</summary>
+    public double SleepSpeed { get; init; } = 1;
+
+    // ---- Advanced: the constants (null = as the machine or planet has it) ----
+    /// <summary>m/s2 for every machine in the world (Earth's 9.81 on Mars's ground: what Mars's slow falls and big cliffs teach goes with it).</summary>
+    public double? Gravity { get; init; }
+    /// <summary>The generator's eta, 0 to 1: the single number for all losses between shaft and bank.</summary>
+    public double? GeneratorEfficiency { get; init; }
+    /// <summary>Degrees C below which the bank takes no charge (lithium plating), default 0.</summary>
+    public double? BankMinChargeC { get; init; }
+    /// <summary>Degrees C above which the bank takes no charge, default 45.</summary>
+    public double? BankMaxChargeC { get; init; }
+
+    public static ScenarioTuning Real { get; } = new();
+
+    /// <summary>Every number is its real one.</summary>
+    public bool IsReal => this == Real;
+    /// <summary>One of the Advanced (risky) numbers has been set.</summary>
+    public bool HasAdvanced => Gravity is not null || GeneratorEfficiency is not null || BankMinChargeC is not null || BankMaxChargeC is not null;
+
+    /// <summary>A label for each tuning number: key (as written in the file), name, unit, real value, and whether it is Advanced (risky).</summary>
+    public sealed record Entry(string Key, string Label, string Unit, double Real, bool Advanced, string Note);
+
+    public static IReadOnlyList<Entry> Entries { get; } =
+    [
+        new("wear", "Bearing wear", "x", 1, false, "bearings wear at this multiple of their real rate"),
+        new("evaporation", "Evaporation", "x", 1, false, "rain-house water evaporates at this multiple of the real rate"),
+        new("bank-capacity", "Battery bank capacity", "x", 1, false, "the bank holds this multiple of its capacity (a smaller bank fills sooner)"),
+        new("generator-cut-in", "Generator cut-in speed", "x", 1, false, "the motor starts charging at this multiple of 1,500 rpm"),
+        new("call-window", "Relay pass length", "x", 1, false, "the call window lasts this multiple of the pass's minutes"),
+        new("call-any-time", "Call at any hour", "0/1", 0, false, "1: the call may go out whenever the bank is full and warm, not only on the pre-dawn pass"),
+        new("sleep-speed", "Sleep speed", "x", 1, false, "sleep gets this multiple of the computing time per frame; the steps and the result are the same"),
+        new("gravity", "Gravity", "m/s2", double.NaN, true, "risky: the planet's own g is what the game teaches; blank keeps it"),
+        new("generator-efficiency", "Generator efficiency", "0 to 1", double.NaN, true, "risky: eta for all losses between shaft and bank; blank keeps the machine's own (0.8)"),
+        new("bank-min-charge-c", "Bank lowest charging temperature", "C", 0, true, "risky: below this the bank takes no charge (real lithium cells plate)"),
+        new("bank-max-charge-c", "Bank highest charging temperature", "C", 45, true, "risky: above this the bank takes no charge"),
+    ];
+
+    /// <summary>A number by its key; NaN for an Advanced number left unset.</summary>
+    public double Get(string key) => key switch
+    {
+        "wear" => Wear, "evaporation" => Evaporation, "bank-capacity" => BankCapacity, "generator-cut-in" => GeneratorCutIn,
+        "call-window" => CallWindow, "call-any-time" => CallAnyTime ? 1 : 0, "sleep-speed" => SleepSpeed,
+        "gravity" => Gravity ?? double.NaN, "generator-efficiency" => GeneratorEfficiency ?? double.NaN,
+        "bank-min-charge-c" => BankMinChargeC ?? 0, "bank-max-charge-c" => BankMaxChargeC ?? 45,
+        _ => throw new ArgumentException($"no tuning number named {key}"),
+    };
+
+    /// <summary>The same tuning with one number set; NaN clears an Advanced number back to the machine's own.</summary>
+    public ScenarioTuning With(string key, double v) => key switch
+    {
+        "wear" => this with { Wear = v }, "evaporation" => this with { Evaporation = v }, "bank-capacity" => this with { BankCapacity = v },
+        "generator-cut-in" => this with { GeneratorCutIn = v }, "call-window" => this with { CallWindow = v },
+        "call-any-time" => this with { CallAnyTime = v != 0 }, "sleep-speed" => this with { SleepSpeed = v },
+        "gravity" => this with { Gravity = double.IsNaN(v) ? null : v }, "generator-efficiency" => this with { GeneratorEfficiency = double.IsNaN(v) ? null : v },
+        "bank-min-charge-c" => this with { BankMinChargeC = v == 0 ? null : v }, "bank-max-charge-c" => this with { BankMaxChargeC = v == 45 ? null : v },   // the real limits are the unset ones
+        _ => throw new ArgumentException($"no tuning number named {key}"),
+    };
+
+    /// <summary>Numbers that can still be changed once a game is running: the ones the sim reads each tick through a settable field.</summary>
+    public static bool ChangeableInPlay(string key) => key is "call-any-time" or "call-window" or "sleep-speed";
+
+    /// <summary>The scenario's own <c>(tuning …)</c> and <c>(advanced …)</c> forms; a number out of its range is refused.</summary>
+    public static ScenarioTuning FromForms(SList? tuning, SList? advanced, string file)
+    {
+        var t = Real;
+        void Read(SList? form, bool advancedForm)
+        {
+            if (form is null) return;
+            foreach (var item in form.Items.Skip(1))
+            {
+                if (item is not SList { Items: [SSymbol key, var value] })
+                    throw new MachineFormatException($"{file}: scenario {(advancedForm ? "advanced" : "tuning")} entries are (NAME NUMBER), got {SExprWriter.Print(item)}");
+                var entry = Entries.FirstOrDefault(e => e.Key == key.Name && e.Advanced == advancedForm)
+                    ?? throw new MachineFormatException($"{file}: scenario {(advancedForm ? "advanced" : "tuning")} has no number named {key.Name}; they are: {string.Join(", ", Entries.Where(e => e.Advanced == advancedForm).Select(e => e.Key))}");
+                double v = value switch
+                {
+                    SNumber n => n.Value,
+                    SBool b => b.Value ? 1 : 0,
+                    _ => throw new MachineFormatException($"{file}: scenario {key.Name} needs a number"),
+                };
+                if (!double.IsFinite(v)) throw new MachineFormatException($"{file}: scenario {key.Name} must be a finite number");
+                bool multiplier = !entry.Advanced && entry.Unit == "x";
+                if (multiplier && !(v > 0)) throw new MachineFormatException($"{file}: scenario {key.Name} is a multiplier and must be above 0");
+                if (key.Name == "generator-efficiency" && !(v > 0 && v <= 1)) throw new MachineFormatException($"{file}: scenario generator-efficiency must be in (0, 1]");
+                if (key.Name == "gravity" && !(v > 0)) throw new MachineFormatException($"{file}: scenario gravity must be above 0");
+                t = t.With(key.Name, v);
+            }
+        }
+        Read(tuning, false);
+        Read(advanced, true);
+        if (t.BankMinChargeC is { } lo && t.BankMaxChargeC is { } hi && !(lo < hi))
+            throw new MachineFormatException($"{file}: scenario bank-min-charge-c must be under bank-max-charge-c");
+        return t;
+    }
+
+    /// <summary>The forms that write this tuning back (only what differs from real), or none.</summary>
+    public IEnumerable<string> ToForms()
+    {
+        string N(double v) => SExprWriter.Number(v);
+        var basic = Entries.Where(e => !e.Advanced && Get(e.Key) != e.Real).Select(e => e.Key == "call-any-time" ? "(call-any-time #t)" : $"({e.Key} {N(Get(e.Key))})").ToList();
+        if (basic.Count > 0) yield return "(tuning " + string.Join(" ", basic) + ")";
+        var adv = Entries.Where(e => e.Advanced && !double.IsNaN(Get(e.Key)) && (double.IsNaN(e.Real) || Get(e.Key) != e.Real)).Select(e => $"({e.Key} {N(Get(e.Key))})").ToList();
+        if (adv.Count > 0) yield return "(advanced " + string.Join(" ", adv) + ")";
+    }
+}
+
+/// <summary>
+/// A scenario (issue #60): what a world is for. It names itself for the front end's list (<see cref="Title"/>, <see cref="Description"/>) and
+/// carries the tuning numbers its machines are built with. <c>(scenario (title "…") (description "…") (tuning …) (advanced …))</c>; see
+/// <see cref="ScenarioTuning"/>. The planet and the map stay the world's own, so any map can sit under any scenario.
+/// </summary>
+public sealed record ScenarioDef(string Title, string Description)
+{
+    public ScenarioTuning Tuning { get; init; } = ScenarioTuning.Real;
+
+    public static ScenarioDef Parse(SList form, string file)
+    {
+        string Text(string field) => form.Field(field)?.Items.ElementAtOrDefault(1) is SString s ? s.Value : "";
+        return new ScenarioDef(Text("title"), Text("description")) { Tuning = ScenarioTuning.FromForms(form.Field("tuning"), form.Field("advanced"), file) };
+    }
+
+    public string Write()
+    {
+        static string Q(string s) => SExprWriter.Print(new SString(s));
+        var parts = new List<string> { $"(title {Q(Title)})", $"(description {Q(Description)})" };
+        parts.AddRange(Tuning.ToForms());
+        return "(scenario " + string.Join("\n    ", parts) + ")";
+    }
+}
+
+/// <summary>
 /// A world (issue #74): many machines standing in one scene, each an
 /// ordinary machine moved into place with <see cref="MachineDef.Translated"/>.
 /// Written in the same s-expression shape as a .machine file:
@@ -53,6 +211,12 @@ public sealed class WorldDef
     /// drives the rover there (game/scripts/Main.Rover.cs); a machine run has none, and keeps the free operator.
     /// </summary>
     public RoverStart? Rover { get; init; }
+
+    /// <summary>
+    /// What this world is for (issue #60): <c>(scenario (title "…") (description "…") …tuning…)</c>. Null for a world that says nothing
+    /// (it runs on the real numbers). The front end lists scenarios by <see cref="ScenarioDef.Title"/> and <see cref="ScenarioDef.Description"/>.
+    /// </summary>
+    public ScenarioDef? Scenario { get; init; }
 
     public required string Name { get; init; }
     public required IReadOnlyList<Placement> Placements { get; init; }
@@ -78,12 +242,12 @@ public sealed class WorldDef
     {
         if (Links.Any(l => l.Id == link.Id)) throw new MachineFormatException($"world {Name} already has a link named {link.Id}");
         CheckLink(link, Placements, null);
-        return new WorldDef { Name = Name, Map = Map, Rover = Rover, Placements = Placements, Links = [.. Links, link] };
+        return new WorldDef { Name = Name, Map = Map, Rover = Rover, Scenario = Scenario, Placements = Placements, Links = [.. Links, link] };
     }
 
     /// <summary>The same world without the named link.</summary>
     public WorldDef WithoutLink(string id) =>
-        new() { Name = Name, Map = Map, Rover = Rover, Placements = Placements, Links = Links.Where(l => l.Id != id).ToList() };
+        new() { Name = Name, Map = Map, Rover = Rover, Scenario = Scenario, Placements = Placements, Links = Links.Where(l => l.Id != id).ToList() };
 
     /// <summary>A link id not yet used in this world: pipe-1, pipe-2, …</summary>
     public string NextLinkId(string stem)
@@ -98,6 +262,7 @@ public sealed class WorldDef
         var sb = new System.Text.StringBuilder();
         sb.Append($"(world {Name}");
         if (Map is not null) sb.Append($"\n  (map {Map})");
+        if (Scenario is { } sc) sb.Append("\n  " + sc.Write());
         if (Rover is { } r)
             sb.Append($"\n  (rover (at {SExprWriter.Number(r.X)} {SExprWriter.Number(r.Z)})" + (r.Heading != 0 ? $" (heading {SExprWriter.Number(r.Heading)})" : "") + ")");
         foreach (var p in Placements)
@@ -185,7 +350,8 @@ public sealed class WorldDef
             double heading = rv.Field("heading") is { Items: [_, SNumber hv] } ? hv.Value : 0;
             rover = new RoverStart(Num(ra.Items[1]), Num(ra.Items[2]), heading);
         }
-        return new WorldDef { Name = name.Name, Map = map, Rover = rover, Placements = placements, Links = links };
+        var scenario = root.Field("scenario") is { } sf ? ScenarioDef.Parse(sf, file) : null;
+        return new WorldDef { Name = name.Name, Map = map, Rover = rover, Scenario = scenario, Placements = placements, Links = links };
 
         static double Num(SExpr e) => e is SNumber n ? n.Value : throw new MachineFormatException($"expected a number, got {e}");
     }

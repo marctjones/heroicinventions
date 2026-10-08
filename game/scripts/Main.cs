@@ -541,6 +541,7 @@ public partial class Main : Node3D
         BuildEnvironment();
         ScanMachineFiles();
         BuildUI();
+        BuildTuningPanel();   // the scenario's numbers, F3 (Main.Tuning.cs, #60)
         ApplyCamera(MenuCamera);
 
         if (OS.GetEnvironment(LiveLinkServer.EnableEnvVar) == "1")
@@ -884,13 +885,14 @@ public partial class Main : Node3D
         if (_current is not null) { _current.GetParent()?.RemoveChild(_current); _current.QueueFree(); }
         _current = null;
         _byName.Clear();
+        BeginWorldTuning(world);   // the scenario's numbers, with the player's edits (Main.Tuning.cs, #60)
         LoadGround(world);
         foreach (var p in world.Placements)
         {
             if (!_machineFiles.TryGetValue(p.Machine, out var path)) { GD.PushError($"world {world.Name}: no machine named {p.Machine}"); continue; }
             // on a map a machine stands on the ground (issue #37)
             var def = WorldDef.Placed(MachineDef.Parse(Godot.FileAccess.GetFileAsString(path)), p, _groundSim?.Ground);
-            var runtime = new MachineRuntime(def, _materials);
+            var runtime = new MachineRuntime(def, _materials, _activeTuning);
             _groundSim?.Attach(p.Label, runtime);
             var view = new MachineView(runtime, _materials) { Name = p.Label, Position = Vector3.Zero, Ground = _groundSim?.Ground };
             AddChild(view);
@@ -965,7 +967,7 @@ public partial class Main : Node3D
     /// </summary>
     private MachineView ReplaceView(MachineView old, MachineDef def)
     {
-        var runtime = new MachineRuntime(def, _materials);
+        var runtime = new MachineRuntime(def, _materials, _world is null ? null : _activeTuning);
         runtime.TakeStateFrom(old.Runtime);
         _groundSim?.Attach(old.Name, runtime);   // its channels pour onto the ground again
         string label = old.Name;
@@ -1155,6 +1157,7 @@ public partial class Main : Node3D
                 Boulders = _groundSim is { Ground.Boulders.Count: > 0 } rocky ? rocky.Ground.SaveBoulders() : null,   // and the rocks slides left on it (#88)
                 Worked = _groundSim?.Ground.SaveWorked(),    // and the trenches and heaps the rover has dug (#199)
                 Rover = RoverSaveState(),                    // and the rover itself: pose, bucket and arm (#201)
+                Goals = GoalsForSave(),                      // and the goals and achievements earned (#68)
                 Operated = _operatorLog.ToList(), OperatorTaken = _operatorTaken,   // what was done to the machine, in order (Main.Operator.cs)
             };
             string target = path ?? SavePath(auto);
@@ -1199,6 +1202,7 @@ public partial class Main : Node3D
             rocky.RetraceBoulders();
         }
         if (save.Worked is { } worked && _groundSim is { } dug) dug.Ground.LoadWorked(worked);   // the trenches and heaps, with their carry ceilings (#199)
+        GoalsRestore(save);   // the goals and achievements the save had earned (#68)
         if (save.Rover is { } roverState) RoverLoadState(roverState);   // the rover where it was, with its bucket and arm (#201)
         foreach (var m in save.Machines)
         {
@@ -1680,12 +1684,14 @@ public partial class Main : Node3D
         }
         if (_running && !_sleep.Active) PreStepHand();   // a hand holding a body sets its target for this step (Main.Drag.cs)
         if (_sleep.Active)
-            _sleep.Advance();                 // sleeping: run ahead as fast as it can, in place of stepping in real time
+            _sleep.Advance(SleepBudgetMs);    // sleeping: run ahead as fast as it can, in place of stepping in real time
         else if (_running && _views.Count > 0)
             StepWorld(delta); // a world: every machine, stepped together, and the links between them
         else if (_running && _current is not null)
             _current.Simulate(delta); // already scaled: see SetSpeed
         PostStepHand();
+        if (!_sleep.Active) GoalsTick();   // goals and achievements, from the state the step left (Main.Goals.cs, #68); a sleep calls it itself every half second
+        ToastTick(delta);
 
         ApplyDueSettings(); // after the step, as SimHost's ApplyDue is: a setting due at t is seen by the sample taken at t
         if (_audit && _running && _current is not null) _current.AuditTick(delta);

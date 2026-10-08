@@ -34,6 +34,9 @@ public sealed class Pendulum
     public double Amplitude => Math.Abs(TurnedAt);
     public double PeakTime { get; private set; }              // s, when it turned there
     public int Swings { get; private set; }                   // turning points since release
+    /// <summary>s between the last two turning points: half a period, once it has turned twice; NaN before.</summary>
+    public double HalfPeriod { get; private set; } = double.NaN;
+    private double _lastPeak = double.NaN;
     public double Time { get; private set; }
 
     private int _sense;                                        // sign of the last motion
@@ -78,6 +81,8 @@ public sealed class Pendulum
             if (_sense != 0)
             {
                 TurnedAt = Angle;
+                if (!double.IsNaN(_lastPeak)) HalfPeriod = Time - _lastPeak;
+                _lastPeak = Time;
                 PeakTime = Time;
                 Swings++;
             }
