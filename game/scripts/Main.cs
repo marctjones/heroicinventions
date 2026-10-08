@@ -526,7 +526,7 @@ public partial class Main : Node3D
         foreach (var (name, _) in _machineFiles)
         {
             var button = BigButton(DisplayNames.GetValueOrDefault(name, name));
-            button.Pressed += () => SelectMachine(name);
+            button.Pressed += () => OpenPart(name);   // a part for a world opens its world (#175); HEROIC_AUTOSELECT still opens it alone, for tests
             _machineList.AddChild(button);
         }
 
