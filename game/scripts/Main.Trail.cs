@@ -33,6 +33,7 @@ public partial class Main
         _missileSeat = body.GlobalPosition;
         _missileReloaded = false;
         _landedAtMs = 0;
+        _missileLetGo = false;
         if (_trailRoot is not null && IsInstanceValid(_trailRoot)) _trailRoot.QueueFree();   // the last throw's record goes when the next throw leaves
         _trailRoot = new Node3D { Name = "Trail" };
         MachineView.MarkScenery(_trailRoot);   // a record of where it flew, not a part
@@ -95,10 +96,27 @@ public partial class Main
 
     private Vector3 _missileSeat;      // where the stone or bolt lay before this throw
     private bool _missileReloaded;     // it has been laid back in its sling or on its string since the last throw landed
+    private bool _missileLetGo;        // this throw went further than the camera may back off (<see cref="ThrowMostDistance"/>): the camera is home and the missile leaves the frame
     private ulong _landedAtMs;         // when the last throw came to rest (real time), 0 while it is still going
 
     /// <summary>How long the camera stays on a throw's landing before going back to the machine, real seconds.</summary>
     private const float LandingHold = 2.5f;
+
+    /// <summary>
+    /// The furthest the camera backs off to keep a throw in frame, metres from the pivot (#202). A bolt that rests
+    /// 126 m out would need 180 m, and the machine (1.2 m wide) is then a speck for the 10 s the bolt slides on. Past
+    /// this the throw is let go: the camera eases home, and the missile leaves the frame with its dotted trail. The
+    /// torsion catapult's 29.7 m needs 46 m and the trebuchet's 17.7 m about 27 m: both are inside it, and still
+    /// followed to their landings. (A fast throw never gets this far: see <see cref="ThrowMostSpeed"/>.)
+    /// </summary>
+    private const float ThrowMostDistance = 60f;
+
+    /// <summary>
+    /// A missile faster than this (m/s) is not followed at all (#202): the camera eases, so a 33 m/s bolt is out of
+    /// reach after a second and the camera would only swell out to <see cref="ThrowMostDistance"/> and back, the machine
+    /// a speck on the way. The trebuchet's stone leaves at 6.6 m/s and the onager's at 11.7.
+    /// </summary>
+    private const float ThrowMostSpeed = 20f;
 
     /// <summary>
     /// Once a thrown stone or bolt (or a rising lantern) is clear of the machine, eases the camera to look between the
@@ -121,8 +139,13 @@ public partial class Main
             StartTrail(_current, _follow);   // the next throw: a new trail from the seat
             _trailStart = _trailLastDot = _missileSeat = seat;
         }
-        bool home = atSeat || (_trailLanded && _landedAtMs > 0 && (Time.GetTicksMsec() - _landedAtMs) / 1000f > LandingHold);
-        Vector3 wantPivot;
+        if (!atSeat && !_missileLetGo && _follow.LinearVelocity.Length() > ThrowMostSpeed)
+        {
+            _missileLetGo = true;
+            if (_framingReport) GD.Print($"[framing] {_currentName}: the throw leaves at {_follow.LinearVelocity.Length():F1} m/s (most followed {ThrowMostSpeed:F0}): let go, the camera stays at the machine (home {_homeDistance:F1} m)");
+        }
+        bool home = atSeat || _missileLetGo || (_trailLanded && _landedAtMs > 0 && (Time.GetTicksMsec() - _landedAtMs) / 1000f > LandingHold);
+        Vector3 wantPivot = _homePivot;
         float wantDistance;
         if (home)
         {
@@ -142,9 +165,16 @@ public partial class Main
                 ? halfSpan * 1.25f / tanHalf
                 : halfSpan / (tanHalf * vp.X / vp.Y * clear.Size.X / vp.X);
             wantDistance = Mathf.Max(_homeDistance, distance);
+            if (wantDistance > ThrowMostDistance)
+            {
+                _missileLetGo = true;
+                if (_framingReport) GD.Print($"[framing] {_currentName}: the throw would need {wantDistance:F0} m of back-off (most {ThrowMostDistance:F0} m): let go, the camera goes back to the machine (home {_homeDistance:F1} m)");
+                wantPivot = _homePivot;
+                wantDistance = _homeDistance;
+            }
             var mid = (_missileSeat + target) / 2;
             float perPixel = 2 * wantDistance * tanHalf / vp.Y;
-            wantPivot = mid with { Y = Mathf.Max(mid.Y, _homePivot.Y) } + _camera.GlobalBasis.X * (vp.X / 2 - clear.GetCenter().X) * perPixel;
+            if (!_missileLetGo) wantPivot = mid with { Y = Mathf.Max(mid.Y, _homePivot.Y) } + _camera.GlobalBasis.X * (vp.X / 2 - clear.GetCenter().X) * perPixel;
         }
         if (_orbit.Pivot.DistanceTo(wantPivot) < 0.005f && Mathf.Abs(_orbit.Distance - wantDistance) < 0.005f) return;
         _orbit.Pivot = _orbit.Pivot.Lerp(wantPivot, 0.06f);
