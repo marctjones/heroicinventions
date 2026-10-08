@@ -254,7 +254,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
         <thead><tr><th>Night heat</th><th>Amount</th><th>Verdict</th></tr></thead>
         <tbody>
           <tr><td class="name">Hot rocks</td><td class="num">about 40 kg of basalt at 200 °C a sol, for a tight vault (modelled)</td><td>Free material from the backhoe; the Roman hypocaust stored heat the same way. A membrane tent needs 60–120 kg.</td></tr>
-          <tr><td class="name">Hot water, heated by mirrors by day</td><td class="num">about 33 kg, 60 → 10 °C, per 7 MJ (arithmetic)</td><td>Water's high heat capacity is the lesson, but it must be mined, melted and kept liquid, so rock wins on the fastest route.</td></tr>
+          <tr><td class="name">Hot water, heated by mirrors by day</td><td class="num">about 56 kg through a 6 W/K film (about 37 kg if stirred) to hold a 2 W/K room above 0 °C all night (simulated, #71). The arithmetic said 33 kg, but it assumed a steady 160 W; a cooling tank gives less and less, and 33 kg leaves the room at −14 °C at dawn</td><td>Water's high heat capacity is the lesson, but it must be mined, melted and kept liquid, so rock wins on the fastest route.</td></tr>
           <tr><td class="name">Wood fire</td><td class="num">about 0.5 kg of wood per 7 MJ (arithmetic)</td><td>A 10 m² greenhouse grows about 5 kg a year: only about 10 nights. A top-up, not the main source.</td></tr>
         </tbody>
       </table>
@@ -368,7 +368,7 @@ td.needs { color: var(--mars); font-weight: 600; white-space: nowrap; }
       <table>
         <thead><tr><th>Claim</th><th>How checked</th><th>Result</th><th>Design change</th></tr></thead>
         <tbody>
-          <tr><td class="name">11 kg of rock carries a vault through the night</td><td>Model</td><td class="needs">Wrong. A fresh vault's walls start at −55 °C and soak up heat for weeks; with a 1 m cavity the bank is at −35 °C at 03:00 on night 1</td><td>A tight cavity and about 40 kg a sol; works from night 1 even from a frozen bank</td></tr>
+          <tr><td class="name">11 kg of rock carries a vault through the night</td><td>Model</td><td class="needs">Wrong. A fresh vault's walls start at −55 °C and soak up heat for weeks; with a 1 m cavity the bank is at about −50 °C at 03:00 on night 1 (simulated, #71; an earlier model said −35 °C)</td><td>A tight cavity and about 40 kg a sol; works from night 1 even from a frozen bank (simulated: +4.3 °C at 03:00 with 40 kg; the threshold is about 36 kg)</td></tr>
           <tr><td class="name">A vault beats a membrane tent</td><td>Model</td><td class="built">Holds, by less than claimed: the tight vault needs about 40 kg of rock, the tent 60–120 kg</td><td>None</td></tr>
           <tr><td class="name">Regolith conductivity about 0.04 W/(m·K)</td><td>Source: InSight measured 0.039</td><td class="built">Confirmed. The vault design works across 0.02–0.08, fails the first two nights at 0.15</td><td>None</td></tr>
           <tr><td class="name">A thermostat can meter the heat</td><td>Model</td><td class="built">Holds if the closed bin leaks 0.1 W/K or less; a 0.5 W/K lid lets the bank reach 64 °C</td><td>The bin's lid must be well insulated</td></tr>
