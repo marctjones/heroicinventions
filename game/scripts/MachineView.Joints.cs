@@ -29,6 +29,7 @@ public partial class MachineView
 
     private void BuildJoints()
     {
+        BuildTethers();   // tether ropes (#155): the ropes are built by now
         foreach (var spec in Runtime.Def.Joints)
         {
             RigidBody3D? Body(string id) => id == "world" ? null : _bodiesById.GetValueOrDefault(id);

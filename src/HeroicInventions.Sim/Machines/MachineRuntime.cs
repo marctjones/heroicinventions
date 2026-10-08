@@ -756,6 +756,7 @@ public sealed class MachineRuntime
         BuildGrips(def);
         BuildCams(def);
         BuildRatchets(def);
+        BuildCatches(def);   // after the ratchets: a pawl is one
         BuildHoppers(def);
         BuildTriggers(def);
         BuildFollows(def);
@@ -823,6 +824,47 @@ public sealed class MachineRuntime
             _getters[$"{id}.peak-force"] = () => ratchet.PeakForce;
         }
     }
+
+    // ---- Catches, pawls and tethers (issue #155) ----
+    private readonly Dictionary<string, Catch> _catches = [];
+
+    /// <summary>
+    /// What holds a machine until it is let go, by the id of the lever, ratchet or rope that holds: a lever's
+    /// catch (#:catch-deg), every ratchet's pawl, a tether rope (#:tether). The view does the holding.
+    /// </summary>
+    public IReadOnlyDictionary<string, Catch> Catches => _catches;
+
+    private void BuildCatches(MachineDef def)
+    {
+        static double After(PartSpec p) => p.Props.GetValueOrDefault("release-after") is SNumber s ? s.Value : double.PositiveInfinity;
+        foreach (var part in def.Parts)
+        {
+            string id = part.Id;
+            if (part.Kind == "lever" && part.Props.GetValueOrDefault("catch-deg") is SNumber)
+            {
+                var c = _catches[id] = new Catch(id, "catch", After(part));
+                _getters[$"{id}.catch"] = () => c.HeldAt(Time) ? 1 : 0;           // 1 holds the arm at #:catch-deg, 0 lets it go
+                _setters[$"{id}.catch"] = c.Command;
+                _getters[$"{id}.catch-load"] = () => Math.Abs(c.Load);            // N·m the catch carries
+                _getters[$"{id}.catch-peak-load"] = () => c.PeakLoad;
+            }
+            else if (part.Kind == "ratchet")
+            {
+                var c = _catches[id] = new Catch(id, "pawl", After(part));
+                _getters[$"{id}.pawl"] = () => c.HeldAt(Time) ? 1 : 0;            // 1 engaged, 0 lifted: the drum runs back
+                _setters[$"{id}.pawl"] = c.Command;
+            }
+        }
+        foreach (var rope in def.Ropes.Where(r => r.Tether))
+        {
+            string id = rope.Id;
+            var c = _catches[id] = new Catch(id, "tether", rope.ReleaseAfter ?? double.PositiveInfinity);
+            _getters[$"{id}.tether"] = () => c.HeldAt(Time) ? 1 : 0;              // 1 tied, 0 let go
+            _setters[$"{id}.tether"] = c.Command;
+            _getters[$"{id}.tether-load"] = () => c.Load;                         // N it holds
+        }
+    }
+    // ---- end catches ----
 
     private void BuildCams(MachineDef def)
     {

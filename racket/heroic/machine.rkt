@@ -73,7 +73,10 @@
 ;; release-deg: see the rope clause; diameter in m; bar: the material of the
 ;; fixed bars at the over points, or #f for turning pulleys (no friction);
 ;; mu: a friction coefficient that overrides the materials', or #f.
-(struct rope-spec (id from to length over wind-on release-deg material diameter nocked turns bar mu loc [links #:auto #:mutable]) #:transparent)
+;; tether: #t for a tether (issue #155), held until its field lets go;
+;; release-after: the seconds a tether lets go by itself, or #f.
+(struct rope-spec (id from to length over wind-on release-deg material diameter nocked turns bar mu loc
+                      [links #:auto #:mutable] [tether #:auto #:mutable] [release-after #:auto #:mutable]) #:transparent)
 ;; parts: wheels fixed on one axle, first one first — they turn as one. One
 ;; of them may be a water wheel, windmill or jet wheel (turned by the sim).
 (struct arbor-spec (parts loc) #:transparent)
@@ -797,6 +800,12 @@
     ;; (N·m per radian) pulling the lever toward #:spring-rest-deg.
     ;; #:section makes the beam square, that many metres a side, instead of
     ;; the default plank (2.5 cm × 22 cm) — a catapult's arm is a stout rod.
+    ;; #:catch-deg puts a catch on the hinge (issue #155): it holds the arm
+    ;; at that angle, carrying whatever tries to turn it (field catch-load,
+    ;; N·m), until its field (id catch) is set to 0. Set to 1 again it waits
+    ;; for the arm to come back to that angle and holds it there.
+    ;; #:release-after s opens it by itself s seconds in (until demo
+    ;; operators exist, #153); a command cancels that.
     (pattern (lever id:id
                     (~alt (~once (~seq #:at at:vec3))
                           (~once (~seq #:length length-v:expr))
@@ -815,9 +824,13 @@
                           (~optional (~seq (~and mu-kw #:bearing-mu) mu-v:expr))
                           (~optional (~seq (~and drag-kw #:bearing-drag) drag-v:expr))
                           (~optional (~seq (~and wear-kw #:bearing-wear) wear-v:expr))
+                          (~optional (~seq #:catch-deg catch-v:expr))
+                          (~optional (~seq #:release-after after-v:expr))
                           (~optional (~seq #:heading-deg heading-v:expr))) ...)
       #:fail-when (and (not (attribute journal-v)) (or (attribute mu-kw) (attribute drag-kw) (attribute wear-kw)))
                   "a lever's bearing needs a #:bearing-radius (its pin's radius, m)"
+      #:fail-when (and (attribute after-v) (not (attribute catch-v)) #'after-v)
+                  "#:release-after is when a lever's catch opens by itself; give #:catch-deg too"
       #:attr info (pinfo #'id 'lever (attribute mat) '())
       #:with expr #`(part 'id 'lever 'mat (list at.x at.y at.z)
                           (list (cons 'length length-v) (cons 'start-angle-deg (~? angle-v 0))
@@ -835,6 +848,9 @@
                                            (cons 'bearing-drag (~? drag-v 0))
                                            (cons 'bearing-wear (~? wear-v 0)))
                                           ()))
+                                ;; a catch (#155) only: other levers' clauses stay as they were
+                                (~@ . (~? ((cons 'catch-deg catch-v)) ()))
+                                (~@ . (~? ((cons 'release-after after-v)) ()))
                                 (~@ . (~? ((cons 'heading-deg heading-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
@@ -1091,6 +1107,9 @@
     ;; valley its pawl is in; #:reverse #t lets it turn the other way. The pawl
     ;; pushes at the teeth's circle, #:radius (default one and a half times the
     ;; wheel's): a load m on a drum r puts m g r on it, and the pawl m g r / R.
+    ;; Its field (id pawl) lifts the pawl at 0 (issue #155): the wheel runs back
+    ;; freely; at 1 it drops into the valley the wheel has reached.
+    ;; #:release-after s lifts it by itself s seconds in (until demo operators, #153).
     ;; A loose ball: a solid sphere #:radius m across, of #:material, free to roll
     ;; and drop. It rolls where a block slides: Jolt gives it a sphere's moment of
     ;; inertia (2/5 m r^2), so down a slope of angle theta it gains speed at
@@ -1139,11 +1158,14 @@
                             (~optional (~seq #:teeth teeth-v:expr))
                             (~optional (~seq #:radius radius-v:expr))
                             (~optional (~seq #:reverse reverse-v:expr))
+                            (~optional (~seq #:release-after after-v:expr))
                             (~optional (~seq #:material mat:id))) ...)
       #:attr info (rcinfo #'id #'wheel-id)
       #:with expr #`(part 'id 'ratchet '(~? mat iron) (list at.x at.y at.z)
                           (list (cons 'on 'wheel-id) (cons 'teeth (~? teeth-v 12)) (cons 'radius (~? radius-v 0))
-                                (cons 'reverse (~? reverse-v #f)))
+                                (cons 'reverse (~? reverse-v #f))
+                                ;; the pawl lifted by itself (#155) only: other ratchets' clauses stay as they were
+                                (~@ . (~? ((cons 'release-after after-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1855,6 +1877,12 @@
     ;;             over all of them. mu is the rope's and the bar's
     ;;             friction combined, sqrt(mu1 mu2), or #:mu to set it
     ;;             (a greased bar, say)
+    ;;   #:tether #t  a tether (issue #155): it holds until its field
+    ;;             (id tether) is set to 0, then lets go of both ends — a
+    ;;             lantern's mooring, the cord a weight hangs by. 1 ties it
+    ;;             again, if its ends are within its length.
+    ;;             #:release-after s lets it go by itself s seconds in
+    ;;             (until demo operators exist, #153); a command cancels that
     (pattern (rope id:id
                    (~alt (~optional (~seq #:from from:rope-end))
                          (~optional (~seq #:wind-on drum:id))
@@ -1868,8 +1896,12 @@
                          (~optional (~seq #:turns sheave:id))
                          (~optional (~seq #:bar bar-mat:id))
                          (~optional (~seq #:mu mu-v:expr))
-                         (~optional (~seq #:links links-v:expr))) ...)
+                         (~optional (~seq #:links links-v:expr))
+                         (~optional (~seq #:tether tether-v:expr))
+                         (~optional (~seq #:release-after after-v:expr))) ...)
       #:fail-unless (or (attribute from) (attribute drum)) "a rope needs a #:from end or a #:wind-on drum"
+      #:fail-when (and (attribute after-v) (not (attribute tether-v)) #'after-v)
+                  "#:release-after is when a tether lets go by itself; give #:tether #t too"
       #:fail-when (and (attribute links-v) (or (attribute drum) (attribute over) (attribute sheave) (attribute bar-mat) (attribute rel-v)) #'links-v)
                   "a chain of #:links hangs free between its two ends: no #:wind-on, #:over, #:turns, #:bar or #:release-deg"
       #:fail-when (let ([n (and (attribute links-v) (syntax-e #'links-v))])
@@ -1893,6 +1925,9 @@
                                         #,(loc-of this-syntax))])
                       ;; a chain of rigid links pinned end to end (issue #31)
                       (set-rope-spec-links! r (~? links-v #f))
+                      ;; a tether (issue #155)
+                      (set-rope-spec-tether! r (and (~? tether-v #f) #t))
+                      (set-rope-spec-release-after! r (~? after-v #f))
                       r))
 
     ;; Wheels fixed on one axle (an arbor): a treadwheel and the drum its

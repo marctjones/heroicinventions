@@ -113,6 +113,8 @@ public static class MachineWriter
             Tagged("bar", SymOrFalse(r.Bar)),
             Tagged("mu", NumOrFalse(r.Mu)),
             .. r.Links is { } n ? [Tagged("links", Num(n))] : Array.Empty<SExpr>(),   // a chain (#31) only
+            .. r.Tether ? [Tagged("tether", new SBool(true))] : Array.Empty<SExpr>(),   // a tether (#155) only
+            .. r.ReleaseAfter is { } after ? [Tagged("release-after", Num(after))] : Array.Empty<SExpr>(),
             SrcLoc(r.Location)]);
 
     private static SExpr InflowClause(SourceSpec s) =>

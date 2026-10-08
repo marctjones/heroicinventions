@@ -56,6 +56,14 @@
 ;; The control carries no flame, so its inside stays at 15 C and its lift
 ;; stays 0 against a weight of 0.687 N: it never leaves the ground.
 ;;
+;; Moored (issue #155). The lit lantern is tied down by a 15 cm cord from
+;; its mouth to a peg 2 cm into the ground, as a lantern is held until it
+;; pulls: (mooring tether 0) lets it go, and until demo operators exist it
+;; is let go 40 s in. Held, it rises the 13 cm of slack once it is light
+;; enough, and then the cord carries what the lift has over the weight,
+;; lift - 0.687 N (mooring tether-load). Let go at 40 s it climbs from
+;; there; let go at the start (the tests do) it flies as worked above.
+;;
 ;; On Mars (kongming-lantern-mars) 610 Pa of air at -63 C is 0.0152 kg/m3:
 ;; the lift can never reach rho_out g V = 0.0152 kg, below the 0.070 kg of
 ;; the lantern, however hot the inside: it stays on the ground.
@@ -65,6 +73,8 @@
   (envelope lantern #:at (0 0 0) #:volume 1 #:envelope-mass (g 50) #:burner-mass (g 20)
             #:burner-power (W 800) #:fuel (g 10) #:skin-conductance 15
             #:height (m 1.2) #:drag-coefficient 0.8 #:material hemp)
+  (rope mooring #:from (world 0 (cm -2) 0) #:to (lantern 0 (m -0.6) 0) #:length (cm 15)
+        #:diameter (mm 3) #:tether #t #:release-after 40)
   (envelope control #:at ((m 3) 0 0) #:volume 1 #:envelope-mass (g 50) #:burner-mass (g 20)
             #:burner-power 0 #:fuel (g 10) #:skin-conductance 15
             #:height (m 1.2) #:drag-coefficient 0.8 #:material hemp))

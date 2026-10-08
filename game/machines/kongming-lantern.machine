@@ -2,5 +2,6 @@
 (machine kongming-lantern
   (source "Kongming (Zhuge Liang) sky lantern: a paper envelope lifted by its own hot air")
   (ambient 15.0)
-  (part lantern envelope (material hemp) (at 0.0 0.0 0.0) (props (volume 1.0) (envelope-mass 0.05) (burner-mass 0.02) (burner-power 800.0) (fuel 0.01) (fuel-energy 40000000.0) (skin-conductance 15.0) (temperature #f) (height 1.2) (drag-coefficient 0.8)) (ports) (srcloc "racket/machines/kongming-lantern.rkt" 65 2))
-  (part control envelope (material hemp) (at 3.0 0.0 0.0) (props (volume 1.0) (envelope-mass 0.05) (burner-mass 0.02) (burner-power 0.0) (fuel 0.01) (fuel-energy 40000000.0) (skin-conductance 15.0) (temperature #f) (height 1.2) (drag-coefficient 0.8)) (ports) (srcloc "racket/machines/kongming-lantern.rkt" 68 2)))
+  (part lantern envelope (material hemp) (at 0.0 0.0 0.0) (props (volume 1.0) (envelope-mass 0.05) (burner-mass 0.02) (burner-power 800.0) (fuel 0.01) (fuel-energy 40000000.0) (skin-conductance 15.0) (temperature #f) (height 1.2) (drag-coefficient 0.8)) (ports) (srcloc "racket/machines/kongming-lantern.rkt" 73 2))
+  (part control envelope (material hemp) (at 3.0 0.0 0.0) (props (volume 1.0) (envelope-mass 0.05) (burner-mass 0.02) (burner-power 0.0) (fuel 0.01) (fuel-energy 40000000.0) (skin-conductance 15.0) (temperature #f) (height 1.2) (drag-coefficient 0.8)) (ports) (srcloc "racket/machines/kongming-lantern.rkt" 78 2))
+  (rope mooring (from world 0.0 -0.02 0.0) (to lantern 0.0 -0.6 0.0) (length 0.15) (over) (wind-on #f) (release-deg #f) (material hemp) (diameter 0.003) (nocked #f) (turns #f) (bar #f) (mu #f) (tether #t) (release-after 40.0) (srcloc "racket/machines/kongming-lantern.rkt" 76 2)))

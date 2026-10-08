@@ -980,7 +980,7 @@
   ;; energy, spin included, never climbs: no tick ends more than 1% of the
   ;; start above the lowest it has been, and nothing is ever above the start.
   (when (godot-available?)
-    (define run (godot-simulate 'trebuchet #:seconds 12 #:sample-dt 1/120))
+    (define run (godot-simulate 'trebuchet #:seconds 12 #:sample-dt 1/120 #:set '((arm catch 0))))   ; let go at once (#155)
     (define energy (values-of run '(scene mechanical)))
     (define start (car energy))
     (check-= start 856.24 0.01 "73 kg of granite 0.81 m up on a 7 kg arm, at rest")
@@ -992,6 +992,81 @@
     (check-true (< (max-of run '(cw-chain stretch)) 10) (format "the chain stretched at most ~a mm" (max-of run '(cw-chain stretch))))
     ;; throws toward -X; traced at 13.1 m
     (check-true (< (final-of run '(stone x)) -12) (format "stone landed at x = ~a" (final-of run '(stone x))))))
+
+;; ---------------------------------------------------------------------------
+;; Catch and release (issue #155): catches on hinges, pawls, tethers. The working is in each blueprint's header.
+;; godot-simulate's #:set acts before the first step (its time, if given, is dropped on this base: #150), so a
+;; release mid-run is the blueprint's own #:release-after, and (x catch 0) at the start is "let go at once".
+
+;; How far a body is, flat, from where it started when it first comes back to the ground after a throw: back within
+;; 15 cm of its starting height after rising half a metre, a metre or more out (the game's [trail] rule, Main.Trail.cs).
+(define (first-touchdown run body)
+  (define (v f k) (cadr (assq (string->symbol (format "~a.~a" body k)) (cdr f))))
+  (define-values (x0 y0 z0) (values (v (car run) 'x) (v (car run) 'y) (v (car run) 'z)))
+  (for/fold ([highest 0] [touchdown #f] #:result touchdown) ([f run])
+    (define across (sqrt (+ (sqr (- (v f 'x) x0)) (sqr (- (v f 'z) z0)))))
+    (define h (max highest (- (v f 'y) y0)))
+    (values h (or touchdown (and (> h 0.5) (< (- (v f 'y) y0) 0.15) (> across 1) across)))))
+
+(test-case "Trebuchet on its catch (#155): held 3 s it carries 95.8 N.m, and let go it throws as one let go at once, within 2%"
+  (when (godot-available?)
+    (define held (godot-simulate 'trebuchet #:seconds 7 #:sample-dt 1/120))
+    (define at-once (godot-simulate 'trebuchet #:seconds 4 #:sample-dt 1/120 #:set '((arm catch 0))))
+    ;; 72.9 kg x 9.81 x 0.27 m x cos 50 = 124.1 N.m from the counterweight, less the beam's own 7.13 x 9.81 x 0.63 x cos 50
+    ;; = 28.3 N.m the other way
+    (define cw (* 2700 (expt 0.3 3) 9.81 0.27 (cos (* pi 50/180))))
+    (define beam (* 720 1.8 0.025 0.22 9.81 0.63 (cos (* pi 50/180))))
+    (check-= cw 124.12 0.01)
+    (check-= (value-at held '(arm catch-load) 2.9) (- cw beam) (* 0.02 (- cw beam)) "the catch carries the counterweight's moment less the beam's")
+    (check-= (value-at held '(arm catch) 2.9) 1 0)
+    (check-= (value-at held '(arm catch) 3.1) 0 0 "and lets go at 3 s")
+    (check-true (< (abs (- (value-at held '(stone x) 2.9) (value-at held '(stone x) 0))) 1e-3) "nothing moves while it holds")
+    (define d-held (first-touchdown held 'stone))
+    (define d-once (first-touchdown at-once 'stone))
+    (check-not-false (and d-held d-once) "both stones flew and came down")
+    (check-= d-held d-once (* 0.02 d-once) (format "first touchdown ~a m out held 3 s, ~a m let go at once" d-held d-once))))
+
+(test-case "Onager and catapulta catches (#155) carry their skeins' pull: k (rest - angle) less the weights on the arm"
+  (when (godot-available?)
+    ;; onager: 150 x 120 degrees = 314.2 N.m, less the oak arm's 2.59 kg at 0.5 m and the 2.70 kg stone at 1 m
+    (define onager (godot-simulate 'torsion-catapult #:seconds 2.5 #:sample-dt 0.1))
+    (define expected (- (* 150 (* pi 120/180)) (* 720 0.06 0.06 1.0 9.81 0.5) (* 2700 0.001 9.81 1.0)))
+    (check-= (value-at onager '(arm catch-load) 1.9) expected (* 0.02 expected))
+    (check-= (value-at onager '(arm angle) 1.9) 0 0.1 "held where it was winched to")
+    (check-true (> (value-at onager '(arm angle) 2.5) 30) "loosed at 2 s, it swings up")
+    ;; catapulta, held by command: 300 x (60 + 40) degrees each; its arms turn about the vertical
+    (define catapulta (godot-simulate 'vitruvian-catapulta #:seconds 2 #:sample-dt 0.1 #:set '((right-arm catch 1) (left-arm catch 1))))
+    (for ([arm '(right-arm left-arm)])
+      (check-= (value-at catapulta (list arm 'catch-load) 1.9) (* 300 (* pi 100/180)) 10.0))))
+
+(test-case "Ratchet windlass, its pawl lifted 2 s in (#155): the load lowers at m g / (m + I/r^2) = 7.88 m/s2, as the free one does"
+  (when (godot-available?)
+    (define run (godot-simulate 'ratchet-windlass #:seconds 2.6 #:sample-dt 1/120))
+    (define I (* 720 6.797550167426925e-5))                   ; the drum's shape, about its axle
+    (define m (* 2700 (expt 0.195 3)))
+    (define a (/ (* m 9.81) (+ m (/ I (sqr 0.1)))))
+    (check-= a 7.883 0.002)
+    (check-= (value-at run '(lower-pawl pawl) 1.9) 1 0)
+    (check-= (value-at run '(lower-pawl pawl) 2.1) 0 0)
+    (check-true (< (abs (- (value-at run '(lower-load y) 1.9) 1.0)) 0.012) "held until then")
+    (define measured (/ (- (value-at run '(lower-load vy) 2.15) (value-at run '(lower-load vy) 2.35)) 0.2))
+    (check-= measured a (* 0.03 a) (format "lowering at ~a m/s2" measured))
+    (define free (/ (- (value-at run '(free-load vy) 0.15) (value-at run '(free-load vy) 0.35)) 0.2))
+    (check-= measured free (* 0.02 free) "the same as the windlass with no pawl")))
+
+(test-case "Tethers (#155): trip-sluice's cord drops the weight 1 s in, the trigger fires 0.335 s later; the moored lantern's cord carries lift - weight"
+  (when (godot-available?)
+    (define sluice (godot-simulate 'trip-sluice #:seconds 2 #:sample-dt 0.05))
+    (check-= (value-at sluice '(weight-cord tension) 0.9) (* 7700 0.001 9.81) 1.0 "the cord carries the 7.7 kg weight")
+    (check-= (final-of sluice '(tripwire fired-at)) (+ 1 (sqrt (/ (* 2 0.55) 9.81))) 0.012 "1 s + sqrt(2 h / g)")
+    (check-= (final-of sluice '(gate opening)) 0.05 1e-9)
+    (define lantern (godot-simulate 'kongming-lantern #:seconds 44 #:sample-dt 0.5))
+    (define (at k t) (value-at lantern (list 'lantern k) t))
+    (check-= (at 'y 33.0) 0.6 0.002 "on the ground until it is light enough")
+    (check-= (at 'y 38.0) 0.73 0.003 "then up the 13 cm of slack, and held")
+    (check-= (value-at lantern '(mooring tension) 38.0) (- (at 'lift 38.0) (at 'weight 38.0)) 0.003 "the cord carries lift - weight")
+    (check-= (value-at lantern '(mooring tether) 39.5) 1 0)
+    (check-true (> (at 'y 44.0) 2.0) "let go at 40 s, it climbs")))
 
 (test-case "Vitruvian catapulta: the bolt stays on the ground and comes to rest a sensible distance out"
   ;; The floor used to be 100 m across; the bolt landed ~11 m out, skidded
@@ -1392,7 +1467,7 @@
 
 (test-case "Onager: the stone flies toward -X and lands ~19 m out, and the machine never gains energy"
   (when (godot-available?)
-    (define run (godot-simulate 'torsion-catapult #:seconds 8 #:sample-dt 0.05))
+    (define run (godot-simulate 'torsion-catapult #:seconds 8 #:sample-dt 0.05 #:set '((arm catch 0))))   ; loosed at once (#155)
     (define start (value-at run '(scene mechanical) 0))
     (check-true (<= (apply max (values-between run '(scene mechanical) 0.5 8)) (* 1.02 start)))
     (check-true (< (final-of run '(stone x)) -15) (format "stone at x = ~a" (final-of run '(stone x))))))
@@ -1471,7 +1546,7 @@
   ;; t = sqrt(2 h / g) = 0.3349 s, or 0.3368 s with the engine's default 0.1/s damping
   ;; (until #33); the physics ticks at 120 Hz, so within a tick or two of either
   (when (godot-available?)
-    (define run (godot-simulate 'trip-sluice #:seconds 4 #:sample-dt 0.05))
+    (define run (godot-simulate 'trip-sluice #:seconds 4 #:sample-dt 0.05 #:set '((weight-cord tether 0))))   ; the cord let go at once (#155)
     (define fired-at (final-of run '(tripwire fired-at)))
     (check-= fired-at (sqrt (/ (* 2 0.55) 9.81)) 0.012 "sqrt(2 h / g)")
     (check-= (final-of run '(tripwire fired)) 1 0)
@@ -2034,7 +2109,7 @@
     ;; with the body (drag 1/2 rho 0.8 (V/h = 0.833 m2) v^2 on its 1.2 m height) gives:
     ;;   lift passes weight at 33.40 s; 2.007 m off the ground at 40 s; 4.887 m at 45 s, climbing 0.649 m/s.
     ;; Its centre rests at h / 2 = 0.6 m.
-    (define run (godot-simulate 'kongming-lantern #:seconds 50 #:sample-dt 0.1))
+    (define run (godot-simulate 'kongming-lantern #:seconds 50 #:sample-dt 0.1 #:set '((mooring tether 0))))   ; unmoored from the start (#155)
     (define (field f path)
       (define key (string->symbol (format "~a.~a" (car path) (cadr path))))
       (cadr (assq key (cdr f))))
@@ -2599,14 +2674,15 @@
 ;; after its second snap before #80, now agree to a fifth of a millimetre for all six seconds.
 (test-case "Existing machines turned 53 degrees (Jolt): cradle, trebuchet, Roman crane, onager, lunar train and wagons behave as unturned"
   (when (godot-available?)
-    (define world (godot-simulate-world 'headings-machines #:seconds 6 #:sample-dt 1/4))
+    (define world (godot-simulate-world 'headings-machines #:seconds 9 #:sample-dt 1/4))
     (define (bodies-of frame)
       (remove-duplicates (for/list ([kv (cdr frame)] #:when (regexp-match #rx"[.]x$" (symbol->string (car kv))))
                            (regexp-replace #rx"[.]x$" (symbol->string (car kv)) ""))))
     ;; (machine at-x until position-tolerance always): every body is compared until `until`; the `always` bodies, the
-    ;; whole 6 s
-    (for ([spec '((cradle 0 6 0.003 ()) (trebuchet 150 2.0 0.05 (arm counterweight)) (crane 300 6 0.005 ())
-                  (onager 450 1.5 0.01 (arm)) (train 600 6 0.003 ()) (wagons 750 6 0.01 ()))])
+    ;; whole run. The trebuchet and the onager start held on their catches (#155) and let go 3 s and 2 s in, so their
+    ;; windows are the 2.0 s and 1.5 s of flight they always had, shifted that much, in a 9 s run
+    (for ([spec '((cradle 0 6 0.003 ()) (trebuchet 150 5.0 0.05 (arm counterweight)) (crane 300 6 0.005 ())
+                  (onager 450 3.5 0.01 (arm)) (train 600 6 0.003 ()) (wagons 750 6 0.01 ()))])
       (define-values (m ox until tol always) (apply values spec))
       (define a (hash-ref world (string->symbol (format "~a-0" m))))
       (define b (hash-ref world (string->symbol (format "~a-53" m))))

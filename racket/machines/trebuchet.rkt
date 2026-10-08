@@ -23,6 +23,16 @@
 ;;
 ;; Throws toward -X. Everything here is rope, hinge and falling weight —
 ;; nothing scripts the flight.
+;;
+;; It starts held on its catch (issue #155), as a real one waits for the
+;; trigger to be pulled: (arm catch 0) lets it go, and until demo operators
+;; exist it lets itself go 3 s in. Held, the catch carries the counterweight's
+;; moment about the axle, 72.9 kg (granite, 0.3 m a side) x 9.81 x 0.27 m x
+;; cos 50 = 124.1 N.m, less the beam's own, which leans the other way: 7.13 kg
+;; of oak (1.8 x 0.025 x 0.22 m) with its middle 0.63 m out on the long side,
+;; 7.13 x 9.81 x 0.63 x cos 50 = 28.3 N.m. So 95.8 N.m (arm catch-load). Let
+;; go after the counterweight has settled on its chain, it throws as it did
+;; let go at once: the stone first touches down the same distance out.
 (require racket/math)
 
 (define arm-length (m 1.8))
@@ -48,7 +58,8 @@
 (define-machine trebuchet
   #:source "Classic mechanics demonstration (medieval; its lever is Archimedes')"
   (lever arm #:at ((car pivot) (cadr pivot) 0) #:length arm-length #:material oak
-         #:pivot-fraction pivot-fraction #:start-angle-deg cocked-deg #:limit-deg 140 #:damping 0.2)
+         #:pivot-fraction pivot-fraction #:start-angle-deg cocked-deg #:limit-deg 140 #:damping 0.2
+         #:catch-deg cocked-deg #:release-after 3)
   (block counterweight #:at ((car cw-at) (cadr cw-at) 0) #:size cw-size #:material granite)
   (rope cw-chain #:from (arm (- short-arm) 0 0) #:to (counterweight 0 (/ cw-size 2) 0)
         #:length chain #:material iron #:diameter (cm 1.5))

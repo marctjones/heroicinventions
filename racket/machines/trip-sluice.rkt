@@ -1,6 +1,7 @@
 #lang heroic
-;; A tripwire (issue #32). A 10 cm iron weight hangs in the air 1.5 m up,
-;; over a stone catch. Below it, 95 cm up, is a trigger: a box 10 cm deep
+;; A tripwire (issue #32). A 10 cm iron weight hangs 1.5 m up on a cord
+;; (a tether, issue #155), over a stone catch. Let go, by (weight-cord
+;; tether 0) or by itself 1 s in until demo operators exist, it falls. Below it, 95 cm up, is a trigger: a box 10 cm deep
 ;; that fires, once, when the weight's middle enters it. What it does is
 ;; open a sluice that was shut: a pool of 300 L stands behind the gate,
 ;; nothing flows until the weight falls, and then the pool runs down the
@@ -9,7 +10,7 @@
 ;; Working it through:
 ;;   fall    the weight's middle drops from 1.5 m to the trigger's top face,
 ;;           0.95 m: h = 0.55 m, so t = sqrt(2 h / g) = sqrt(1.1 / 9.81)
-;;           = 0.3349 s. (The engine's default damping of 0.1 per second,
+;;           = 0.3349 s after the cord lets go: at 1.3349 s. (The engine's default damping of 0.1 per second,
 ;;           which stretched that to 0.3368 s, went with #33.)
 ;;           The physics steps at 120 Hz, so it fires within a tick (8.3 ms)
 ;;           of either.
@@ -30,5 +31,7 @@
         (port inlet #:height (cm 35)))
   (post catch #:at ((m 2) 0 0) #:size ((cm 40) (cm 30) (cm 40)) #:material limestone)
   (block weight #:at ((m 2) (m 1.5) 0) #:size (cm 10) #:material iron)
+  (rope weight-cord #:from (world (m 2) (m 2) 0) #:to (weight 0 (cm 5) 0) #:length (cm 45)
+        #:tether #t #:release-after 1)
   (trigger tripwire #:at ((m 2) (cm 90) 0) #:size ((cm 50) (cm 10) (cm 50)) #:body weight
            #:do ((gate opening 0.05))))
