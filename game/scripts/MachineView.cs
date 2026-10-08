@@ -145,7 +145,11 @@ public partial class MachineView : Node3D
         BuildFracture();
         Skins.FitJoints(this, Surface);   // a collar or ball wherever the physics joins two parts
         Skins.OrientGrain(this);
-        Skins.RecedeStructure(this);   // standing structure recedes; what moves keeps its colour (#167)   // after every part is built: each piece of wood's grain along its length
+        Skins.RecedeStructure(this);
+        Skins.ScreenLabels(this);      // every label the same size on screen, near or far (#148)
+        // and every label added later (an impact's readout, a fracture's tag) the same way
+        GetTree().NodeAdded += OnNodeAdded;
+        TreeExiting += () => GetTree().NodeAdded -= OnNodeAdded;   // standing structure recedes; what moves keeps its colour (#167)   // after every part is built: each piece of wood's grain along its length
         Refresh();
 
         // Baseline for "energy retained": mechanical energy before anything
@@ -161,6 +165,11 @@ public partial class MachineView : Node3D
     /// A part's heading as a turn about the vertical (issue #83): the frame it is built in is the machine's own
     /// turned by this, so its body, axle and slope stand at the heading and its pivot stays where it was put.
     /// </summary>
+    private void OnNodeAdded(Node node)
+    {
+        if (node is Label3D label && IsAncestorOf(label)) Skins.ScreenLabel(label);
+    }
+
     private static Basis YawOf(PartSpec part) => new(Vector3.Up, Mathf.DegToRad((float)MachineDef.HeadingOf(part)));
 
     /// <summary>The axis a wheel or screw turns on, before any heading: #:axis, raised #:tilt-deg.</summary>

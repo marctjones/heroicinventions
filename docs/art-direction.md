@@ -320,3 +320,16 @@ A machine reads as a crane or a mill from how its parts combine, not from any on
 5. **Silhouette check:** `HEROIC_SILHOUETTE=1` draws the machine solid black on white (labels, particles, ground and effects hidden), and `tools/silhouette_sheet.py` crops and sheets the frames. Each mesh gets its own black material, reset every frame. With one shared material, the tank code's per-frame ice colour repainted every mesh white. The same hazard applies to any shared material a builder mutates through `MaterialOverride`.
 
 Frames (`docs/art/skins/`): `recognisable-before-after.png` (pairs: crane, shaduf, trebuchet, noria / sawmill, Heron's fountain, aeolipile, lantern) and `silhouettes-ancient.png`. All eight silhouettes are distinct. The Kongming lantern's two lanterns read as plain cylinders on the ground; an envelope shape would help. legibility.py, sd / sep before → after: crane 42/−65 → 44/−68, shaduf 37/−75 → 40/−81, sawmill 55/−92 → 58/−97, Heron 29/−74 → 30/−77, noria 42/−86 → 42/−87, aeolipile 34/−69 → 34/−70, lantern 41/+83 → 41/+82, trebuchet 16/−135 → 20/−112 (its figure now shares the frame).
+
+### 12.7 Labels at a constant screen size; the trebuchet's opening shot (2026-10-07, #148)
+
+- **Labels** (`Skins.ScreenLabels`, and for labels added mid-run, a `NodeAdded` hook in `MachineView`):
+  - every `Label3D` in a machine is `FixedSize`, at 0.0011 pixel size;
+  - fonts are capped at 28 pt;
+  - outlines are at least 8;
+  - long readouts wrap at 220.
+  - So a close-up's tags (the aeolipile's "kettle") no longer fill the frame, and a wide shot's no longer vanish. Impact readouts, fracture tags and room readouts follow the same rule.
+- **The scale figure's "in front" spots** must not cover the machine's own outline on screen (one hid a block in the drop test). Spots beside the machine are unaffected.
+- **The trebuchet** opens close, from behind its shoulder; the follow camera widens along the throw. Opening frame fill went from about 2% to 9% (`legibility.py`: sd 30, sep −83).
+
+Frames: `docs/art/skins/labels-and-trebuchet.png`.

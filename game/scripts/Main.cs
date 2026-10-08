@@ -90,7 +90,7 @@ public partial class Main : Node3D
         ["lever-demo"] = new(new Vector3(0, 0.75f, 1.5f), new Vector3(0, 0.55f, 0), 42),
         ["inclined-plane-demo"] = new(new Vector3(0, 1.6f, 2.8f), new Vector3(0, 0.3f, -0.6f), 55),
         ["newtons-cradle"] = new(new Vector3(0, 0.75f, 1.0f), new Vector3(0, 0.6f, 0), 38),
-        ["trebuchet"] = new(new Vector3(7.0f, 4.0f, 4.5f), new Vector3(-4.0f, 0.6f, 0), 55), // from behind its shoulder, along the throw (to −x): the flight runs into the clear middle, not under the info panel
+        ["trebuchet"] = new(new Vector3(4.6f, 2.3f, 3.4f), new Vector3(-0.3f, 1.0f, 0), 50), // close on the machine from behind its shoulder; the follow camera widens along the throw (to −x) as the stone flies
         ["torsion-catapult"] = new(new Vector3(5.0f, 2.8f, 3.2f), new Vector3(-4.0f, 0.5f, 0), 55),   // along the throw, as the trebuchet
         ["antikythera-lunar-train"] = new(new Vector3(0.13f, 0.19f, 0.19f), new Vector3(0.022f, 0.09f, 0.004f), 38),
         ["archimedes-screw"] = new(new Vector3(0.5f, 2.2f, 7.0f), new Vector3(0, 1.4f, 0), 50),
