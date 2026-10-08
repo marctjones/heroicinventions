@@ -475,6 +475,14 @@ public partial class TerrainView : Node3D
 
     private int[] _waterTri = [];
 
+    /// <summary>The palette's water at a depth (Shapes.Water), paler where shallow and darker where deep, never the sky's pale blue.</summary>
+    private static Color WaterColour(double depth, bool wet)
+    {
+        float deep = Mathf.Clamp((float)depth / 0.6f, 0, 1);
+        var water = Shapes.Water.Lightened(0.3f).Lerp(Shapes.Water.Darkened(0.3f), deep);
+        return water with { A = wet ? 0.65f + 0.3f * deep : 0 };
+    }
+
     private void DrawWater()
     {
         int nx = _ground.Nx, nz = _ground.Nz;
@@ -490,12 +498,7 @@ public partial class TerrainView : Node3D
             return new Vector3((float)_ground.CellX(i), (float)y, (float)_ground.CellZ(j));
         }
         // the palette's water (Shapes.Water), paler where shallow and darker where deep, never the sky's pale blue
-        Color Colour(int c)
-        {
-            float deep = Mathf.Clamp((float)depths[c] / 0.6f, 0, 1);
-            var water = Shapes.Water.Lightened(0.3f).Lerp(Shapes.Water.Darkened(0.3f), deep);
-            return water with { A = Wet(c) ? 0.65f + 0.3f * deep : 0 };
-        }
+        Color Colour(int c) => WaterColour(depths[c], Wet(c));
         if (_wetTexture is not null)
         {
             // built as bytes and sent once, and only when some cell's wetness changed: per-cell SetPixel cost ~10 ms a frame on the crater
@@ -510,9 +513,12 @@ public partial class TerrainView : Node3D
         // the mesh in one call from arrays (as the ground's is), not vertex by vertex through a SurfaceTool
         if (_waterTri.Length != (nx - 1) * (nz - 1) * 6) _waterTri = new int[(nx - 1) * (nz - 1) * 6];
         int count = 0;
+        bool patched = _ground.Worked.Count > 0;
+        if (patched) DrawPatchWater();   // the water on the rover's worked ground, on its own fine mesh (#200)
         for (int j = 0; j + 1 < nz; j++)
             for (int i = 0; i + 1 < nx; i++)
             {
+                if (patched && InPatch(i, j)) continue;   // the patch's own water mesh is the water there
                 int a = i + j * nx, b = a + 1, c = a + nx, d = c + 1;
                 if (Wet(a) || Wet(b) || Wet(c)) { _waterTri[count++] = a; _waterTri[count++] = b; _waterTri[count++] = c; }
                 if (Wet(b) || Wet(d) || Wet(c)) { _waterTri[count++] = b; _waterTri[count++] = d; _waterTri[count++] = c; }

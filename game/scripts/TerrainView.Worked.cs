@@ -25,6 +25,15 @@ public partial class TerrainView
         public Vector3[] Vertices = [], Normals = [];
         public Color[] Shades = [];
         public int[] Indices = [];
+        public MeshInstance3D? Water;
+        // for each node column (row), the two sample points half a fine cell either side: the fine water column (row) there, or -1
+        // off the patch's grid, and the map's column (row) there
+        public int[] FineCol = [], FineRow = [], MapCol = [], MapRow = [];
+        public float[] Surface = [];
+        public bool[] Wet = [];
+        public int[] Tri = [];
+        public Vector3[] WaterVertices = [], WaterNormals = [];
+        public Color[] WaterColours = [];
     }
 
     private readonly List<Patch> _patches = [];
@@ -46,7 +55,7 @@ public partial class TerrainView
             _shownPatches = _ground.WorkedPatches;
             foreach (var p in _patches.Where(p => !_ground.Worked.Contains(p.Ground)).ToList())
             {
-                p.Node.QueueFree(); p.Body.QueueFree();
+                p.Node.QueueFree(); p.Body.QueueFree(); p.Water?.QueueFree();
                 _patches.Remove(p);
             }
             foreach (var w in _ground.Worked.Where(w => _patches.All(p => p.Ground != w)))
@@ -147,5 +156,115 @@ public partial class TerrainView
         AddChild(body);
         p.Shown = w.Version;
         TickProfile.Stop("worked-shape", t0);
+    }
+}
+
+public partial class TerrainView
+{
+    /// <summary>
+    /// The water on each worked patch (#200), drawn as the map's is but through the patch's own nodes: each node stands at the
+    /// mean surface of the wet cells round it (the patch's fine water cells, and in the patch's outer half-cells, where the
+    /// map's coarse cell holds the water, that cell's), so a trench's water is a trench's width and a channel's follows its
+    /// bends; a dry node sits just under the ground, so the water's edge dips out of sight where it ends.
+    /// </summary>
+    private void DrawPatchWater()
+    {
+        foreach (var p in _patches) DrawPatchWater(p);
+    }
+
+    private void DrawPatchWater(Patch p)
+    {
+        var w = p.Ground;
+        if (w.Water is not { } grid) return;
+        int nx = w.Nx, nz = w.Nz, n = nx * nz;
+        var bed = grid.Bed;
+        double cf = bed.Cell;
+        if (p.FineCol.Length != 2 * nx)
+        {
+            int Col(double x, double x0, double cell, int count) { int i = (int)Math.Floor((x - x0) / cell); return i >= 0 && i < count ? i : -1; }
+            p.FineCol = new int[2 * nx]; p.MapCol = new int[2 * nx]; p.FineRow = new int[2 * nz]; p.MapRow = new int[2 * nz];
+            for (int i = 0; i < nx; i++)
+                for (int s = 0; s < 2; s++)
+                {
+                    double x = w.NodeX(i) + (s == 0 ? -cf / 2 : cf / 2);
+                    p.FineCol[2 * i + s] = Col(x, bed.X0, cf, bed.Nx);
+                    p.MapCol[2 * i + s] = Math.Clamp((int)Math.Floor((x - _ground.X0) / _ground.Cell), 0, _ground.Nx - 1);
+                }
+            for (int j = 0; j < nz; j++)
+                for (int s = 0; s < 2; s++)
+                {
+                    double z = w.NodeZ(j) + (s == 0 ? -cf / 2 : cf / 2);
+                    p.FineRow[2 * j + s] = Col(z, bed.Z0, cf, bed.Nz);
+                    p.MapRow[2 * j + s] = Math.Clamp((int)Math.Floor((z - _ground.Z0) / _ground.Cell), 0, _ground.Nz - 1);
+                }
+            p.Surface = new float[n]; p.Wet = new bool[n]; p.Tri = new int[(nx - 1) * (nz - 1) * 6];
+            p.WaterVertices = new Vector3[n]; p.WaterNormals = new Vector3[n]; p.WaterColours = new Color[n];
+            Array.Fill(p.WaterNormals, Vector3.Up);
+        }
+        var fineDepth = grid.Water.Depths; var mapDepth = _water.Depths;
+        var ground = w.Fine.Heights;
+        bool any = false;
+        for (int j = 0; j < nz; j++)
+            for (int i = 0; i < nx; i++)
+            {
+                double sum = 0; int wet = 0;
+                for (int t = 0; t < 2; t++)
+                    for (int s = 0; s < 2; s++)
+                    {
+                        int fc = p.FineCol[2 * i + s], fr = p.FineRow[2 * j + t];
+                        if (fc >= 0 && fr >= 0)
+                        {
+                            int c = fc + fr * bed.Nx;
+                            if (fineDepth[c] > 0.003) { sum += bed.Heights[c] + fineDepth[c]; wet++; }
+                        }
+                        else
+                        {
+                            int c = p.MapCol[2 * i + s] + p.MapRow[2 * j + t] * _ground.Nx;
+                            if (!_water.UnderPatch(c) && mapDepth[c] > 0.003) { sum += _ground.Heights[c] + mapDepth[c]; wet++; }
+                        }
+                    }
+                int k = i + j * nx;
+                double surface = wet > 0 ? sum / wet : double.NegativeInfinity;
+                p.Wet[k] = surface > ground[k] + 0.002;
+                p.Surface[k] = (float)(p.Wet[k] ? surface + 0.01 : ground[k] - 0.03);
+                any |= p.Wet[k];
+                p.WaterVertices[k] = new Vector3((float)w.NodeX(i), p.Surface[k], (float)w.NodeZ(j));
+                p.WaterColours[k] = WaterColour(surface - ground[k], p.Wet[k]);
+            }
+        p.Water ??= MakeWaterNode(p);
+        if (!any) { p.Water.Mesh = null; return; }
+        int count = 0;
+        for (int j = 0; j + 1 < nz; j++)
+            for (int i = 0; i + 1 < nx; i++)
+            {
+                int a = i + j * nx, b = a + 1, c = a + nx, d = c + 1;   // cut as the patch's ground is
+                if (p.Wet[a] || p.Wet[b] || p.Wet[c]) { p.Tri[count++] = a; p.Tri[count++] = b; p.Tri[count++] = c; }
+                if (p.Wet[b] || p.Wet[d] || p.Wet[c]) { p.Tri[count++] = b; p.Tri[count++] = d; p.Tri[count++] = c; }
+            }
+        // one vertex a node, shared by the wet triangles round it (indexed, as the patch's ground is)
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = p.WaterVertices;
+        arrays[(int)Mesh.ArrayType.Normal] = p.WaterNormals;
+        arrays[(int)Mesh.ArrayType.Color] = p.WaterColours;
+        arrays[(int)Mesh.ArrayType.Index] = p.Tri.AsSpan(0, count).ToArray();
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        p.Water.Mesh = mesh;
+    }
+
+    private MeshInstance3D MakeWaterNode(Patch p)
+    {
+        var node = new MeshInstance3D
+        {
+            Name = "WorkedWater",
+            MaterialOverride = new StandardMaterial3D
+            {
+                VertexColorUseAsAlbedo = true, VertexColorIsSrgb = true, Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                Roughness = 0.15f, CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            },
+        };
+        AddChild(node);
+        return node;
     }
 }

@@ -1,0 +1,7 @@
+;; The rover by a spring on level ground (issue #200; racket/maps/spring-field.rkt): it can dig a channel from the spring to
+;; lead its 6 L/s away. The water stands and runs in what it digs at the dug ground's own 0.25 m cells, not the map's 5 m
+;; ones. (A world needs one machine: a crate, off to the side.)
+(world spring-channel
+  (map spring-field)
+  (rover (at -2.0 3.0) (heading 0))
+  (place crate cargo-crate (at -20.0 0 20.0)))
