@@ -56,10 +56,16 @@ public partial class Main
             box.GetCenter() - right * halfAcross * 0.75f + toCamera * (halfDeep + 0.4f),
             box.GetCenter() + right * halfAcross * 0.75f + toCamera * (halfDeep + 0.4f),
         };
-        foreach (var c in candidates)
+        // a spot in front must not stand over the machine itself on screen (one in front of the drop test hid a block)
+        var machineOnScreen = ScreenRect(box) is { } m ? m.Grow(-Mathf.Min(m.Size.X, m.Size.Y) * 0.08f) : (Rect2?)null;
+        for (int k = 0; k < candidates.Length; k++)
         {
-            var at = c with { Y = 0 };
-            if (FitsOnScreen(at) && FitsOnScreen(at + Vector3.Up * FigureHeight)) { spot = at; break; }
+            var at = candidates[k] with { Y = 0 };
+            if (!FitsOnScreen(at) || !FitsOnScreen(at + Vector3.Up * FigureHeight)) continue;
+            // the spots beside it share its depth and can't hide it; only the two in front are checked
+            if (k >= 2 && machineOnScreen is { } r && FigureOnScreen(at).Intersects(r)) continue;
+            spot = at;
+            break;
         }
         if (spot is not { } place) { _figure.QueueFree(); _figure = null; return; }
         _figure.Position = place;
@@ -70,6 +76,16 @@ public partial class Main
     /// <summary>True when <paramref name="p"/> lands inside the window region the panels leave clear.</summary>
     private bool FitsOnScreen(Vector3 p) =>
         !_camera.IsPositionBehind(p) && ClearArea().Grow(-8).HasPoint(_camera.UnprojectPosition(p));
+
+    /// <summary>The figure's outline on screen standing at <paramref name="at"/>: its feet, head and shoulders.</summary>
+    private Rect2 FigureOnScreen(Vector3 at)
+    {
+        var right = _camera.GlobalBasis.X * 0.2f;
+        var rect = new Rect2(_camera.UnprojectPosition(at), Vector2.Zero);
+        foreach (var p in new[] { at + right, at - right, at + Vector3.Up * FigureHeight + right, at + Vector3.Up * FigureHeight - right })
+            rect = rect.Expand(_camera.UnprojectPosition(p));
+        return rect;
+    }
 
     private void ToggleFigure()
     {

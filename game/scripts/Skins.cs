@@ -341,6 +341,30 @@ public static class Skins
     }
 
     /// <summary>
+    /// Labels a constant size on screen (#148): a label's size was set in metres, so a close-up (the aeolipile's
+    /// "kettle") wrote it as a headline across the machine and a wide shot (a crane) shrank it to specks. Every
+    /// Label3D under <paramref name="root"/> keeps its font size, so a heading stays bigger than a tag, but is drawn
+    /// at a fixed scale on screen. Run after a view is built; a view also applies it to labels added while it runs.
+    /// </summary>
+    public static void ScreenLabels(Node root)
+    {
+        foreach (var node in root.FindChildren("*", "Label3D", true, false))
+            if (node is Label3D l && !l.FixedSize) ScreenLabel(l);
+    }
+
+    public static void ScreenLabel(Label3D label)
+    {
+        label.FixedSize = true;
+        label.PixelSize = 0.0011f;
+        // a heading may stay a little bigger than a tag, but none shouts: readouts written for a far camera used 48 pt
+        label.FontSize = Math.Min(label.FontSize, 28);
+        label.OutlineSize = Math.Max(label.OutlineSize, 8);
+        // a long readout wraps into a short block instead of running into its neighbour's
+        label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        label.Width = 220;
+    }
+
+    /// <summary>
     /// A part's own shade: its brightness nudged up to ±6%, fixed by its name so it's the same every run
     /// (real castings and timbers vary that much anyway), so two neighbouring parts of one material don't
     /// merge into one shape.
