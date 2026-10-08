@@ -87,7 +87,8 @@ public sealed partial class ShallowWater2D
                     _fsx[f] = open && (i == 0 ? q < 0 : q > 0) ? q : 0;
                     continue;
                 }
-                _fsx[f] = m > 0 ? Math.Max(0, _qsx[i - 1 + j * nx]) : m < 0 ? Math.Min(0, _qsx[i + j * nx]) : 0;
+                _fsx[f] = _inactive is { } offX && (offX[i - 1 + j * nx] || offX[i + j * nx]) ? 0   // a patch's fine water carries no sand (#200)
+                        : m > 0 ? Math.Max(0, _qsx[i - 1 + j * nx]) : m < 0 ? Math.Min(0, _qsx[i + j * nx]) : 0;
             }
         for (int i = 0; i < nx; i++)
             for (int j = 0; j <= nz; j++)
@@ -101,7 +102,8 @@ public sealed partial class ShallowWater2D
                     _fsz[f] = open && (j == 0 ? q < 0 : q > 0) ? q : 0;
                     continue;
                 }
-                _fsz[f] = m > 0 ? Math.Max(0, _qsz[i + (j - 1) * nx]) : m < 0 ? Math.Min(0, _qsz[i + j * nx]) : 0;
+                _fsz[f] = _inactive is { } offZ && (offZ[i + (j - 1) * nx] || offZ[i + j * nx]) ? 0
+                        : m > 0 ? Math.Max(0, _qsz[i + (j - 1) * nx]) : m < 0 ? Math.Min(0, _qsz[i + j * nx]) : 0;
             }
         // Exner: the bed goes down by what leaves, up by what arrives, pores and all
         double k = dt / (Ground.Cell * (1 - Porosity)), area = Ground.Cell * Ground.Cell;
