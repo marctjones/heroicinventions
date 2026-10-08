@@ -117,14 +117,81 @@ public sealed partial class Terrain
 
     public bool Contains(double x, double z) => CellAt(x, z) is not null;
 
-    /// <summary>The ground's height at a world point, interpolated between cell centres (held level beyond the outermost ones).</summary>
+    /// <summary>
+    /// The ground's height at a world point: where the rover has worked it (<see cref="Worked"/>), that fine ground, else the
+    /// map's cells interpolated between their centres (held level beyond the outermost ones).
+    /// </summary>
     public double HeightAt(double x, double z)
+    {
+        for (int n = 0; n < Worked.Count; n++)
+            if (Worked[n].Inside(x, z)) return Worked[n].HeightAt(x, z);
+        return CoarseHeightAt(x, z);
+    }
+
+    /// <summary>The map's own cells, interpolated between their centres, whatever has been worked over them.</summary>
+    public double CoarseHeightAt(double x, double z)
     {
         double fx = Math.Clamp((x - X0) / Cell - 0.5, 0, Nx - 1), fz = Math.Clamp((z - Z0) / Cell - 0.5, 0, Nz - 1);
         int i = Math.Min((int)fx, Math.Max(0, Nx - 2)), j = Math.Min((int)fz, Math.Max(0, Nz - 2));
         double tx = Nx > 1 ? fx - i : 0, tz = Nz > 1 ? fz - j : 0;
         double H(int a, int b) => Heights[Math.Min(a, Nx - 1) + Math.Min(b, Nz - 1) * Nx];
         return (H(i, j) * (1 - tx) + H(i + 1, j) * tx) * (1 - tz) + (H(i, j + 1) * (1 - tx) + H(i + 1, j + 1) * tx) * tz;
+    }
+
+    /// <summary>
+    /// The height of the map's drawn surface at a point: the ground mesh's triangles (each square between four cell centres is
+    /// cut along the diagonal from (i+1, j) to (i, j+1), as the view cuts it), so a patch of finer cells that starts from these
+    /// heights is the same ground bit for bit, not bilinear's slightly different one.
+    /// </summary>
+    public double CoarseSurfaceAt(double x, double z)
+    {
+        double fx = Math.Clamp((x - X0) / Cell - 0.5, 0, Nx - 1), fz = Math.Clamp((z - Z0) / Cell - 0.5, 0, Nz - 1);
+        int i = Math.Min((int)fx, Math.Max(0, Nx - 2)), j = Math.Min((int)fz, Math.Max(0, Nz - 2));
+        double u = Nx > 1 ? fx - i : 0, v = Nz > 1 ? fz - j : 0;
+        double H(int a, int b) => Heights[Math.Min(a, Nx - 1) + Math.Min(b, Nz - 1) * Nx];
+        double a0 = H(i, j), b0 = H(i + 1, j), c0 = H(i, j + 1), d0 = H(i + 1, j + 1);
+        return u + v <= 1 ? a0 + u * (b0 - a0) + v * (c0 - a0) : d0 + (1 - u) * (c0 - d0) + (1 - v) * (b0 - d0);
+    }
+
+    /// <summary>The patches of fine ground the rover has made by digging (#63): at most a few, none overlapping, each over whole map cells.</summary>
+    public List<WorkedGround> Worked { get; } = [];
+
+    /// <summary>Goes up when patches are made or merged, so a view knows to rebuild what it shows of them.</summary>
+    public int WorkedPatches { get; private set; }
+
+    /// <summary>
+    /// The patch of fine ground to dig or dump at a point, made if there is none: <see cref="WorkedGround.Side"/> m square
+    /// round the point, in whole map cells, kept inside the map. A point nearer than <see cref="WorkedGround.Margin"/> to the
+    /// edge of a patch that is there is given a bigger patch (this one and the new square together, up to three times the side),
+    /// its fine ground carried over. Null if that would be bigger, or the point is off the map.
+    /// </summary>
+    public WorkedGround? WorkAt(double x, double z)
+    {
+        if (!Contains(x, z)) return null;
+        foreach (var w in Worked) if (w.Inside(x, z, WorkedGround.Margin)) return w;
+        int n = Math.Max(2, (int)Math.Ceiling(WorkedGround.Side / Cell)), cap = 3 * n;
+        double fx = (x - X0) / Cell - 0.5, fz = (z - Z0) / Cell - 0.5;
+        int i0 = Math.Clamp((int)Math.Round(fx) - n / 2, 0, Math.Max(0, Nx - 1 - n)), j0 = Math.Clamp((int)Math.Round(fz) - n / 2, 0, Math.Max(0, Nz - 1 - n));
+        int i1 = Math.Min(Nx - 1, i0 + n), j1 = Math.Min(Nz - 1, j0 + n);
+        var parts = new List<WorkedGround>();
+        bool grew;
+        do
+        {
+            grew = false;
+            foreach (var w in Worked)
+                if (!parts.Contains(w) && w.Bi0 <= i1 && i0 <= w.Bi1 && w.Bj0 <= j1 && j0 <= w.Bj1)
+                {
+                    parts.Add(w);
+                    (i0, j0, i1, j1) = (Math.Min(i0, w.Bi0), Math.Min(j0, w.Bj0), Math.Max(i1, w.Bi1), Math.Max(j1, w.Bj1));
+                    grew = true;
+                }
+        } while (grew);
+        if (i1 - i0 > cap || j1 - j0 > cap) return null;
+        var made = parts.Count == 0 ? new WorkedGround(this, i0, j0, i1, j1) : WorkedGround.Merged(this, i0, j0, i1, j1, parts);
+        foreach (var p in parts) Worked.Remove(p);
+        Worked.Add(made);
+        WorkedPatches++;
+        return made.Inside(x, z, WorkedGround.Margin) ? made : null;
     }
 
     public static Terrain Parse(string text, string file = "<map>")
