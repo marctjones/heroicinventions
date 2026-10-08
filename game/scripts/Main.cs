@@ -102,7 +102,7 @@ public partial class Main : Node3D
         // #161's reload demos had no profile, so the menu's camera stood inside the treadwheel (#190); the crane's own view, fitted
         ["roman-crane-reload"] = new(new Vector3(3.0f, 3.8f, 10.5f), new Vector3(0.3f, 3.2f, 0.5f), 50),
         ["roman-crane-reload-gang"] = new(new Vector3(3.0f, 3.8f, 10.5f), new Vector3(0.3f, 3.2f, 0.5f), 50),
-        ["vitruvian-catapulta"] = new(new Vector3(7.5f, 2.2f, 1.6f), new Vector3(0, 0.8f, 1.6f), 50),   // throws to +z, screen-left from +x
+        ["vitruvian-catapulta"] = new(new Vector3(7.5f, 2.2f, 1.0f), new Vector3(0, 0.8f, 1.0f), 50),   // throws to +z, screen-left from +x
         ["component-gallery"] = new(new Vector3(4.5f, 6.5f, 25f), new Vector3(4.5f, 0.8f, 0), 60),
         ["newcomen-hearth"] = new(new Vector3(1.5f, 4.5f, 12.5f), new Vector3(0, 3.6f, 0), 50),
         ["hearth-engine"] = new(new Vector3(0, 1.0f, 1.7f), new Vector3(0, 0.75f, 0), 45),

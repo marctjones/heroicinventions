@@ -270,7 +270,7 @@ How the numbers were taken. `HEROIC_FRAMING_REPORT=1` at selection, both builds 
 
 | # | machine | parts outside, before -> after | box outside, before -> after | parts fill | verdict | what is left / what changed |
 |---|---|---|---|---|---|---|
-| 1 | `aeolipile` | 0% -> 0% | 7% -> 5% | 37% -> 37% | GOOD | close-up by design; kettle base and sphere in frame now (was cut) |
+| 1 | `aeolipile` | 0% -> 0% | 7% -> 5% | 37% -> 37% | GOOD | unchanged: close-up by design; only the steam (not in the bounds) leaves the top |
 | 2 | `airlock` | 0% -> 0% | 1% -> 1% | 37% -> 37% | GOOD | door labels (inner, outer, bleed) now placed |
 | 3 | `antikythera-lunar-train` | 1% -> 0% | 9% -> 5% | 53% -> 53% | GOOD | reference; three more gear labels placed |
 | 4 | `archimedes-screw` | 33% -> 0% | 40% -> 1% | 66% -> 36% | GOOD | whole run between the panels (was 33% out) |
@@ -365,7 +365,7 @@ How the numbers were taken. `HEROIC_FRAMING_REPORT=1` at selection, both builds 
 | 93 | `tunnel-test` | n/a -> n/a | n/a -> n/a | n/a -> n/a | FIX | bolts dropped from 300 m bounce out of sight; only planks and readouts in frame |
 | 94 | `two-modules` | 46% -> 0% | 66% -> 0% | 67% -> 69% | GOOD | both modules in (were 46% of parts out); readouts large but clear |
 | 95 | `universal-joint` | 2% -> 0% | 4% -> 0% | 43% -> 44% | GOOD |  |
-| 96 | `vitruvian-catapulta` | 47% -> 5% | 54% -> 11% | 14% -> 5% | GOOD | side-on; bolt's 36.5 m flight and the machine in one frame; returns for the reload |
+| 96 | `vitruvian-catapulta` | 47% -> 0% | 54% -> 0% | 14% -> 5% | GOOD | side-on; bolt's 36.5 m flight and the machine in one frame; returns for the reload (pivot moved 0.6 m so the windlass end clears the info panel: parts 5% -> 0%) |
 | 97 | `wake-clock` | 15% -> 0% | 20% -> 0% | 55% -> 43% | GOOD | spring tank in |
 | 98 | `walkers-wheel` | 0% -> 0% | 0% -> 0% | 41% -> 41% | GOOD |  |
 | 99 | `water-clock` | 0% -> 0% | 0% -> 0% | 48% -> 48% | GOOD |  |
@@ -381,7 +381,7 @@ How the numbers were taken. `HEROIC_FRAMING_REPORT=1` at selection, both builds 
 - Throwers (trebuchet, torsion-catapult, vitruvian-catapulta): done; side-on, the machine and the landing in one frame, back to the machine for the reload, a fresh trail each throw; the figure beside the machine.
 - Labels over gauges and each other (herons-fountain, placer-sluice, boiler-shells, capstans, belt-drive, bellows-forge): done by the general rule in `Main.Labels.cs`. Still stacked: ratchet-windlass, trip-hammer.
 - Things leaving the frame: ball-ramp, carts, rail-wagons done. falling-stones and tunnel-test still open (bodies dropped from 300-350 m).
-- Too close / cut off (aeolipile, branca-steam-wheel, newtons-cradle, pendulum-demo, kitchen-smoke-jack, hearth-engine): done by the fit.
+- Too close / cut off: branca-steam-wheel (parts 32% -> 0%), newtons-cradle (7% -> 0%), pendulum-demo (2% -> 0%), hearth-engine (38% -> 0%) done by the fit; aeolipile and kitchen-smoke-jack unchanged (0% of parts outside before and after; the aeolipile is a close-up by design).
 - Panel title wraps: done before this pass (`Wrap(_hudTitle)`), seen on airlock, glass-rooms, greenhouse, mars-sols, rain-house, earth-machines-on-mars.
 - Missing profiles: roman-crane-reload, roman-crane-reload-gang (new); worlds flood-plain and dig-out have opening frames.
 - Still open, not framing: crate-tongs' tongs too small; bare buried-crate has no ground; falling-stones and tunnel-test bodies out of frame.
