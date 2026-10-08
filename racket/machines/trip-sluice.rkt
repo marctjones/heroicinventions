@@ -30,6 +30,14 @@
   (tank reach #:at ((m 4) (cm 30) 0) #:area 1 #:height (cm 40) #:water 0 #:material limestone
         (port inlet #:height (cm 35)))
   (post catch #:at ((m 2) 0 0) #:size ((cm 40) (cm 30) (cm 40)) #:material limestone)
+  ;; what the cord hangs from (#176): an oak post 2 m tall standing beside
+  ;; the catch, at (2.5, -0.3), clear of the weight's fall, the tripwire and
+  ;; the race, and an arm resting on its top that reaches back over the catch,
+  ;; turned 31 degrees (atan 0.3/0.5) so its underside at 2 m passes over the
+  ;; cord's anchor (2, 2, 0). Solid, but nothing touches them: the weight
+  ;; hangs 45 cm below the arm and falls straight down.
+  (post cord-post #:at ((m 2.5) 0 (cm -30)) #:size ((cm 8) (m 2) (cm 8)) #:material oak)
+  (post cord-arm #:at ((m 2.25) (m 2) (cm -15)) #:size ((cm 66) (cm 8) (cm 8)) #:material oak #:heading-deg 31)
   (block weight #:at ((m 2) (m 1.5) 0) #:size (cm 10) #:material iron)
   (rope weight-cord #:from (world (m 2) (m 2) 0) #:to (weight 0 (cm 5) 0) #:length (cm 45)
         #:tether #t #:release-after 1)
