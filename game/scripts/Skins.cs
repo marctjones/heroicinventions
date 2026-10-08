@@ -672,4 +672,18 @@ public static class Skins
                 }
         }
     }
+
+    /// <summary>
+    /// The hover highlight (#152): a cool cyan hull, wider than the plain line, laid over a mesh as its
+    /// <c>MaterialOverlay</c>. An overlay is the mesh's own, so no builder's material is touched (the shared-material
+    /// hazard of #151), and it is never the strain rim's amber or red.
+    /// </summary>
+    public static readonly ShaderMaterial HoverLine = HoverLineMaterial();
+
+    private static ShaderMaterial HoverLineMaterial()
+    {
+        var m = OutlineIn(new Color(0.35f, 0.9f, 1f));
+        m.SetShaderParameter("width", 0.0075f);
+        return m;
+    }
 }

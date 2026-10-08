@@ -1426,6 +1426,7 @@ public partial class Main : Node3D
     public override void _UnhandledInput(InputEvent @event)
     {
         if (_buildMode is not null) return; // build mode handles its own camera, keys and clicks
+        OperateInput(@event);   // hover, click-to-operate, right-click list (Main.Operate.cs); consumes nothing
         if (HandleHandInput(@event)) return;   // a press on a dynamic body drags it instead of orbiting (Main.Drag.cs)
         switch (@event)
         {
@@ -1534,7 +1535,7 @@ public partial class Main : Node3D
             case "pick": PrintPick(new Vector2(float.Parse(w[1]), float.Parse(w[2]))); return ScriptedInput.Step.Next;   // which part is drawn at that pixel (#151)
             case "pickworld": PrintPick(_camera.UnprojectPosition(new Vector3(float.Parse(w[1]), float.Parse(w[2]), float.Parse(w[3])))); return ScriptedInput.Step.Next;   // ... or where that point of the world is drawn
         }
-        return OperatorStep(w);   // operate / waitsim (Main.Operator.cs)
+        return OperatorStep(w) ?? ClickStep(w);   // operate / waitsim (Main.Operator.cs), hovered (Main.Operate.cs)
     }
 
     public override void _Process(double delta)
@@ -1545,6 +1546,8 @@ public partial class Main : Node3D
         _environment.FogDepthBegin = d * _hazeReach;
         _environment.FogDepthEnd = d * _hazeReach * 6;
         _inputScript?.Process(delta);
+        OperateHoverTick(delta);
+        OperatePanelTick();
         if (!_fpsReport || (_fpsTimer += delta) < 2) return;
         _fpsTimer = 0;
         GD.Print($"[fps] {Performance.GetMonitor(Performance.Monitor.TimeFps):F0} fps · frame {Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000:F1} ms process, " +

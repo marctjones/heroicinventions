@@ -127,12 +127,15 @@ public partial class MachineView
         {
             var upright = Shapes.Box(new Vector3(post, 2 * h + 0.1f, post), wood);
             upright.Position = new Vector3(x, h + 0.05f, s * (w / 2 + post / 2));
+            upright.SetMeta("part_id", id);   // the gate is the sluice part's, though it stands in the channel's frame (a click on it operates the gate, #152)
             trough.Frame.AddChild(upright);
         }
         var beam = Shapes.Box(new Vector3(post, post, w + 2 * post), wood);
         beam.Position = new Vector3(x, 2 * h + 0.1f + post / 2, 0);
+        beam.SetMeta("part_id", id);
         trough.Frame.AddChild(beam);
         var plate = Shapes.Box(new Vector3(thick, h, w), wood);
+        plate.SetMeta("part_id", id);
         trough.Frame.AddChild(plate);
         _gateViews.Add((gate, plate));
         AddLabel(id, trough.Frame.Transform * new Vector3(x, 2 * h + 0.3f, 0));
