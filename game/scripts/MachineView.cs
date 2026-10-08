@@ -234,6 +234,17 @@ public partial class MachineView : Node3D
                                Shapes.Glass());
         shell.Position = V(part.At) + new Vector3(0, height / 2, 0);
         AddChild(shell);
+        // an iron frame on its twelve edges: a glass box reads as a vessel, not as a ghost of one, at any size and
+        // whatever is behind it (#165). Children of the shell, so they move with a hung one.
+        var frame = Surface("iron");
+        float e = Mathf.Clamp(side * 0.04f, 0.004f, 0.03f), hs = side / 2, hh = height / 2;
+        foreach (float a in new[] { -1f, 1f })
+            foreach (float b in new[] { -1f, 1f })
+            {
+                shell.AddChild(Shapes.Rod(new Vector3(a * hs, -hh, b * hs), new Vector3(a * hs, hh, b * hs), e, frame));   // uprights
+                shell.AddChild(Shapes.Rod(new Vector3(-hs, a * hh, b * hs), new Vector3(hs, a * hh, b * hs), e, frame));   // along X, top and bottom
+                shell.AddChild(Shapes.Rod(new Vector3(b * hs, a * hh, -hs), new Vector3(b * hs, a * hh, hs), e, frame));   // along Z, top and bottom
+            }
 
         // nearly opaque: water held in a vessel must read against a pale sky through its glass (readable first)
         var water = Shapes.Box(new Vector3(side * 0.96f, 1, side * 0.96f),
@@ -956,6 +967,22 @@ public partial class MachineView : Node3D
         body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(width, thickness, length) } });
         body.AddChild(Shapes.Box(new Vector3(width, thickness, length), Surface(part.Material)));
         AddChild(body);
+        // Drawn as the solid wedge a ramp is, down to its own base height, so it reads as a slope and not a plank
+        // laid flat (two such planks, a lever and a ramp, looked alike in the build palette; #165). Only drawn: the
+        // slab above is still what bodies slide on.
+        float rise = length * Mathf.Sin(angle), run = length * Mathf.Cos(angle);
+        if (rise > 0.01f)
+        {
+            var wedge = new MeshInstance3D
+            {
+                // PrismMesh's ridge is at its top; left_to_right 1 puts it over the +X edge, a right-angled wedge
+                Mesh = new PrismMesh { LeftToRight = 1, Size = new Vector3(run, rise, width) },
+                MaterialOverride = Surface(part.Material),
+                // its +X (the tall side) must point back up the slope, the ramp's −Z: a quarter turn about Y, then the heading
+                Transform = new Transform3D(yaw * new Basis(Vector3.Up, Mathf.Pi / 2), V(part.At) + yaw * new Vector3(0, rise / 2 - thickness / 2, -run / 2)),
+            };
+            AddChild(wedge);
+        }
         _surfaceMaterials[body.GetInstanceId()] = part.Material;
         AddLabel(part.Id, V(part.At) + new Vector3(0, 0.1f, 0));
     }

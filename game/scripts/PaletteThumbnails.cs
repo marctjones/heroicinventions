@@ -69,6 +69,7 @@ public partial class PaletteThumbnails(BuildMode builder, List<(int Index, strin
         _viewport.AddChild(_model);
         if (_model is MachineView view) view.SetFrozen(true);
         foreach (var label in Descendants(_model).OfType<Label3D>()) label.Visible = false;
+        Skins.UseOutline(_model, Skins.ThumbnailOutline);   // the line, thick enough to survive the 40 px list
         Frame(_model);
         _wait = 1;   // let it draw before reading it back
     }
