@@ -334,4 +334,15 @@ public class HeatStoreTests
         Assert.Equal(running.GetField("tight-bank", "temperature"), edited.GetField("tight-bank", "temperature"), 6);
         Assert.Equal(running.GetField("tight", "wall-heat"), edited.GetField("tight", "wall-heat"), 6);
     }
+
+    [Fact]
+    public void AFireUnderAStoreWarmsItByTheHeatItGivesThePot()
+    {
+        // a 1 kW wood fire at the hearth's default 50% efficiency gives 500 W: 100 s is 50 kJ, over 40 kg x 840 = 33.6 kJ/K, 1.488 K
+        var rock = new HeatStore("rock", Substance.Of(Materials["basalt"]), 40, 20) { Zone = new Zone() };
+        var fire = new Hearth(rock, 1000, 1.0);
+        for (int i = 0; i < 100; i++) { fire.Step(1); rock.Absorb(1); }
+        Assert.Equal(500, fire.HeatOut, 6);
+        Assert.Equal(20 + 50_000.0 / 33_600, rock.Temperature, 9);
+    }
 }
