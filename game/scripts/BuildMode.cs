@@ -427,6 +427,7 @@ public partial class BuildMode : Node3D
     {
         var layer = new CanvasLayer();
         AddChild(layer);
+        HudTheme.Install(layer);
 
         // left: palette, material, file and run
         var left = _leftPanel = new PanelContainer { CustomMinimumSize = new Vector2(250, 0) };
