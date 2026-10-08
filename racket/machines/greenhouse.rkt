@@ -23,6 +23,14 @@
 ;;             back to where they started, but for what the trees have grown
 ;;             since the harvest: O2 up, CO2 down, by exactly 1.1841 and 1.6284
 ;;             times the wood then standing.
+;; coppiced   the harvest is cut by hand (click the trees: trees.harvest, kg
+;;             onto the stove; the stove is lit by clicking it too), and the
+;;             demo operator does it 600 s in, with the sun held where it is
+;;             at noon: 3.181e-7 x 600 = 1.909e-4 kg of wood, which the stove
+;;             then burns at 1 kW: 1.909e-4 x 15 MJ/kg = 2.863 kJ in 2.86 s,
+;;             taking back the 1.1841 x 1.909e-4 = 2.26e-4 kg of O2 growing it
+;;             gave. The trees begin again from nothing. (The wood is so little
+;;             because 600 s is so short; 30 sols of it is the 0.847 kg above.)
 ;; melter      an ice drill and melter, 1 kW, cutting ice at -63 °C:
 ;;             2100 x 63 + 334,000 = 466.3 kJ/kg, 7.72 kg an hour; its 100 L
 ;;             tank, in the warm greenhouse (outside, the meltwater would
@@ -47,4 +55,6 @@
   (enclosure cell #:at ((m -4) 0 0) #:size ((m 2) (m 2) (m 2))
              #:pressure 13500 #:air '((o2 0.21) (n2 0.79)) #:temperature 20 #:insulation 0 #:material iron)
   (tank feed #:at ((m -4) 0 (m -0.5)) #:area (m2 0.1) #:height (m 0.3) #:water (L 20) #:material iron)
-  (electrolyser splitter #:at ((m -4) 0 (m 0.5)) #:water feed #:power 500 #:efficiency 0.7))
+  (electrolyser splitter #:at ((m -4) 0 (m 0.5)) #:water feed #:power 500 #:efficiency 0.7)
+  ;; the trees coppiced onto the stove (issue #157), every kilogram standing (it cuts only what has grown); taking any control stops it
+  (operator (at 600 (trees harvest 1000))))

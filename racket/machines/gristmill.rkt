@@ -10,8 +10,16 @@
 ;;   sharp: 3,356 W x 54 kg/kWh = 181 kg an hour, 3.02 kg a minute
 ;;   dull:  the same power, 24 kg/kWh = 80.5 kg an hour, 1.34 kg a minute
 ;;   the third's wheel gives only 200 N.m: less than the stones' 267, so
-;;   they never turn, and it grinds nothing. Lighten the stones (set
-;;   weak.grind-torque below 200 in the console) and it will.
+;;   they never turn, and it grinds nothing. Lighten the stones (click the
+;;   weak stone, or set weak.grind-torque below 200 in the console) and it will.
+;;   fixed     the demo operator does it 5 s in: weak.grind-torque 100. The 100
+;;             N.m left over spins the stone up at alpha = 100 / I, I = 175 kg.m2
+;;             (the stone's own, from the blueprint): 12.566 rad/s (120 rpm) in
+;;             12.566 / alpha = 22 s, so 27 s in it is up to speed, grinding 100 x
+;;             12.566 = 1,257 W x 54 kg/kWh = 67.9 kg an hour, 18.85 g/s.
+;;   controls  click a stone to stop or start it (drive-rpm), Shift+click to
+;;             reverse it; right-click it for the grind-torque slider (the
+;;             stones' setting) and drive-torque (what the wheel gives).
 (define r (cm 61))
 (define y (cm 75))                          ; the runner's middle; the bed stone's top is 2 cm below its face
 (define stone (disc-wheel #:radius r #:width (cm 30) #:bore (cm 8)))
@@ -27,4 +35,6 @@
          #:drive-rpm 120 #:drive-torque 400 #:grind-torque 267 #:yield 24)
   (post weak-bed #:at (3 0 0) #:size ((* 2 r) (cm 58) (* 2 r)) #:material granite #:round #t)
   (wheel weak #:shape stone #:at (3 y 0) #:axis y #:material granite
-         #:drive-rpm 120 #:drive-torque 200 #:grind-torque 267 #:yield 54))
+         #:drive-rpm 120 #:drive-torque 200 #:grind-torque 267 #:yield 54)
+  ;; the miller dresses the weak pair lighter 5 s in (issue #157); taking any control stops it
+  (operator (at 5 (weak grind-torque 100))))

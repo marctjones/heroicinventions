@@ -16,6 +16,15 @@
 ;; after the gate goes and no later than 40 / 1.23 = 32.5 s (a kinematic
 ;; shock at the normal speed): between 33.8 and 52.5 s. Every litre is
 ;; accounted for: pond + race + low pond = what there was + the stream's.
+;;
+;; By hand. The gate is a sluice (click it: "Open the gate", opening 1; the
+;; slider draws it part way), so a person can draw it before the trigger does.
+;; The demo operator does, at 15 s, when the pond stands 50 + 250 x 15 / 100 =
+;; 53.75 cm: 33.75 cm over the lip, at most 1.705 x 0.5 x 0.3375^1.5 = 167.2 L/s
+;; at first, and the front is at the low pond 13.8 to 32.5 s later, 28.8 to 47.5 s
+;; in. The stream still brings more (250 L/s) than the gate passes (168 L/s), so
+;; the pond goes on rising by 82 L/s and reaches 55 cm at about 15 + 1.25 m3 /
+;; 0.078 m3/s = 31 s, where the trigger finds the gate open and has nothing left to do.
 
 (define-machine dam-break
   #:source "a millpond's sluice drawn, and the wave down its race"
@@ -28,4 +37,6 @@
   (sluice gate #:on race #:height (m 1) #:opening 0)
   (trigger full #:when (millpond level above 55) #:do ((gate opening 1)))
   (tank low-pond #:at ((m 47.75) 0 0) #:area 30 #:height (m 1.5) #:material limestone
-        (port inlet #:height (m 1))))
+        (port inlet #:height (m 1)))
+  ;; the gate drawn by hand at 15 s, five seconds before the trigger would (issue #157); taking any control stops it
+  (operator (at 15 (gate opening 1))))

@@ -75,11 +75,13 @@ public static class Controls
         Switch("windmill waterwheel", "load", "Free the stones", "Engage the stones", 1000, 0, 5000, "load"),
         Switch("wheel screw", "drive-rpm", "Stop the wheel", "Start the wheel", 10, -60, 60, "rpm"),
         new(["wheel", "screw"], "drive-rpm", Style.Reverse, "Reverse the wheel", "", 0, Needs: v => v != 0),
+        Switch("wheel screw", "drive-torque", "Let go of the drive", "Take hold of the drive", 1000, 0, 0, "N.m"),
         Switch("wheel screw", "grind-torque", "Free the stones", "Engage the stones", 5, 0, 50, "N.m"),
         Switch("bellows", "airflow", "Stop the bellows", "Work the bellows", 1, 0, 5, "m3/s"),
         Switch("jetwheel smokejack", "load", "Free the shaft", "Load the shaft", 1, 0, 50, "N.m"),
         Switch("enclosure", "leak", "Patch the hole", "Open a hole", 1, 0, 20, "cm2"),
         Switch("digger", "power", "Stop digging", "Start digging", 1000, 0, 5000, "W"),
+        new(["plants"], "harvest", Style.Set, "Coppice the trees onto the stove", "", 1000),   // cuts all that stands (a value over it is what is standing)
     ];
 
     /// <summary>The capability hook: whether a person may work this control on this part. A machine run says yes to everything; the game narrows it to what the rover could do (#163).</summary>

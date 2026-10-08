@@ -22,6 +22,15 @@
 ;;           the doors wide open and the bucket let down 7.9 cm.
 ;;   out     the 30 g of wood burns 3000 s; then the altar cools, the air
 ;;           shrinks, the water runs back and the doors shut.
+;;   doused  the fire put out by hand: click the offering ("Douse the
+;;           hearth": power 0). The demo operator does it at 1000 s, with the
+;;           doors open. The altar then cools from 20 + 30(1 - e^(-1000/660)) =
+;;           43.4 C as 20 + 23.4 e^(-(t-1000)/660), the air's pressure falls with
+;;           it, and the water runs back down the siphon (2e-4 m3/s per m of
+;;           head) until the bucket holds less than 2 kg and the doors shut.
+;;           Integrating that (quasi-steady head, bucket lowered while the doors
+;;           are open) gives the doors opening at 745 s and shutting at about
+;;           1228 s: 228 s after the fire is doused.
 (define-machine heron-temple-doors
   #:source "Hero of Alexandria, Pneumatica I.38"
   (post altar-base #:at (0 0 0) #:size ((cm 55) (cm 80) (cm 55)) #:material limestone)
@@ -34,4 +43,6 @@
         (port inlet #:height 0))
   (pipe siphon globe.outlet bucket.inlet #:conductance 2e-4)
   (counterpoise doors #:at ((m 1.8) (m 1.4) (m -1)) #:vessel bucket #:vessel-mass 2 #:counterweight 4
-                #:radius (cm 5) #:turn-deg 90 #:leaf ((cm 60) (m 1.6)) #:leaf-inertia 3))
+                #:radius (cm 5) #:turn-deg 90 #:leaf ((cm 60) (m 1.6)) #:leaf-inertia 3)
+  ;; the fire doused at 1000 s, so the altar cools and the doors shut (issue #157); taking any control stops it
+  (operator (at 1000 (offering power 0))))

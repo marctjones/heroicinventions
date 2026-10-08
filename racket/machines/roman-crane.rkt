@@ -15,6 +15,20 @@
 ;; bottom) turns it with his weight × radius × sin 30°. Two men give
 ;; ~1,550 N·m against the stone's ~1,430 N·m, so they lift it, slowly; one
 ;; man alone (~770 N·m) can't — the stone would run the wheel backwards.
+;;
+;; Operated (issue #157): lift, hold, lower. The walkers' motor is the wheel's
+;; drive (click the treadwheel: drive-rpm to 0 holds the stone, Shift+click
+;; reverses it; right-click for drive-torque, 0 lets the walkers go and the
+;; stone runs the wheel back). The demo operator lifts for 20 s, holds for 10,
+;; then walks it down for 20. The margin is thin: 1,545 N.m against the stone's
+;; m g r = 1,430 N.m, so 115 N.m accelerates the wheel and drum (I = 1,823
+;; kg.m2, 1,861 with the stone and pulley) against the axle's 0.2 /s damping:
+;; the wheel comes up to w = 115 / (0.2 x 1,823) = 0.315 rad/s (the motor's 3 rpm,
+;; 0.314) with a time constant 1,861 / 364.5 = 5.1 s, and the stone, rising at r w,
+;; has climbed 0.25 x 0.314 x (t - 5.1) in t s: about 1.18 m by 20 s (1.15 above
+;; where it started, less the coasting). Held at 0 rpm it hangs still (the motor's
+;; 1,545 N.m against 1,430); reversed at -3 rpm it comes down at exactly
+;; r x 3 rpm = 7.854 cm/s, to the ground after 1.21 / 0.0785 = 15.4 s: 45.4 s in.
 (require racket/math)
 
 (define wheel-r (m 2.25))
@@ -58,4 +72,6 @@
   (block stone #:at ((car stone-at) (cadr stone-at) rope-z) #:size stone-size #:material granite)
   (rope hoist #:wind-on drum #:to (stone 0 (/ stone-size 2) 0) #:length rope-length
         #:over (((car over-top) (cadr over-top) rope-z) ((car over-side) (cadr over-side) rope-z))
-        #:diameter (cm 4) #:turns pulley))
+        #:diameter (cm 4) #:turns pulley)
+  ;; the walkers lift for 20 s, stand still holding the stone for 10, then walk it back down (issue #157)
+  (operator (at 20 (tympanus drive-rpm 0)) (at 30 (tympanus drive-rpm -3)) (at 50 (tympanus drive-rpm 0))))

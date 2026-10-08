@@ -11,6 +11,10 @@
 ;; (1e-4 m³/s per metre of head) from a pond a metre deep, h = 1 - e^(-t/100),
 ;; reaching 10 cm at 100 ln(1/0.9) = 10.5 s. Then the 7.2 m³ above the race's
 ;; lip goes, at first the free weir's 1.705 x 0.3 x 0.9^1.5 = 437 L/s.
+;; The sluice can be drawn by hand as well (click it: "Open the gate"); the demo
+;; operator draws it at 8 s, 2.5 s before the clock would trip it, when the cup
+;; stands 100 (1 - e^(-8/100)) = 7.69 cm and the pond has dropped only 7.69 cm x
+;; 0.01 m2 / 8 m2 = 0.1 mm: the weir flow at the start is the 437 L/s above.
 ;; Alone (no map), the race just pours off the scene: the valley it runs down is the map's, so
 ;; the machine menu lists the pond under Parts for Worlds and opens flood-plain.world (#175, #176).
 
@@ -25,4 +29,6 @@
   (pipe drip pond.clock-feed clock.inlet #:conductance 1e-4)
   (channel race #:from pond.race-head #:to off #:end ((m 6) (cm 30) 0) #:width (cm 30) #:dynamic #t)
   (sluice gate #:on race #:height (m 1.2) #:opening 0)
-  (trigger let-go #:when (clock level above 10) #:do ((gate opening 1))))
+  (trigger let-go #:when (clock level above 10) #:do ((gate opening 1)))
+  ;; the gate drawn by hand (issue #157); taking any control stops it
+  (operator (at 8 (gate opening 1))))

@@ -1010,7 +1010,7 @@
 
 (test-case "Trebuchet on its catch (#155): held 3 s it carries 95.8 N.m, and let go it throws as one let go at once, within 2%"
   (when (godot-available?)
-    (define held (godot-simulate 'trebuchet #:seconds 7 #:sample-dt 1/120))
+    (define held (godot-simulate 'trebuchet #:seconds 7 #:sample-dt 1/120 #:set '((arm catch 0 3))))   ; the catch pulled at 3 s, as the blueprint's demo operator does (#157)
     (define at-once (godot-simulate 'trebuchet #:seconds 4 #:sample-dt 1/120 #:set '((arm catch 0))))
     ;; 72.9 kg x 9.81 x 0.27 m x cos 50 = 124.1 N.m from the counterweight, less the beam's own 7.13 x 9.81 x 0.63 x cos 50
     ;; = 28.3 N.m the other way
@@ -1029,7 +1029,7 @@
 (test-case "Onager and catapulta catches (#155) carry their skeins' pull: k (rest - angle) less the weights on the arm"
   (when (godot-available?)
     ;; onager: 150 x 120 degrees = 314.2 N.m, less the oak arm's 2.59 kg at 0.5 m and the 2.70 kg stone at 1 m
-    (define onager (godot-simulate 'torsion-catapult #:seconds 2.5 #:sample-dt 0.1))
+    (define onager (godot-simulate 'torsion-catapult #:seconds 2.5 #:sample-dt 0.1 #:set '((arm catch 0 2))))   ; looses at 2 s, as the demo operator does (#157)
     (define expected (- (* 150 (* pi 120/180)) (* 720 0.06 0.06 1.0 9.81 0.5) (* 2700 0.001 9.81 1.0)))
     (check-= (value-at onager '(arm catch-load) 1.9) expected (* 0.02 expected))
     (check-= (value-at onager '(arm angle) 1.9) 0 0.1 "held where it was winched to")
@@ -1041,7 +1041,7 @@
 
 (test-case "Ratchet windlass, its pawl lifted 2 s in (#155): the load lowers at m g / (m + I/r^2) = 7.88 m/s2, as the free one does"
   (when (godot-available?)
-    (define run (godot-simulate 'ratchet-windlass #:seconds 2.6 #:sample-dt 1/120))
+    (define run (godot-simulate 'ratchet-windlass #:seconds 2.6 #:sample-dt 1/120 #:set '((lower-pawl pawl 0 2))))   ; lifted at 2 s, as the demo operator does (#157)
     (define I (* 720 6.797550167426925e-5))                   ; the drum's shape, about its axle
     (define m (* 2700 (expt 0.195 3)))
     (define a (/ (* m 9.81) (+ m (/ I (sqr 0.1)))))
@@ -1080,7 +1080,7 @@
 
 (test-case "Roman crane: two walkers in the treadwheel lift the granite block"
   (when (godot-available?)
-    (define run (godot-simulate 'roman-crane #:seconds 20 #:sample-dt 1))
+    (define run (godot-simulate 'roman-crane #:seconds 20 #:sample-dt 1 #:actions '()))   ; no demo operator: the walkers just walk (#157)
     (define rise (- (final-of run '(stone y)) (value-at run '(stone y) 0)))
     (check-true (> rise 0.5) (format "the stone rose ~a m in 20 s" rise))))
 
@@ -1127,7 +1127,7 @@
 
 (test-case "Roman crane over a fixed bar: two walkers can't lift the stone, seven lift it with the drum side at e^(mu theta) the stone's"
   (when (godot-available?)
-    (define run (godot-simulate 'bar-crane #:seconds 10 #:sample-dt 1))
+    (define run (godot-simulate 'bar-crane #:seconds 10 #:sample-dt 1 #:actions '()))   ; no demo operator (#157)
     (define e (exp (* bar-mu (* (/ pi 180) (value-at run '(seven-hoist wrap-deg) 5)))))
     (check-= e 2.908 0.002 "the rope turns 128.9 degrees over the bar")
     ;; two: the stone stays down; the walkers' 6,180 N reaches it as 6,180 / E
@@ -1283,7 +1283,7 @@
 (test-case "Gristmill: 267 N.m at 120 rpm is 3,356 W, which sharp stones turn into 181 kg of flour an hour and dull ones 80.5; a weaker wheel stalls"
   ;; predicted before the first run (gristmill.rkt): 54 and 24 kg/kWh
   (when (godot-available?)
-    (define run (godot-simulate 'gristmill #:seconds 60 #:sample-dt 10))
+    (define run (godot-simulate 'gristmill #:seconds 60 #:sample-dt 10 #:actions '()))   ; no demo operator: the weak stone is left as it is (#157)
     (define (at t key) (cadr (assq key (cdr (for/first ([f run] #:when (>= (car f) (- t 1e-6))) f)))))
     (define w (* 120 (/ (* 2 pi) 60)))
     (check-= (at 60 'sharp.omega) w 0.01 "up to 120 rpm")
@@ -2058,7 +2058,7 @@
   ;; 20.02 kg on a 10 cm drum: 19.64 N.m; the pawl on a 15 cm circle carries m g r / R = 130.9 N. A crank at
   ;; 6 rpm winds 0.628 rad/s, 6.28 cm/s of rope, 30 degrees a tooth of 12 (a tooth every 0.83 s)
   (when (godot-available?)
-    (define run (godot-simulate 'ratchet-windlass #:seconds 10 #:sample-dt 0.25))
+    (define run (godot-simulate 'ratchet-windlass #:seconds 10 #:sample-dt 0.25 #:set '((lower-pawl pawl 0 2))))   ; as it was before the demo operator (#157)
     ;; holds: the load stays put, within a centimetre, for the whole run
     (check-true (for/and ([y (values-of run '(hold-load y))]) (< (abs (- y 1.0)) 0.012)) "the held load sags no more than a centimetre")
     (define forces (for/list ([t (times-of run)] [f (values-of run '(hold-pawl force))] #:when (> t 1.0)) f))
