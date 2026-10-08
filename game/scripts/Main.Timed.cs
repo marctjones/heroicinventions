@@ -43,7 +43,11 @@ public partial class Main
         foreach (var due in _timedSettings.Where(s => s.At <= now + 1e-9).ToList())
         {
             _timedSettings.Remove(due);
-            try { _current.Runtime.SetField(due.Target, due.Field, due.Value); }
+            try
+            {
+                // a person's hand on a rope or a wheel's drive is the view's to do (MachineView.Hooks.cs), the rest the runtime's
+                if (!_current.TrySetViewField(due.Target, due.Field, due.Value)) _current.Runtime.SetField(due.Target, due.Field, due.Value);
+            }
             catch (Exception e) { SettingFailed($"'{due.Target} {due.Field} {due.Value} {due.At}': {e.Message}"); }
         }
     }

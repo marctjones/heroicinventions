@@ -104,6 +104,7 @@ public partial class MachineView
         }
         if (spec.Bar is { } barMat && rope.Over.Count > 0) BuildBar(rope, barMat);
         _ropes.Add(rope);
+        AddEye(rope);   // a crane's load hangs from a lifting eye (#160)
         DrawRope(rope);
     }
 

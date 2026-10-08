@@ -407,6 +407,7 @@ public partial class Main : Node3D
 
     public override void _Ready()
     {
+        MachineView.HookChanged += (view, rope, action, load, point) => HandActions.RecordHook(view, rope, action, load, point);   // (Main.Drag.cs)
         // HEROIC_BACKGROUND=1 (tools/gui-check.sh): a window that never takes
         // the keyboard, for scripted runs while someone works in other apps
         if (OS.GetEnvironment("HEROIC_BACKGROUND") == "1") GetWindow().Unfocusable = true;

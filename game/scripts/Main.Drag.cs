@@ -276,6 +276,7 @@ public partial class Main
                 }
             }
         }
+        if (_hand is { } gone && !IsInstanceValid(gone.Spring.Body)) { gone.View.Hand = null; _hand = null; }   // hooked away from under the hand
         if (_hand is not { } h) return;
         double now = h.View.Runtime.Time;
         Vector3 target;
