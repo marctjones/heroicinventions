@@ -13,10 +13,12 @@
 (define (machine-form name) (call-with-input-file (build-path compiled-machines (format "~a.machine" name)) read))
 
 ;; the blueprint's operator as an operator log: ((at t (part field value)) ...)
-(define (demo-actions name)
+;; a blueprint's demo operator as an action log; #:until keeps the actions a short run reaches (a thrower's demo goes
+;; on to re-span and reload, #161)
+(define (demo-actions name #:until [until +inf.0])
   (define op (for/first ([f (cddr (machine-form name))] #:when (and (pair? f) (eq? (car f) 'operator))) f))
   (unless op (error 'demo-actions "~a has no operator" name))
-  (for/list ([a (cdr op)] #:when (and (pair? a) (eq? (car a) 'at))) a))
+  (for/list ([a (cdr op)] #:when (and (pair? a) (eq? (car a) 'at) (<= (cadr a) until))) a))
 
 (define (value run key t)
   (define frame (for/fold ([best (car run)]) ([f (cdr run)]) (if (< (abs (- (car f) t)) (abs (- (car best) t))) f best)))
@@ -47,10 +49,11 @@
     (check-true (pair? actions) (format "~a has an operator" name))
     (for ([a actions])
       (define-values (target field) (values (car (caddr a)) (cadr (caddr a))))
-      (define part (for/first ([c (cddr form)] #:when (and (pair? c) (eq? (car c) 'part) (eq? (cadr c) target))) c))
-      (check-true (and part #t) (format "~a: ~a is a part" name target))
+      ;; a part's kind, or "rope" for a rope (as Controls.KindOf names it)
+      (define part (for/first ([c (cddr form)] #:when (and (pair? c) (memq (car c) '(part rope)) (eq? (cadr c) target))) c))
+      (check-true (and part #t) (format "~a: ~a is a part or rope" name target))
       (when part
-        (define kind (symbol->string (caddr part)))
+        (define kind (if (eq? (car part) 'rope) "rope" (symbol->string (caddr part))))
         ;; a Controls.cs row is Switch("kind kind", "field", ...) or new(["kind", ...], "field", ...)
         (define row
           (for/first ([line (string-split controls "\n")]
@@ -305,7 +308,7 @@
 
 (test-case "Trebuchet: held on its catch carrying 95.8 N.m until the demo operator pulls it at 3 s, then it throws"
   (when (godot-available?)
-    (define run (godot-simulate 'trebuchet #:seconds 7 #:sample-dt 1/120 #:actions (demo-actions 'trebuchet)))
+    (define run (godot-simulate 'trebuchet #:seconds 7 #:sample-dt 1/120 #:actions (demo-actions 'trebuchet #:until 7)))
     (define cw (* 2700 (expt 0.3 3) 9.81 0.27 (cos (* pi 50/180))))
     (define beam (* 720 1.8 0.025 0.22 9.81 0.63 (cos (* pi 50/180))))
     (check-= (value run 'arm.catch-load 2.9) (- cw beam) (* 0.02 (- cw beam)) "N.m the catch carries")
@@ -315,7 +318,7 @@
 
 (test-case "Onager: held on its slip-hook carrying 275 N.m until the demo operator looses it at 2 s"
   (when (godot-available?)
-    (define run (godot-simulate 'torsion-catapult #:seconds 4 #:sample-dt 0.05 #:actions (demo-actions 'torsion-catapult)))
+    (define run (godot-simulate 'torsion-catapult #:seconds 4 #:sample-dt 0.05 #:actions (demo-actions 'torsion-catapult #:until 4)))
     (define expected (- (* 150 (* pi 120/180)) (* 720 0.06 0.06 1.0 9.81 0.5) (* 2700 0.001 9.81 1.0)))
     (check-= expected 275.0 0.1)
     (check-= (value run 'arm.catch-load 1.9) expected (* 0.02 expected))

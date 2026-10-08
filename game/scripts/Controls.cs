@@ -65,6 +65,7 @@ public static class Controls
         Switch("ratchet", "pawl", "Lift the pawl", "Drop the pawl", 1),
         Switch("lever", "catch", "Release the catch", "Cock the catch", 1),
         Switch("rope", "tether", "Let the tether go", "Tie the tether", 1),
+        new(["rope"], "load", Style.Set, "Lay the shot in the sling", "", 1),   // a thrown stone or bolt back in its pouch or on its nock; refused while the ropes can't reach (#161)
         // mirrors
         new(["mirror", "burning-mirror"], "dust", Style.Set, "Clean the mirror", "", 0, Needs: v => v > 0.005),
         Switch("mirror burning-mirror", "area", "Cover the mirror", "Uncover the mirror", 1, 0, 20, "m2"),
