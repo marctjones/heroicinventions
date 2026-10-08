@@ -189,7 +189,7 @@ public class HeatStoreTests
         Assert.Equal(1, bin.Openings);
     }
 
-    /// <summary>A vault of a cavity <paramref name="cavity"/> m across in a 0.5 m regolith wall at -55 °C, a 20 kg bank at -55 °C and a bin of basalt at 200 °C, from dusk.</summary>
+    /// <summary>A vault of a cavity <paramref name="cavity"/> m across in a 0.5 m regolith wall at -55 °C, a 16 kg bank at -55 °C and a bin of basalt at 200 °C, from dusk.</summary>
     private static (Enclosure Vault, HeatStore Bank, HeatStore Rock, HeatBin Bin) Vault(double cavity, double rockKg, double leak)
     {
         var ground = new Zone(Planet.Mars, -55);
@@ -200,7 +200,7 @@ public class HeatStoreTests
             Wall = new HeatSlab(0.039, 1500, 800, 0.5, area, -55, -55),
         };
         double Surface(double kg, double density) => 6 * Math.Pow(kg / density, 2.0 / 3);
-        var bank = new HeatStore("bank", new Substance("cells", 1000, 2000, 1000, 0), 20, -55) { Area = Surface(20, 2000), Zone = vault };
+        var bank = new HeatStore("bank", Substance.Of(Materials["cells"]), 16, -55) { Area = Surface(16, 2500), Zone = vault };
         var rock = new HeatStore("rock", Substance.Of(Materials["basalt"]), rockKg, 200) { Area = Surface(rockKg, 2900), Zone = vault };
         var bin = new HeatBin("bin", rock, leak) { Sense = bank, OpenBelow = 5, CloseAbove = 40 };
         rock.Bin = bin;
@@ -217,17 +217,21 @@ public class HeatStoreTests
     [Fact]
     public void AFreshVaultSoaksUpTheHeatEleven_KgOfRockFailsAndFortyInATightCavityWorks()
     {
-        // From dusk to 03:00 (9 local hours, 3,699 s each at 24 per sol: 33,291 s): the bank starts frozen at -55 °C.
-        const double nine = 9 * 88775.0 / 24 / 3600;
+        // From 17:00 to 03:00 (10 local hours, 3,699 s each at 24 per sol: 36,990 s): the bank starts frozen at -55 °C.
+        const double nine = 10 * 88775.0 / 24 / 3600;
         // 1 m cavity (6 m² of wall), 11 kg of rock: the rock holds 11 × 840 × 150 K = 1.39 MJ above 50 °C, the wall alone takes 2 I A ΔT √(t/π) with ΔT near 40 K,
         // 2 × 216 × 6 × 40 × √(33291/π) = 10.7 MJ: nothing is left for the bank (-50 °C, no thermostat can help)
         var (wide, wideBank, _, wideBin) = Vault(1.0, 11, 0.1);
         Night(wide, wideBin, nine, 10);
         Assert.True(wideBank.Temperature < -30, $"the bank in a 1 m cavity with 11 kg is at {wideBank.Temperature:0.0} °C at 03:00");
-        // 0.5 m cavity (1.5 m² of wall), 40 kg: 40 × 840 × 150 = 5.0 MJ; the wall takes 2 × 216 × 1.5 × 40 × 106 = 2.7 MJ, the bank 20 × 1000 × 55 = 1.1 MJ to reach 0: it works
+        // 0.5 m cavity (1.5 m² of wall), 40 kg: 40 × 840 × 150 = 5.0 MJ; the wall takes 2 × 216 × 1.5 × 40 × 106 = 2.7 MJ, the bank 16 × 1000 × 55 = 0.9 MJ to reach 0: it works,
+        // and by the same count about 36 kg is the least that does
         var (tight, tightBank, _, tightBin) = Vault(0.5, 40, 0.1);
         Night(tight, tightBin, nine, 10);
-        Assert.InRange(tightBank.Temperature, 0, 45);
+        Assert.InRange(tightBank.Temperature, 3.5, 5.0);              // traced 4.3 °C (the machine's own trace, 5 s steps)
+        var (few, fewBank, _, fewBin) = Vault(0.5, 35, 0.1);
+        Night(few, fewBin, nine, 10);
+        Assert.True(fewBank.Temperature < 0, $"35 kg leaves the bank at {fewBank.Temperature:0.0} °C at 03:00");
     }
 
     [Fact]

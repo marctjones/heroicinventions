@@ -156,6 +156,8 @@ public partial class Main : Node3D
         ["rain-house"] = new(new Vector3(3f, 4f, 10f), new Vector3(0, 2.2f, 0), 50),
         ["greenhouse"] = new(new Vector3(-1f, 5f, 10f), new Vector3(-1.5f, 1f, 0), 50),
         ["heliostats"] = new(new Vector3(7.5f, 3.2f, 5.5f), new Vector3(0, 0.6f, 0), 50),
+        ["night-heat"] = new(new Vector3(-1.4f, 2.6f, 8.5f), new Vector3(-1.4f, 0.35f, 0), 50),   // the three vaults and the rock in the sun, cut away at the front (+z)
+        ["hot-water-night"] = new(new Vector3(0, 2.4f, 6.5f), new Vector3(0, 0.5f, 0), 50),
     };
 
     /// <summary>
@@ -207,6 +209,8 @@ public partial class Main : Node3D
         // 10x it happens in half a second, too quick to see happen.
         // 1x is the speed that actually shows it; the speed row is still
         // there for anyone who wants to skip ahead or slow it down.
+        ["night-heat"] = 20,         // the 03:00 pass is 10 local hours on: 31 minutes (sleep, or a trace, for less)
+        ["hot-water-night"] = 20,    // a 12 h night in 36 minutes
     };
     private static readonly (int Width, int Height, string Label)[] WindowSizes =
         [(1152, 720, "Small"), (1600, 1000, "Medium"), (1920, 1200, "Large")];
@@ -287,6 +291,8 @@ public partial class Main : Node3D
         ["rain-house"] = "A Rain-House on Mars (Evaporation and Condensation)",
         ["greenhouse"] = "A Greenhouse on Mars (Trees, Oxygen and Wood)",
         ["heliostats"] = "Heliostats: Sunlight and Mirrors",
+        ["night-heat"] = "Night Heat (Regolith Vault and Rock Store)",
+        ["hot-water-night"] = "Hot Water Through a Night (Tank and Room)",
     };
 
     private static readonly Dictionary<string, string> Descriptions = new()
@@ -362,6 +368,8 @@ public partial class Main : Node3D
         ["capstans"] = "Three oak bollards, each with 200 kg hanging a metre below on a hemp rope, and a sailor holding the other end with 100 N. Friction where rope slides on a post takes off tension in proportion to the tension there, so round the post it falls off exponentially: the tight end carries e^(mu theta) times the slack one (the capstan equation, Euler 1762). Hemp on oak, mu = 0.474. Half a turn multiplies the pull by 4.4 - 444 N, not the load's 1962 N, so it runs out and falls. One turn multiplies it by 19.7 - just enough. Two turns by 388: 5 N would hold it. Try one-turn.hold 99, or haul in over half a turn with half-turn.hold 10000.",
         ["windmills"] = "Two post mills, sails 10 m from hub to tip. The wind carries 1/2 rho A v^3 through the disc they sweep; the sails take a share of it, Cp, that depends on how fast their tips run for the wind - most, 0.3 here, at 2.5 times its speed. No rotor can take more than 16/27 (Betz, 1919): the air behind it has to keep moving. Each miller sets the stones to hold the sails at that best speed: the left, in a 6 m/s breeze, turns at 14.3 rpm and grinds with 12.3 kW; the right, in a 9 m/s wind, at 21.5 rpm with 41.4 kW. Half again the wind, (1.5)^3 = 3.4 times the power. Set the right one's stones light (gale.load 8171) and it races to 33 rpm but takes only 0.21 of the wind.",
         ["bellows-forge"] = "Two forges, each 1 kg of wood at 5 kW. The left burns on its own draught: its steady burn already draws power / density x wood's 6:1 air-fuel ratio, 2 g/s of air, and takes 3000 s to burn the kilogram out. The right has a bellows forcing in 5 L/s more (air's density, 1.204 kg/m3, makes that 6.02 g/s) — 4.01x the air, so 4.01x the burn rate, out in 748 s. Both give up the same 15 MJ; the bellows only ever buys speed, not heat.",
+        ["night-heat"] = "A battery bank frozen at -55 C buried in a regolith vault, kept warm through a Mars night by hot rock in a lidded bin. A fresh wall is at ground temperature all through and soaks heat up as 2 I dT sqrt(t/pi) (I = 216 J/(m2 K sqrt(s))): 2.8 MJ a square metre in a night, 16 times the steady loss, so 11 kg of 200 C rock in a 1 m cavity (left) leaves the bank at -50 C at 03:00, while 40 kg in a tight 0.5 m cavity (right) brings it to +4 C from night 1. The rock cools through its lid with tau = m c / leak (3.9 days at 0.1 W/K): a lid leaking 0.5 W/K lets the bank pass 45 C from sol 5 (leaky vault, far right; it takes sols: speed it up, and top the rock up to 200 C at each dusk). The rock in the sun at the far left warms at P / (m c). Walls show the warmth soaking in; the lid swings as the thermostat opens it at 5 C and shuts it at 40 C.",
+        ["hot-water-night"] = "Three rooms losing 2 W/K to a night at -80 C, each warmed by a tank of water at 60 C through a 6 W/K film. Tank and room cool together with two time constants (375 s, and 8 h, 26 h or 52 h by tank size); 33 kg of water, the design doc's 7 MJ, leaves its room at -14 C at dawn and about 56 kg is needed to hold 0 C. The 10 kg tank reaches 0 C at 4.4 h and holds there, freezing, with its room at -20 C. Best at 20x.",
     };
 
     private MaterialLibrary _materials = null!;

@@ -68,9 +68,18 @@
     (apply max (for/list ([f run] #:when (>= (car f) (* from-sol sol))) (at f key))))
   ;; the first night is the same either way: the lid is open all night (bank under 5 C until 03:00)
   (check-= (value-at run 'tight-bank.temperature (* 10 hour)) (value-at run 'leaky-bank.temperature (* 10 hour)) 0.05 "night 1: same")
-  ;; equilibrium of a shut lid: the bank settles where the lid's heat L (T_rock - T_bank) balances what leaves it, U (T_bank - T_ground), U = 0.10 W/K
-  ;; (the bank's radiation 0.83 W/K in series with the wall's steady 0.117 W/K): T = (L T_rock + U T_g) / (L + U). With the rock near 100 C
-  ;; on average: L = 0.1 -> 22 C; L = 0.5 -> 73 C. The wall takes weeks to warm, so these are asymptotes.
+  ;; a shut lid is a leak L to the cavity, so the rock cools towards the cavity's temperature T_e with time constant tau = m c / L:
+  ;;   0.1 W/K: 40 x 840 / 0.1 = 336,000 s (3.9 days);  0.5 W/K: 67,200 s (18.7 h)
+  ;; by sol 5 the bank is over 5 C all day, so the lid stays shut from one reload to the next, and the rock should end the sol at
+  ;;   T_e + (200 - T_e) exp(-88,775 / tau)   (T_e the day's mean cavity temperature, read from the trace: 14.1 and 48.6 C)
+  ;; = 156.8 C and 89.0 C
+  (define day5 (for/list ([f run] #:when (and (>= (car f) (* 4 sol)) (< (car f) (* 5 sol)))) f))
+  (for ([v '(tight leaky)] [L '(0.1 0.5)] [end '(156.8 89.0)])
+    (define rock (string->symbol (format "~a-rock.temperature" v)))
+    (define te (/ (apply + (map (λ (f) (at f (string->symbol (format "~a.temperature" v)))) day5)) (length day5)))
+    (define tau (/ (* 40 840) L))
+    (check-= (at (last day5) rock) (+ te (* (- 200 te) (exp (- (/ sol tau))))) 1.0 (format "~a W/K lid: the rock ends sol 5 at ~a C" L end))
+    (check-true (for/and ([f day5]) (>= (at f (string->symbol (format "~a-bank.temperature" v))) 5)) "with the lid shut all day"))
   (check-true (<= (peak-of 'tight-bank.temperature 3) 41) (format "0.1 W/K lid: bank peaks at ~a C from sol 4" (peak-of 'tight-bank.temperature 3)))
   (check-true (>= (peak-of 'leaky-bank.temperature 3) 55) (format "0.5 W/K lid: bank reaches ~a C by sol 8" (peak-of 'leaky-bank.temperature 3)))
   (check-true (> (peak-of 'leaky-bank.temperature 3) 45) "above the 45 C a lithium bank may charge at"))

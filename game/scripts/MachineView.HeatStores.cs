@@ -18,7 +18,7 @@ namespace HeroicInventions;
 /// </summary>
 public partial class MachineView
 {
-    private sealed record StoreView(HeatStore Store, StandardMaterial3D Block, Label3D Label, HeatBin? Bin, Node3D? Lid);
+    private sealed record StoreView(HeatStore Store, StandardMaterial3D Block, Label3D Label, HeatBin? Bin, Node3D? Lid, MeshInstance3D? Ice, float Height, float BaseY);
     private sealed record VaultView(Enclosure Room, List<StandardMaterial3D> Liners, Label3D Label);
     private readonly List<StoreView> _storeViews = [];
     private readonly List<VaultView> _vaultViews = [];
@@ -35,14 +35,22 @@ public partial class MachineView
             var at = V(part.At);
             float s = StoreSide(store);
             bool water = store.Substance.Name == "water";
-            var mat = water ? Shapes.Mat(Shapes.Water, roughness: 0.3f, alpha: 0.85f) : PartSurface(part, s);
+            var mat = water ? Shapes.Mat(Shapes.Water, roughness: 0.3f) : PartSurface(part, s);
             MeshInstance3D block;
+            MeshInstance3D? ice = null;
+            float height = s;
             if (water)
             {
                 // a tank of water: V = 2 pi r^3, as tall as it is wide
                 float r = s / Mathf.Pow(2 * Mathf.Pi, 1f / 3f) * 0.9f;
                 block = Shapes.Cylinder(r, 2 * r, mat);
                 block.Position = at + new Vector3(0, r, 0);
+                height = 2 * r;
+                // what has frozen: a pale cylinder rising from the bottom, as much of the tank as is ice
+                ice = Shapes.Cylinder(r * 1.01f, 2 * r, Shapes.Mat(new Color(0.88f, 0.95f, 1f), roughness: 0.4f));
+                ice.Position = at + new Vector3(0, r, 0);
+                ice.Visible = false;
+                AddChild(ice);
             }
             else
             {
@@ -77,7 +85,7 @@ public partial class MachineView
                 lidMesh.Position = new Vector3(0, 0.02f, outer / 2);
                 lid.AddChild(lidMesh);
             }
-            _storeViews.Add(new StoreView(store, mat, label, store.Bin, lid));
+            _storeViews.Add(new StoreView(store, mat, label, store.Bin, lid, ice, height, at.Y));
         }
 
         // a room with a wall heat soaks into: the earth round it, cut away at the front (+z) and the top, and a sheet on its inner face
@@ -124,6 +132,13 @@ public partial class MachineView
             var s = v.Store;
             Skins.Warm(v.Block, s.Temperature);   // the stored heat, on the store (art direction 12.9)
             Skins.Glow(v.Block, s.Temperature);   // and a glow from 500 °C, as for any hot thing
+            if (v.Ice is { } ice)
+            {
+                ice.Visible = s.Frozen > 0.001;
+                float share = Mathf.Max(0.001f, (float)s.Frozen);
+                ice.Scale = new Vector3(1, share, 1);
+                ice.Position = new Vector3(ice.Position.X, v.BaseY + share * v.Height / 2, ice.Position.Z);
+            }
             if (v.Lid is not null && v.Bin is { } bin) v.Lid.RotationDegrees = new Vector3(-105f * (float)bin.Open, 0, 0);
             string text = $"{s.Name}: {s.Temperature:0} °C";
             if (s.Substance.Latent > 0 && s.Frozen > 0) text += $", {s.Frozen * 100:0}% ice";
