@@ -58,8 +58,12 @@
     (check-true (regexp-match? #rx"\\(machine battery-bank " (file->string (p "s2.save"))) "the save after a load keeps the crates' labels"))
 
   (test-case "the loaded rover stands in the hole, which is not the ground that was there"
-    (check-true (< (pitch (first (rover-lines loaded))) 0) "pitch on the dug ground")
-    (check-true (> (pitch (first (rover-lines first-half))) 9) "pitch on the undug ground"))
+    (define dug (pitch (first (rover-lines loaded)))) (define undug (pitch (first (rover-lines first-half))))
+    ;; the patch's collision came back with the load: set at the same place, the rover leans 3.4 degrees less on the dug
+    ;; ground than on the ground that was there (5.5 against 8.9 since its wheels are sprung, #198; -2.8 against 9.4
+    ;; on rigid wheels, which rested on two corners of the hole)
+    (check-true (> undug 8) (format "pitch on the undug slope ~a" undug))
+    (check-true (< dug (- undug 2)) (format "pitch on the dug ground ~a, against ~a undug" dug undug)))
 
   (test-case "after a second cycle the loaded run's worked ground is the kept run's, node for node"
     (define a (worked-of (p "kept.save")))
