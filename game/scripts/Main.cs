@@ -1531,7 +1531,7 @@ public partial class Main : Node3D
                 else if (mb.ButtonIndex == MouseButton.Left && mb.Position.DistanceTo(_pressAt) < 4)
                 {
                     if (_joining) JoinPickAt(mb.Position);
-                    else FocusMachineAt(mb.Position);
+                    else if (!RoverIsPlayer) FocusMachineAt(mb.Position);   // (in the game the rover's hand focuses what it touches, without moving the follow camera)
                 }
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.Middle } mb:

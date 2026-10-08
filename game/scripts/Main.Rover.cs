@@ -188,7 +188,7 @@ public partial class Main
         foreach (var child in col.GetChildren().OfType<Control>())
             if (child != _roverInfo && child != _hudNote && child != _hudControls && child != _operatorSection) Hide(child);
         // the left panel offers sleep, save and load, menu and speed (and pause); the machine list, restart, details, edit and join are for machine runs
-        foreach (Control c in new Control[] { _machinesToggle, _machineList, _restartButton, _detailsButton, _editButton, _joinButton }) Hide(c);
+        foreach (Control c in new Control[] { _machinesToggle, _machineList, _restartButton, _detailsButton }) Hide(c);
     }
 
     private void Hide(Control c)
@@ -211,6 +211,7 @@ public partial class Main
         var r = _rover;
         // Main re-shows these when it focuses a machine or folds the menu; keep them away while the rover is the player
         foreach (var c in _roverHidden.Keys) if (IsInstanceValid(c) && c.Visible) c.Visible = false;
+        _editButton.Visible = _joinButton.Visible = false;   // (not restored: ClearWorld and LoadWorld own these two)
         _roverState!.Text = $"{(_running ? "Running" : "Paused")} · time ×{_timeScale:0.##}";
         _roverDrive!.Text = $"{r.Speed:0.0} m/s · nose {r.PitchDeg:+0;-0;0}° · tilt {r.TiltDeg:0}°";
         _roverArm!.Text = $"{r.ArmStatus}\nReaches {Rover.ArmReach:0.0} m · pushes up to {RoverSpec.PushForce(r.GroundGravity) / 1000:0.0} kN · never lifts a load. B digs and dumps.";
@@ -221,7 +222,7 @@ public partial class Main
                          .Select(x => (x.View, Distance: here.DistanceTo(x.Box!.Value.Position.Max(here.Min(x.Box.Value.End)))))
                          .Where(x => x.Distance < 25).OrderBy(x => x.Distance).Take(3).ToList();
         _roverNear!.Text = near.Count == 0 ? "No machine within 25 m."
-            : string.Join("\n", near.Select(x => $"{DisplayNames.GetValueOrDefault(_viewMachine.GetValueOrDefault(x.View, ""), _viewMachine.GetValueOrDefault(x.View, "machine"))} {x.Distance:0.0} m"
+            : string.Join("\n", near.Select(x => $"{_byName.FirstOrDefault(kv => kv.Value == x.View).Key ?? "machine"} {x.Distance:0.0} m"
                                                    + (x.Distance <= Rover.ArmReach ? " (in reach)" : "")));
         _roverNote!.Text = RoverSaid is { } said ? said : "";
         _roverNote.Visible = _roverNote.Text.Length > 0;

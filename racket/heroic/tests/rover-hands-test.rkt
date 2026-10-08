@@ -106,8 +106,9 @@
     ;; the two allowed actions are in the operator log, the refused ones are not (the log is the replayable record)
     (check-equal? (length (lines-with lines "[operate]")) 2 "tap 1 and water 0 only"))
 
-  (test-case "the 21.6 t boulder on the battery bank can't be lifted or dragged: refused with its mass, in reach or not, and it does not move"
-    ;; the opening's slide has come down and settled by 3000 frames (25 s); the boulder nearest the battery bank is 21.6 t of granite
+  (test-case "the 21.6 t boulder nearest the battery bank can't be lifted or dragged: refused with its mass, and it does not move"
+    ;; the opening's slide has come down and settled by 3000 frames (25 s); the boulder nearest the battery bank (6.4 m from its crate in this run:
+    ;; none came to rest on it, the opening's own check #61 owns that) is 21.6 t of granite; the refusal is by its mass, wherever it lies
     (define lines
       (run-game "lonely-rover-opening"
                 (string-append "wait 3000; rover nearboulder battery-bank:crate 1.0; wait 60; rover body boulder:last;"
