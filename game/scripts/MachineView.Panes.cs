@@ -18,6 +18,7 @@ public partial class MachineView
     {
         foreach (var (id, pane) in Runtime.Panes)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var at = V(part.At);
             int across = (int)Math.Ceiling(Math.Sqrt(pane.Count));

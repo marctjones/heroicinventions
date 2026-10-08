@@ -54,7 +54,7 @@ public partial class MachineView
         AddChild(label);
         _bearingPendulums.Add((p, node, turned, label, pivot, yaw));
         // posts clear of the whole swing, not just the ball at rest: a lone pendulum's frame isn't a cradle's
-        _pendulumMounts.Add((pivot, bobRadius, length * Mathf.Sin(Mathf.Abs((float)p.Angle)) + bobRadius + 0.08f, yaw));
+        _pendulumMounts.Add((pivot, bobRadius, length * Mathf.Sin(Mathf.Abs((float)p.Angle)) + bobRadius + 0.08f, yaw, _building ?? ""));
     }
 
     private void DrawBearingPendulums()

@@ -1442,6 +1442,8 @@ public partial class Main : Node3D
             case "select": SelectMachine(w[1]); return ScriptedInput.Step.Next;
             case "run": SetRunning(true); return ScriptedInput.Step.Next;
             case "pause": SetRunning(false); return ScriptedInput.Step.Next;
+            case "pick": PrintPick(new Vector2(float.Parse(w[1]), float.Parse(w[2]))); return ScriptedInput.Step.Next;   // which part is drawn at that pixel (#151)
+            case "pickworld": PrintPick(_camera.UnprojectPosition(new Vector3(float.Parse(w[1]), float.Parse(w[2]), float.Parse(w[3])))); return ScriptedInput.Step.Next;   // ... or where that point of the world is drawn
         }
         return null;
     }
@@ -1479,7 +1481,11 @@ public partial class Main : Node3D
 
         if (_quitAfterSimSeconds is { } limit && _current is not null && _current.Runtime.Time >= limit)
         {
-            if (_audit) GD.Print(_current.AuditReport());
+            if (_audit)
+            {
+                GD.Print(_current.AuditReport());
+                foreach (var v in _views.Where(v => v != _current)) GD.Print(v.AuditReport());   // a world: every machine in it (#151)
+            }
             if (_debugPhysics) GD.Print($"[final] {_current.Details}");
             _current.StopTrace();
             foreach (var v in _views) v.StopTrace();

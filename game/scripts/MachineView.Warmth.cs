@@ -26,6 +26,7 @@ public partial class MachineView
             .ToHashSet();
         foreach (var (id, boiler) in Runtime.Boilers)
         {
+            _building = id;
             // a boiler with a safety valve or a burst rating is a sealed pressure vessel: nothing breathes out of its lid
             if (busy.Contains(id) || boiler.Valves.Count > 0 || boiler.Rating > 0) continue;
             var part = Runtime.Def.Part(id)!;

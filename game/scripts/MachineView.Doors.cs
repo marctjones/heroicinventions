@@ -19,6 +19,7 @@ public partial class MachineView
     {
         foreach (var (id, door) in Runtime.Doors)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             float side = Mathf.Sqrt((float)door.Area);
             float w = Mathf.Min(side, 1.2f), h = (float)door.Area / w;      // a door is taller than wide
@@ -34,6 +35,7 @@ public partial class MachineView
         }
         foreach (var (id, pump) in Runtime.GasPumps)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var drum = Shapes.Cylinder(0.18f, 0.3f, Surface(part.Material));
             drum.Position = V(part.At) + new Vector3(0, 0.15f, 0);

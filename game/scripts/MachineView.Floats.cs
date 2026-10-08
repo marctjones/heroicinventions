@@ -48,6 +48,7 @@ public partial class MachineView
         double rho = Physics.WaterDensity, g = Runtime.Outside.Gravity;
         foreach (var (id, tank) in Runtime.Tanks)
         {
+            _building = id;
             if (tank.WaterVolume <= 0 || Runtime.Def.Part(id) is not { } spec) continue;
             float half = Mathf.Sqrt((float)tank.Area) / 2, surface = (float)tank.SurfaceElevation;
             var centre = V(spec.At);

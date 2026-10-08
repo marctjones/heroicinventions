@@ -17,6 +17,7 @@ public partial class MachineView
     {
         foreach (var (id, hearth) in Runtime.Bellows)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var at = V(part.At);
             var wood = Surface(part.Material);

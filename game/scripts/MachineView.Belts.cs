@@ -34,6 +34,7 @@ public partial class MachineView
     {
         foreach (var (id, belt) in Runtime.Belts)
         {
+            _building = id;
             var spec = Runtime.Def.Belts.First(b => b.Id == id);
             var partA = Runtime.Def.Part(spec.A)!;
             var partB = Runtime.Def.Part(spec.B)!;

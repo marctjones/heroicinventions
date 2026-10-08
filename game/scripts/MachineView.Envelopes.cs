@@ -21,6 +21,7 @@ public partial class MachineView
     {
         foreach (var (id, env) in Runtime.Envelopes)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             float h = (float)env.Height, r = (float)env.Radius;
             var body = new RigidBody3D

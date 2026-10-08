@@ -18,6 +18,7 @@ public partial class MachineView
     {
         foreach (var (id, pond) in Runtime.Ponds)
         {
+            _building = id;
             var tank = Runtime.Def.Part(pond.Tank.Name)!;
             float side = Mathf.Sqrt((float)tank.Number("area"));
             var vapour = SteamCloud(V(tank.At) + new Vector3(0, (float)pond.Tank.Level + 0.05f, 0), amount: 40, radius: side * 0.4f, lifetime: 2f);
@@ -26,6 +27,7 @@ public partial class MachineView
         }
         foreach (var (id, roof) in Runtime.Roofs)
         {
+            _building = id;
             var room = Runtime.Def.Part(roof.Room.Name)!;
             float w = (float)room.Number("size-x"), h = (float)room.Number("size-y"), d = (float)room.Number("size-z");
             var fogMat = Shapes.Mat(new Color(0.93f, 0.96f, 1f), roughness: 1, alpha: 0);

@@ -82,6 +82,36 @@ public partial class MachineView
             }
     }
 
+    /// <summary>
+    /// Visible opaque meshes that neither belong to a part nor are marked scenery: a click on one would find
+    /// nothing (#151). Translucent shapes (water, glass, steam) don't count; they are never what is clicked.
+    /// </summary>
+    public List<MeshInstance3D> UntaggedMeshes()
+    {
+        var found = new List<MeshInstance3D>();
+        void Walk(Node node)
+        {
+            if (node.HasMeta("part_id") || node.HasMeta("scenery")) return;
+            if (node is MeshInstance3D mesh && mesh.IsVisibleInTree() && IsOpaque(mesh)) found.Add(mesh);
+            foreach (var child in node.GetChildren()) Walk(child);
+        }
+        foreach (var child in GetChildren()) Walk(child);
+        return found;
+    }
+
+    /// <summary>Which build pass made the view's child that holds this node (see TagBuilt).</summary>
+    private string BuiltBy(Node node)
+    {
+        while (node.GetParent() is { } up && up != this) node = up;
+        return node.HasMeta("built_by") ? node.GetMeta("built_by").AsString() : "later";
+    }
+
+    public static bool IsOpaque(MeshInstance3D mesh)
+    {
+        var material = mesh.MaterialOverride ?? mesh.GetActiveMaterial(0);
+        return material is not BaseMaterial3D m || (m.Transparency == BaseMaterial3D.TransparencyEnum.Disabled && m.AlbedoColor.A > 0.99f);
+    }
+
     public string AuditReport()
     {
         var lines = new List<string> { $"AUDIT {Name} at {Runtime.Time:F1}s" };
@@ -93,6 +123,9 @@ public partial class MachineView
             lines.Add($"  rope {id}: max tension {t:F0} N{(t < 1 ? "   <-- NEVER PULLED" : "")}");
         foreach (var (id, v) in _auditLifted)
             lines.Add($"  lift {id}: delivered {v * 1000:F0} L{(v < 1e-4 ? "   <-- NOTHING LIFTED" : "")}");
+        var untagged = UntaggedMeshes();
+        lines.Add($"  untagged opaque meshes: {untagged.Count}");
+        lines.AddRange(untagged.GroupBy(BuiltBy).Select(g => $"    UNTAGGED from {g.Key}: {g.Count()} e.g. {GetPathTo(g.First())}"));
         return string.Join("\n", lines);
     }
 }

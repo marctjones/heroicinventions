@@ -28,6 +28,7 @@ public partial class MachineView
     {
         foreach (var (id, hopper) in Runtime.Hoppers)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var floor = V(part.At);
             float side = Mathf.Sqrt((float)hopper.Area), start = (float)hopper.Level;

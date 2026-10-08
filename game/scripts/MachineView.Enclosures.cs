@@ -29,6 +29,7 @@ public partial class MachineView
     {
         foreach (var (id, room) in Runtime.Enclosures)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             float w = (float)part.Number("size-x"), h = (float)part.Number("size-y"), d = (float)part.Number("size-z");
             var at = V(part.At);

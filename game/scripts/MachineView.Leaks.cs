@@ -23,6 +23,7 @@ public partial class MachineView
     {
         foreach (var (id, leak) in Runtime.Leaks)
         {
+            _building = id;
             var part = Runtime.Def.Part(id)!;
             var at = V(part.At);
             AddLabel(id, at + new Vector3(0.12f, 0.08f, 0));

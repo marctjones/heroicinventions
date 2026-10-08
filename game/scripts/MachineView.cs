@@ -73,9 +73,11 @@ public partial class MachineView : Node3D
         // labelling each one adds nothing (they're interchangeable) and
         // the text can't fit between them anyway. One machine title is enough.
         _manyIdenticalPendulums = Runtime.Def.Parts.Count(p => p.Kind == "pendulum" && !Runtime.Pendulums.ContainsKey(p.Id)) > 1;
+        ChildEnteredTree += TagBuilt;
         foreach (var part in Runtime.Def.Parts)
         {
             int before = GetChildCount();
+            _building = part.Id;
             switch (part.Kind)
             {
                 case "tank": BuildTank(part); break;
@@ -103,46 +105,51 @@ public partial class MachineView : Node3D
                 case "sluice-box": BuildSluiceBox(part); break;
                 case "galvanic-jar": BuildGalvanicJar(part); break;
             }
+            _building = null;
             _partNodes[part.Id] = Enumerable.Range(before, GetChildCount() - before)
                 .Select(i => GetChild(i)).OfType<Node3D>().ToList();
         }
-        foreach (var pipe in Runtime.Def.Pipes) BuildPipe(pipe);
-        BuildPendulumFrames();
-        BuildArbors();
-        BuildGearTrains();
-        BuildBelts();
-        BuildGrips();
-        BuildCams();
-        BuildRatchets();
-        BuildHoppers();
-        BuildAxleSupports();
-        foreach (var rope in Runtime.Def.Ropes) BuildRope(rope);
-        BuildLifts();
-        BuildChannels();
-        BuildFloatValves();
-        BuildLeaks();
-        BuildDrains();
-        BuildTriggers();
-        BuildSafetyValves();
-        BuildBellows();
-        BuildWarmth();
-        BuildEnclosures();
-        BuildDoors();
-        BuildCrucibles();
-        BuildEnvelopes();
-        BuildPanes();
-        BuildRainHouse();
-        BuildStirlings();
-        BuildGreenhouse();
-        BuildMirrors();
-        BuildPumps();
-        BuildPistonDrives();
-        BuildCarriedWheels();
-        BuildMillstones();
-        BuildAxleFriction();
-        BuildJoints();
-        BuildImpacts();
-        BuildFracture();
+        _pass = "BuildPipe";
+        foreach (var pipe in Runtime.Def.Pipes) { _building = pipe.Id; BuildPipe(pipe); }
+        _building = null;
+        Pass(BuildPendulumFrames);
+        Pass(BuildArbors);
+        Pass(BuildGearTrains);
+        Pass(BuildBelts);
+        Pass(BuildGrips);
+        Pass(BuildCams);
+        Pass(BuildRatchets);
+        Pass(BuildHoppers);
+        Pass(BuildAxleSupports);
+        _pass = "BuildRope";
+        foreach (var rope in Runtime.Def.Ropes) { _building = rope.Id; BuildRope(rope); }
+        _building = null;
+        Pass(BuildLifts);
+        Pass(BuildChannels);
+        Pass(BuildFloatValves);
+        Pass(BuildLeaks);
+        Pass(BuildDrains);
+        Pass(BuildTriggers);
+        Pass(BuildSafetyValves);
+        Pass(BuildBellows);
+        Pass(BuildWarmth);
+        Pass(BuildEnclosures);
+        Pass(BuildDoors);
+        Pass(BuildCrucibles);
+        Pass(BuildEnvelopes);
+        Pass(BuildPanes);
+        Pass(BuildRainHouse);
+        Pass(BuildStirlings);
+        Pass(BuildGreenhouse);
+        Pass(BuildMirrors);
+        Pass(BuildPumps);
+        Pass(BuildPistonDrives);
+        Pass(BuildCarriedWheels);
+        Pass(BuildMillstones);
+        Pass(BuildAxleFriction);
+        Pass(BuildJoints);
+        Pass(BuildImpacts);
+        Pass(BuildFracture);
         Skins.FitJoints(this, Surface);   // a collar or ball wherever the physics joins two parts
         Skins.OrientGrain(this);
         Skins.RecedeStructure(this);
@@ -157,6 +164,44 @@ public partial class MachineView : Node3D
         // energy its starting displacement already has).
         var e0 = Energy();
         _initialMechanicalEnergy = e0.KineticJ + e0.PotentialJ;
+    }
+
+    /// <summary>
+    /// The part whose builder is running right now. Every node added to the view while this is set is tagged
+    /// with it, so no builder has to remember to (#151).
+    /// </summary>
+    private string? _building;
+
+    private string _pass = "parts";
+
+    private void Pass(Action build) { _building = null; _pass = build.Method.Name; build(); _building = null; _pass = "after"; }
+
+    private void TagBuilt(Node node)
+    {
+        if (_building is { } id && !node.HasMeta("part_id") && !node.HasMeta("scenery")) node.SetMeta("part_id", id);
+        else node.SetMeta("built_by", _pass);   // for the audit: which pass made a node that no part owns
+    }
+
+    /// <summary>Marks a node as belonging to no part (ground, light, a scale figure): the audit skips it, a click passes through it.</summary>
+    public static void MarkScenery(Node node) => node.SetMeta("scenery", true);
+
+    /// <summary>
+    /// Everything drawn or built for a part, for highlighting: the nodes tagged with its id (a body carries its own
+    /// meshes below it). A rope, pipe, channel or joint is a part of the machine too, under its own id.
+    /// </summary>
+    public IEnumerable<Node3D> NodesOf(string partId) =>
+        GetChildren().OfType<Node3D>().Where(n => n.HasMeta("part_id") && n.GetMeta("part_id").AsString() == partId);
+
+    /// <summary>Every mesh in the view, however deep, for the picker.</summary>
+    public IEnumerable<MeshInstance3D> Meshes()
+    {
+        var stack = new Stack<Node>(GetChildren());
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            if (node is MeshInstance3D mesh) yield return mesh;
+            foreach (var child in node.GetChildren()) stack.Push(child);
+        }
     }
 
     private static Vector3 V(Vec3 v) => new((float)v.X, (float)v.Y, (float)v.Z);
@@ -744,7 +789,7 @@ public partial class MachineView : Node3D
         // the bob is the part actually worth pointing at.
         if (!_manyIdenticalPendulums)
             AddLabel(part.Id, new Vector3(0, -length + bobRadius + 0.06f, 0), body);
-        _pendulumMounts.Add((V(part.At), bobRadius, 0.06f, yaw)); // hung from a frame beside the swing, built once all are placed
+        _pendulumMounts.Add((V(part.At), bobRadius, 0.06f, yaw, part.Id)); // hung from a frame beside the swing, built once all are placed
     }
 
     /// <summary>
@@ -892,7 +937,7 @@ public partial class MachineView : Node3D
     }
 
     private const uint FixtureLayer = 8, SprungArmLayer = 16;
-    private readonly List<(Vector3 Pivot, float BobRadius, float Reach, Basis Yaw)> _pendulumMounts = []; // Reach: clearance past the end pivots
+    private readonly List<(Vector3 Pivot, float BobRadius, float Reach, Basis Yaw, string Id)> _pendulumMounts = []; // Reach: clearance past the end pivots
 
     /// <summary>
     /// Pendulums hang from a frame beside their swing, never from a post
@@ -914,6 +959,7 @@ public partial class MachineView : Node3D
                  }))
         {
             var yaw = row.First().Yaw;
+            _building = row.First().Id;   // a row's frame is the first pendulum's to click
             Vector3 At(float x, float y, float z) => yaw * new Vector3(x, y, z);
             float y = row.First().Pivot.Y, z = (yaw.Inverse() * row.First().Pivot).Z;
             float side = row.Max(m => m.BobRadius) + 0.04f;
@@ -924,7 +970,7 @@ public partial class MachineView : Node3D
                 AddGroundedSupport(At(right, y, z + dz), 0.012f, 0.06f);
                 AddChild(Shapes.Rod(At(left, y, z + dz), At(right, y, z + dz), 0.01f, wood));
             }
-            foreach (var (pivot, _, _, _) in row)
+            foreach (var (pivot, _, _, _, _) in row)
                 AddChild(Shapes.Rod(pivot - yaw * new Vector3(0, 0, side), pivot + yaw * new Vector3(0, 0, side), 0.005f, iron));
         }
     }
@@ -1266,12 +1312,13 @@ public partial class MachineView : Node3D
                 var c = g.First().Body.Position;
                 var across = c - axis * c.Dot(axis);
                 return (Axis: axis, Back: across + axis * lo, Front: across + axis * hi, Radius: g.Max(a => a.Radius),
-                        Label: string.Join("\n", g.Select(a => a.Label)), Driven: g.Any(a => _trainOf.ContainsKey(a.Body)));
+                        Label: string.Join("\n", g.Select(a => a.Label)), Id: g.First().Body.Name.ToString(), Driven: g.Any(a => _trainOf.ContainsKey(a.Body)));
             })
             .ToList();
 
         foreach (var g in groups)
         {
+            _building = g.Id;   // an axle's rod, posts and label belong to its first wheel
             // one line per part on the axle, above its largest wheel
             var middle = (g.Back + g.Front) / 2;
             AddLabel(g.Label, middle + Vector3.Up * g.Radius * 1.25f, pixelSize: LabelSizeFor(2 * g.Radius));
@@ -1282,6 +1329,7 @@ public partial class MachineView : Node3D
         var small = groups.Where(g => g.Radius < 0.1f && Mathf.Abs(g.Axis.Z) > 0.999f && !g.Driven).ToList();
         if (small.Count > 0)
         {
+            _building = small[0].Id;   // the plate is shared: the first small wheel owns it
             float margin = small.Max(g => g.Radius) * 0.3f;
             float left = small.Min(g => g.Back.X - g.Radius) - margin;
             float right = small.Max(g => g.Back.X + g.Radius) + margin;
@@ -1293,12 +1341,14 @@ public partial class MachineView : Node3D
             AddChild(plate);
             foreach (var g in small)
             {
+                _building = g.Id;
                 float rod = Mathf.Max(0.0006f, g.Radius * 0.04f);
                 AddChild(Shapes.Rod(new Vector3(g.Back.X, g.Back.Y, plateZ), g.Front + g.Axis * rod * 2, rod, Surface("bronze"))); // the arbor
             }
         }
         foreach (var g in groups.Except(small))
         {
+            _building = g.Id;
             float gap = Mathf.Clamp(g.Radius * 0.1f, 0.01f, 0.15f);
             var back = g.Back - g.Axis * gap;
             var front = g.Front + g.Axis * gap;

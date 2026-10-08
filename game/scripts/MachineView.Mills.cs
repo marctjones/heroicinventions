@@ -28,6 +28,7 @@ public partial class MachineView
     {
         foreach (var part in Runtime.Def.Parts.Where(p => p.Kind == "wheel" && p.Props.GetValueOrDefault("grind-torque") is SNumber))
         {
+            _building = part.Id;
             if (!_bodiesById.TryGetValue(part.Id, out var stone) || !_hinges.TryGetValue(stone, out var hinge)) continue;
             // the grinding is its drag: without this, the axle's 0.2/s bearing
             // damping (plus Godot's 0.1) on a 950 kg stone was a 134 N·m brake
