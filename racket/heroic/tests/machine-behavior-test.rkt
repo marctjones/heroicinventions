@@ -995,8 +995,8 @@
 
 ;; ---------------------------------------------------------------------------
 ;; Catch and release (issue #155): catches on hinges, pawls, tethers. The working is in each blueprint's header.
-;; godot-simulate's #:set acts before the first step (its time, if given, is dropped on this base: #150), so a
-;; release mid-run is the blueprint's own #:release-after, and (x catch 0) at the start is "let go at once".
+;; (x catch 0) at the start is "let go at once"; a release mid-run is the blueprint's own #:release-after, or a timed
+;; (x catch 0 t) under #:set, which godot-simulate now honours (#150).
 
 ;; How far a body is, flat, from where it started when it first comes back to the ground after a throw: back within
 ;; 15 cm of its starting height after rising half a metre, a metre or more out (the game's [trail] rule, Main.Trail.cs).
@@ -1578,6 +1578,64 @@
     (check-= (value-at game '(outer open) 710) 0 1e-9)
     (check-= (value-at game '(chamber pressure) 399) (value-at sim '(chamber pressure) 399) 0.05
              "the pump has pumped it down to its 5 kPa switch in both")))
+
+(test-case "Timed settings under godot-simulate (#158): the constant-head tap is opened to 2 cm at 120 s and the float valve holds the head both before and after, as under simulate"
+  (when (godot-available?)
+    (define opened '((tap opening 0.04 120) (bare-tap opening 0.04 120)))   ; operator action: the same list under both hosts
+    (define sim (simulate 'constant-head #:seconds 240 #:step 0.01 #:sample-dt 1 #:set opened))
+    (define game (godot-simulate 'constant-head #:seconds 240 #:sample-dt 1 #:set opened))
+    (define h1 (held-level 0.01))
+    (define h2 (held-level 0.02))
+    (check-= (value-at game '(tap opening) 119) 0.02 1e-9 "the tap is still at its starting 1 cm at 119 s: nothing was set before the first step")
+    (for ([t '(60 110)]) (check-= (value-at game '(cistern level) t) (* 100 h1) 0.05 (format "game: held at 39.17 cm at ~a s" t)))
+    (for ([t '(180 235)]) (check-= (value-at game '(cistern level) t) (* 100 h2) 0.05 (format "game: held at 38.38 cm at ~a s" t)))
+    (for ([t '(60 110 180 235)])
+      (check-= (value-at game '(cistern level) t) (value-at sim '(cistern level) t) 0.05 (format "Godot and SimHost agree on the level at ~a s" t))
+      (check-= (value-at game '(outlet flow) t) (value-at sim '(outlet flow) t) 2e-3 (format "and on the draw at ~a s" t)))))
+
+(test-case "Timed settings under godot-simulate (#158): the boiler-safety valve is tied down at 600 s and the guarded boiler then bursts, as under simulate"
+  (when (godot-available?)
+    (define tied '((guard lift 300 600)))
+    (define sim (simulate 'boiler-safety #:seconds 700 #:step 0.01 #:sample-dt 1 #:set tied))
+    (define game (godot-simulate 'boiler-safety #:seconds 700 #:sample-dt 1 #:set tied))
+    (check-= (value-at game '(guarded pressure) 599) (/ bs-p-hold 1000) 0.02 "held at the safety valve's pressure until tied down")
+    (check-= (value-at game '(guard flow) 601) 0 1e-12 "tied down, it vents nothing")
+    (check-= (final-of game '(guarded burst)) 1 0 "and bursts before 700 s")
+    (check-= (final-of game '(guarded burst-pressure)) 200 0.5)
+    (check-= (final-of game '(guarded burst-time)) (final-of sim '(guarded burst-time)) 1 "Godot and SimHost agree on when")
+    (check-= (value-at game '(guarded pressure) 599) (value-at sim '(guarded pressure) 599) 0.02)))
+
+;; The mars-sols and greenhouse timed tests run 270,000 s and 2.7 million s under simulate: far past what the game's
+;; 120 Hz physics can do, so the same two operator actions (clean the mirror, stack the harvest on the stove) are
+;; checked here a few minutes in, with the sun held still (scenario: clock-rate 0), on both hosts.
+(test-case "Timed settings under godot-simulate (#158): a mirror dusted over at 10 s throws e^-0.5 of its light until it is cleaned at 30 s, as under simulate"
+  (when (godot-available?)
+    (define dusted (- 1 (exp -0.5)))                  ; the fraction of the light the dust takes: 0.3935
+    (define dust `((scene clock-rate 0) (mirror dust ,dusted 10) (mirror dust 0 30)))   ; scenario, then the operator's two actions
+    (define sim (simulate 'mars-sols #:seconds 60 #:step 0.05 #:sample-dt 1 #:set dust))
+    (define game (godot-simulate 'mars-sols #:seconds 60 #:sample-dt 1 #:set dust))
+    (for ([run (list sim game)] [host '("SimHost" "Godot")])
+      (check-= (value-at run '(mirror dust) 5) 0 0 (format "~a: clean until dusted at 10 s" host))
+      (check-= (value-at run '(mirror dust) 20) dusted 1e-9 (format "~a: dusted" host))
+      (check-= (value-at run '(mirror dust) 40) 0 0 (format "~a: cleaned at 30 s" host))
+      (check-= (/ (value-at run '(mirror power) 20) (value-at run '(mirror power) 5)) (exp -0.5) 1e-6
+               (format "~a: a dusted mirror throws e^-0.5 of what it did" host))
+      (check-= (value-at run '(mirror power) 40) (value-at run '(mirror power) 5) 1e-6 (format "~a: and cleaned, the same as at first" host)))
+    (for ([t '(5 20 40)])
+      (check-= (value-at game '(mirror power) t) (value-at sim '(mirror power) t) 1e-3 (format "Godot and SimHost agree on the power at ~a s" t)))))
+
+(test-case "Timed settings under godot-simulate (#158): the greenhouse harvest stacked on the stove at 300 s burns at 1 kW, as under simulate"
+  (when (godot-available?)
+    (define harvest '((scene clock-rate 0) (trees harvest 1000 300)))     ; scenario, then the operator's harvest
+    (define sim (simulate 'greenhouse #:seconds 320 #:step 0.05 #:sample-dt 1 #:set harvest))
+    (define game (godot-simulate 'greenhouse #:seconds 320 #:sample-dt 1 #:set harvest))
+    ;; the wood grown by 300 s, 3.181e-7 kg/s net, burns at 1 kW / 15 MJ/kg = 6.667e-5 kg/s: 1.43 s
+    (define net 3.181e-7)
+    (for ([run (list sim game)] [host '("SimHost" "Godot")])
+      (check-= (value-at run '(stove fuel) 299) 0 1e-12 (format "~a: nothing on the stove before the harvest" host))
+      (check-= (value-at run '(trees wood) 299) (* net 299) 1e-6 (format "~a: the wood grown by then" host))
+      (check-= (value-at run '(trees wood) 320) (* net 19.5) 5e-6 (format "~a: the trees start again from nothing" host))
+      (check-= (value-at run '(stove fuel) 310) 0 1e-9 (format "~a: burned out" host)))))
 
 (test-case "Timed settings under godot-simulate: a malformed or impossible setting is an error, not a skipped line"
   (when (godot-available?)
@@ -2981,8 +3039,9 @@
 
 ;; ---- #154 driven wheels a person can start, stop, slow, reverse and let go
 ;; The roman crane (roman-crane.rkt) lifts its granite at 3 rpm x 0.25 m = 7.85 cm/s. The people at the wheel
-;; are a hinge motor, and a field set at run time changes it: here a trigger sets it as the stone passes 1.2 m
-;; (a test-only copy of the blueprint with one trigger clause added, written beside the others and removed).
+;; are a hinge motor, and a field set at run time changes it: here the operator log sets it, timed under
+;; godot-simulate's #:set, at 15.4 s, when the stone passes 1.2 m (it used to be a test-only copy of the blueprint with
+;; a trigger clause, written beside the others and removed; the trigger fired at 15.4 s in every variant).
 ;; Worked out before the first run, with the bodies' inertias from the blueprint:
 ;;   m = 2700 x 0.6^3 = 583.2 kg; r = 0.25 m; I_wheel + I_drum = 720 x (2.5254 + 0.0061957) = 1822.7 kg m2;
 ;;   the pulley (bronze, 5.18e-5 x 8800 = 0.456 kg m2 on 0.15 m) adds 20.3 kg to the stone's;
@@ -2993,16 +3052,8 @@
 ;;   Holding still needs m g r = 1430.3 N m; the walkers give 1545.1. At a torque of 1300 the 130 N m left over,
 ;;   at 0.25 m, is 520 N on 29,767 kg: 0.0175 m/s2, ~7.9 cm in 3 s less the stopping.
 ;;   Reversed at -3 rpm it lowers at 3 x 2 pi / 60 x 0.25 = 7.854 cm/s.
-(define (with-crane-variant name actions proc)
-  (define source (file->string (build-path compiled-machines "roman-crane.machine")))
-  (define body (string-trim source #:left? #f))
-  (define text
-    (string-append (string-replace (substring body 0 (sub1 (string-length body))) "(machine roman-crane" (format "(machine ~a" name) #:all? #f)
-                   (format "\n  (trigger at-top (at 3.35 1.2 1.05) (size 0.5 0.1 0.5) (body stone) (when) (do ~a) (srcloc \"test\" 1 1)))\n" actions)))
-  (define file (build-path compiled-machines (format "~a.machine" name)))
-  (dynamic-wind (λ () (call-with-output-file file (λ (out) (write-string text out)) #:exists 'truncate))
-                (λ () (proc))
-                (λ () (when (file-exists? file) (delete-file file)))))
+(define crane-walkers-act-at 15.4)   ; s: the stone, rising from 0.30 m, reaches the 1.2 m mark (the old test's trigger clause)
+(define (crane-run actions) (godot-simulate 'roman-crane #:seconds 24 #:sample-dt 1/120 #:set actions))
 (define (first-time run key pred)
   (for/first ([f run] #:when (let ([v (assq key (cdr f))]) (and v (pred (cadr v))))) (car f)))
 
@@ -3018,9 +3069,8 @@
     (define (y-at run t) (value-at-key run 'stone.y t))
     (define (vy-at run t) (value-at-key run 'stone.vy t))
     ;; --- let go
-    (with-crane-variant 'crane-let-go "(tympanus drive-torque 0.0)"
-      (λ ()
-        (define run (godot-simulate 'crane-let-go #:seconds 24 #:sample-dt 1/120))
+    (let ()
+        (define run (crane-run `((tympanus drive-torque 0.0 ,crane-walkers-act-at))))
         (define t0 (first-time run 'tympanus.drive-torque zero?))
         (check-true (and t0 (< 9 t0 20)) (format "the walkers let go at ~a s, as the stone passes 1.2 m" t0))
         (check-= (vy-at run (- t0 0.2)) v0 0.003 "it was rising at 7.85 cm/s")
@@ -3028,28 +3078,25 @@
         (check-= (vy-at run (+ t0 0.4)) predicted 0.004 (format "0.4 s after it is falling back: v = ~a, predicted ~a" (vy-at run (+ t0 0.4)) predicted))
         (check-true (< (y-at run (+ t0 4)) (- (y-at run t0) 0.5)) "and in four seconds it has dropped more than half a metre")
         ;; the fall is the free-wheel acceleration, damped: v(3) = -a/k (1 - e^-3k) + v0 e^-3k
-        (check-= (vy-at run (+ t0 3)) (+ (* (/ a k) (- (exp (* -3 k)) 1)) (* v0 (exp (* -3 k)))) 0.01)))
+        (check-= (vy-at run (+ t0 3)) (+ (* (/ a k) (- (exp (* -3 k)) 1)) (* v0 (exp (* -3 k)))) 0.01))
     ;; --- held still
-    (with-crane-variant 'crane-hold "(tympanus drive-rpm 0.0)"
-      (λ ()
-        (define run (godot-simulate 'crane-hold #:seconds 24 #:sample-dt 1/120))
+    (let ()
+        (define run (crane-run `((tympanus drive-rpm 0.0 ,crane-walkers-act-at))))
         (define t0 (first-time run 'tympanus.drive-rpm zero?))
         (check-true (and t0 (< 9 t0 20)))
-        (check-= (y-at run (+ t0 4)) (y-at run (+ t0 0.3)) 0.01 "1545 N m against 1430: the stone hangs still")))
+        (check-= (y-at run (+ t0 4)) (y-at run (+ t0 0.3)) 0.01 "1545 N m against 1430: the stone hangs still"))
     ;; --- held with less torque than the stone's 1430 N m
-    (with-crane-variant 'crane-slip "(tympanus drive-rpm 0.0) (tympanus drive-torque 1300.0)"
-      (λ ()
-        (define run (godot-simulate 'crane-slip #:seconds 24 #:sample-dt 1/120))
+    (let ()
+        (define run (crane-run `((tympanus drive-rpm 0.0 ,crane-walkers-act-at) (tympanus drive-torque 1300.0 ,crane-walkers-act-at))))
         (define t0 (first-time run 'tympanus.drive-torque (λ (v) (< v 1400))))
         (check-true (> (- (y-at run (+ t0 0.3)) (y-at run (+ t0 3.3))) 0.03)
-                    (format "1300 N m is not enough: it slips ~a m in 3 s" (- (y-at run (+ t0 0.3)) (y-at run (+ t0 3.3)))))))
+                    (format "1300 N m is not enough: it slips ~a m in 3 s" (- (y-at run (+ t0 0.3)) (y-at run (+ t0 3.3))))))
     ;; --- reversed
-    (with-crane-variant 'crane-lower "(tympanus drive-rpm -3.0)"
-      (λ ()
-        (define run (godot-simulate 'crane-lower #:seconds 24 #:sample-dt 1/120))
+    (let ()
+        (define run (crane-run `((tympanus drive-rpm -3.0 ,crane-walkers-act-at))))
         (define t0 (first-time run 'tympanus.drive-rpm (λ (v) (< v 0))))
         (check-= (vy-at run (+ t0 3)) (- v0) 0.002 "lowers at 7.85 cm/s")
-        (check-= (- (y-at run (+ t0 3)) (y-at run (+ t0 2))) (- v0) 0.003)))))
+        (check-= (- (y-at run (+ t0 3)) (y-at run (+ t0 2))) (- v0) 0.003))))
 
 ;; The gristmill's weak wheel gives 200 N m against stones set to 267, so it never turns (its header says to
 ;; set weak.grind-torque in the console). Set to 150, the 50 N m left over spins the stone up: alpha = 50 / I
