@@ -271,7 +271,7 @@ public sealed partial class Rover
     private const float BodySlack = 0.03f, BodyClearance = 0.05f;
 
     /// <summary>
-    /// The name of the first loose body (a rigid body that is not frozen, and not the rover's own chassis or wheels) that the ground,
+    /// The name of the first loose body (a rigid body, frozen or not, other than the rover's own chassis and wheels) that the ground,
     /// risen at these nodes, would reach: a column a fine cell across over each node, from just under its old height to a little over
     /// its new one. Null if there is none. (#72: the rover may move soil anywhere, but not lift or push a load with it.)
     /// </summary>
@@ -290,7 +290,7 @@ public sealed partial class Rover
             box.Size = new Vector3(cell, hi - lo, cell);
             query.Transform = new Transform3D(Basis.Identity, new Vector3((float)r.X, (lo + hi) / 2, (float)r.Z));
             foreach (var hit in space.IntersectShape(query, 32))
-                if (hit["collider"].AsGodotObject() is RigidBody3D { Freeze: false } body) return body.Name;
+                if (hit["collider"].AsGodotObject() is RigidBody3D body) return body.Name;   // frozen too: it would be shoved when let go
         }
         return null;
     }
