@@ -142,7 +142,7 @@ public partial class MachineView
             if (v.Lid is not null && v.Bin is { } bin) v.Lid.RotationDegrees = new Vector3(-105f * (float)bin.Open, 0, 0);
             string text = $"{s.Name}: {s.Temperature:0} °C";
             if (s.Substance.Latent > 0 && s.Frozen > 0) text += $", {s.Frozen * 100:0}% ice";
-            if (v.Bin is { } b) text += b.Open >= 0.5 ? "\nlid open" : $"\nlid shut, leaks {b.Leak:0.##} W/K";
+            if (v.Bin is { } b) text += b.Open >= 0.995 ? "\nlid open" : b.Open > 0.005 ? $"\nlid {b.Open * 100:0}% open" : $"\nlid shut, leaks {b.Leak:0.##} W/K";
             v.Label.Text = text;
         }
         foreach (var v in _vaultViews)

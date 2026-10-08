@@ -41,6 +41,9 @@ public sealed record MaterialDef(
     /// <summary>Thermal conductivity in W/(m·K) (issue #71), or null where the table gives none.</summary>
     public double? Conductivity { get; init; }
 
+    /// <summary>Linear thermal expansion in 10⁻⁶ per kelvin (issue #97), near 20 °C, or null where the table gives none.</summary>
+    public double? Expansion { get; init; }
+
     /// <summary>Mass in kg of a solid of this material with the given volume in m³.</summary>
     public double MassOf(double volumeM3) => Density * volumeM3;
 

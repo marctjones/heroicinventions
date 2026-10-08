@@ -9,9 +9,11 @@ namespace HeroicInventions.Sim.Thermo;
 ///
 ///   G = (1 − open)·G_leak + open·G_exposed.
 ///
-/// A thermostat can work it (issue #97 will be a bimetal strip). Until then a bin may <see cref="Sense"/> a store (the
-/// bank) and swing its lid by hysteresis: wide open when the bank has cooled to <see cref="OpenBelow"/> °C, shut when it
-/// has warmed to <see cref="CloseAbove"/>, and left as it is between. An ideal switch: it senses the bank's own temperature.
+/// A thermostat works it: a <see cref="BimetalStrip"/> (issue #97), the physical one, which sets <see cref="Open"/> in proportion to
+/// where its tip is. The bin also keeps its ideal stand-in (issue #71), the limit the strip is compared with: it may <see cref="Sense"/>
+/// a store (the bank) and swing its lid by hysteresis, wide open when the bank has cooled to <see cref="OpenBelow"/> °C, shut when it
+/// has warmed to <see cref="CloseAbove"/>, and left as it is between; an ideal switch that senses the bank's own temperature with no
+/// lag. A strip on the lid takes its place (the runtime clears <see cref="Sense"/>).
 /// </summary>
 public sealed class HeatBin(string name, HeatStore store, double leak)
 {

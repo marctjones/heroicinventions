@@ -44,7 +44,7 @@
          "geometry/shape.rkt" "planets.rkt" "weather.rkt")
 
 (provide define-machine
-         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar heat-store heat-bin
+         tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar heat-store heat-bin bimetal
          pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
          inflow channel off trigger follow belt wake joint
          (struct-out machine) (struct-out part) (struct-out port-spec)
@@ -437,6 +437,20 @@
          (bad "#:open-below must be under #:close-above, or the lid chatters"))]))
   parts)
 
+;; A bimetal strip's numbers are checked when the machine is built (#97).
+(define (check-bimetals parts)
+  (for ([p parts] #:when (eq? (part-kind p) 'bimetal))
+    (define (prop k) (cdr (assq k (part-props p))))
+    (define loc (part-loc p))
+    (define (bad what) (error 'define-machine "~a:~a:~a: bimetal ~a: ~a" (vector-ref loc 0) (vector-ref loc 1) (vector-ref loc 2) (part-id p) what))
+    (for ([k '(length thickness width travel contact)])
+      (unless (and (real? (prop k)) (> (prop k) 0)) (bad (format "#:~a must be above 0, got ~e" k (prop k)))))
+    (unless (and (real? (prop 'high-share)) (< 0 (prop 'high-share) 1))
+      (bad (format "#:high-share must be between 0 and 1, got ~e" (prop 'high-share))))
+    (for ([k '(shut-at straight-at)])
+      (unless (and (real? (prop k)) (> (prop k) -273.15)) (bad (format "#:~a must be a temperature in deg C, got ~e" k (prop k))))))
+  parts)
+
 ;; A mirror's numbers are checked when the machine is built.
 (define (check-mirrors parts)
   (for ([p parts] #:when (eq? (part-kind p) 'burning-mirror))
@@ -529,7 +543,7 @@
     (unless (and (real? time) (<= 0 time) (< time 24))
       (error 'define-machine "machine ~a: #:time must be solar hours in [0, 24), got ~e" name time)))
   (machine name source ambient sun planet-v weather-v
-           (check-panes (check-heat-stores (check-zone-joins (check-enclosures (check-carried-wheels (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-floats (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items)))))))))))))
+           (check-panes (check-bimetals (check-heat-stores (check-zone-joins (check-enclosures (check-carried-wheels (check-mirrors (check-capstans (check-windmills (check-pumps (place-safety-valves (place-floats (place-leaks (place-float-valves (place-sluices (filter part? items) (filter channel-spec? items)) items))))))))))))))
            (filter pipe-spec? items)
            (filter connect-spec? items)
            (filter air-spec? items)
@@ -563,7 +577,7 @@
       (raise-syntax-error #f "only allowed inside define-machine" stx))
     ...))
 
-(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar heat-store heat-bin
+(define-clause-keywords tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror hopper pane pond drain roof stirling ball plants melter electrolyser galvanic-jar heat-store heat-bin bimetal
   pipe connect sealed-air port rope world arbor mesh lift piston atmospheric-cylinder steam-cylinder
   inflow channel off trigger follow belt wake joint)
 
@@ -622,6 +636,7 @@
   (struct chinfo (id from to onto))
   (struct zjinfo (id kind from to))
   (struct pninfo (id on))
+  (struct bminfo (id senses drives))  ; a bimetal strip: what it senses (a heat-store or an enclosure), the heat-bin whose lid it works
   (struct hbinfo (id holds sense))    ; a heat-bin: the heat-store it holds, the one that works its lid (or #f)
   (struct gninfo (id water store))    ; plants, a melter or an electrolyser: its water tank, the hearth its wood is stacked on (or #f)
   (struct rfinfo (id kind on gutter)) ; a pond (on a tank) or a roof (on an enclosure, with a gutter tank or #f)            ; a pane: the enclosure whose wall it is in  ; a door or air-pump: the zones it joins (enclosure ids or outside)  ; a channel: from a ref, to a ref or #f (off the scene), onto a hearth/boiler id or #f
@@ -666,8 +681,8 @@
       #:with port-id (datum->syntax #'r (string->symbol (second pieces)) #'r)))
 
   (define-syntax-class clause
-    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, envelope, burning-mirror, hopper, pane, pond, drain, roof, stirling, ball, plants, melter, electrolyser, galvanic-jar, heat-store, heat-bin) or link (pipe, connect, sealed-air)"
-    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror pane pond drain roof plants melter electrolyser galvanic-jar heat-store heat-bin tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
+    #:description "a part (tank, boiler, rotor, jetwheel, smokejack, block, pendulum, lever, ramp, wheel, screw, fixture, post, hearth, bellows, sluice, waterwheel, windmill, capstan, mirror, counterpoise, float-valve, leak, safety-valve, pump, enclosure, grip, door, air-pump, cam, digger, float, sluice-box, ratchet, crucible, envelope, burning-mirror, hopper, pane, pond, drain, roof, stirling, ball, plants, melter, electrolyser, galvanic-jar, heat-store, heat-bin, bimetal) or link (pipe, connect, sealed-air)"
+    #:literals (ball stirling hopper enclosure grip door air-pump cam digger float sluice-box ratchet crucible envelope burning-mirror pane pond drain roof plants melter electrolyser galvanic-jar heat-store heat-bin bimetal tank boiler rotor jetwheel smokejack block pendulum lever ramp wheel screw fixture post hearth bellows sluice waterwheel windmill capstan mirror counterpoise float-valve leak safety-valve pump piston pipe connect sealed-air rope arbor mesh lift atmospheric-cylinder steam-cylinder inflow channel off trigger follow belt wake joint)
     #:attributes (expr info)
 
     (pattern (tank id:id
@@ -1523,10 +1538,11 @@
     ;; #:leak W/K (default 0.1: the most that holds a vault's bank at 40 deg C; a
     ;; 0.5 W/K lid lets it overheat); open (#:open 0 shut ... 1 wide, default
     ;; shut, set at run time with (bin open 1)) the store is bare to its room.
-    ;; #:sense bank gives it a thermostat in the meantime (the bimetal strip is
-    ;; #97): it opens when that store has cooled to #:open-below (default 5 deg C)
-    ;; and shuts when it has warmed to #:close-above (default 40), and is left
-    ;; between. It is drawn on the store, wherever #:at is.
+    ;; #:sense bank gives it the ideal stand-in thermostat, the limit a bimetal
+    ;; strip (#97, the physical thermostat) is compared with: it opens when that
+    ;; store has cooled to #:open-below (default 5 deg C) and shuts when it has
+    ;; warmed to #:close-above (default 40), and is left between. A bimetal
+    ;; that #:drives the bin takes its place. It is drawn on the store, wherever #:at is.
     (pattern (heat-bin id:id
                        (~alt (~once (~seq #:at at:vec3))
                              (~once (~seq #:holds held:id))
@@ -1540,6 +1556,40 @@
       #:with expr #`(part 'id 'heat-bin '(~? mat oak) (list at.x at.y at.z)
                           (list (cons 'holds 'held) (cons 'leak (~? leak-v 0.1)) (cons 'open (~? open-v 0))
                                 (cons 'sense '(~? sensed #f)) (cons 'open-below (~? lo-v 5)) (cons 'close-above (~? hi-v 40)))
+                          '()
+                          #,(loc-of this-syntax)))
+
+;; A bimetal strip (issue #97): two metals bonded face to face, clamped at one end at #:at, the default thermostat for a heat bin.
+    ;; #:layers (high low) names the two metals of the table, the one that expands more first (brass steel: 19.9 and 11.7 per
+    ;; million per K); the strip bends toward the second as it warms. It is #:length m long (default 0.1), #:thickness m (both layers,
+    ;; default 0.001), #:width m (default 0.01), the first layer #:high-share of the thickness (default 0.5). Timoshenko's curvature,
+    ;; kappa = 6 d_alpha dT (1+m)^2 / (t (3 (1+m)^2 + (1+mn)(m^2 + 1/(mn)))), moves its tip (1 - cos kappa L)/kappa, about 3 d_alpha dT L^2 / (4 t)
+    ;; for equal layers. It #:senses a heat-store or an enclosure through its own time constant tau = C / (h A), #:contact W/(m^2 K) (default 10),
+    ;; and #:drives a heat-bin's lid: shut at #:shut-at deg C (default 40), opening in proportion as the tip moves back, wide open after
+    ;; #:travel m of tip movement (default 0.0021). It is flat at #:straight-at deg C (default 20). A strip driving a bin takes the place
+    ;; of the bin's own #:sense switch.
+    (pattern (bimetal id:id
+                      (~alt (~once (~seq #:at at:vec3))
+                            (~once (~seq #:senses sensed:id))
+                            (~once (~seq #:drives bin-id:id))
+                            (~once (~seq #:layers (hi-l:id lo-l:id)))
+                            (~optional (~seq #:length len-v:expr))
+                            (~optional (~seq #:thickness thick-v:expr))
+                            (~optional (~seq #:width wid-v:expr))
+                            (~optional (~seq #:high-share share-v:expr))
+                            (~optional (~seq #:shut-at shut-v:expr))
+                            (~optional (~seq #:straight-at flat-v:expr))
+                            (~optional (~seq #:travel trav-v:expr))
+                            (~optional (~seq #:contact cont-v:expr))
+                            (~optional (~seq #:material mat:id))) ...)
+      #:fail-unless (and (memq (syntax-e (attribute hi-l)) known-materials) (memq (syntax-e (attribute lo-l)) known-materials))
+                    "#:layers names two materials of the table (brass, steel, iron, copper ...)"
+      #:attr info (bminfo #'id #'sensed #'bin-id)
+      #:with expr #`(part 'id 'bimetal '(~? mat steel) (list at.x at.y at.z)
+                          (list (cons 'senses 'sensed) (cons 'drives 'bin-id) (cons 'high 'hi-l) (cons 'low 'lo-l)
+                                (cons 'length (~? len-v 0.1)) (cons 'thickness (~? thick-v 0.001)) (cons 'width (~? wid-v 0.01))
+                                (cons 'high-share (~? share-v 0.5)) (cons 'shut-at (~? shut-v 40)) (cons 'straight-at (~? flat-v 20))
+                                (cons 'travel (~? trav-v 0.0021)) (cons 'contact (~? cont-v 10)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -2636,6 +2686,14 @@
         (define p (hash-ref parts (syntax-e ref) #f))
         (unless (and p (eq? (pinfo-kind p) 'heat-store))
           (fail (format "~a is not a heat-store; a heat-bin ~a one" (syntax-e ref) what) ref))))
+    (for ([b infos] #:when (bminfo? b))
+      (define id (syntax-e (bminfo-id b)))
+      (when (hash-ref parts id #f) (fail (format "there is already a part named ~a" id) (bminfo-id b)))
+      (define sensed (hash-ref parts (syntax-e (bminfo-senses b)) #f))
+      (unless (and sensed (memq (pinfo-kind sensed) '(heat-store enclosure)))
+        (fail (format "~a is not a heat-store or an enclosure; a bimetal senses one" (syntax-e (bminfo-senses b))) (bminfo-senses b)))
+      (unless (for/or ([h infos]) (and (hbinfo? h) (eq? (syntax-e (hbinfo-id h)) (syntax-e (bminfo-drives b)))))
+        (fail (format "~a is not a heat-bin; a bimetal drives the lid of one" (syntax-e (bminfo-drives b))) (bminfo-drives b))))
     (for ([c infos] #:when (cpinfo? c))
       (define v (hash-ref parts (syntax-e (cpinfo-vessel c)) #f))
       (unless (and v (eq? (pinfo-kind v) 'tank))
