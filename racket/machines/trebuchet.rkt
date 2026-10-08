@@ -10,7 +10,7 @@
 ;; than the tip itself — the sling is a second, longer lever on the end
 ;; of the first. The sling's loop slips off its release pin once it has
 ;; swung close to in line with the arm (#:release-deg), and the stone
-;; flies on its own momentum, released at about 0.95 s. Traced, it lands
+;; flies on its own momentum, released at about 0.95 s after the catch lets go. Traced, let go at once, it rests
 ;; 13.1 m out: roughly a tenth of the machine's 856 J in the stone
 ;; (1.4 kg thrown 13 m needs ~90 J). Real trebuchets reach 30–60%,
 ;; mostly because their arms don't slam into a stop mid-throw. (Before the
@@ -32,7 +32,11 @@
 ;; of oak (1.8 x 0.025 x 0.22 m) with its middle 0.63 m out on the long side,
 ;; 7.13 x 9.81 x 0.63 x cos 50 = 28.3 N.m. So 95.8 N.m (arm catch-load). Let
 ;; go after the counterweight has settled on its chain, it throws as it did
-;; let go at once: the stone first touches down the same distance out.
+;; let go at once: the stone first touches down the same distance out
+;; (traced: 9.53 m from where it lay, both ways). Where it comes to rest is
+;; another matter: a cube's first bounce goes as it lands, and held 3 s it
+;; bounces nearly straight up and stops 9.1 m from the axle, where let go at
+;; once it skids on to the 13.1 m above.
 (require racket/math)
 
 (define arm-length (m 1.8))
