@@ -16,6 +16,9 @@
 ;;           vanes' windage: 39 rpm, 0.012 W. Slow and weak, but steady for
 ;;           as long as the fire burns, and free: it runs on heat the
 ;;           cauldron was going to waste anyway.
+;; Drawn (#176, view only): the rising warm air as streaks climbing the flue at its
+;; 1.18 m/s while the draught lasts, and the spit in front of the fire with a joint on
+;; it, geared 40 to 1 to the vanes: 39 rpm of vanes turn it 0.975 rpm, 5.85 degrees a second.
 (define plinth-height (cm 30))
 (define-machine kitchen-smoke-jack
   #:source "Leonardo da Vinci, Codex Atlanticus (smoke jack, c. 1480)"
