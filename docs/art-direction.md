@@ -342,3 +342,23 @@ Frames: `docs/art/skins/labels-and-trebuchet.png`.
 - then newer labels.
 
 A label that would overlap one already placed fades out until there's room again. **L** shows every label. A label is hidden by zeroing its text and outline alpha, re-applied just before each frame is drawn, because impact readouts and digger tags rewrite their own alpha every frame. The alpha a builder last wrote is restored. `Visible` is never touched, since builders own it. `GeometryInstance3D.Transparency` was tried first, but a Label3D drawn without depth testing ignores it. Frames: `docs/art/skins/label-density.png` (all labels, left; laid out, right).
+
+### 12.9 Warmth you can see, and turning you can see (2026-10-07, #169 and #172)
+
+**Warmth tint** (`Skins.WarmthTint`, `Skins.Warmed`, `Skins.Warm`). A wash over a part's own colour, by the temperature the sim holds for it:
+- below 0 °C a cool blue-grey, at 20 °C nothing (the material's own colour), a burnt ochre by 100 °C (share 0.55), through to a dull red by 400 °C (share 0.65), held there;
+- `Incandescence` starts at 500 °C from that same dull red at zero energy, so the two join with no step;
+- never more than a wash, so the material still reads. `Warm` keeps the albedo the material had when first asked and works only on the albedo; emission (`Glow`) and the outline (`Rim`) are not touched. A surface its builder recolours every frame (an enclosure's skin: frost) folds `Warmed` into its own colour instead.
+
+Used wherever the sim has a temperature for a part: every boiler's shell (`Boiler.Temperature`; `MachineView.Warmth.cs`), crucible bowl, sand and glass (`Crucible.Temperature`), enclosure skin and heater (`Enclosure.Temperature`). Not invented: a brake or bearing holds only heat in joules (no temperature), so those carry no tint; the Stirling's face keeps its own hot-to-cold colour.
+
+**Steam at boiling.** Every boiler has a plume at its lid that is on exactly while the water is at or above `Boiler.SaturationTemperature(zone pressure)` (100 °C at sea level, 0.1 °C on Mars), the boiler is not dry and not burst. Set in the same frame the sim crosses the line (`HEROIC_DEBUG_PHYSICS=1` prints the crossing). It is separate from the older vapour wisp, which shows at 25 K over the air.
+
+**Turning marks** (`Skins.MarkTurning`, `MachineView.Marks.cs`). Everything that turns carries a mark painted on, not built: a pass added to the part's own surface (after it, before its outline, so nothing is replaced), a shader in the part's own space.
+- a stripe a tenth of the radius wide along one half-plane through the axis: on a wheel, disc, drum, pulley or gear it runs hub to rim across each face and over the rim; on a shaft (a drum) it runs along the side; on a ball it is a meridian. Dark on a light surface, pale on a dark one;
+- above 15 turns a second (900 rpm), where a stripe aliases at 60 fps, the stripe fades out (gone by 30 turns a second) and a blur ring takes over: a band over each face between 0.4 and 0.92 of the radius, and all of a rim or shaft's side, opacity 25% at 15 turns a second rising to 75% by 30;
+- speed is the part's own: a body's angular velocity about its axle, or the rotor's or jet wheel's sim rpm.
+- the mark is a pass on the surface of that one mesh, so it is only given to surfaces no other mesh shares (the rotor's ball and jet wheel's hub get a surface of their own). `UseOutline` looks through it, so palette thumbnails keep their wide line.
+- not marked: the fixed axle rods drawn behind a group of wheels (they do not turn in the view, and wheels on one rod may turn at different speeds), and the water wheels' and windmills' spoked frames (their spokes already show the turn).
+
+`HEROIC_MARKS_REPORT=1` prints each wheel's mark angle about its axle and the time the ring comes on, to check a frame against the trace. Frames: `docs/art/skins/warmth.png`, `docs/art/skins/turning-marks.png`.

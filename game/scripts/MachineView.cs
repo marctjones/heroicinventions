@@ -153,6 +153,7 @@ public partial class MachineView : Node3D
         Skins.FitJoints(this, Surface);   // a collar or ball wherever the physics joins two parts
         Skins.OrientGrain(this);
         Skins.RecedeStructure(this);
+        BuildTurnMarks();   // a stripe on everything that turns, a blur ring above 15 rev/s (#172)
         Skins.ScreenLabels(this);      // every label the same size on screen, near or far (#148)
         // and every label added later (an impact's readout, a fracture's tag) the same way
         GetTree().NodeAdded += OnNodeAdded;
@@ -540,7 +541,7 @@ public partial class MachineView : Node3D
         // bend along ±Z, so both jets push the same way around.
         var node = new Node3D { Position = axle };
         AddChild(node);
-        node.AddChild(Shapes.Sphere(radius, surface));
+        node.AddChild(Shapes.Sphere(radius, Surface(part.Material)));   // its own surface: the turning mark rides on it (#172)
         var rotor = Runtime.Rotors[part.Id];
         foreach (int s in new[] { 1, -1 })
         {
@@ -579,7 +580,7 @@ public partial class MachineView : Node3D
 
         var node = new Node3D { Position = axle };
         AddChild(node);
-        var hub = Shapes.Cylinder(radius * 0.18f, width * 0.8f, surface);
+        var hub = Shapes.Cylinder(radius * 0.18f, width * 0.8f, Surface(part.Material));   // its own surface: the turning mark rides on it (#172)
         hub.RotationDegrees = new Vector3(90, 0, 0);
         node.AddChild(hub);
         for (int i = 0; i < paddles; i++)
@@ -1162,20 +1163,8 @@ public partial class MachineView : Node3D
             body.AddChild(new CollisionShape3D { Shape = mesh.CreateConvexShape() });
         var extent = mesh.GetAabb().Size;
         body.AddChild(new MeshInstance3D { Mesh = mesh, MaterialOverride = PartSurface(part, Mathf.Max(extent.X, extent.Y)) });
-        // A round, evenly toothed wheel looks the same at every angle, so a
-        // gear turning at 27 rpm read as frozen. A dark stripe from hub to
-        // rim on each face shows it turning.
-        if (part.Symbol("shape", "") is "gear" or "pulley" or "drum" or "disc-wheel")
-        {
-            float radius = Mathf.Min(extent.X, extent.Y) / 2;
-            var stripe = Shapes.Mat(new Color(0.12f, 0.1f, 0.09f));
-            foreach (float side in new[] { 1f, -1f })
-            {
-                var bar = Shapes.Box(new Vector3(radius * 0.8f, Mathf.Max(radius * 0.09f, 0.002f), 0.001f), stripe);
-                bar.Position = new Vector3(radius * 0.45f, 0, side * (extent.Z / 2 + 0.0008f));
-                body.AddChild(bar);
-            }
-        }
+        // A round, evenly toothed wheel looks the same at every angle, so a gear turning at 27 rpm read as
+        // frozen: it is marked with a stripe, painted on, by BuildTurnMarks (#172).
         AddChild(body);
         _freezable.Add(body);
         _bodiesById[part.Id] = body;

@@ -168,7 +168,11 @@ public static class Skins
     public static void UseOutline(Node root, ShaderMaterial outline)
     {
         foreach (var mesh in Meshes(root))
-            if (mesh.MaterialOverride is BaseMaterial3D { NextPass: var pass } m && pass == Outline) m.NextPass = outline;
+        {
+            if (mesh.MaterialOverride is not BaseMaterial3D m) continue;
+            if (m.NextPass == Outline) m.NextPass = outline;
+            else if (m.NextPass is ShaderMaterial { NextPass: var after } mark && mark.HasMeta(MarkMeta) && after == Outline) mark.NextPass = outline;
+        }
     }
 
     private static Shader? _outlineShader;
@@ -425,5 +429,139 @@ public static class Skins
         if (mat.NextPass == Outline || mat.NextPass is not ShaderMaterial own) mat.NextPass = own = OutlineIn(color);
         own.SetShaderParameter("color", color);
         own.SetShaderParameter("width", 0.003f * (1.5f + 2f * t));   // and thickens as it reddens, to 3.5 times the plain line
+    }
+
+    // ── layer 3: warmth (#169) ──────────────────────────────────────────────────────────────────────
+
+    private const string WarmBaseMeta = "skin_warm_base";
+
+    /// <summary>
+    /// The warmth tint: what colour, and how much of it, a part at <paramref name="celsius"/> is washed with. Below 0 °C a
+    /// cool blue-grey, at 20 °C nothing (the material's own colour), a warm ochre by 100 °C, then through to a dull red
+    /// by 400 °C, held there: at 500 °C the incandescence ramp (<see cref="Incandescence"/>) starts from that same dull
+    /// red at zero energy, so the two join without a step. Never more than a wash (0.65), so the material still reads.
+    /// </summary>
+    public static (Color Tint, float Share) WarmthTint(double celsius)
+    {
+        float c = (float)celsius;
+        if (c < 20) return (new Color(0.50f, 0.62f, 0.82f), 0.5f * Mathf.Clamp((20 - c) / 20f, 0, 1));
+        // a burnt ochre, deeper than bronze and copper themselves so a metal's warming shows on it too
+        var ochre = new Color(0.88f, 0.46f, 0.07f);
+        if (c <= 100) return (ochre, 0.55f * (c - 20) / 80f);
+        float t = Mathf.Clamp((c - 100) / 300f, 0, 1);
+        return (ochre.Lerp(new Color(0.72f, 0.10f, 0.04f), t), 0.55f + 0.1f * t);
+    }
+
+    /// <summary>A colour washed with the warmth tint of <paramref name="celsius"/>; its alpha is kept.</summary>
+    public static Color Warmed(Color own, double celsius)
+    {
+        var (tint, share) = WarmthTint(celsius);
+        return new Color(own.Lerp(tint, share), own.A);
+    }
+
+    /// <summary>
+    /// Shows <paramref name="mat"/>'s part as warm or cold as <paramref name="celsius"/>. Works on the albedo, from the colour the
+    /// material had when first asked (so a part's own shade survives), and leaves emission (<see cref="Glow"/>) and the outline
+    /// (<see cref="Rim"/>) alone. For a surface its builder does not recolour every frame; one that is (a room's skin)
+    /// folds <see cref="Warmed"/> into its own colour instead.
+    /// </summary>
+    public static void Warm(StandardMaterial3D mat, double celsius)
+    {
+        if (!mat.HasMeta(WarmBaseMeta)) mat.SetMeta(WarmBaseMeta, mat.AlbedoColor);
+        mat.AlbedoColor = Warmed((Color)mat.GetMeta(WarmBaseMeta), celsius);
+    }
+
+    // ── layer 3: turning (#172) ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>The speed above which a stripe aliases at 60 frames a second, in turns a second (900 rpm).</summary>
+    public const double BlurFrom = 15;
+
+    private const string MarkMeta = "skin_turn_mark";
+    private static Shader? _markShader;
+
+    /// <summary>A turning part's mark: a stripe when slow, a blurred ring when the stripe would alias.</summary>
+    public sealed class TurnMark(ShaderMaterial pass)
+    {
+        /// <summary>The stripe's opacity now (1 up to 15 turns a second, fading to 0 by 30).</summary>
+        public float StripeAlpha { get; private set; } = 1;
+        /// <summary>The ring's opacity now: 0 up to 15 turns a second, then 25% growing to 75% by 30.</summary>
+        public float RingAlpha { get; private set; }
+
+        public void Spin(double turnsPerSecond)
+        {
+            double f = Math.Abs(turnsPerSecond);
+            float k = (float)Math.Clamp((f - BlurFrom) / BlurFrom, 0, 1);
+            float stripe = 1 - k, ring = f > BlurFrom ? 0.25f + 0.5f * k : 0;
+            if (stripe != StripeAlpha) { StripeAlpha = stripe; pass.SetShaderParameter("stripe", stripe); }
+            if (ring != RingAlpha) { RingAlpha = ring; pass.SetShaderParameter("ring", ring); }
+        }
+    }
+
+    /// <summary>
+    /// Everything that turns gets a mark (#172), painted on and not built: a stripe from hub to rim across each face of a wheel,
+    /// disc, drum or pulley, along a shaft, and over a ball, in contrast to the part's own colour (dark on a light surface, pale on
+    /// a dark one). It is a transparent pass added after the part's own surface and before its outline, so the surface is never
+    /// replaced. <paramref name="axis"/> is the part's turning axis in <paramref name="mesh"/>'s own space. The surface must be this
+    /// mesh's alone: a pass on a shared material would paint every mesh that uses it.
+    /// </summary>
+    public static TurnMark? MarkTurning(MeshInstance3D mesh, Vector3 axis)
+    {
+        if (mesh.MaterialOverride is not BaseMaterial3D mat || mesh.Mesh is null) return null;
+        axis = axis.Normalized();
+        // the part's radius about the axis: the farthest corner of its box
+        var box = mesh.GetAabb();
+        float radius = 0.001f;
+        for (int i = 0; i < 8; i++)
+        {
+            var p = box.Position + new Vector3((i & 1) * box.Size.X, ((i >> 1) & 1) * box.Size.Y, ((i >> 2) & 1) * box.Size.Z);
+            radius = Mathf.Max(radius, (p - axis * p.Dot(axis)).Length());
+        }
+        // any direction square to the axis will do for where the stripe starts
+        var across = Mathf.Abs(axis.Dot(Vector3.Up)) > 0.9f ? Vector3.Right : Vector3.Up;
+        var start = (across - axis * across.Dot(axis)).Normalized();
+        var c = mat.AlbedoColor;
+        bool lightSurface = 0.2126f * c.R + 0.7152f * c.G + 0.0722f * c.B > 0.4f;
+        _markShader ??= new Shader
+        {
+            Code = """
+                shader_type spatial;
+                render_mode unshaded, blend_mix, depth_draw_never, cull_back, shadows_disabled;
+                uniform vec3 axis;
+                uniform vec3 start;
+                uniform float radius = 0.1;
+                uniform vec4 colour : source_color = vec4(0.08, 0.07, 0.06, 1.0);
+                uniform float stripe = 1.0;   // the stripe's opacity: fades as the ring comes up
+                uniform float ring = 0.0;     // the blur ring's opacity: 0 until the stripe would alias
+                varying vec3 lp;
+                varying vec3 ln;
+                void vertex() { lp = VERTEX; ln = NORMAL; }
+                void fragment() {
+                    float along = dot(lp, axis);
+                    vec3 q = lp - axis * along;
+                    float r = length(q);
+                    float a = 0.0;
+                    // the stripe: a strip a tenth of the radius either side of one half-plane through the axis,
+                    // so on a face it runs hub to rim and on a shaft's side it runs along it
+                    float x = dot(q, start);
+                    float y = dot(q, cross(axis, start));
+                    if (x > 0.0 && abs(y) < 0.1 * radius && r > 0.08 * radius) a = stripe;
+                    // the ring: the stripe smeared all the way round; on a face a band over its middle,
+                    // on a side (a rim, a shaft) all of it
+                    bool face = abs(dot(normalize(ln), axis)) > 0.7;
+                    if (face ? (r > 0.4 * radius && r < 0.92 * radius) : (r > 0.6 * radius)) a = max(a, ring);
+                    if (a <= 0.0) discard;
+                    ALBEDO = colour.rgb;
+                    ALPHA = a;
+                }
+                """,
+        };
+        var pass = new ShaderMaterial { Shader = _markShader, NextPass = mat.NextPass };
+        pass.SetShaderParameter("axis", axis);
+        pass.SetShaderParameter("start", start);
+        pass.SetShaderParameter("radius", radius);
+        pass.SetShaderParameter("colour", lightSurface ? new Color(0.08f, 0.07f, 0.06f) : new Color(0.97f, 0.94f, 0.82f));
+        pass.SetMeta(MarkMeta, true);
+        mat.NextPass = pass;
+        return new TurnMark(pass);
     }
 }

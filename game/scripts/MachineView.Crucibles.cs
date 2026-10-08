@@ -12,6 +12,7 @@ namespace HeroicInventions;
 public partial class MachineView
 {
     private readonly List<(Crucible Pot, StandardMaterial3D Sand, MeshInstance3D Glass, StandardMaterial3D GlassMat, float Radius)> _crucibleViews = [];
+    private readonly Dictionary<Crucible, StandardMaterial3D> _crucibleBowls = [];   // the bowl's own surface, washed with the warmth tint (#169)
 
     private void BuildCrucibles()
     {
@@ -23,7 +24,9 @@ public partial class MachineView
             // 25 cm heap on a 33 cm bowl, so the charge reads from across a furnace field (#176; the heap is only drawn)
             float radius = Mathf.Clamp(Mathf.Sqrt((float)(pot.Charge / 1500 / 0.15) / Mathf.Pi), 0.25f, 0.6f);
             const float bowlHeight = 0.2f;
-            var bowl = Shapes.Cylinder(radius * 1.3f, bowlHeight, Surface(part.Material));
+            var bowlMat = Surface(part.Material);
+            _crucibleBowls[pot] = bowlMat;   // its own surface, washed with the warmth tint (#169)
+            var bowl = Shapes.Cylinder(radius * 1.3f, bowlHeight, bowlMat);
             bowl.Position = V(part.At) + new Vector3(0, bowlHeight / 2, 0);
             AddChild(bowl);
             var sandMat = Shapes.Mat(pot.Sand.Name == "silica" ? new Color(0.9f, 0.88f, 0.8f) : new Color(0.3f, 0.26f, 0.24f), roughness: 1);
@@ -49,6 +52,9 @@ public partial class MachineView
     {
         foreach (var (pot, sandMat, glass, glassMat, radius) in _crucibleViews)
         {
+            if (_crucibleBowls.TryGetValue(pot, out var bowlMat)) Skins.Warm(bowlMat, pot.Temperature);
+            Skins.Warm(sandMat, pot.Temperature);
+            Skins.Warm(glassMat, pot.Temperature);
             Skins.Glow(sandMat, pot.Temperature);
             Skins.Glow(glassMat, pot.Temperature);
             double share = pot.Charge > 0 ? pot.Melted / pot.Charge : 0;
