@@ -35,6 +35,12 @@ public sealed record MaterialDef(
     /// <summary>Melting point in °C for the metals (null for the rest); a pressure shell loses strength towards it.</summary>
     public double? MeltingPoint { get; init; }
 
+    /// <summary>Specific heat in J/(kg·K) (issue #71), or null where the table gives none.</summary>
+    public double? SpecificHeat { get; init; }
+
+    /// <summary>Thermal conductivity in W/(m·K) (issue #71), or null where the table gives none.</summary>
+    public double? Conductivity { get; init; }
+
     /// <summary>Mass in kg of a solid of this material with the given volume in m³.</summary>
     public double MassOf(double volumeM3) => Density * volumeM3;
 
