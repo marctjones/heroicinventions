@@ -7,7 +7,7 @@ namespace HeroicInventions.Sim.Editor;
 /// where it is, how fast it moves and spins, and, for a wheel on an axle,
 /// how far it turned this tick (rad, signed, about its axle, not wrapped).
 /// </summary>
-public readonly record struct BodySample(double Y, double LinearSpeed, double AngularSpeed, double TurnedRad);
+public readonly record struct BodySample(double Y, double LinearSpeed, double AngularSpeed, double TurnedRad, double X = 0, double Z = 0);
 
 /// <summary>A rope in one tick: the pull it carried, how much it can carry, how far its path ran past its length (negative: slack), and whether it has gone.</summary>
 public readonly record struct RopeSample(double Tension, double Strength, double Stretch, bool Broken, bool Released);
@@ -18,8 +18,11 @@ public sealed record TestTick(double Dt,
                               IReadOnlyDictionary<string, double> TankVolumes,
                               IReadOnlyDictionary<string, RopeSample> Ropes);
 
-/// <summary>A body that ended higher (positive) or lower than it began, and the highest and lowest it got, metres.</summary>
-public sealed record PartRise(string Id, double Metres, double Peak, double Low);
+/// <summary>
+/// A body that ended higher (positive) or lower than it began, and the highest and lowest it got, metres; how far it ended from
+/// where it began across the ground (<see cref="Across"/>, m) and the fastest it ever went (<see cref="TopSpeed"/>, m/s).
+/// </summary>
+public sealed record PartRise(string Id, double Metres, double Peak, double Low, double Across = 0, double TopSpeed = 0);
 
 /// <summary>A wheel's turning over the run: the net turns from where it began (signed, + the way the axle's own direction turns it), the most it was ever away from there, and its speed at the end.</summary>
 public sealed record WheelTurn(string Id, double Turns, double PeakTurns, double EndRpm);
@@ -87,6 +90,8 @@ public sealed class TestRecorder
     private sealed class Track
     {
         public double StartY, EndY, MaxY, MinY;
+        public double StartX, StartZ, EndX, EndZ, TopSpeed;
+        public bool Seen;
         public double Turned, PeakTurned, EndRate;   // rad
     }
 
@@ -130,6 +135,10 @@ public sealed class TestRecorder
         foreach (var (id, s) in tick.Bodies)
         {
             if (!_bodies.TryGetValue(id, out var t)) _bodies[id] = t = new Track { StartY = s.Y, EndY = s.Y, MaxY = s.Y, MinY = s.Y };
+            if (!t.Seen) { t.Seen = true; t.StartX = t.EndX = s.X; t.StartZ = t.EndZ = s.Z; }
+            t.EndX = s.X;
+            t.EndZ = s.Z;
+            t.TopSpeed = Math.Max(t.TopSpeed, s.LinearSpeed);
             t.EndY = s.Y;
             t.MaxY = Math.Max(t.MaxY, s.Y);
             t.MinY = Math.Min(t.MinY, s.Y);
@@ -162,7 +171,9 @@ public sealed class TestRecorder
     public TestFacts Facts()
     {
         const double litre = 1000;
-        var rises = _bodies.Select(kv => new PartRise(kv.Key, kv.Value.EndY - kv.Value.StartY, kv.Value.MaxY - kv.Value.StartY, kv.Value.MinY - kv.Value.StartY)).ToList();
+        var rises = _bodies.Select(kv => new PartRise(kv.Key, kv.Value.EndY - kv.Value.StartY, kv.Value.MaxY - kv.Value.StartY, kv.Value.MinY - kv.Value.StartY,
+                                                    Math.Sqrt((kv.Value.EndX - kv.Value.StartX) * (kv.Value.EndX - kv.Value.StartX) + (kv.Value.EndZ - kv.Value.StartZ) * (kv.Value.EndZ - kv.Value.StartZ)),
+                                                    kv.Value.TopSpeed)).ToList();
         var turns = _bodies.Where(kv => kv.Value.PeakTurned > 0)
                            .Select(kv => new WheelTurn(kv.Key, kv.Value.Turned / (2 * Math.PI), kv.Value.PeakTurned / (2 * Math.PI), kv.Value.EndRate * 60 / (2 * Math.PI))).ToList();
         var tanks = _tankStart.Select(kv => new TankChange(kv.Key, kv.Value * litre, _tankEnd[kv.Key] * litre)).ToList();
@@ -247,7 +258,8 @@ public static class TestReport
     public static string DataLine(TestFacts f)
     {
         var parts = new List<string> { $"t={N(f.Seconds, "0.00")} by={f.EndedBy}" };
-        parts.AddRange(f.Rises.Where(r => Math.Abs(r.Metres) >= 0.005 || r.Peak >= 0.005).Select(r => $"rise {r.Id}={N(r.Metres, "0.0000")} peak={N(r.Peak, "0.0000")} low={N(r.Low, "0.0000")}"));
+        parts.AddRange(f.Rises.Where(r => Math.Abs(r.Metres) >= 0.005 || r.Peak >= 0.005 || r.Across >= 0.005)
+                                .Select(r => $"rise {r.Id}={N(r.Metres, "0.0000")} peak={N(r.Peak, "0.0000")} low={N(r.Low, "0.0000")} across={N(r.Across, "0.000")} top={N(r.TopSpeed, "0.000")}"));
         parts.AddRange(f.Turns.Select(t => $"turns {t.Id}={N(t.Turns, "0.0000")} peak={N(t.PeakTurns, "0.0000")} rpm={N(t.EndRpm, "0.0")}"));
         parts.AddRange(f.Tanks.Where(t => Math.Abs(t.Litres) >= 0.0005).Select(t => $"water {t.Id}={N(t.Litres, "0.000")} L"));
         parts.AddRange(f.Ropes.Select(r => $"rope {r.Id} max={N(r.MaxTension, "0.00")} strength={N(r.Strength, "0.00")} broke={(r.Broke ? "yes" : "no")} slack={(r.WentSlack ? "yes" : "no")}"));

@@ -45,7 +45,7 @@ public partial class MachineView
                     turned = axis.LengthSquared() > 1e-12f ? angle * axis.Normalized().Dot(hinge.Axis.Normalized()) : 0;
                 }
                 _testBasis[b] = b.GlobalBasis;
-                bodies[id] = new BodySample(b.GlobalPosition.Y, b.LinearVelocity.Length(), b.AngularVelocity.Length(), turned);
+                bodies[id] = new BodySample(b.GlobalPosition.Y, b.LinearVelocity.Length(), b.AngularVelocity.Length(), turned, b.GlobalPosition.X, b.GlobalPosition.Z);
             }
             else if (TurningKinds.Contains(kind) && IsSimTurned(id))
             {
