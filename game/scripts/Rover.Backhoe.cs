@@ -135,7 +135,7 @@ public sealed partial class Rover
 
     public override void _Process(double delta)
     {
-        if (_step < 0) return;
+        if (_step < 0 || Frozen) return;   // paused: the arm holds still too
         _stepTime += delta;
         var (phase, seconds) = Cycle[_step];
         double t = Math.Min(1, _stepTime / seconds);

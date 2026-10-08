@@ -61,12 +61,15 @@ public sealed partial class Rover : Node3D
     public double SpeedScale { get; set; } = 1;
 
     private double _speedCmd, _turnCmd;
+    private bool _frozen;
 
     /// <summary>Holds the whole rover still (the game is paused).</summary>
     public bool Frozen
     {
+        get => _frozen;
         set
         {
+            _frozen = value;
             Chassis.Freeze = value;
             foreach (var w in _wheels) w.Freeze = value;
         }
