@@ -67,7 +67,7 @@ public partial class Main : Node3D
         ["trench-crew"] = new(new Vector3(4.86f, 3.50f, 7.70f), new Vector3(2.00f, 0.64f, -0.48f), 45),
         ["trough"] = new(new Vector3(1.0f, 1.6f, 3.0f), new Vector3(0, 0.5f, 0), 45),
         ["walkers-wheel"] = new(new Vector3(1.57f, 5.59f, 9.05f), new Vector3(-1.60f, 2.42f, 0.00f), 45),
-        ["falling-stones"] = new(new Vector3(0.8f, 2.6f, 6f), new Vector3(0, 0.6f, 0), 50),   // the landing: 10 cm balls over 350 m are too small to follow down
+        ["falling-stones"] = new(new Vector3(-25f, 175f, 470f), new Vector3(-25f, 175f, 0), 50),   // the whole 350 m fall, side-on (#192)
         ["aeolipile"] = new(new Vector3(0, 0.55f, 0.85f), new Vector3(0, 0.32f, 0), 42),
         ["shaduf"] = new(new Vector3(1.0f, 3.2f, 7.5f), new Vector3(1.0f, 1.8f, 0), 50),
         ["baghdad-battery"] = new(new Vector3(0.3f, 1.82f, 2.61f), new Vector3(0.3f, 0.1f, 0.15f), 45),   // pivot (0.3,0.1,0.15), 3 m out at 35 deg: the ten-jar lamp at x~1.2 clears the info panel (unverified against the new geometry)
