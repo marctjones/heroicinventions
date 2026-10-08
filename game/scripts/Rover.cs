@@ -45,7 +45,7 @@ public static class RoverSpec
     /// <summary>m above where a load was taken that its hand may go: the backhoe's own tolerance, not lifting (#72, Rover.Backhoe.cs dumps no more than 5 cm above where it dug).</summary>
     public const double LiftSlack = 0.05;
     /// <summary>The arm's pivot, in the chassis frame (the turntable of Rover.Backhoe.cs).</summary>
-    public static readonly Vector3 ArmBaseLocal = new(0, 0.34f, -0.7f);
+    public static readonly Vector3 ArmBaseLocal = Rover.TurntableLocal;   // the backhoe's own constant, so reach follows the arm if it moves
 
     /// <summary>The wheels' speed, rad/s, for the rover to roll at <paramref name="speed"/> m/s.</summary>
     public static double WheelOmega(double speed) => speed / WheelRadius;
