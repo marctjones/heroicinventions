@@ -137,6 +137,7 @@ public partial class MachineView
             }
         }
         foreach (var (key, value) in BurialFields()) Add(key, value);
+        foreach (var (key, value) in SpinLimitFields()) Add(key, value);   // bodies pinned at Jolt's spin limit (#202)
         foreach (var (key, value) in GearTraceFields()) Add(key, value);   // what driven gear trains carry (#113)   // blocks held by the ground (#54)
         var e = Energy();
         Add("scene.kinetic", e.KineticJ); Add("scene.potential", e.PotentialJ); Add("scene.mechanical", e.KineticJ + e.PotentialJ);
