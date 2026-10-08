@@ -304,3 +304,19 @@ The design promises "the state is shown in the scene: a cold bank frosts, a stal
 | Windmill, Stirling stalled | Motion stops | implicit only |
 
 **Not drawable yet, because the sim has no state for them:** a battery bank and its 0–45 °C charging window ("a cold bank frosts"), a generator ("a stalled generator stops"), heat leaking through a lid ("a leaky lid glows"), and pipes freezing. These need model work before any look.
+
+### 12.6 Recognisable machines (2026-10-07, #167)
+
+A machine reads as a crane or a mill from how its parts combine, not from any one part.
+
+1. **Scale figure** (`Main.Composition.cs`). A plain 1.7 m person in muted slate stands beside every machine; **P** shows or hides it. It isn't part of the machine, so framing and bounds ignore it. Placement is a rule, not a choice per machine:
+   - It tries four spots in turn: beside the machine on its screen-left, then screen-right, then just in front near either end.
+   - It takes the first spot where the whole figure stands in the clear part of the screen (`ClearArea`).
+   - It shows no figure when no spot fits (noria, sawmill), when the machine is tabletop-sized, or when a person would stand more than 1.3× the machine's height (Heron's fountain, the aeolipile). In those cases the figure would dominate or be cut off, not serve as a ruler.
+   - Worlds get none (the rover is their scale).
+2. **Structure recedes** (`Skins.RecedeStructure`, run once after a view is built). Wood and stone meshes that ride on no rigid body (posts, frames, supports, footings) draw at 80% value and 70% saturation. What moves keeps its full colour. Metal, glass, water and glowing parts are left alone, and so is any material shared by moving and still meshes, since builders keep live handles on their materials.
+3. **The working path:** checked, not changed. Water is already the strongest colour in every frame that has it (§12.1). Thrown stones and bolts have their flight trail.
+4. **Named assemblies:** waits on #24 (assemblies as Racket macros), which doesn't exist yet.
+5. **Silhouette check:** `HEROIC_SILHOUETTE=1` draws the machine solid black on white (labels, particles, ground and effects hidden), and `tools/silhouette_sheet.py` crops and sheets the frames. Each mesh gets its own black material, reset every frame. With one shared material, the tank code's per-frame ice colour repainted every mesh white. The same hazard applies to any shared material a builder mutates through `MaterialOverride`.
+
+Frames (`docs/art/skins/`): `recognisable-before-after.png` (pairs: crane, shaduf, trebuchet, noria / sawmill, Heron's fountain, aeolipile, lantern) and `silhouettes-ancient.png`. All eight silhouettes are distinct. The Kongming lantern's two lanterns read as plain cylinders on the ground; an envelope shape would help. legibility.py, sd / sep before → after: crane 42/−65 → 44/−68, shaduf 37/−75 → 40/−81, sawmill 55/−92 → 58/−97, Heron 29/−74 → 30/−77, noria 42/−86 → 42/−87, aeolipile 34/−69 → 34/−70, lantern 41/+83 → 41/+82, trebuchet 16/−135 → 20/−112 (its figure now shares the frame).

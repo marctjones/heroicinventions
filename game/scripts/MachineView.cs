@@ -144,7 +144,8 @@ public partial class MachineView : Node3D
         BuildImpacts();
         BuildFracture();
         Skins.FitJoints(this, Surface);   // a collar or ball wherever the physics joins two parts
-        Skins.OrientGrain(this);   // after every part is built: each piece of wood's grain along its length
+        Skins.OrientGrain(this);
+        Skins.RecedeStructure(this);   // standing structure recedes; what moves keeps its colour (#167)   // after every part is built: each piece of wood's grain along its length
         Refresh();
 
         // Baseline for "energy retained": mechanical energy before anything
