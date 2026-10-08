@@ -625,7 +625,7 @@ public sealed partial class MachineRuntime
             var strip = new BimetalStrip(part.Id, Layer("high"), Layer("low"), length, thickness, width)
             {
                 HighShare = share, Contact = contact, Travel = travel, ShutAt = part.Number("shut-at", 40), StraightAt = part.Number("straight-at", 20),
-                Sensed = sensed, Bin = lid,
+                Sensed = sensed, Bin = lid, SensesName = senses,
             };
             strip.Reset();
             lid.Sense = null;   // a strip on the lid takes the place of the ideal switch

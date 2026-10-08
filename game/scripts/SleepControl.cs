@@ -52,6 +52,9 @@ public partial class SleepControl : VBoxContainer
         if (_session.Done) Finish();
     }
 
+    /// <summary>Raised every 60 steps (half a second of the machine's time) while a sleep runs ahead, so the goals (issue #68) see a night or a sol as it passes, not a single sample of its end.</summary>
+    public event Action? Stepped;
+
     /// <summary>Called when a sleep ends, so the game can save on waking (issue #67).</summary>
     public event Action? Woke;
 
@@ -227,6 +230,7 @@ public partial class SleepControl : VBoxContainer
                 foreach (var v in others) v.Runtime.Step(_session.Dt);     // the rest of a world sleeps along
                 _session.Run(1);
             }
+            Stepped?.Invoke();
         }
         _sleeper.ShowState();
         foreach (var v in others) v.ShowState();

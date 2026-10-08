@@ -39,12 +39,15 @@ public partial class Main
     {
         _activeTuning = EffectiveTuning(world);
         _tuningPanel?.Refresh();
+        _goals?.RestartRun();   // a world (re)started: the path starts over, the achievements stay (a save loaded next puts its own back)
+        _goalsKey = world.Name;
     }
 
     private void BuildTuningPanel()
     {
-        _tuningPanel = new TuningPanel(this) { Name = "TuningPanel", Visible = false };
+        _tuningPanel = new TuningPanel(this) { Name = "TuningPanel", Visible = OS.GetEnvironment("HEROIC_TUNING_PANEL") == "1" };
         AddChild(_tuningPanel);
+        BuildGoalsPanel();   // the goals panel and the achievement toast (Main.Goals.cs, #68)
     }
 
     /// <summary>Shows or hides the tuning panel.</summary>

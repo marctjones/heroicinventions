@@ -1157,6 +1157,7 @@ public partial class Main : Node3D
                 Boulders = _groundSim is { Ground.Boulders.Count: > 0 } rocky ? rocky.Ground.SaveBoulders() : null,   // and the rocks slides left on it (#88)
                 Worked = _groundSim?.Ground.SaveWorked(),    // and the trenches and heaps the rover has dug (#199)
                 Rover = RoverSaveState(),                    // and the rover itself: pose, bucket and arm (#201)
+                Goals = GoalsForSave(),                      // and the goals and achievements earned (#68)
                 Operated = _operatorLog.ToList(), OperatorTaken = _operatorTaken,   // what was done to the machine, in order (Main.Operator.cs)
             };
             string target = path ?? SavePath(auto);
@@ -1201,6 +1202,7 @@ public partial class Main : Node3D
             rocky.RetraceBoulders();
         }
         if (save.Worked is { } worked && _groundSim is { } dug) dug.Ground.LoadWorked(worked);   // the trenches and heaps, with their carry ceilings (#199)
+        GoalsRestore(save);   // the goals and achievements the save had earned (#68)
         if (save.Rover is { } roverState) RoverLoadState(roverState);   // the rover where it was, with its bucket and arm (#201)
         foreach (var m in save.Machines)
         {
@@ -1688,6 +1690,8 @@ public partial class Main : Node3D
         else if (_running && _current is not null)
             _current.Simulate(delta); // already scaled: see SetSpeed
         PostStepHand();
+        if (!_sleep.Active) GoalsTick();   // goals and achievements, from the state the step left (Main.Goals.cs, #68); a sleep calls it itself every half second
+        ToastTick(delta);
 
         ApplyDueSettings(); // after the step, as SimHost's ApplyDue is: a setting due at t is seen by the sample taken at t
         if (_audit && _running && _current is not null) _current.AuditTick(delta);

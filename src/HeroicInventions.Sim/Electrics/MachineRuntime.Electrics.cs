@@ -66,13 +66,13 @@ public sealed partial class MachineRuntime
             double volts = part.Number("volts", 28);
             if (!(volts > 0) || hour < 0 || hour >= 24 || !(minutes > 0))
                 throw new MachineFormatException($"battery-bank {part.Id}: #:volts and #:call-minutes must be above 0 and #:call-hour a local solar hour in [0, 24)", part.Location);
-            string zone = part.Symbol("in", "");
+            string zone = part.Symbol("in", "");   // (the bank remembers the name: a thermostat is read as sensing it)
             Func<double> sensed = _heatStores.TryGetValue(zone, out var store) ? () => store.Temperature
                 : _enclosures.TryGetValue(zone, out var room) ? () => room.Temperature
                 : throw new MachineFormatException($"battery-bank {part.Id} sits in {zone}, which is not a heat-store or an enclosure", part.Location);
             _banks[part.Id] = new BatteryBank(part.Id, capacityWh * BatteryBank.JoulesPerWattHour, chargeWh * BatteryBank.JoulesPerWattHour)
             {
-                Volts = volts, CallHour = hour, CallMinutes = minutes, Sensed = sensed,
+                InName = zone, Volts = volts, CallHour = hour, CallMinutes = minutes, Sensed = sensed,
                 CallAnyTime = Tuning.CallAnyTime || part.Props.GetValueOrDefault("call-any-time") is SBool { Value: true },
                 MinChargeC = Tuning.BankMinChargeC ?? 0, MaxChargeC = Tuning.BankMaxChargeC ?? 45,   // Advanced (#60)
             };
@@ -93,8 +93,14 @@ public sealed partial class MachineRuntime
             var gen = new Generator(part.Id)
             {
                 Bank = bank, Efficiency = eff, CutInRpm = cut, RatedRpm = rated, RatedTorque = torque,
-                DrivenBy = driven.Length > 0 && driven != "#f" ? driven : PrimeMoverOf(def, on),
+                DrivenBy = driven.Length > 0 && driven != "#f" ? driven : PrimeMoverOf(def, on).Name,
             };
+            // the prime mover's own shaft speed, so the train between it and the rotor can be read as a ratio (#68's Gear up)
+            if (PrimeMoverOf(def, on).Id is { } primeId)
+                gen.PrimeOmega = _windmills.TryGetValue(primeId, out var pw) ? () => pw.AngularVelocity
+                    : _wheels.TryGetValue(primeId, out var pww) ? () => pww.AngularVelocity
+                    : _jetWheels.TryGetValue(primeId, out var pj) ? () => pj.AngularVelocity
+                    : _stirlings.TryGetValue(primeId, out var ps) ? () => ps.AngularVelocity : null;
             _generators[part.Id] = gen;
             if (_windmills.TryGetValue(on, out var wm)) _simDrives.Add(new(gen, () => wm.AngularVelocity, () => wm.Load, v => wm.Load = v));
             else if (_wheels.TryGetValue(on, out var ww)) _simDrives.Add(new(gen, () => ww.AngularVelocity, () => ww.Load, v => ww.Load = v));
@@ -107,7 +113,7 @@ public sealed partial class MachineRuntime
     }
 
     /// <summary>What turns the shaft a generator is on: the part the sim turns, or for a wheel the one it is geared, keyed or belted to, or a rope winding a falling weight on.</summary>
-    private string PrimeMoverOf(MachineDef def, string on)
+    private (string Name, string? Id) PrimeMoverOf(MachineDef def, string on)
     {
         static string Name(string kind) => kind switch { "windmill" => "wind", "waterwheel" => "water-wheel", "jetwheel" => "steam-jet", "stirling" => "stirling", _ => "shaft" };
         // the wheels joined to this one by arbors, meshes and belts
@@ -122,9 +128,9 @@ public sealed partial class MachineRuntime
             foreach (var n in next) if (seen.Add(n)) queue.Enqueue(n);
         }
         foreach (var id in seen)
-            if (def.Part(id) is { Kind: "windmill" or "waterwheel" or "jetwheel" or "stirling" } p) return Name(p.Kind);
-        if (def.Ropes.Any(r => r.WindOn is { } drum && seen.Contains(drum))) return "falling-weight";
-        return "shaft";
+            if (def.Part(id) is { Kind: "windmill" or "waterwheel" or "jetwheel" or "stirling" } p) return (Name(p.Kind), id);
+        if (def.Ropes.Any(r => r.WindOn is { } drum && seen.Contains(drum))) return ("falling-weight", null);
+        return ("shaft", null);
     }
 
     private void RegisterElectricsFields()

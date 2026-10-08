@@ -39,6 +39,8 @@ public sealed class WaterLift(string name, Tank from, Tank to, double volumePerT
     /// <summary>A pump's rod carries the weight of the water column it's raising: ρ·g·H·A. N.</summary>
     public double LoadForce => IsPump ? Physics.WaterDensity * Zone.Gravity * Head * VolumePerMetre * Fill : 0;
     public double Flow { get; private set; }                   // m³/s, last step
+    /// <summary>m³ carried up all told.</summary>
+    public double Moved { get; private set; }
 
     /// <summary>How full each scoop is: the intake's depth under the source's surface, over what a full scoop needs.</summary>
     public double Fill => Math.Clamp((From.SurfaceElevation - IntakeElevation) / IntakeDepth, 0, 1);
@@ -64,6 +66,7 @@ public sealed class WaterLift(string name, Tank from, Tank to, double volumePerT
         moved = Math.Max(0, moved);
         From.WaterVolume -= moved;
         To.WaterVolume += moved;
+        Moved += moved;
         Flow = moved / dt;
     }
 

@@ -42,6 +42,8 @@ public sealed class BimetalStrip
     public double ShutAt { get; set; } = 40;       // °C at which the lid it works is just shut
     public double Travel { get; set; } = 0.0021;  // m of tip movement from shut to wide open
     public Func<double>? Sensed { get; set; }
+    /// <summary>The heat store or enclosure it senses.</summary>
+    public string SensesName { get; init; } = "";
     public HeatBin? Bin { get; set; }
     /// <summary>The strip's own temperature, °C.</summary>
     public double Temperature { get; set; }
