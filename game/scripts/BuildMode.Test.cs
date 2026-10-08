@@ -147,7 +147,7 @@ public partial class BuildMode
                 var now = body.GlobalPosition;
                 float across = new Vector2(now.X - start.X, now.Z - start.Z).Length(), drop = start.Y - now.Y;
                 bool riding = _testStart.Keys.Any(k => doc.Parts[k].Kind == "lever") && across < 0.1f;
-                if (now.Y < 0.12f && start.Y > 0.25f) sentences.Add($"The {LooseName(id)} fell to the ground.");
+                if (now.Y < 0.12f && start.Y > 0.25f && across < 0.5f) sentences.Add($"The {LooseName(id)} fell to the ground.");   // mostly straight down; a ball that rolled off a ramp and on across the floor rolled (#184)
                 else if (across > 0.1f) sentences.Add($"The {LooseName(id)} {(part.Kind == "ball" ? "rolled" : "slid")} {across:0.0} m.");
                 else if (drop > 0.1f && !riding) sentences.Add($"The {LooseName(id)} dropped {drop:0.0} m.");
                 if (!riding && facts.RiseOf(id) is { } rise && TestReport.RiseSentence(LooseName(id), rise) is { } rose) sentences.Add(rose);
