@@ -609,7 +609,9 @@ public partial class BuildMode : Node3D
         _loadDialog = new FileDialog
         {
             FileMode = FileDialog.FileModeEnum.OpenFile, Access = FileDialog.AccessEnum.Filesystem,
-            CurrentDir = ProjectSettings.GlobalizePath("res://machines"), Filters = ["*.machine"],
+            // the player's own machines: an exported game's res:// is inside its pack, not a folder the dialog can browse;
+            // the shipped ones open from "Start from an example..." (#99)
+            CurrentDir = ProjectSettings.GlobalizePath("user://machines"), Filters = ["*.machine"],
         };
         _loadDialog.FileSelected += path =>
         {

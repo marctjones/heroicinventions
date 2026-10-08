@@ -1102,7 +1102,9 @@ public partial class MachineView : Node3D
         if (GeneratedMeshes.TryGetValue(path, out var cached)) return cached;
         var doc = new GltfDocument();
         var state = new GltfState();
-        var err = doc.AppendFromFile(ProjectSettings.GlobalizePath(path), state);
+        // read through Godot's own file access, which also reads inside an exported game's pack, where res:// is no folder (#99)
+        var bytes = Godot.FileAccess.GetFileAsBytes(path);
+        var err = bytes.Length > 0 ? doc.AppendFromBuffer(bytes, path.GetBaseDir(), state) : Error.FileNotFound;
         if (err != Error.Ok || state.GetMeshes().Count == 0)
             throw new MachineFormatException(
                 $"{part.Kind} {part.Id}: couldn't load its mesh {path} ({err}); run `racket racket/build.rkt`", part.Location);

@@ -289,8 +289,9 @@ public partial class BuildMode
     {
         const string path = "res://icons/rope.png";
         if (!Godot.FileAccess.FileExists(path)) return null;
-        var image = Image.LoadFromFile(ProjectSettings.GlobalizePath(path));
-        return image is null || image.IsEmpty() ? null : ImageTexture.CreateFromImage(image);
+        var image = new Image();   // the bytes through Godot's file access, which reads inside an exported pack too (#99)
+        if (image.LoadPngFromBuffer(Godot.FileAccess.GetFileAsBytes(path)) != Error.Ok || image.IsEmpty()) return null;
+        return ImageTexture.CreateFromImage(image);
     }
 
     private int ListIndexOf(string key) =>
