@@ -1318,13 +1318,17 @@ public partial class Main : Node3D
         AddChild(_halo);
         _sun.RotationDegrees = new Vector3(-50, 30, 0);
 
-        // 2 km across: a catapulta's bolt lands ~11 m out at 25 m/s and then
-        // skids on for tens of metres (oak on stone stops it in ~80 m), and at
-        // 100 m across it used to slide off the edge and fall forever. 2 m
-        // deep (top still at y = 0) so a fast body can't tunnel through it
-        // between ticks even without its swept test.
+        // The ground is an infinite plane (top at y = 0), not a box (#186). It was a
+        // 2 km box, 2 m deep so a fast body could not tunnel through it, but Jolt
+        // finds a resting contact's normal from the two shapes' support points, and
+        // at 1 km from the box's centre the float error in those (~6e-5 m against
+        // a ~1 mm penetration) tilted the normal by a few hundredths of a radian:
+        // a ball set down on flat ground picked up 0.05 m/s^2 along the floor and
+        // rolled 1.5 m in 10 s. A plane is exact, has no edge for a skidding bolt
+        // to fall off, and no thickness to tunnel through. The shape sits 1 m above
+        // its body so Main.Ground can still sink the whole floor under a map.
         var floor = _floor = new StaticBody3D { Position = new Vector3(0, -1f, 0) };
-        floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(2000, 2f, 2000) } });
+        floor.AddChild(new CollisionShape3D { Shape = new WorldBoundaryShape3D(), Position = new Vector3(0, 1f, 0) });
         _floorMaterial = Shapes.Mat(SkyLook.GroundFor(HeroicInventions.Sim.Planet.Earth, 0.5), roughness: 0.85f, outline: false);   // ShowSky sets it per machine
         floor.AddChild(Shapes.Box(new Vector3(2000, 2f, 2000), _floorMaterial));
         AddChild(floor);
