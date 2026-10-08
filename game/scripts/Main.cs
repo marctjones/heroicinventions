@@ -67,7 +67,7 @@ public partial class Main : Node3D
         ["trench-crew"] = new(new Vector3(4.86f, 3.50f, 7.70f), new Vector3(2.00f, 0.64f, -0.48f), 45),
         ["trough"] = new(new Vector3(1.0f, 1.6f, 3.0f), new Vector3(0, 0.5f, 0), 45),
         ["walkers-wheel"] = new(new Vector3(1.57f, 5.59f, 9.05f), new Vector3(-1.60f, 2.42f, 0.00f), 45),
-        ["falling-stones"] = new(new Vector3(0.8f, 2.6f, 6f), new Vector3(0, 0.6f, 0), 50),   // the landing: 10 cm balls over 350 m are too small to follow down
+        ["falling-stones"] = new(new Vector3(-25f, 175f, 470f), new Vector3(-25f, 175f, 0), 50),   // the whole 350 m fall, side-on (#192)
         ["aeolipile"] = new(new Vector3(0, 0.55f, 0.85f), new Vector3(0, 0.32f, 0), 42),
         ["shaduf"] = new(new Vector3(1.0f, 3.2f, 7.5f), new Vector3(1.0f, 1.8f, 0), 50),
         ["baghdad-battery"] = new(new Vector3(0.3f, 1.82f, 2.61f), new Vector3(0.3f, 0.1f, 0.15f), 45),   // pivot (0.3,0.1,0.15), 3 m out at 35 deg: the ten-jar lamp at x~1.2 clears the info panel (unverified against the new geometry)
@@ -79,10 +79,10 @@ public partial class Main : Node3D
         ["ball-ramp"] = new(new Vector3(4.5f, 1.6f, -1.4f), new Vector3(0f, 0.2f, -2.0f), 55),
         ["wake-clock"] = new(new Vector3(0.2f, 0.9f, 3.2f), new Vector3(0f, 0.45f, 0), 50),
         ["sand-timer"] = new(new Vector3(0.6f, 1.25f, 2.9f), new Vector3(0.6f, 0.7f, 0), 50),   // close enough that the three timers, not the scale figure, fill the frame (#190)
-        ["ratchet-windlass"] = new(new Vector3(4.3f, 1.6f, -1.5f), new Vector3(0f, 1.08f, -1.5f), 55),
-        ["trip-hammer"] = new(new Vector3(1.5f, 1.4f, 3.3f), new Vector3(0.2f, 0.75f, -0.5f), 55),
-        ["tunnel-test"] = new(new Vector3(0f, 1.6f, 4.5f), new Vector3(0f, 1f, 0), 50),
-        ["crate-tongs"] = new(new Vector3(1f, 1.4f, 3.2f), new Vector3(1f, 0.68f, 0), 55),
+        ["ratchet-windlass"] = new(new Vector3(1.55f, 1.7f, 4.2f), new Vector3(1.55f, 1.1f, 0), 55),   // from the front: four windlasses in a row, ratchets facing the lens (#192)
+        ["trip-hammer"] = new(new Vector3(0.9f, 1.1f, 2.4f), new Vector3(0.7f, 0.65f, 0), 55),   // the two rigs side by side, peg wheels face on (#192)
+        ["tunnel-test"] = new(new Vector3(0f, 1.5f, 3.2f), new Vector3(0f, 0.75f, 0), 50),   // the planks and the ground under them, where the lead bolts come to rest (#192)
+        ["crate-tongs"] = new(new Vector3(1.5f, 1.1f, 1.9f), new Vector3(1.5f, 0.7f, 0), 55),   // close on the three rigs, 0.5 m apart, so the tongs read (#192)
         ["belt-drive"] = new(new Vector3(2.4f, 1.2f, -0.25f), new Vector3(0.35f, 0.6f, -0.25f), 55),
         ["holy-water"] = new(new Vector3(0.75f, 1.1f, 3.3f), new Vector3(0.75f, 0.5f, 0), 50),
         ["trip-sluice"] = new(new Vector3(2f, 1.3f, 6.2f), new Vector3(2f, 0.75f, 0), 55),

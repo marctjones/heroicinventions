@@ -18,15 +18,17 @@
 ;;           the same height in the same time.
 ;; On Mars (g = 3.71) the same tongs need 2.64 times less force per kilogram,
 ;; or hold 2.64 times the mass.
+;; The three stand 0.5 m apart, steps 10 cm apart (#192: at 1 m apart the frame was so wide that the tongs, 6 cm jaws,
+;; read as specks beside the crates). Each rig only moved along x: the trace is the same to 1.5e-4 degrees.
 (define-machine crate-tongs
   #:source "Tongs that hold what their grip allows"
-  (post step-light #:at (0 0 0) #:size ((cm 40) (cm 30) (cm 40)) #:material limestone)
-  (post step-heavy #:at ((m 1) 0 0) #:size ((cm 40) (cm 30) (cm 40)) #:material limestone)
+  (post step-light #:at ((m 1) 0 0) #:size ((cm 40) (cm 30) (cm 40)) #:material limestone)
+  (post step-heavy #:at ((m 1.5) 0 0) #:size ((cm 40) (cm 30) (cm 40)) #:material limestone)
   (post step-firm #:at ((m 2) 0 0) #:size ((cm 40) (cm 30) (cm 40)) #:material limestone)
-  (block light-crate #:at (0 (m 1.2) 0) #:size (cm 8.7) #:material iron)
-  (block heavy-crate #:at ((m 1) (m 1.2) 0) #:size (cm 9.9) #:material iron)
+  (block light-crate #:at ((m 1) (m 1.2) 0) #:size (cm 8.7) #:material iron)
+  (block heavy-crate #:at ((m 1.5) (m 1.2) 0) #:size (cm 9.9) #:material iron)
   (block firm-crate #:at ((m 2) (m 1.2) 0) #:size (cm 9.9) #:material iron)
-  (grip light-tongs #:at (0 (m 1.2) 0) #:kind tongs #:force 100 #:reach (cm 15) #:closed 1 #:material bronze)
-  (grip heavy-tongs #:at ((m 1) (m 1.2) 0) #:kind tongs #:force 100 #:reach (cm 15) #:closed 1 #:material bronze)
+  (grip light-tongs #:at ((m 1) (m 1.2) 0) #:kind tongs #:force 100 #:reach (cm 15) #:closed 1 #:material bronze)
+  (grip heavy-tongs #:at ((m 1.5) (m 1.2) 0) #:kind tongs #:force 100 #:reach (cm 15) #:closed 1 #:material bronze)
   (grip firm-tongs #:at ((m 2) (m 1.2) 0) #:kind tongs #:force 140 #:reach (cm 15) #:closed 1 #:material bronze)
   (trigger let-go #:when (light-tongs held-for above 1) #:do ((light-tongs closed 0))))
