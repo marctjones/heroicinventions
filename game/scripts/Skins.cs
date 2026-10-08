@@ -156,6 +156,21 @@ public static class Skins
     /// </summary>
     public static readonly ShaderMaterial Outline = OutlineIn(Colors.Black);
 
+    /// <summary>
+    /// The line for a 40-pixel palette thumbnail (#165): at 0.3% of a 96-pixel render the normal line is a third
+    /// of a pixel and vanishes, so a thumbnail's parts draw it about 2.5 px wide instead.
+    /// </summary>
+    public static readonly ShaderMaterial ThumbnailOutline = Wide(OutlineIn(Colors.Black));
+
+    private static ShaderMaterial Wide(ShaderMaterial m) { m.SetShaderParameter("width", 0.026f); return m; }
+
+    /// <summary>Every surface under <paramref name="root"/> that carries the plain line gets <paramref name="outline"/> instead.</summary>
+    public static void UseOutline(Node root, ShaderMaterial outline)
+    {
+        foreach (var mesh in Meshes(root))
+            if (mesh.MaterialOverride is BaseMaterial3D { NextPass: var pass } m && pass == Outline) m.NextPass = outline;
+    }
+
     private static Shader? _outlineShader;
 
     private static ShaderMaterial OutlineIn(Color color)

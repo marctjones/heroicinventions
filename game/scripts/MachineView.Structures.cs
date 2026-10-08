@@ -26,6 +26,14 @@ public partial class MachineView
         body.AddChild(new CollisionShape3D { Shape = shape });
         body.AddChild(round ? Shapes.Cylinder(w / 2, h, Surface(part.Material)) : Shapes.Box(new Vector3(w, h, d), Surface(part.Material)));
         AddChild(body);
+        // a post standing on the ground gets a stone footing a little wider than itself: a made thing set into the
+        // ground, and a colour of its own whatever it's made of (#165). Only drawn.
+        if (Mathf.Abs((float)part.At.Y) < 0.01f)
+        {
+            var footing = Shapes.Box(new Vector3(w * 1.6f, Mathf.Min(0.06f, h * 0.08f), d * 1.6f), Surface("granite"));
+            footing.Transform = new Transform3D(YawOf(part), V(part.At) + new Vector3(0, Mathf.Min(0.03f, h * 0.04f), 0));
+            AddChild(footing);
+        }
         _surfaceMaterials[body.GetInstanceId()] = part.Material;
         RegisterBreakable(part, body);
         AddLabel(part.Id, V(part.At) + new Vector3(0, h + 0.08f, 0));
