@@ -68,6 +68,7 @@ public static class Controls
         // mirrors
         new(["mirror", "burning-mirror"], "dust", Style.Set, "Clean the mirror", "", 0, Needs: v => v > 0.005),
         Switch("mirror burning-mirror", "area", "Cover the mirror", "Uncover the mirror", 1, 0, 20, "m2"),
+        Switch("mirror burning-mirror", "track", "Hold the mirror still", "Let the mirror follow the sun", 1),   // aim by dragging its spot (Main.Aim.cs)
         // machines that turn or work
         Switch("pump", "rpm", "Stop the pump", "Start the pump", 30, 0, 120, "rpm"),
         Switch("air-pump", "speed", "Stop the pump", "Start the pump", 50, 0, 100, "L/s"),

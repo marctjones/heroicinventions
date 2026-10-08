@@ -22,8 +22,10 @@ namespace HeroicInventions.Sim.Mechanics;
 public sealed class Digger(string name, double x0, double z0, double length, double width, double depth, double power, double spit, double spoilOffset)
 {
     public string Name { get; } = name;
-    public double X0 { get; } = x0;
-    public double Z0 { get; } = z0;
+    public double X0 { get; private set; } = x0;
+    public double Z0 { get; private set; } = z0;
+    public double StartX { get; } = x0;
+    public double StartZ { get; } = z0;
     public double Length { get; } = length;
     public double Width { get; } = width;
     public double TargetDepth { get; } = depth;
@@ -69,6 +71,23 @@ public sealed class Digger(string name, double x0, double z0, double length, dou
         _surface = _cells.Select((c, k) => ground.Heights[c]
             + (Dug > 0 ? Math.Min((_spitIndex + (k < _next ? 1 : 0)) * Spit, TargetDepth) : 0)).ToArray();
     }
+
+    /// <summary>
+    /// A person picks where the gang works (#162): it climbs out of what it had cut and starts afresh at (x, z), the
+    /// trench's near end and centre line. What it had dug stays dug (the ground keeps it, and <see cref="Dug"/>
+    /// and <see cref="Work"/> are totals); the new trench starts from the ground as it is there.
+    /// </summary>
+    public void MoveTo(double x, double z)
+    {
+        X0 = x; Z0 = z;
+        SiteHeight = _ground?.HeightAt(x, z);
+        _spitIndex = 0; _next = 0; _energy = 0;
+        Depth = 0; Done = false; Collapsed = false; CollapseDepth = -1;
+        if (_ground is { } g) Attach(g, _gravity);
+    }
+
+    /// <summary>The ground's height under the trench's near end when the gang was sent there; null while it works where it was built.</summary>
+    public double? SiteHeight { get; private set; }
 
     public void Step(double dt)
     {
