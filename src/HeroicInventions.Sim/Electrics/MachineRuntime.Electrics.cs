@@ -32,16 +32,21 @@ public sealed partial class MachineRuntime
     private sealed class SimGeneratorDrive(Generator generator, Func<double> omega, Func<double> getLoad, Action<double> setLoad)
     {
         public Generator Generator { get; } = generator;
-        public double Applied, Omega0, Torque;
+        private double _own, _omega0, _torque;
+        /// <summary>Before the part steps: its load is its own plus the generator's torque at its speed.</summary>
         public void Pre()
         {
-            Omega0 = omega();
-            double own = getLoad() - Applied;           // the part's own load (an operator may have reset it)
-            Torque = Generator.LoadTorque(Omega0);
-            setLoad(own + Torque);
-            Applied = Torque;
+            _omega0 = omega();
+            _own = getLoad();
+            _torque = Generator.LoadTorque(_omega0);
+            setLoad(_own + _torque);
         }
-        public void Post(double dt) => Generator.Apply((Omega0 + omega()) / 2, Torque, dt);
+        /// <summary>After: the load is the part's own again (so a person's setting, or a live edit, never meets the generator's torque), and the bank is charged.</summary>
+        public void Post(double dt)
+        {
+            setLoad(_own);
+            Generator.Apply((_omega0 + omega()) / 2, _torque, dt);
+        }
     }
 
     private void BuildElectrics(MachineDef def)
@@ -51,7 +56,12 @@ public sealed partial class MachineRuntime
             double capacityWh = part.Number("capacity", 4000), chargeWh = part.Number("charge", 0);
             if (!(capacityWh > 0) || chargeWh < 0 || chargeWh > capacityWh)
                 throw new MachineFormatException($"battery-bank {part.Id}: #:capacity must be above 0 Wh and #:charge from 0 to the capacity", part.Location);
-            double volts = part.Number("volts", 28), hour = part.Number("call-hour", 3), minutes = part.Number("call-minutes", 10);
+            // the pass the call goes out on: the scene's own relay pass nearest 03:00 (the pre-dawn pass) and its length, unless the bank names its own;
+            // a scene with no weather has no passes, and the bank calls at 03:00 for 10 minutes
+            double hour = part.Props.GetValueOrDefault("call-hour") is SNumber ch ? ch.Value
+                : def.Weather is { Passes.Count: > 0 } wx ? wx.Passes.OrderBy(h => Math.Min(((h - 3) % 24 + 24) % 24, ((3 - h) % 24 + 24) % 24)).First() : 3;
+            double minutes = part.Props.GetValueOrDefault("call-minutes") is SNumber cm ? cm.Value : def.Weather?.PassMinutes ?? 10;
+            double volts = part.Number("volts", 28);
             if (!(volts > 0) || hour < 0 || hour >= 24 || !(minutes > 0))
                 throw new MachineFormatException($"battery-bank {part.Id}: #:volts and #:call-minutes must be above 0 and #:call-hour a local solar hour in [0, 24)", part.Location);
             string zone = part.Symbol("in", "");

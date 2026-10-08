@@ -21,14 +21,13 @@ namespace HeroicInventions;
 public partial class MachineView
 {
     private sealed record BankView(BatteryBank Bank, MeshInstance3D Fill, StandardMaterial3D FillMat, float Height, Label3D Label, MeshInstance3D Beacon, StandardMaterial3D BeaconMat);
-    private sealed record GeneratorView(Generator Gen, Node3D Needle, MeshInstance3D Cap, Label3D Label, Vector3 Axis, double RatedAmps);
+    private sealed record GeneratorView(Generator Gen, Node3D Needle, MeshInstance3D Cap, Label3D Label, Vector3 Axis, double RatedAmps) { public float CapAngle; }
     private sealed class GeneratorLoad { public required Generator Gen; public required RigidBody3D Body; public required Vector3 Axis; }
 
     private readonly List<BankView> _bankViews = [];
     private readonly List<GeneratorView> _generatorViews = [];
     private readonly List<GeneratorLoad> _generatorLoads = [];
     private double _generatorSeen;
-    private float _capAngle;
 
     private static readonly Color BankGreen = new(0.25f, 0.8f, 0.35f), BankCold = new(0.45f, 0.58f, 0.8f), BankHot = new(0.9f, 0.3f, 0.2f),
                                    BankAmber = new(0.95f, 0.7f, 0.15f), BankReady = new(0.55f, 0.95f, 1f);
@@ -171,8 +170,8 @@ public partial class MachineView
             double amps = g.Bank is { } b ? g.Delivered / b.Volts : 0;
             float sweep = Mathf.DegToRad((float)(Math.Clamp(amps / v.RatedAmps, 0, 1) * 270 - 135));
             v.Needle.Basis = new Basis(new Quaternion(Vector3.Up, v.Axis)) * new Basis(Vector3.Up, sweep);
-            _capAngle += (float)(g.Omega * Math.Max(dt, 0));
-            var capBasis = new Basis(new Quaternion(Vector3.Up, v.Axis)) * new Basis(Vector3.Up, _capAngle);
+            v.CapAngle = Mathf.Wrap(v.CapAngle + (float)(g.Omega * Math.Max(dt, 0)), 0, Mathf.Tau);   // each rotor's own
+            var capBasis = new Basis(new Quaternion(Vector3.Up, v.Axis)) * new Basis(Vector3.Up, v.CapAngle);
             v.Cap.Basis = capBasis;
             v.Cap.Position = (Vector3)v.Cap.GetMeta("gen_at") - v.Axis * 0.025f;
             v.Label.Text = $"{g.Name} {g.Rpm:#,0} rpm · {g.Torque:0.00} N·m\n{g.Delivered:0} W · {amps:0.0} A at {g.Bank?.Volts:0} V"

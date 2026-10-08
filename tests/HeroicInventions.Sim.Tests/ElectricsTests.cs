@@ -153,8 +153,8 @@ public class ElectricsTests
         Assert.Equal(rt.GetField("g-warm", "torque"), sails.Torque, 2);      // the sails give what the generator takes: steady
         Assert.Equal(159.87, rt.GetField("g-warm", "power"), 1);
         Assert.Equal(5.7095, rt.GetField("g-warm", "current"), 3);
-        // the load is the generator's alone: the sails' own load is still 0
-        Assert.Equal(rt.GetField("g-warm", "torque"), sails.Load, 9);
+        // the generator's torque joins the load only while the sails step: between ticks the sails' own load is still 0
+        Assert.Equal(0, sails.Load, 12);
     }
 
     [Fact]
@@ -368,6 +368,65 @@ public class ElectricsTests
         Assert.Equal("aeolipile", new MachineRuntime(MachineDef.Parse(named), Materials).Generators["motor"].DrivenBy);
     }
 
+
+    private static string WithWeather(string text, string weather) => text.Replace("(source ", weather + "\n  (source ");
+
+    [Fact]
+    public void TheCallWindowIsTheScenesOwnRelayPassNearest0300WhenTheBankNamesNone()
+    {
+        // found-electrics has no weather: 03:00 for 10 minutes
+        var plain = new MachineRuntime(MachineDef.Parse(ElectricsText()), Materials);
+        Assert.Equal(3, plain.Banks["bank"].CallHour);
+        Assert.Equal(10, plain.Banks["bank"].CallMinutes);
+        // passes at 4 and 15 for 5 minutes: the call is at 04:00 (the one nearer 03:00), for 5 minutes
+        var rt = new MachineRuntime(MachineDef.Parse(WithWeather(ElectricsText(), "(weather (daily #f) (passes 4.0 15.0) (pass-minutes 5.0))")), Materials);
+        Assert.Equal(4, rt.Banks["bank"].CallHour);
+        Assert.Equal(5, rt.Banks["bank"].CallMinutes);
+        rt.SetField("bank", "charge", 10);       // full, at 20 C
+        rt.SetField("scene", "clock-rate", 0);
+        foreach (var (hour, wins) in new[] { (3.0, false), (3.5, false), (3.99, false), (4.0, true) })
+        {
+            var again = new MachineRuntime(MachineDef.Parse(WithWeather(ElectricsText(), "(weather (daily #f) (passes 4.0 15.0) (pass-minutes 5.0))")), Materials);
+            again.SetField("bank", "charge", 10); again.SetField("scene", "clock-rate", 0); again.SetField("scene", "time", hour);
+            again.Step(0.1);
+            Assert.Equal(wins, again.Won);
+            Assert.Equal(wins, rt.Banks["bank"].InWindow(hour));
+        }
+        Assert.True(rt.Banks["bank"].InWindow(4.08));      // 04:04:48
+        Assert.False(rt.Banks["bank"].InWindow(4.09));     // 04:05:24: the 5 minutes are over
+        // and scene.relay agrees with the bank's window, so there is one pass and not two
+        foreach (double hour in new[] { 3.5, 4.0, 4.05, 4.1 })
+        {
+            rt.SetField("scene", "time", hour);
+            rt.Step(0.01);
+            Assert.Equal(rt.GetField("scene", "relay"), rt.GetField("bank", "in-window"));
+        }
+    }
+
+    [Fact]
+    public void ALiveEditKeepsTheWindmillsLoadAndTheGeneratorsTorqueWhereTheyWere()
+    {
+        var a = Bench();
+        for (int i = 0; i < 600; i++) a.Step(0.1);   // 60 s: settled, not yet full
+        double torque = a.GetField("g-warm", "torque"), rpm = a.GetField("w-warm", "rpm"), charge = a.GetField("warm", "charge");
+        Assert.Equal(20.712, torque, 2);
+        var b = new MachineRuntime(a.Def, Materials);
+        b.SetField("scene", "clock-rate", 0);
+        b.TakeStateFrom(a);
+        Assert.Equal(0, b.Windmills["w-warm"].Load, 12);                         // the sails' own load, not the generator's
+        Assert.Equal(charge, b.GetField("warm", "charge"), 9);
+        for (int i = 0; i < 100; i++) b.Step(0.1);
+        Assert.Equal(torque, b.GetField("g-warm", "torque"), 3);                 // not doubled
+        Assert.Equal(rpm, b.GetField("w-warm", "rpm"), 2);
+        Assert.Equal(0, b.Windmills["w-warm"].Load, 12);
+        // a person's setting of the sails' own load is the part's own: 5 N.m of millstone besides the generator
+        b.SetField("w-warm", "load", 5);
+        for (int i = 0; i < 300; i++) b.Step(0.1);
+        Assert.Equal(5, b.Windmills["w-warm"].Load, 12);
+        // slower by the extra load: w = (2 tau* + k w_cut - 5) / (tau* / w* + k) = 95.788 / 10.4462 = 9.1695 rad/s, 87.56 rpm
+        Assert.Equal(87.56, b.GetField("w-warm", "rpm"), 1);
+    }
+
     // ---- the editor ----
 
     [Fact]
@@ -383,8 +442,12 @@ public class ElectricsTests
         s.Execute("(set motor #:charges bank)");
         Assert.Throws<InvalidOperationException>(() => s.Execute("(set motor #:charges nothing-here)"));
         s.Execute("(set bank #:capacity 10)");
-        string rkt = RktExporter.Write(s.Document.ToMachineDef());
-        Assert.Contains("(battery-bank bank #:at (0.5 0 0) #:in cells #:capacity 10 #:charge 0 #:volts 28 #:call-hour 3 #:call-minutes 10 #:material iron)", rkt);
+        string plain = RktExporter.Write(s.Document.ToMachineDef());
+        s.Execute("(set bank #:call-hour 4)");
+        s.Execute("(set bank #:call-minutes 5)");
+        Assert.Contains("#:volts 28 #:call-hour 4 #:call-minutes 5 #:material iron)", RktExporter.Write(s.Document.ToMachineDef()));
+        string rkt = plain;
+        Assert.Contains("(battery-bank bank #:at (0.5 0 0) #:in cells #:capacity 10 #:charge 0 #:volts 28 #:material iron)", rkt);
         Assert.Contains("(generator motor #:at (0 3 -0.4) #:on sails #:charges bank #:efficiency 0.8 #:cut-in-rpm 1500 #:rated-rpm 2500 #:rated-torque 12 #:material iron)", rkt);
         Assert.Contains("generator", PartTemplates.PrimitiveKinds);
         Assert.Contains("battery-bank", PartTemplates.PrimitiveKinds);

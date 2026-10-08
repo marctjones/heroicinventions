@@ -249,7 +249,7 @@ public static class PartTemplates
             new Dictionary<string, SExpr>
             {
                 ["in"] = new SSymbol("?"), ["capacity"] = new SNumber(4000), ["charge"] = new SNumber(0), ["volts"] = new SNumber(28),
-                ["call-hour"] = new SNumber(3), ["call-minutes"] = new SNumber(10), ["call-any-time"] = new SBool(false),
+                ["call-hour"] = new SBool(false), ["call-minutes"] = new SBool(false), ["call-any-time"] = new SBool(false),   // (false: the scene's own relay pass)
             },
             [], null),
         // a 10 cm square grate in the ground over a pipe into a tank (#90): set #:into to the tank

@@ -281,8 +281,9 @@ public static class RktExporter
                        $"#:rated-rpm {F(N("rated-rpm", 2500))} #:rated-torque {F(N("rated-torque", 12))}" +
                        (p.Props.GetValueOrDefault("driven-by") is SSymbol drv ? $" #:driven-by {drv.Name}" : "") + $" {Mat()})\n";
             case "battery-bank":
-                return $"  (battery-bank {p.Id} {At()} #:in {Sym("in", "?")} #:capacity {F(N("capacity", 4000))} #:charge {F(N("charge"))} #:volts {F(N("volts", 28))} " +
-                       $"#:call-hour {F(N("call-hour", 3))} #:call-minutes {F(N("call-minutes", 10))}" +
+                return $"  (battery-bank {p.Id} {At()} #:in {Sym("in", "?")} #:capacity {F(N("capacity", 4000))} #:charge {F(N("charge"))} #:volts {F(N("volts", 28))}" +
+                       (p.Props.GetValueOrDefault("call-hour") is SNumber ch ? $" #:call-hour {F(ch.Value)}" : "") +
+                       (p.Props.GetValueOrDefault("call-minutes") is SNumber cm ? $" #:call-minutes {F(cm.Value)}" : "") +
                        (p.Props.GetValueOrDefault("call-any-time") is SBool { Value: true } ? " #:call-any-time #t" : "") + $" {Mat()})\n";
             case "burning-mirror":
                 return $"  (burning-mirror {p.Id} {At()} #:area {F(N("area"))} #:image {F(N("image"))} #:onto {Sym("onto", "?")} #:reflectivity {F(N("reflectivity", 0.85))} {Mat()})\n";

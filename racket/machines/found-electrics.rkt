@@ -21,7 +21,8 @@
 ;; The bank   10 Wh (36,000 J: a scenario number, small so a run can fill it) in a vault at 20 C, taking charge from 0 to 45 C. It fills in
 ;;   36,000 / 278.30 = 129.4 s of charging. The sails reach the cut-in's w = 157.08/125 = 1.2566 rad/s from rest in about
 ;;   -19.2 s x ln(1 - 1.2566/3) = 10.4 s, so it is full at about 140 s (traced 143 s).
-;; The call   The run starts at 02:55 on Earth's 3,600 s hour: 03:00 is 300 s in. The bank is full from about 140 s and warm all the way,
+;; The call   (This scene has no weather, so the bank calls at 03:00 for 10 minutes; with #:weather it takes the scene's relay pass nearest 03:00.)
+;;   The run starts at 02:55 on Earth's 3,600 s hour: 03:00 is 300 s in. The bank is full from about 140 s and warm all the way,
 ;;   but the pass opens at 03:00: not won at 02:59 (240 s), won by 305 s. The window is 10 minutes (to 03:10).
 (require racket/math)
 

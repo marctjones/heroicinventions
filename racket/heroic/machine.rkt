@@ -475,9 +475,9 @@
     (unless (and (real? (prop 'charge)) (<= 0 (prop 'charge) (prop 'capacity)))
       (bad (format "#:charge must be from 0 to the capacity (~a Wh), got ~e" (prop 'capacity) (prop 'charge))))
     (unless (and (real? (prop 'volts)) (> (prop 'volts) 0)) (bad (format "#:volts must be above 0, got ~e" (prop 'volts))))
-    (unless (and (real? (prop 'call-hour)) (<= 0 (prop 'call-hour)) (< (prop 'call-hour) 24))
+    (unless (or (not (prop 'call-hour)) (and (real? (prop 'call-hour)) (<= 0 (prop 'call-hour)) (< (prop 'call-hour) 24)))
       (bad (format "#:call-hour must be a local solar hour in [0, 24), got ~e" (prop 'call-hour))))
-    (unless (and (real? (prop 'call-minutes)) (> (prop 'call-minutes) 0))
+    (unless (or (not (prop 'call-minutes)) (and (real? (prop 'call-minutes)) (> (prop 'call-minutes) 0)))
       (bad (format "#:call-minutes must be above 0, got ~e" (prop 'call-minutes)))))
   parts)
 
@@ -1655,7 +1655,8 @@
     ;; cells at 250 Wh/kg) with #:charge Wh in it (default 0). It sits #:in a heat-store (the cells, whose temperature is the bank's own)
     ;; or an enclosure (its air), and takes charge only from 0 to 45 deg C of that temperature, and only until full; it holds charge
     ;; and cannot be destroyed. #:volts (default 28) only turns watts into an amp readout. The call: at the relay pass, #:call-minutes
-    ;; (default 10) after local solar hour #:call-hour (default 3), the game is won if the bank is full and 0 to 45 deg C;
+    ;; after local solar hour #:call-hour, the game is won if the bank is full and 0 to 45 deg C; left out, the pass is the scene's own
+    ;; (#:weather #:passes: the one nearest 03:00, and #:pass-minutes), or 03:00 for 10 minutes in a scene with no weather.
     ;; #:call-any-time #t is the easy setting that lets the call go at any hour.
     (pattern (battery-bank id:id
                            (~alt (~once (~seq #:at at:vec3))
@@ -1670,7 +1671,7 @@
       #:attr info (bkinfo #'id #'zone)
       #:with expr #`(part 'id 'battery-bank '(~? mat iron) (list at.x at.y at.z)
                           (list (cons 'in 'zone) (cons 'capacity (~? cap-v 4000)) (cons 'charge (~? chg-v 0)) (cons 'volts (~? volt-v 28))
-                                (cons 'call-hour (~? hour-v 3)) (cons 'call-minutes (~? min-v 10)) (cons 'call-any-time (~? any-v #f)))
+                                (cons 'call-hour (~? hour-v #f)) (cons 'call-minutes (~? min-v #f)) (cons 'call-any-time (~? any-v #f)))
                           '()
                           #,(loc-of this-syntax)))
 
