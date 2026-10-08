@@ -16,6 +16,8 @@ public partial class Main
 {
     private WorldLinks? _links;
     private WorldLinksView? _linksView;
+    /// <summary>The Jolt locks that make shafts between two machines' hinged bodies turn as one piece (#191).</summary>
+    private readonly List<Action> _shaftLocks = [];
     private Button _joinButton = null!;
     private bool _joining;
     private LinkEnd? _firstPick;
@@ -34,17 +36,52 @@ public partial class Main
     private void RebuildLinks()
     {
         if (_world is null) { ClearLinks(); return; }
+        UnlockShafts();   // a shaft end is its own machine's arbor: undo the locks' mates before resolving the ends again
         _links = WorldLinks.Build(_world.Links,
             label => _byName.GetValueOrDefault(label)?.Runtime,
             end => _byName.GetValueOrDefault(end.Label)?.ShaftEnd(end.Part));
         if (_linksView is null) AddChild(_linksView = new WorldLinksView { Name = "Links" });
         _linksView.Show(_links, end => _byName.GetValueOrDefault(end.Label)?.LinkPoint(end.Part, end.Port));
+        LockShafts();
         StartLinksTraceIfLinked();
         foreach (var l in _links.All.Where(l => l.Unfinished is not null)) GD.Print($"[links] {l.Spec.Id} unfinished: {l.Unfinished}");
     }
 
+    /// <summary>
+    /// A shaft between two machines' Jolt bodies on one axle line is also locked inside Jolt's step (#191):
+    /// the once-a-tick exchange alone let a motor on one end hold only that end at its speed, and the other
+    /// ran a tick of the shaft's torque behind (the split crane's rope 2.25% slow). The exchange still runs,
+    /// before the step, and still reads the torque the shaft carries; the lock carries what acts within the
+    /// step. A shaft a lock can't make (a sim part at an end, a ratio other than one, axles off one line) is
+    /// the exchange alone, as before; which it is goes to the log.
+    /// </summary>
+    private void LockShafts()
+    {
+        UnlockShafts();
+        if (_links is null) return;
+        foreach (var link in _links.All)
+        {
+            if (link.Shaft is null || link.Unfinished is not null) continue;
+            var (from, to) = (link.Spec.From, link.Spec.To);
+            if (_byName.GetValueOrDefault(from.Label) is not { } a || _byName.GetValueOrDefault(to.Label) is not { } b) continue;
+            var (unlock, why) = a.LockAxleTo(from.Part, b, to.Part, link.Spec.Ratio, this);
+            if (unlock is not null) _shaftLocks.Add(unlock);
+            link.Shaft.Locked = unlock is not null;
+            GD.Print(unlock is not null
+                ? $"[links] {link.Spec.Id}: locked in Jolt's step, {from} to {to}"
+                : $"[links] {link.Spec.Id}: exchange only ({why})");
+        }
+    }
+
+    private void UnlockShafts()
+    {
+        foreach (var unlock in _shaftLocks) unlock();
+        _shaftLocks.Clear();
+    }
+
     private void ClearLinks()
     {
+        UnlockShafts();
         _links = null;
         _linksView?.StopTrace();
         _linksView?.QueueFree();
@@ -52,9 +89,10 @@ public partial class Main
         SetJoining(false);
     }
 
-    /// <summary>One tick of a world: water through the cross-machine pipes, every machine, then the shafts, then the records.</summary>
+    /// <summary>One tick of a world: the locked shafts read after Jolt's step, water through the cross-machine pipes, every machine, then the shafts, then the records.</summary>
     private void StepWorld(double delta)
     {
+        _links?.ReadLockedShafts();   // what the locked shafts carried through Jolt's last step (#191)
         _links?.StepPipes(delta);
         foreach (var v in _views) v.SimulateUntraced(delta);
         _links?.StepShafts(delta);
