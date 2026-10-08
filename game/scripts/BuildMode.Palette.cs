@@ -256,6 +256,7 @@ public partial class BuildMode
                     AddListItem(e, "   " + e.Label + (e.Variants.Count > 1 ? $" ({e.Variants.Count} sizes)" : ""));
             }
         }
+        HighlightPaletteEntry(_lessonHighlight);
         if (_placingKey is { } placing) SelectListItem(placing);
         // thumbnails render one a frame in the background, offscreen (none when headless: nothing would draw them)
         if (DisplayServer.GetName() == "headless") return;
@@ -311,7 +312,7 @@ public partial class BuildMode
             _placingKey = null;
             return;
         }
-        _placeMaterial = UsualMaterial(key);
+        _placeMaterial = LessonMaterialFor(key) ?? UsualMaterial(key);
         _placingKey = key;
         StartPlacing(VariantOf(key));
         ShowCard(key);

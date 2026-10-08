@@ -306,6 +306,7 @@ public partial class BuildMode : Node3D
     public override void _Process(double delta)
     {
         _orbit.ProcessKeys(delta, GetViewport());
+        LessonProcess(delta);
         _inputScript?.Process(delta);
     }
 
@@ -321,12 +322,35 @@ public partial class BuildMode : Node3D
                 StartEntry(key);
                 return ScriptedInput.Step.Next;
             }
+            case "drag-to":   // "drag-to PART X Y Z": press on a part, drag it over the scene, let go where that world point is drawn
+            {
+                if (BoundsOf(NodesOf(w[1])) is not { } box) { GD.Print($"[BuildMode] no part {w[1]}"); return ScriptedInput.Step.Next; }
+                var screen = GetViewport().GetScreenTransform();
+                var from = screen * _camera.UnprojectPosition(box.GetCenter());
+                var to = screen * _camera.UnprojectPosition(new Vector3(float.Parse(w[2], System.Globalization.CultureInfo.InvariantCulture),
+                                                                        float.Parse(w[3], System.Globalization.CultureInfo.InvariantCulture),
+                                                                        float.Parse(w[4], System.Globalization.CultureInfo.InvariantCulture)));
+                _inputScript!.Mouse(from);
+                _inputScript.Mouse(from, MouseButton.Left, true);
+                for (int k = 1; k <= 10; k++) _inputScript.Mouse(from.Lerp(to, k / 10f), MouseButton.Left);
+                _inputScript.Mouse(to, MouseButton.Left, false);
+                return ScriptedInput.Step.Next;
+            }
+            case "lesson":   // "lesson ID": start that lesson afresh; "lesson-resume ID" takes it up where it was left
+            case "lesson-resume":
+                StartLesson(w[1], resume: w[0] == "lesson-resume");
+                return ScriptedInput.Step.Next;
+            case "lesson-leave":
+                LeaveLesson();
+                return ScriptedInput.Step.Next;
             case "show-all":   // "show-all on|off": the full list or the starter set
                 SetShowAll(w.Length < 2 || w[1] != "off");
                 return ScriptedInput.Step.Next;
             case "test":   // press Test
                 StartTest();
                 return ScriptedInput.Step.Next;
+            case "wait-test":   // wait until no test is running or about to run (the lesson presses Test itself)
+                return Testing || _lessonAutoTestIn is not null ? ScriptedInput.Step.Again : ScriptedInput.Step.Next;
             case "click-at":   // "click-at X Y Z": a click wherever that world point is drawn
                 ClickAt(new Vector3(float.Parse(w[1], System.Globalization.CultureInfo.InvariantCulture),
                                     float.Parse(w[2], System.Globalization.CultureInfo.InvariantCulture),
@@ -377,7 +401,7 @@ public partial class BuildMode : Node3D
                 return ScriptedInput.Step.Next;
             }
             case "log":
-                GD.Print($"[BuildMode] state: px={F(1 / GetViewport().GetScreenTransform().Scale.X)} selected={_selectedId ?? "none"} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})" + (p.Props.GetValueOrDefault("heading-deg") is SNumber h ? $"^{F(h.Value)}" : "")))}");
+                GD.Print($"[BuildMode] state: px={F(1 / GetViewport().GetScreenTransform().Scale.X)} selected={_selectedId ?? "none"} placing={_placingPaletteId ?? "none"} link={_link?.ToString() ?? "none"} testing={Testing} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})" + (p.Props.GetValueOrDefault("heading-deg") is SNumber h ? $"^{F(h.Value)}" : "")))}");
                 return ScriptedInput.Step.Continue;
             case "focus":
                 if (w[1] == "console") _consoleInput.GrabFocus(); else GetViewport().GuiReleaseFocus();
@@ -417,6 +441,7 @@ public partial class BuildMode : Node3D
         _testButton.Pressed += () => StartTest();
         actions.AddChild(_testButton);
         leftCol.AddChild(actions);
+        BuildLessonUi(layer, actions);
 
         // Start from something that works, and change it.
         var examples = new OptionButton { TooltipText = "Load a working machine to change" };
@@ -597,6 +622,7 @@ public partial class BuildMode : Node3D
         }
         if (_selectedId is { } id && !_session.Document.Parts.ContainsKey(id)) _selectedId = null;
         Redraw();
+        LessonCheck();
         return ok;
     }
 
@@ -797,7 +823,8 @@ public partial class BuildMode : Node3D
         foreach (var id in _session.Document.Parts.Keys)
         {
             var overlay = id == _selectedId ? SelectedOverlay : _linkPicks.Contains(id) ? PickedOverlay : id == _hoverId ? HoverOverlay
-                : _link is { } tool && tool is not (LinkGestures.Kind.Rope or LinkGestures.Kind.Joint) && LinkTakes(tool, id) ? CandidateOverlay : null;
+                : _link is { } tool && tool is not (LinkGestures.Kind.Rope or LinkGestures.Kind.Joint) && LinkTakes(tool, id) ? CandidateOverlay
+                : id == LessonPartId ? LessonPartOverlay : null;
             foreach (var root in NodesOf(id))
                 foreach (var g in Descendants(root).OfType<GeometryInstance3D>())
                     if (g is not Label3D) g.MaterialOverlay = overlay;

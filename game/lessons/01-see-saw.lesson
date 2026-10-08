@@ -1,0 +1,54 @@
+;; Lesson 1: the see-saw (#166). Read by src/HeroicInventions.Sim/Editor/Lessons.cs;
+;; the format is described there.
+;;
+;; The numbers, worked by hand before writing the steps (materials.rktd
+;; densities, the starter block a 10 cm cube = 0.001 m³):
+;;   granite block  2700 kg/m³ × 0.001 m³ = 2.7 kg, 0.20 m left of the pivot: 2.7 × 0.20 = 0.54
+;;   oak block       720 kg/m³ × 0.001 m³ = 0.72 kg
+;;     at 0.20 m right:  0.72 × 0.20 = 0.144, less than 0.54: the granite end goes down
+;;     balanced where 0.72 × d = 0.54:   d = 0.75 m (on the 2 m beam, whose ends are at 1 m)
+;; The beam (the starter Beam: 2 m of pine on legs, pivot 0.4 m up) is the
+;; same either side of its pivot, so its own weight turns neither way.
+;; Blocks sit on its top: pivot + half its 2.5 cm thickness + half the
+;; block, 0.4 + 0.0125 + 0.05 = 0.4625, so "up 0.0625".
+
+(lesson see-saw
+  (title "Lesson 1: the see-saw")
+
+  (step
+    (text "Put a beam on the ground. Pick Beam in the parts list (it is lit up), then click on the green shape in the scene. A beam balanced on a pivot at its middle is a lever: a see-saw.")
+    (highlight lever)
+    (target (kind lever) (at 0 0.4 0) (within 0.6))
+    (check place (kind lever) (as beam)))
+
+  (step
+    (text "Put a heavy stone block on the beam, left of the pivot, on the green block. Pick Block: it comes in granite, a heavy stone. Anywhere close to the green block counts.")
+    (highlight block)
+    (material granite)
+    (target (kind block) (on beam) (along -0.2) (up 0.0625) (within 0.15))
+    (check place (kind block) (category stone) (as heavy)))
+
+  (step
+    (text "Now a light wooden block on the other side, the same distance from the pivot. Pick Block again: this time the lesson has picked Oak on its card, so it is made of wood.")
+    (highlight block)
+    (material oak)
+    (target (kind block) (on beam) (along 0.2) (up 0.0625) (within 0.15))
+    (check place (kind block) (category wood) (as light)))
+
+  (step
+    (text "Press Test it (lit, top left) and watch: the stone end goes down. Why? Both blocks are {heavy.dist} from the pivot, but the stone weighs {heavy.mass} and the wood only {light.mass}. What turns a beam is weight × distance from the pivot: stone {heavy.mass} × {heavy.dist} = {heavy.turn}, wood {light.mass} × {light.dist} = {light.turn}. The bigger number wins.")
+    (highlight test)
+    (check test))
+
+  (step
+    (text "The beam tipped {tilt}. To balance it, the light block needs more distance. Drag the wooden block out along the beam to the green spot, {balance} from the pivot: wood {light.mass} × {balance} makes {heavy.turn}, the same as the stone's {heavy.mass} × {heavy.dist}. Close is enough: the lesson sets it exactly on the spot.")
+    (highlight part:light)
+    (target (kind block) (on beam) (balance heavy light) (up 0.0625) (within 0.15))
+    (check place (part light)))
+
+  (step
+    (text "Now the lesson runs the machine to check it: if the beam stays level, both sides turn it equally. Watch the beam.")
+    (highlight test)
+    (check balanced (beam beam) (within-deg 3)))
+
+  (done "Balanced! In the test the beam never leaned more than {tilt}. Stone {heavy.mass} × {heavy.dist} = {heavy.turn}; wood {light.mass} × {light.dist} = {light.turn}. The same turning on each side keeps a lever level: a light weight far out balances a heavy one close in. That is the law of the lever, as Archimedes wrote it down."))

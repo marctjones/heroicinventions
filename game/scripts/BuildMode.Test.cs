@@ -88,7 +88,12 @@ public partial class BuildMode
             if (part.Kind == "lever")
             {
                 double end = TiltOf(body), most = _testTilts[id].Select(Math.Abs).DefaultIfEmpty(0).Max();
-                if (most < 2) { sentences.Add($"The beam stayed level (it never leaned more than {most:0.#}°)."); continue; }
+                if (most < 2)
+                {
+                    sentences.Add(most < 0.1 ? "The beam stayed level (it never leaned even a tenth of a degree)."
+                                             : $"The beam stayed level (it never leaned more than {most:0.#}°).");
+                    continue;
+                }
                 // the end that went down, along the beam as it was built, and where that is on screen
                 var along = startBasis.X.Normalized() * (end < 0 ? 1 : -1);
                 var screenDown = _camera.UnprojectPosition(start + along) - _camera.UnprojectPosition(start);

@@ -30,14 +30,16 @@ namespace HeroicInventions;
 /// </summary>
 public sealed class ScriptedInput(string tag, string script, Node owner, Func<OrbitCamera?> camera, Func<string[], ScriptedInput.Step?>? extra = null)
 {
-    public enum Step { Next, Continue }
+    /// <summary>Next: wait a few frames before the next step; Continue: run the next at once; Again: this step isn't ready, try it again in a few frames.</summary>
+    public enum Step { Next, Continue, Again }
 
     private readonly Queue<string> _steps = new(script.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
     private int _wait;
     private (InputEventKey Key, double Left, double Held)? _holding;
     private Vector2 _lastMouse;
+    private string? _retry;   // a step that said Again
 
-    public bool Done => _steps.Count == 0 && _holding is null;
+    public bool Done => _steps.Count == 0 && _holding is null && _retry is null;
 
     /// <summary>Call once a frame from the owner's _Process, after anything the held keys drive.</summary>
     public void Process(double delta)
@@ -56,11 +58,14 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
         }
         if (_wait-- > 0) return;
         _wait = 3;
-        while (_steps.TryDequeue(out var line))
+        while ((_retry ?? (_steps.TryDequeue(out var next) ? next : null)) is { } line)
         {
-            GD.Print($"[{tag}] input: {line}");
+            if (_retry is null) GD.Print($"[{tag}] input: {line}");
+            _retry = null;
             var w = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if ((extra?.Invoke(w) ?? Run(w)) == Step.Next) return;
+            var step = extra?.Invoke(w) ?? Run(w);
+            if (step == Step.Again) { _retry = line; return; }   // not ready yet: the same step again in a few frames
+            if (step == Step.Next) return;
         }
     }
 
