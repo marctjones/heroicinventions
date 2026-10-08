@@ -362,7 +362,9 @@ public partial class BuildMode
         col.AddChild(_cardMadeOf);
         _cardSwatches = new HFlowContainer();
         col.AddChild(_cardSwatches);
-        leftCol.AddChild(_card);
+        // beside the panel, not in it: in the column the card took a third of the height the list needs (#181)
+        _leftPanel.GetParent().AddChild(_card);
+        _card.CustomMinimumSize = new Vector2(260, 0);
     }
 
     /// <summary>The "What is this?" card for a palette entry: what it does, what it joins, and (for the part being placed) its size and material.</summary>
@@ -371,6 +373,7 @@ public partial class BuildMode
         _cardKey = key;
         if (key is null || !_entryByKey.TryGetValue(key, out var e)) { _card.Visible = false; return; }
         _card.Visible = true;
+        _card.Position = new Vector2(_leftPanel.GetGlobalRect().End.X + 6, _leftPanel.GetGlobalRect().Position.Y + 120);
         _cardTitle.Text = $"What is this? {e.Label}";
         _cardSays.Text = e.Says;
         _cardJoins.Text = e.Joins;

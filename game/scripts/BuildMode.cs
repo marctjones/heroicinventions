@@ -67,6 +67,8 @@ public partial class BuildMode : Node3D
     // every part's connection points, drawn and clickable: click one, then another, to join them
     private readonly List<(string Part, string Port, string Kind, Vector3 At, MeshInstance3D Node)> _ports = [];
     private (string Part, string Port, Vector3 At)? _connectFrom;
+    private readonly List<(Label3D Node, List<(string Part, string Port, string Words)> Ports)> _portLabels = [];
+    private IReadOnlyList<LinkGestures.Candidate> _candidates = [];   // what the selected part (or the point a pipe starts from) can join, lit green (#179)
     private MeshInstance3D? _connectLine;
 
     // camera: spherical coordinates around a pivot (OrbitCamera.cs, shared with run view)
@@ -301,7 +303,7 @@ public partial class BuildMode : Node3D
     private bool _paletteDrag;
 
     /// <summary>Whether a window point is over one of build mode's panels rather than the scene.</summary>
-    private bool OverPanel(Vector2 at) => _leftPanel.GetGlobalRect().HasPoint(at) || _rightPanel.GetGlobalRect().HasPoint(at);
+    private bool OverPanel(Vector2 at) => _leftPanel.GetGlobalRect().HasPoint(at) || _card.Visible && _card.GetGlobalRect().HasPoint(at) || _rightPanel.GetGlobalRect().HasPoint(at);
 
     private PanelContainer _leftPanel = null!, _rightPanel = null!;
 
@@ -402,6 +404,27 @@ public partial class BuildMode : Node3D
                 ClickAt(box.GetCenter());
                 return ScriptedInput.Step.Next;
             }
+            case "select":   // "select ID" or "select PART.PORT": what a click on the part, or on that dot (starting a pipe), would do, without needing it on screen
+            {
+                var at = w[1].Split('.');
+                if (at.Length == 2 && _ports.FirstOrDefault(p => p.Part == at[0] && p.Port == at[1]) is { Node: not null } dot)
+                { _connectFrom = (dot.Part, dot.Port, dot.At); RefreshHighlights(); }
+                else { CancelConnect(); Select(w[1]); }
+                return ScriptedInput.Step.Next;
+            }
+            case "candidates":   // what is lit as joinable, and which words are showing: the selected part, or the point a pipe starts from
+                GD.Print($"[BuildMode] candidates: from={(_connectFrom is { } cf ? $"{cf.Part}.{cf.Port}" : _selectedId ?? "none")} lit={string.Join(",", _candidates.Select(c => c.PartId).Distinct().Order())} "
+                    + $"via={string.Join(",", _candidates.Select(c => $"{c.PartId}.{c.Via}" + (c.TheirPort is { } tp ? $".{tp}" : "")))} "
+                    + $"words={string.Join("|", _portLabels.Where(l => l.Node.Visible).Select(l => l.Node.Text).Order())}");
+                return ScriptedInput.Step.Continue;
+            case "palette-rows":   // how many rows of the parts list are fully on screen at once (the list scrolled to the top)
+            {
+                int whole = 0;
+                for (int i = 0; i < _paletteList.ItemCount; i++)
+                    if (_paletteList.GetItemRect(i, false).End.Y <= _paletteList.Size.Y) whole++; else break;
+                GD.Print($"[BuildMode] palette-rows: list={F(_paletteList.Size.X)}x{F(_paletteList.Size.Y)} visible={whole} of {_paletteList.ItemCount} panel={F(_leftPanel.Size.Y)} card={(_card.Visible ? "shown" : "hidden")} viewport={GetViewport().GetVisibleRect().Size}");
+                return ScriptedInput.Step.Continue;
+            }
             case "log":
                 GD.Print($"[BuildMode] state: px={F(1 / GetViewport().GetScreenTransform().Scale.X)} selected={_selectedId ?? "none"} placing={_placingPaletteId ?? "none"} link={_link?.ToString() ?? "none"} testing={Testing} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})" + (p.Props.GetValueOrDefault("heading-deg") is SNumber h ? $"^{F(h.Value)}" : "")))}");
                 return ScriptedInput.Step.Continue;
@@ -467,7 +490,7 @@ public partial class BuildMode : Node3D
         var joinBox = new VBoxContainer { Visible = _showAll };
         _joinBox = joinBox;
         joinBox.AddChild(new Label { Text = "Join parts: pick a tool, then click the parts" });
-        var joinGrid = new GridContainer { Columns = 2 };
+        var joinGrid = new GridContainer { Columns = 3 };
         foreach (var (kind, label, tip) in new[]
         {
             (LinkGestures.Kind.Rope, "Rope", "A rope between two parts (click one, then the other); trim its length in the inspector"),
@@ -487,22 +510,28 @@ public partial class BuildMode : Node3D
         joinBox.AddChild(joinGrid);
         leftCol.AddChild(joinBox);
 
-        joinBox.AddChild(new Label { Text = "Parts with no usual material are made of", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        // the material for parts with no usual one, and the planet, are set once in a while: folded away so the parts list keeps the height (#181)
+        var moreToggle = new CheckButton { Text = "Material and planet", FocusMode = Control.FocusModeEnum.None, TooltipText = "The material for parts with no usual one, and the planet the scene stands on" };
+        joinBox.AddChild(moreToggle);
+        var moreBox = new VBoxContainer { Visible = false };
+        moreToggle.Toggled += on => moreBox.Visible = on;
+        joinBox.AddChild(moreBox);
+        moreBox.AddChild(new Label { Text = "Parts with no usual material are made of", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         _materialBox = new OptionButton();
         _materialIds = _materials.All.OrderBy(m => m.Id).Select(m => m.Id).ToList();
         foreach (var mat in _materials.All.OrderBy(m => m.Id)) _materialBox.AddItem(mat.Name);
         _materialBox.Select(Math.Max(0, _materialIds.IndexOf(_material)));
         _materialBox.ItemSelected += index => _material = _materialIds[(int)index];
-        joinBox.AddChild(_materialBox);
+        moreBox.AddChild(_materialBox);
 
         // The planet the scene stands on (issue #38): its gravity, air and sunlight.
-        joinBox.AddChild(new Label { Text = "On the planet" });
+        moreBox.AddChild(new Label { Text = "On the planet" });
         var planetBox = new OptionButton { TooltipText = "Gravity, air pressure and mix, sunlight: (planet mars) in the console, with #:gravity etc. to change a number" };
         var planetIds = HeroicInventions.Sim.Planet.Presets.Keys.ToList();
         foreach (var id in planetIds) planetBox.AddItem(HeroicInventions.Sim.Planet.Presets[id].Name);
         planetBox.Select(Math.Max(0, planetIds.IndexOf(_session.Document.Planet.Id)));
         planetBox.ItemSelected += index => RunCommand($"(planet {planetIds[(int)index]})");
-        joinBox.AddChild(planetBox);
+        moreBox.AddChild(planetBox);
 
         var fileRow = new HBoxContainer();
         var saveButton = new Button { Text = "Save…", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
@@ -513,12 +542,14 @@ public partial class BuildMode : Node3D
         fileRow.AddChild(loadButton);
         leftCol.AddChild(fileRow);
 
-        var runButton = new Button { Text = "Run this machine" };
+        var runRow = new HBoxContainer();
+        var runButton = new Button { Text = "Run this machine", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         runButton.Pressed += () => RunRequested?.Invoke();
-        leftCol.AddChild(runButton);
-        var exitButton = new Button { Text = "Leave build mode" };
+        runRow.AddChild(runButton);
+        var exitButton = new Button { Text = "Leave", TooltipText = "Leave build mode", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         exitButton.Pressed += () => ExitRequested?.Invoke();
-        leftCol.AddChild(exitButton);
+        runRow.AddChild(exitButton);
+        leftCol.AddChild(runRow);
 
         // right: inspector and console
         var right = _rightPanel = new PanelContainer { CustomMinimumSize = new Vector2(300, 0) };
@@ -744,6 +775,8 @@ public partial class BuildMode : Node3D
     {
         foreach (var p in _ports) p.Node.QueueFree();
         _ports.Clear();
+        foreach (var l in _portLabels) l.Node.QueueFree();
+        _portLabels.Clear();
         foreach (var part in _session.Document.Parts.Values)
             foreach (var port in part.Ports)
             {
@@ -758,7 +791,55 @@ public partial class BuildMode : Node3D
                 dot.Position = at;
                 AddChild(dot);
                 _ports.Add((part.Id, port.Name, port.Kind, at, dot));
+                // one label for the dots sharing a spot (a tank's inlet and outlet), written by UpdatePortLabels
+                var words = PortWords.Words(part, port);
+                if (_portLabels.FirstOrDefault(l => l.Node.Position.DistanceTo(at + PortLabelLift) < 0.01f) is { Node: not null } same)
+                    same.Ports.Add((part.Id, port.Name, words));
+                else
+                {
+                    var label = new Label3D
+                    {
+                        Position = at + PortLabelLift, FontSize = 36, OutlineSize = 12, PixelSize = 0.0028f,
+                        Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, Visible = false,
+                        Modulate = colour.Lerp(Colors.White, 0.55f), OutlineModulate = new Color(0.05f, 0.07f, 0.12f),
+                        RenderPriority = 10, OutlineRenderPriority = 9,
+                    };
+                    AddChild(label);
+                    _portLabels.Add((label, [(part.Id, port.Name, words)]));
+                }
             }
+        UpdatePortLabels();
+    }
+
+    private static readonly Vector3 PortLabelLift = new(0, 0.07f, 0);
+
+    /// <summary>
+    /// The words beside the dots (#178), shown for the selected part's points, for a point a pipe has
+    /// been started from, for the points of the parts that could join it (#179), and for every point
+    /// while a join tool is active. Everything else stays bare dots, so a busy scene isn't covered in text.
+    /// </summary>
+    private void UpdatePortLabels()
+    {
+        bool Shown(string part, string port) =>
+            _link is not null
+            || part == _selectedId
+            || _connectFrom is { } cf && cf.Part == part && cf.Port == port
+            || _candidates.Any(c => c.PartId == part && c.TheirPort == port);
+        foreach (var (node, ports) in _portLabels)
+        {
+            var shown = ports.Where(p => Shown(p.Part, p.Port)).Select(p => p.Words).ToList();
+            node.Visible = shown.Count > 0;
+            if (shown.Count > 0) node.Text = PortWords.Combine(shown);
+        }
+    }
+
+    /// <summary>What the selected part, or the point a pipe has been started from, can join; the same rules the join tools use.</summary>
+    private void UpdateCandidates()
+    {
+        _candidates = _link is not null ? []
+            : _connectFrom is { } cf ? LinkGestures.Candidates(_session.Document, cf.Part, cf.Port)
+            : _selectedId is { } sel ? LinkGestures.Candidates(_session.Document, sel)
+            : [];
     }
 
     /// <summary>The connection point nearest the mouse ray, within a few pixels' reach.</summary>
@@ -782,6 +863,7 @@ public partial class BuildMode : Node3D
         _connectFrom = null;
         _connectLine?.QueueFree();
         _connectLine = null;
+        RefreshHighlights();
     }
 
     private void DrawConnectLine(Vector3 to)
@@ -823,9 +905,14 @@ public partial class BuildMode : Node3D
 
     private void RefreshHighlights()
     {
+        UpdateCandidates();
+        UpdatePortLabels();
+        var lit = _candidates.Select(c => c.PartId).ToHashSet();
         foreach (var id in _session.Document.Parts.Keys)
         {
             var overlay = id == _selectedId ? SelectedOverlay : _linkPicks.Contains(id) ? PickedOverlay : id == _hoverId ? HoverOverlay
+                : _connectFrom is { } from && from.Part == id ? PickedOverlay
+                : lit.Contains(id) ? CandidateOverlay
                 : _link is { } tool && tool is not (LinkGestures.Kind.Rope or LinkGestures.Kind.Joint) && LinkTakes(tool, id) ? CandidateOverlay
                 : id == LessonPartId ? LessonPartOverlay : null;
             foreach (var root in NodesOf(id))
@@ -1301,6 +1388,7 @@ public partial class BuildMode : Node3D
             else
             {
                 _connectFrom = (port.Part, port.Port, port.At);
+                RefreshHighlights();
                 _status.Text = $"Connecting {port.Part}'s {port.Port}: click the point to join it to, Esc to cancel";
             }
             return;

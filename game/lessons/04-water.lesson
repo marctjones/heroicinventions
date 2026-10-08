@@ -41,7 +41,7 @@
            (then "(set {id} #:water 0)")))
 
   (step
-    (text "Join the two with a pipe. Each tank has a blue dot low on its front, where water goes in and out. Click the dot on the upper tank, then the dot on the lower tank, and a pipe joins them.")
+    (text "Join the two with a pipe. Each tank has a blue dot low on its front, labelled \"water in / out\" when the tank is selected: that is where water goes in and out. Click the dot on the upper tank, then the dot on the lower tank, and a pipe joins them.")
     (check join (kind pipe) (between upper lower)))
 
   (step
