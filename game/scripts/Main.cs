@@ -939,6 +939,7 @@ public partial class Main : Node3D
 
         ApplyCamera(Profiles.GetValueOrDefault(name, MenuCamera with { Eye = new Vector3(0, 1, 2) }));
         CheckFraming(name, view);
+        PlaceFigure(view);      // a person for scale (Main.Composition.cs)
         SetRunning(true);
         // A real aeolipile doesn't spin until its water boils (~30s of
         // simulated time for 0.3kg at 3kW) — accurate, but a bad first
@@ -1397,6 +1398,9 @@ public partial class Main : Node3D
             case Key.D when _current is not null:
                 _detailsButton.EmitSignal(BaseButton.SignalName.Pressed);
                 break;
+            case Key.P:
+                ToggleFigure();   // the scale figure
+                break;
             case Key.E when _views.Count > 0:
                 EditFocused();
                 break;
@@ -1500,6 +1504,8 @@ public partial class Main : Node3D
         }
         FollowMissile();
         DrawTrail(delta);
+        ApplySilhouette(_current);   // review mode only (HEROIC_SILHOUETTE)
+        if (_figure is not null && (_current is null || !IsInstanceValid(_current))) { _figure.QueueFree(); _figure = null; }
         ShowSky(_current?.Runtime);
         UpdateInfoPanel();
     }

@@ -311,6 +311,36 @@ public static class Skins
             .Where(m => m.HasMeta(MaterialMeta)).Select(m => (string)m.GetMeta(MaterialMeta)).FirstOrDefault();
 
     /// <summary>
+    /// Frame and moving parts (#167): a machine reads by what moves, so its standing structure recedes. Every mesh that
+    /// rides on no rigid body (posts, frames, supports, footings, fixtures) and is made of wood or stone draws a little
+    /// darker and greyer; what moves or carries the load (arms, wheels, beams, the stone) keeps its full colour. Metal,
+    /// glass, water and anything glowing are left alone: they're working parts or carry state cues. A material used by
+    /// both still and moving meshes is left alone too, and none is copied: builders keep handles on the materials they
+    /// change at run time. Run once after a view is built.
+    /// </summary>
+    public static void RecedeStructure(Node root)
+    {
+        var users = new Dictionary<StandardMaterial3D, (bool Still, bool Moving)>();
+        foreach (var mesh in Meshes(root))
+        {
+            if (mesh.MaterialOverride is not StandardMaterial3D mat || !mat.HasMeta(FinishMeta)) continue;
+            bool moving = false;
+            for (Node? n = mesh.GetParent(); n is not null && n != root; n = n.GetParent())
+                if (n is RigidBody3D) { moving = true; break; }
+            var u = users.GetValueOrDefault(mat);
+            users[mat] = moving ? (u.Still, true) : (true, u.Moving);
+        }
+        foreach (var (mat, u) in users)
+        {
+            if (!u.Still || u.Moving) continue;
+            if (mat.Transparency != BaseMaterial3D.TransparencyEnum.Disabled || mat.EmissionEnabled) continue;
+            if ((Finish)(int)mat.GetMeta(FinishMeta) is not (Finish.Grain or Finish.Dressed or Finish.Crystalline or Finish.Veined)) continue;
+            var c = mat.AlbedoColor;
+            mat.AlbedoColor = Color.FromHsv(c.H, c.S * 0.7f, c.V * 0.8f, c.A);
+        }
+    }
+
+    /// <summary>
     /// A part's own shade: its brightness nudged up to ±6%, fixed by its name so it's the same every run
     /// (real castings and timbers vary that much anyway), so two neighbouring parts of one material don't
     /// merge into one shape.
