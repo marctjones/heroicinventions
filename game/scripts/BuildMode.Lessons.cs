@@ -58,9 +58,10 @@ public partial class BuildMode
 
     private void BuildLessonUi(CanvasLayer layer, HBoxContainer actions)
     {
-        var lessons = new Button { Text = "Lessons", TooltipText = "Step-by-step: build a simple machine, starting with a see-saw", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var lessons = new Button { Text = "Lessons", TooltipText = "Step-by-step: build a simple machine, starting with a see-saw", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Disabled = Live };
         lessons.AddThemeColorOverride("font_color", new Color(0.7f, 1f, 0.7f));
         _lessonMenu = new PopupMenu();
+        _lessonMenu.IndexPressed += OnLessonMenu;
         lessons.AddChild(_lessonMenu);
         lessons.Pressed += () =>
         {
@@ -123,12 +124,10 @@ public partial class BuildMode
             i++;
         }
         if (lessons.Count == 0) _lessonMenu.AddItem("(no lessons found)");
-        _lessonMenu.IndexPressed += OnLessonMenu;
     }
 
     private void OnLessonMenu(long index)
     {
-        _lessonMenu.IndexPressed -= OnLessonMenu;
         if (_lessonMenu.GetItemMetadata((int)index).AsString() is not { Length: > 0 } meta) return;
         var (how, id) = (meta[..meta.IndexOf(':')], meta[(meta.IndexOf(':') + 1)..]);
         StartLesson(id, resume: how == "resume");
@@ -137,6 +136,7 @@ public partial class BuildMode
     /// <summary>Starts a lesson, or takes it up again where it was left (its design and step).</summary>
     private void StartLesson(string id, bool resume)
     {
+        if (Live) return;   // a lesson clears the bench: never a machine running in the world
         if (AllLessons().FirstOrDefault(l => l.Id == id) is not { } lesson) { GD.Print($"[Lesson] no lesson {id}"); return; }
         if (Testing) FinishTest();
         CancelPlacing();

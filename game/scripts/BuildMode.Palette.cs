@@ -265,11 +265,14 @@ public partial class BuildMode
             .Select(i => (i, _paletteList.GetItemMetadata(i).AsString()))
             .Where(q => !_thumbs.ContainsKey(q.Item2) && q.Item2 != "rope").ToList();
         if (queue.Count > 0)
+        {
+            var keyAt = queue.ToDictionary(q => q.Item1, q => q.Item2);   // the list may be refilled while these render
             AddChild(new PaletteThumbnails(this, queue, (i, texture) =>
             {
-                if (i < _paletteList.ItemCount) _thumbs[_paletteList.GetItemMetadata(i).AsString()] = texture;
-                if (i < _paletteList.ItemCount) _paletteList.SetItemIcon(i, texture);
+                _thumbs[keyAt[i]] = texture;
+                if (i < _paletteList.ItemCount && _paletteList.GetItemMetadata(i).AsString() == keyAt[i]) _paletteList.SetItemIcon(i, texture);
             }));
+        }
     }
 
     private void AddListItem(Entry e, string text)
