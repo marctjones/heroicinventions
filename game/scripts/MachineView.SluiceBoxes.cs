@@ -32,6 +32,7 @@ public partial class MachineView
         var gold = Shapes.Box(new Vector3(1, 1, 1), Shapes.Mat(new Color(0.95f, 0.78f, 0.2f), metallic: 0.9f, roughness: 0.3f));
         gold.Position = at + new Vector3(-len / 4, 0.02f, 0);
         AddChild(gold);
+        BuildGoldGlint(box, gold);   // dust on the floor where it lies, so a pinch can be seen (#173)
         var sand = Shapes.Box(new Vector3(1, 1, 1), Shapes.Mat(Shapes.ColorFor("sand")));
         sand.Position = at + new Vector3(len / 4, 0.02f, 0);
         AddChild(sand);
@@ -44,10 +45,12 @@ public partial class MachineView
     {
         foreach (var (box, gold, sand, tag) in _sluiceBoxViews)
         {
-            // a heap as big as what's kept (grains and pores, ~60% solid), flattened behind the riffles
-            static Vector3 Heap(double kg, double density) { float s = Mathf.Max(0.001f, (float)Math.Cbrt(kg / (density * 0.6))); return new Vector3(s * 1.6f, s * 0.4f, s * 1.6f); }
+            // a heap exactly as big as what's kept: its volume is the mass over the material's density (#173)
+            gold.Visible = box.KeptHeavy > 0;
+            sand.Visible = box.KeptLight > 0;
             gold.Scale = Heap(box.KeptHeavy, box.HeavyDensity);
             sand.Scale = Heap(box.KeptLight, box.LightDensity);
+            DrawGoldGlint(box, gold, sand);
             tag.Text = $"{box.Name} · {box.Shear:F2} Pa · keeps what's over {box.Cutoff:F0} kg/m³\ngold {box.KeptHeavy * 1000:F0} g kept, {box.PassedHeavy * 1000:F0} g lost · sand {box.KeptLight:F2} kg caught";
         }
     }

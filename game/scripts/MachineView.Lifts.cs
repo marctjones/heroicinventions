@@ -86,6 +86,7 @@ public partial class MachineView
     {
         foreach (var d in _liftDrives)
         {
+            if (_norias.TryGetValue(d, out var noria)) { DrawNoria(d, noria); continue; }   // once per bucket, from its lip (Flow)
             bool pouring = d.Lift.Flow > 1e-5;
             d.Stream.Visible = pouring;
             if (!pouring) continue;

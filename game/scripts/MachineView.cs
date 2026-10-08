@@ -125,6 +125,7 @@ public partial class MachineView : Node3D
         foreach (var rope in Runtime.Def.Ropes) { _building = rope.Id; BuildRope(rope); }
         _building = null;
         Pass(BuildLifts);
+        BuildNorias();   // water in a noria's buckets (#171)
         Pass(BuildChannels);
         Pass(BuildFloatValves);
         Pass(BuildLeaks);
@@ -141,6 +142,7 @@ public partial class MachineView : Node3D
         Pass(BuildRainHouse);
         Pass(BuildStirlings);
         Pass(BuildGreenhouse);
+        BuildProducts();   // oxygen from plants (#173)
         Pass(BuildMirrors);
         Pass(BuildPumps);
         Pass(BuildPistonDrives);
@@ -469,10 +471,11 @@ public partial class MachineView : Node3D
 
     private void BuildPipe(PipeSpec pipe)
     {
-        var bronze = Surface("bronze");
+        var bronze = Surface("iron");   // dark, so the water dashes riding it read and the pipe stands off a pale ground (#171)
         var from = PortPosition(pipe.From);
         var to = PortPosition(pipe.To);
-        AddChild(Shapes.Rod(from, to, 0.006f, bronze));
+        AddChild(Shapes.Rod(from, to, PipeBore, bronze));
+        BuildPipeFlow(pipe, from, to);   // dashes that ride it with the flow (#171)
         if (!pipe.Jet) return;
 
         // Thicker and brighter than the still water elsewhere, with a
@@ -1533,8 +1536,8 @@ public partial class MachineView : Node3D
     {
         foreach (var (tank, spec, water) in _water)
         {
-            float level = Mathf.Max((float)tank.Level, 0.001f);
-            water.Visible = tank.Level > 0.001;
+            float level = ShownLevel(tank);   // the true level, or a 4 mm film once it holds any (#173)
+            water.Visible = tank.WaterVolume >= 5e-6 || tank.Level > 0.001;
             water.Scale = new Vector3(1, level, 1);
             // a hanging vessel rides up and down on its rope
             water.Position = new Vector3((float)spec.At.X, (float)tank.BaseElevation + level / 2, (float)spec.At.Z);
@@ -1589,6 +1592,7 @@ public partial class MachineView : Node3D
         foreach (var rope in _ropes) DrawRope(rope);
         DrawLiftStreams();
         DrawChannels();
+        DrawPipeFlow();
         DrawCylinders();
         DrawHearths();
         DrawWaterWheels();
@@ -1629,6 +1633,7 @@ public partial class MachineView : Node3D
         DrawDiggers();
         DrawFloats();
         DrawSluiceBoxes();
+        DrawProducts();
         DrawGauges();   // last: a room's dial follows its walls
     }
 
