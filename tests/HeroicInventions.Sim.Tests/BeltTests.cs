@@ -76,7 +76,7 @@ public class BeltTests
         Assert.Equal(12.109, runtime.GetField("tight-belt", "capacity"), precision: 3);
         Assert.Equal(6.054, runtime.GetField("loose-belt", "capacity"), precision: 3);
         Assert.Equal(2.0, runtime.GetField("tight-belt", "capacity") / runtime.GetField("loose-belt", "capacity"), precision: 9);
-        runtime.SetField("loose-belt", "tension", 10);                            // tighten the loose one to match
+        OperatorRun.Of(runtime, "(at 0 (loose-belt tension 10))");                // a person tightens the loose one to match
         Assert.Equal(12.109, runtime.GetField("loose-belt", "capacity"), precision: 3);
     }
 

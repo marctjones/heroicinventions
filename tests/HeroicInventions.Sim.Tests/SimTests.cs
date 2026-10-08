@@ -206,13 +206,13 @@ public class OpenChannelTests
         // 1.0 m of water over a 0.5 m sill; a 30 cm gate raised 10 cm (opening 0.1 of 1 m)
         var pool = new Tank("pool", 0, 10, 3, waterVolume: 15);
         var race = new Channel("race", pool, 0.5, null, 0.4, width: 0.3, length: 5) { Gate = new SluiceGate(0.3, 1.0, 0.1) };
-        race.Step(0.001);
+        var person = new OperatorRun(OperatorLog.Parse("(at 0.001 (gate opening 0))"), race.Step, a => race.Gate.Opening = a.Value);   // a person drops the gate after the first step
+        person.Run(0.001, 0.001);
         double h = 1.5 - (0.5 + 0.05);                                    // above the slot's middle
         Assert.Equal(0.6 * 0.3 * 0.1 * Math.Sqrt(2 * 9.81 * h), race.Flow, precision: 6);
         Assert.True(race.Flow < Channel.WeirFlow(0.3, 1.0), "the gate, not the lip, is holding the water back");
 
-        race.Gate.Opening = 0;
-        race.Step(0.001);
+        person.Run(0.001, 0.001);
         Assert.Equal(0, race.Flow);
         Assert.Equal(0, race.Depth);                                       // the channel below runs dry at once
         Assert.Equal(0, race.Velocity);
@@ -683,8 +683,7 @@ public class TankLeakTests
     public void APluggedHoleOrADryTankLeaksNothingAndASeepTakesAFixedVolumeUntilDry()
     {
         var (net, tank, leak) = Barrel(0.10);
-        leak.Area = 0;
-        net.Step(1);
+        new OperatorRun(OperatorLog.Parse("(at 0 (hole area 0))"), net.Step, a => leak.Area = a.Value).Run(1, 1);   // a person plugs the hole before the water moves
         Assert.Equal(A * H0, tank.WaterVolume, precision: 12);
 
         var seepNet = new FluidNetwork();
@@ -857,14 +856,16 @@ public class LiftPumpTests
     public void ADriveTooWeakForTheColumnStalls()
     {
         var (p, _, _) = Rig(lift: 5);
-        Strokes(p, 1);
-        p.Force = RhoG * A * 5.5 - 1;
-        Strokes(p, 3);
+        // the drive is weakened after the first stroke (2 s) and restored after the stalled three (8 s)
+        var person = new OperatorRun(
+            [new OperatorAction(2, "drive", "force", RhoG * A * 5.5 - 1), new OperatorAction(8, "drive", "force", RhoG * A * 5.5 + 1)],
+            p.Step, a => p.Force = a.Value);
+        person.Run(2, 0.01);                                              // one stroke at 30 rpm
+        person.Run(6, 0.01);
         Assert.True(p.Stalled);
         Assert.Equal(1, p.Strokes);
         Assert.Equal(A * Stroke * Eta, p.Delivered, precision: 9);
-        p.Force = RhoG * A * 5.5 + 1;
-        Strokes(p, 3);
+        person.Run(6, 0.01);
         Assert.False(p.Stalled);
         Assert.Equal(4, p.Strokes);
         Assert.Equal(4 * A * Stroke * Eta, p.Delivered, precision: 9);

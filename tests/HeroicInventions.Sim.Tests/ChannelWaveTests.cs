@@ -1,3 +1,4 @@
+using HeroicInventions.Sim.Machines;
 using HeroicInventions.Sim.Fluids;
 
 namespace HeroicInventions.Sim.Tests;
@@ -121,14 +122,15 @@ public class ChannelWaveTests
         var gate = new SluiceGate(0.5, 0.5, 1);
         var ch = new Channel("reach", pond, 1.0, low, 0.8, 0.5, 40) { Cells = 160, Gate = gate };
         double total = pond.WaterVolume;
-        Run(ch, 120, each: _ => Assert.Equal(total, pond.WaterVolume + low.WaterVolume + ch.Stored + ch.Clipped, total * 1e-9));
+        // a person shuts the sluice at 120 s; the dam-break run before it is the machine on its own
+        var person = new OperatorRun(OperatorLog.Parse("(at 120 (gate opening 0))"), ch.Step, a => gate.Opening = a.Value);
+        person.Run(120, 0.01, each: _ => Assert.Equal(total, pond.WaterVolume + low.WaterVolume + ch.Stored + ch.Clipped, total * 1e-9));
         double hn = Channel.NormalDepth(ch.Outflow, 0.5, 0.005), un = ch.Outflow / (0.5 * hn);
         double crossing = 40 / un;
         Assert.InRange(ch.Arrival, 40 / (un + Math.Sqrt(G * hn)), crossing);
 
         double peak = ch.Stored;
-        gate.Opening = 0;
-        Run(ch, 10 * crossing);
+        person.Run(10 * crossing, 0.01);
         Assert.True(ch.Stored < 0.01 * peak, $"{ch.Stored * 1000:F1} L of {peak * 1000:F1} L left");
         Assert.Equal(total, pond.WaterVolume + low.WaterVolume + ch.Stored + ch.Clipped, total * 1e-9);
     }

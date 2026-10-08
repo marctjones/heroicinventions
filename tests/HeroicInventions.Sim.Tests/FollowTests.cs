@@ -38,13 +38,15 @@ public class FollowTests
     {
         var runtime = new MachineRuntime(Urn().Document.ToMachineDef(), Materials);
         Assert.Equal(0, runtime.GetField("spout", "area"));            // shut: nothing flows
-        runtime.Step(0.01);
+        var lifts = new[] { 0.5, 1, 2, 3, 5, 10 };
+        // a person lifts the plug a notch each 0.1 ms, after the first 10 ms with it shut
+        var person = OperatorRun.Of(runtime, lifts.Select((mm, i) => new OperatorAction(0.01 + i * 1e-4, "spout", "lift", mm)));
+        person.Run(0.01, 0.01);
         Assert.Equal(0, runtime.GetField("spout", "flow"));
 
-        foreach (double liftMm in new[] { 0.5, 1, 2, 3, 5, 10 })
+        foreach (double liftMm in lifts)
         {
-            runtime.SetField("spout", "lift", liftMm);
-            runtime.Step(1e-4);                                        // one short step, the head has hardly moved
+            person.Run(1e-4, 1e-4);                                    // the notch lands, then one short step: the head has hardly moved
             double head = runtime.GetField("spout", "head") / 100;     // m over the hole
             double area = TankLeak.PlugArea(Bore, liftMm / 1000);
             double predicted = Cd * area * Math.Sqrt(2 * G * head) * 1000;   // L/s
