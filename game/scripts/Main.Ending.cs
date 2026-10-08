@@ -42,7 +42,9 @@ public partial class Main
     private void RaiseEnding(MachineView view, BatteryBank bank)
     {
         _endingWasRunning = _running;
-        SetRunning(false);
+        // a person reads the page with the world held still; a scripted run that quits at a sim time keeps its clock
+        // going, or it would wait for that time for ever (the end-to-end route hung here)
+        if (string.IsNullOrEmpty(OS.GetEnvironment("HEROIC_QUIT_AFTER_SIM_SECONDS"))) SetRunning(false);
         if (RoverIsPlayer) _rover!.Command = (0, 0);
 
         var col = Page(Screen.Ending, "THE CALL WENT OUT", $"{_scenario?.Title ?? "The Lonely Rover"} · sol {bank.WonAtSol}, {MachineView.HoursText(bank.WonAtHour)}", 700, 38);
