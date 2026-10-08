@@ -154,10 +154,12 @@ public sealed partial class Terrain
     }
 
     /// <summary>The patches of fine ground the rover has made by digging (#63): at most a few, none overlapping, each over whole map cells.</summary>
-    public List<WorkedGround> Worked { get; } = [];
+    [NonSerialized] private readonly List<WorkedGround> _worked = [];   // saved its own way (SaveWorked), not field by field
+    public List<WorkedGround> Worked => _worked;
 
     /// <summary>Goes up when patches are made or merged, so a view knows to rebuild what it shows of them.</summary>
-    public int WorkedPatches { get; private set; }
+    [NonSerialized] private int _workedPatches;
+    public int WorkedPatches { get => _workedPatches; private set => _workedPatches = value; }
 
     /// <summary>
     /// The patch of fine ground to dig or dump at a point, made if there is none: <see cref="WorkedGround.Side"/> m square
