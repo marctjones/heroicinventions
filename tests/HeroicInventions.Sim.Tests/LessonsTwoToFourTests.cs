@@ -266,7 +266,7 @@ public class LessonsTwoToFourTests
     public void APipeBetweenTheTwoTanksCountsAndAnythingElseIsNudgedAbout()
     {
         var (s, run) = TanksJoined();
-        Assert.Equal("That is a rope, but this step needs a pipe. Undo it (Ctrl+Z) and make a pipe between the water tank and the water tank.",
+        Assert.Equal("That is a rope, but this step needs a pipe. Undo it (Ctrl+Z) and make a pipe between the upper water tank and the lower water tank.",
                      Why(s, run, LinkGestures.Command(s.Document, LinkGestures.Kind.Rope, ["up", "low"])));
         s.Execute("(remove rope-1)");
         Assert.Null(run.CheckDesign(s.Document).Reason);

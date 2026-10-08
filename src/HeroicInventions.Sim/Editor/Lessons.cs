@@ -430,7 +430,9 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         var fresh = links.Where(l => !_baselineLinks.Contains(l.Id)).ToList();
         if (fresh.Count == 0) return (false, [], null);
         var about = fresh.FirstOrDefault(l => l.Kind != c.Kind, fresh[^1]);
-        string wanted = $"between {Named(doc, a)} and {Named(doc, b)}";
+        string nameA = Named(doc, a), nameB = Named(doc, b);
+        if (nameA == nameB) (nameA, nameB) = ($"the {pair.A} {PartName(doc.Parts[a])}", $"the {pair.B} {PartName(doc.Parts[b])}");   // two tanks: say which is which
+        string wanted = $"between {nameA} and {nameB}";
         Nudge = about.Kind != c.Kind
             ? $"That is a {about.Kind}, but this step needs a {c.Kind}. Undo it (Ctrl+Z) and make a {c.Kind} {wanted}."
             : $"That {about.Kind} joins {Named(doc, about.A)} to {Named(doc, about.B)}, but this step needs it {wanted}. Undo it (Ctrl+Z) and join those two.";
