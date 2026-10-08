@@ -686,4 +686,40 @@ public static class Skins
         m.SetShaderParameter("width", 0.0075f);
         return m;
     }
+
+    // ---- Wave 3: water you can see moving, and what a machine produces (#171, #173) -------------------------------
+
+    /// <summary>
+    /// The one water-flow look: bright dashes riding a pipe, advanced from the sim's own clock by flow over the bore's
+    /// cross-section. Each pipe gets its own instance (it holds that pipe's length and phase); dashes fade into an even
+    /// band above about 15 a second, where a dash would alias at 60 frames a second (the same rule as the turn marks).
+    /// </summary>
+    public static ShaderMaterial FlowDashes(float length, float pitch)
+    {
+        var shader = new Shader
+        {
+            Code = """
+                shader_type spatial;
+                render_mode unshaded, cull_back, depth_draw_never;
+                uniform vec3 tint : source_color = vec3(0.80, 0.93, 1.0);
+                uniform float length = 1.0;
+                uniform float pitch = 0.15;
+                uniform float phase = 0.0;
+                uniform float duty = 0.45;
+                uniform float blur = 0.0;
+                varying float along;
+                void vertex() { along = VERTEX.y + length * 0.5; }
+                void fragment() {
+                    float u = fract(along / pitch - phase);
+                    float dash = u < duty ? 1.0 : 0.0;
+                    ALBEDO = tint;
+                    ALPHA = mix(dash, duty, blur) * 0.9;
+                }
+                """,
+        };
+        var m = new ShaderMaterial { Shader = shader };
+        m.SetShaderParameter("length", length);
+        m.SetShaderParameter("pitch", pitch);
+        return m;
+    }
 }

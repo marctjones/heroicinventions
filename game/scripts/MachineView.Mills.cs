@@ -37,7 +37,7 @@ public partial class MachineView
             float radius = (float)part.Number("radius", 0.5);
             var heap = new MeshInstance3D
             {
-                Mesh = new CylinderMesh { TopRadius = 0.02f, BottomRadius = 1, Height = 1, RadialSegments = 24 },
+                Mesh = new CylinderMesh { TopRadius = 0f, BottomRadius = 1, Height = 1, RadialSegments = 24 },
                 MaterialOverride = Shapes.Mat(new Color(0.96f, 0.94f, 0.88f), roughness: 0.95f),
                 Position = V(part.At) + new Vector3(radius * 1.6f, 0, 0) with { Y = 0 },
                 Scale = Vector3.One * 0.001f,
@@ -78,6 +78,8 @@ public partial class MachineView
             float r = Mathf.Max(0.001f, Mathf.Pow(volume * 9 / Mathf.Pi, 1f / 3));   // V = pi r^2 h / 3, h = r / 3
             m.Heap.Scale = new Vector3(r, r / 3, r);
             m.Heap.Position = m.Heap.Position with { Y = r / 6 };
+            if (FlourReportDue) ReportFlour(m);
         }
+        if (FlourReportDue) _nextFlourReport = Math.Floor(Runtime.Time / 5) * 5 + 5;
     }
 }
