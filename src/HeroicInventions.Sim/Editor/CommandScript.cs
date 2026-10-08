@@ -94,6 +94,7 @@ public static class CommandScript
             Add($"(follow {f.Id} {(f.Lever is { } lv ? $"#:lever {lv}" : $"#:rope {f.Rope}")} #:from {N(f.From)} #:to {N(f.To)} " +
                 $"#:set ({f.Target} {f.Field}) #:low {N(f.Low)} #:high {N(f.High)})");
         foreach (var j in m.Joints) Add(RktExporter.JointCommand(j, N));
+        if (m.Operator.Count > 0) Add($"(operator {string.Join(' ', m.Operator.Select(a => $"(at {N(a.At)} ({a.Target} {a.Field} {N(a.Value)}))"))})");
         lines.AddRange(afterLinks);
         return lines;
     }

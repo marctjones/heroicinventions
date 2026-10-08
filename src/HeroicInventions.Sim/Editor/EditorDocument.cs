@@ -47,6 +47,9 @@ public sealed class EditorDocument
     public IReadOnlyList<BeltSpec> Belts => _belts;
     public IReadOnlyList<WakeSpec> Wakes => _wakes;
     public IReadOnlyList<JointSpec> Joints => _joints;
+    /// <summary>The blueprint's demo operator (issue #153); the editor keeps it as it finds it and (operator …) replaces it.</summary>
+    public IReadOnlyList<OperatorAction> Operator => _operator;
+    public void SetOperator(IEnumerable<OperatorAction> actions) => _operator = actions.OrderBy(a => a.At).ToList();
     public IReadOnlyList<SourceSpec> Sources => _sources;
     public IReadOnlyList<ChannelSpec> Channels => _channels;
     public IReadOnlyList<LiftSpec> Lifts => _lifts;
@@ -66,6 +69,7 @@ public sealed class EditorDocument
     private IReadOnlyList<BeltSpec> _belts = [];
     private IReadOnlyList<WakeSpec> _wakes = [];
     private IReadOnlyList<JointSpec> _joints = [];
+    private IReadOnlyList<OperatorAction> _operator = [];
 
     /// <summary>Starts a fresh, empty document.</summary>
     public static EditorDocument New(string name) => new() { Name = name };
@@ -90,6 +94,7 @@ public sealed class EditorDocument
         doc._belts = def.Belts;
         doc._wakes = def.Wakes;
         doc._joints = def.Joints;
+        doc._operator = def.Operator;
         int maxPipe = def.Pipes.Select(p => int.TryParse(p.Id.AsSpan(p.Id.LastIndexOf('-') + 1), out int n) ? n : 0).DefaultIfEmpty(0).Max();
         doc._nextPipeId = maxPipe + 1;
         return doc;
@@ -454,5 +459,6 @@ public sealed class EditorDocument
         Belts = _belts,
         Wakes = _wakes,
         Joints = _joints,
+        Operator = _operator,
     };
 }

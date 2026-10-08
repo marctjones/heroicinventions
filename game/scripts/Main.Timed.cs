@@ -14,7 +14,8 @@ namespace HeroicInventions;
 /// </summary>
 public partial class Main
 {
-    private readonly List<(string Target, string Field, double Value, double At)> _timedSettings = new();
+    // Source is null for a test's setting; "demo" or "replay" for an operator action (Main.Operator.cs), which is logged as it is applied
+    private readonly List<(string Target, string Field, double Value, double At, string? Source)> _timedSettings = new();
     private bool _heroicSetFailed;
 
     private void ApplyHeroicSet(string text)
@@ -31,7 +32,7 @@ public partial class Main
                 SettingFailed($"expected 'target field value [at]', got '{setting}'");
                 continue;
             }
-            _timedSettings.Add((parts[0], parts[1], value, at));
+            _timedSettings.Add((parts[0], parts[1], value, at, null));
         }
         ApplyDueSettings();
     }
@@ -43,21 +44,26 @@ public partial class Main
         foreach (var due in _timedSettings.Where(s => s.At <= now + 1e-9).ToList())
         {
             _timedSettings.Remove(due);
-            try { _current.Runtime.SetField(due.Target, due.Field, due.Value); }
-            catch (Exception e) { SettingFailed($"'{due.Target} {due.Field} {due.Value} {due.At}': {e.Message}"); }
+            try
+            {
+                _current.Runtime.SetField(due.Target, due.Field, due.Value);
+                if (due.Source is not null) LogOperatorAction(new Sim.Machines.OperatorAction(due.At, due.Target, due.Field, due.Value));
+            }
+            catch (Exception e) { SettingFailed($"'{due.Target} {due.Field} {due.Value} {due.At}': {e.Message}", due.Source is ReplaySource ? "HEROIC_ACTIONS" : "HEROIC_SET"); }
         }
     }
 
     // a setting still waiting when the run ends was never applied: the run was shorter than the test thought
     private void ReportUnappliedSettings()
     {
-        foreach (var s in _timedSettings) SettingFailed($"'{s.Target} {s.Field} {s.Value} {s.At}' was never applied: the run ended first");
+        foreach (var s in _timedSettings.Where(s => s.Source != DemoSource))   // a demo that the run ended before is just a short run
+            SettingFailed($"'{s.Target} {s.Field} {s.Value} {s.At}' was never applied: the run ended first");
         _timedSettings.Clear();
     }
 
-    private void SettingFailed(string message)
+    private void SettingFailed(string message, string tag = "HEROIC_SET")
     {
         _heroicSetFailed = true;
-        GD.PrintErr($"HEROIC_SET: {message}");
+        GD.PrintErr($"{tag}: {message}");
     }
 }

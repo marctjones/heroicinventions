@@ -8,4 +8,5 @@
   (part inner door (material oak) (at -2.5 0.0 0.0) (props (from habitat) (to chamber) (area 1.6) (open 0.0) (coefficient 0.6)) (ports) (srcloc "racket/machines/airlock.rkt" 32 2))
   (part outer door (material oak) (at -0.5 0.0 0.0) (props (from chamber) (to outside) (area 1.6) (open 0.0) (coefficient 0.6)) (ports) (srcloc "racket/machines/airlock.rkt" 33 2))
   (part bleed door (material oak) (at -0.5 1.6 0.6) (props (from chamber) (to outside) (area 0.0005) (open 0.0) (coefficient 0.6)) (ports) (srcloc "racket/machines/airlock.rkt" 34 2))
-  (part pump air-pump (material bronze) (at -2.5 1.6 -0.6) (props (from chamber) (to habitat) (speed 0.05) (until 5000.0)) (ports) (srcloc "racket/machines/airlock.rkt" 35 2)))
+  (part pump air-pump (material bronze) (at -2.5 1.6 -0.6) (props (from chamber) (to habitat) (speed 0.05) (until 5000.0)) (ports) (srcloc "racket/machines/airlock.rkt" 35 2))
+  (operator (at 400.0 (bleed open 1.0)) (at 600.0 (bleed open 0.0)) (at 600.0 (outer open 1.0)) (at 700.0 (outer open 0.0)) (at 700.0 (pump speed 0.0)) (at 700.0 (inner open 1.0)) (srcloc "racket/machines/airlock.rkt" 40 2)))

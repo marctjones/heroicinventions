@@ -32,4 +32,10 @@
   (door inner #:at ((m -2.5) 0 0) #:from habitat #:to chamber #:area (m2 1.6))
   (door outer #:at ((m -0.5) 0 0) #:from chamber #:to outside #:area (m2 1.6))
   (door bleed #:at ((m -0.5) (m 1.6) (m 0.6)) #:from chamber #:to outside #:area (cm2 5))
-  (air-pump pump #:at ((m -2.5) (m 1.6) (m -0.6)) #:from chamber #:to habitat #:speed (L/s 50) #:until (kPa 5)))
+  (air-pump pump #:at ((m -2.5) (m 1.6) (m -0.6)) #:from chamber #:to habitat #:speed (L/s 50) #:until (kPa 5))
+  ;; the cycle, worked by a demo operator (issue #153) so opening the machine shows it: the pump has run itself down to
+  ;; its 5 kPa switch by 368 s; at 400 s the bleed valve is opened (200 s), then shut as the outer door opens onto Mars;
+  ;; at 700 s the outer door is shut and the inner one opened, re-pressurising the chamber from the habitat.
+  ;; Taking any control (the F key, a click) stops it.
+  (operator (at 400 (bleed open 1)) (at 600 (bleed open 0)) (at 600 (outer open 1))
+            (at 700 (outer open 0)) (at 700 (pump speed 0)) (at 700 (inner open 1))))
