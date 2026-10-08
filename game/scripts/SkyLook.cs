@@ -126,7 +126,7 @@ public readonly record struct SkyLook(
     public static Color GroundFor(Planet planet, double partsValue)
     {
         // Light unless the parts are clearly pale: wood, bronze and iron, most machines, are dark to mid-toned
-        bool light = partsValue < 0.66;
+        bool light = partsValue < 0.58;   // weighted by drawn surface (Main.PartsValue): ball-ramp 0.63 and carts 0.62 go dark, newtons-cradle 0.53 and water-wheels 0.51 stay light
         // nearly neutral, so blue water and glass stand out from it by hue as well as value
         if (planet.IsEarth) return Color.FromHsv(0.1f, 0.03f, light ? 0.8f : 0.32f);
         // Mars: always dark, since its butterscotch sky is pale and a light ground would merge with it; the planet's

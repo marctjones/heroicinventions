@@ -644,22 +644,28 @@ public partial class Main : Node3D
         panel.AddChild(col);
 
         _hudTitle = SectionLabel("", 20);
+        // long titles ("Glass Walls on Mars (Light and Pressure)") wrap at the panel's width instead of widening the panel past
+        // the right edge of the window (machine review 2026-10-07, #190)
+        Wrap(_hudTitle);
         col.AddChild(_hudTitle);
         _hudDescription = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(340, 0) };
         _hudDescription.AddThemeFontSizeOverride("font_size", 13);
         _hudDescription.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.75f));
         col.AddChild(_hudDescription);
         _hudState = new Label();
+        Wrap(_hudState);
         col.AddChild(_hudState);
 
         col.AddChild(new HSeparator());
         col.AddChild(SectionLabel("Energy", 15));
         _hudEnergy = new Label();
+        Wrap(_hudEnergy);
         col.AddChild(_hudEnergy);
 
         col.AddChild(new HSeparator());
         col.AddChild(SectionLabel("Speed", 15));
         _hudSpeed = new Label();
+        Wrap(_hudSpeed);
         col.AddChild(_hudSpeed);
 
         _hudNote = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -688,6 +694,13 @@ public partial class Main : Node3D
         _hudControls.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.6f));
         _hudControls.AddThemeFontSizeOverride("font_size", 13);
         col.AddChild(_hudControls);
+    }
+
+    /// <summary>A panel label that wraps at the info panel's width rather than growing it.</summary>
+    private static void Wrap(Label l)
+    {
+        l.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        l.CustomMinimumSize = new Vector2(340, 0);
     }
 
     private static Label SectionLabel(string text, int fontSize)
@@ -1261,7 +1274,7 @@ public partial class Main : Node3D
     private ProceduralSkyMaterial _skyMaterial = null!;
     private StandardMaterial3D _floorMaterial = null!;
     private StaticBody3D? _floor;   // sunk beneath a world's map (Main.Ground.cs)
-    private (double ambient, bool sunShown, int elevation, int azimuth, HeroicInventions.Sim.Planet? planet, double storm) _shownSky = (double.NaN, false, 0, 0, null, 0);
+    private (double ambient, bool sunShown, int elevation, int azimuth, HeroicInventions.Sim.Planet? planet, double storm, MachineRuntime? run) _shownSky = (double.NaN, false, 0, 0, null, 0, null);
 
     /// <summary>
     /// The sky, seen. At 20 °C under the studio light everything is as it
@@ -1279,7 +1292,9 @@ public partial class Main : Node3D
         var sun = run?.Sun;
         var planet = run?.Planet ?? HeroicInventions.Sim.Planet.Earth;
         double storm = sun?.ExtraDust ?? 0;
-        var key = (Math.Round(ambient * 2) / 2, sunShown, sunShown ? (int)Math.Round(sun!.Elevation * 4) : 0, sunShown ? (int)Math.Round(sun!.Azimuth * 4) : 0, planet, Math.Round(storm * 10));
+        // the machine is part of the key: the ground is chosen against its parts (SkyLook.GroundFor), so a new machine under
+        // the same sky must still get its own ground
+        var key = (Math.Round(ambient * 2) / 2, sunShown, sunShown ? (int)Math.Round(sun!.Elevation * 4) : 0, sunShown ? (int)Math.Round(sun!.Azimuth * 4) : 0, planet, Math.Round(storm * 10), run);
         if (key == _shownSky) return;
         _shownSky = key;
 
@@ -1327,8 +1342,27 @@ public partial class Main : Node3D
     /// How light a machine's parts look on average (relative luminance, 0 to 1), for <see cref="SkyLook.GroundFor"/>. A part with
     /// no material, or none at all (an empty scene), counts as mid-toned.
     /// </summary>
-    private static double PartsValue(MachineRuntime? run)
+    private double PartsValue(MachineRuntime? run)
     {
+        // As drawn, each opaque surface weighted by its size: a big pale ramp under two small dark carts makes the machine
+        // read pale, so the ground goes dark under it (ball-ramp and carts had a ramp the floor's own colour, machine review
+        // #190). Counting each part once, as before, let a wheel weigh as much as the slope it rolls down.
+        var view = _current is { } v && IsInstanceValid(v) && v.Runtime == run ? v : null;
+        if (view is not null)
+        {
+            double sum = 0, weight = 0;
+            foreach (var node in view.FindChildren("*", "MeshInstance3D", true, false))
+            {
+                var m = (MeshInstance3D)node;
+                if (!m.IsVisibleInTree() || m.MaterialOverride is not StandardMaterial3D mat) continue;
+                if (mat.Transparency != BaseMaterial3D.TransparencyEnum.Disabled) continue;
+                var size = m.GetAabb().Size * m.GlobalBasis.Scale.Abs();
+                double area = 2 * (size.X * size.Y + size.Y * size.Z + size.Z * size.X);
+                sum += area * Luminance(mat.AlbedoColor);
+                weight += area;
+            }
+            if (weight > 0) return sum / weight;
+        }
         var values = run?.Def.Parts.Where(p => !string.IsNullOrEmpty(p.Material)).Select(p => Luminance(Skins.ColorOf(p.Material))).ToList();
         return values is { Count: > 0 } ? values.Average() : 0.5;
     }
