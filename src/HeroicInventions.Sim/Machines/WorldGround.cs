@@ -127,6 +127,8 @@ public sealed class WorldGround
 
     public void Step(double dt)
     {
+        long whole = StepProfile.Start();
+        long t = whole;
         // a map that asks to settle lets its too-steep ground go, onto whatever stands below (#54): on the first tick,
         // or (#61) a few passes a tick at the map's rate, so the collapse is watched
         if (Ground.SettleOnLoad && !_settleDone)
@@ -151,9 +153,13 @@ public sealed class WorldGround
                 }
             }
         }
+        StepProfile.Stop("ground-settle", t);
         foreach (var (machine, mill, at) in _fieldMills) mill.Wind = WindAt(machine, at);
+        t = StepProfile.Start();
         Water.Step(dt);
+        StepProfile.Stop("ground-water", t);
         TraceBoulders();
+        StepProfile.Stop("ground-step", whole);
     }
 
     /// <summary>

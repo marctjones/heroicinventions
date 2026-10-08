@@ -102,30 +102,48 @@ public sealed partial class Terrain
     {
         int failures = 0, passes = 0;
         var toLay = new List<BoulderSpec>();
-        for (int round = 0; round < 4 && failed.Count > 0 && TakeBoulders(before, failed, made, toLay); round++)
+        for (int round = 0; round < 4 && failed.Count > 0 && Timed("collapse-take", () => TakeBoulders(before, failed, made, toLay)); round++)
         {
+            long t = StepProfile.Start();
             var (f, p) = Passes(i0, j0, i1, j1, gravity, maxPasses, failed);
+            StepProfile.Stop("collapse-passes", t);
             failures += f; passes += p;
         }
-        if (toLay.Count > 0) LayBoulders(before, toLay);   // on the ground as it has settled
+        if (toLay.Count > 0) Timed("collapse-lay", () => { LayBoulders(before, toLay); return true; });   // on the ground as it has settled
         if (failed.Count > 0) Collapsed += failed.Sum(c => Math.Max(0, before[c] - Heights[c])) * Cell * Cell;
         return (failures, passes);
     }
 
+    private static bool Timed(string name, Func<bool> f) { long t = StepProfile.Start(); bool r = f(); StepProfile.Stop(name, t); return r; }
+
+    /// <summary>
+    /// Relaxation passes over a region until nothing moves more than a micron. The first pass looks at the whole
+    /// region; each after it only at the box round what moved in the one before (#188), as <see cref="SettleStep"/>
+    /// does. That is the same ground, bit for bit: a pair of cells can only need a move if one of them changed
+    /// (a pair that needed none, and whose cells did not change, still needs none), and every pair with a
+    /// changed cell lies inside that box widened by one, in the same raster order. A slide's finish used to
+    /// scan the whole 170 x 170 crater for each of its ~250 passes (78 ms in one tick).
+    /// </summary>
     private (int Failures, int Passes) Passes(int i0, int j0, int i1, int j1, double gravity, int maxPasses, HashSet<int>? failed)
     {
         int failures = 0, pass = 0;
+        int bi0 = i0, bj0 = j0, bi1 = i1, bj1 = j1;
         for (; pass < maxPasses; pass++)
         {
             var changed = new Changed();
-            double moved = RelaxPass(i0, j0, i1, j1, gravity, ref failures, changed, failed);
+            double moved = RelaxPass(bi0, bj0, bi1, bj1, gravity, ref failures, changed, failed);
             if (moved < 1e-6) break;
             Version++;
+            (bi0, bj0, bi1, bj1) = (Math.Max(i0, changed.I0 - 1), Math.Max(j0, changed.J0 - 1), Math.Min(i1, changed.I1 + 1), Math.Min(j1, changed.J1 + 1));
         }
         return (failures, pass);
     }
 
-    private sealed class Changed { public int I0 = int.MaxValue, J0 = int.MaxValue, I1 = -1, J1 = -1; }
+    private sealed class Changed
+    {
+        public int I0 = int.MaxValue, J0 = int.MaxValue, I1 = -1, J1 = -1;
+        public void Add(int i, int j) { I0 = Math.Min(I0, i); I1 = Math.Max(I1, i); J0 = Math.Min(J0, j); J1 = Math.Max(J1, j); }
+    }
 
     /// <summary>One pass over cells [i0, i1] × [j0, j1]: returns the most any cell moved, and the box of cells that did.</summary>
     private double RelaxPass(int i0, int j0, int i1, int j1, double gravity, ref int failures, Changed changed, HashSet<int>? failed)
@@ -156,12 +174,8 @@ public sealed partial class Terrain
                     Heights[b] += shift;
                     loose[b] = true;
                     moved = Math.Max(moved, shift);
-                    foreach (int c in new[] { a, b })
-                    {
-                        int ci = c % Nx, cj = c / Nx;
-                        changed.I0 = Math.Min(changed.I0, ci); changed.I1 = Math.Max(changed.I1, ci);
-                        changed.J0 = Math.Min(changed.J0, cj); changed.J1 = Math.Max(changed.J1, cj);
-                    }
+                    changed.Add(a % Nx, a / Nx);
+                    changed.Add(b % Nx, b / Nx);
                 }
         return moved;
     }
@@ -199,8 +213,10 @@ public sealed partial class Terrain
                 _stood = true;
                 if (rocky)
                 {
+                    long t = StepProfile.Start();
                     var (f, p) = FinishCollapse(_stepBefore!, _stepFailed!, _stepMade, 0, 0, Nx - 1, Nz - 1, gravity, 20000);
                     failures += f; ran += p;
+                    StepProfile.Stop("finish-collapse", t);
                 }
                 break;
             }

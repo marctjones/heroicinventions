@@ -47,6 +47,7 @@ public partial class TerrainView : Node3D
         AddChild(_groundMesh = new MeshInstance3D { Mesh = GroundMesh(), Name = "Ground" });
         AddChild(_body = Collision());
         _shownVersion = ground.Version;
+        if (TickProfile.On) { AddChild(new TickProfile.Edge(true)); AddChild(new TickProfile.Edge(false)); }
         _waterMesh = new MeshInstance3D
         {
             Name = "Water",
@@ -62,60 +63,94 @@ public partial class TerrainView : Node3D
 
     private Vector3 Centre(int i, int j) => new((float)_ground.CellX(i), (float)_ground.Heights[i + j * _ground.Nx], (float)_ground.CellZ(j));
 
+    // The ground mesh's arrays are kept between reshapes, and a reshape redoes only what a change can reach (#188):
+    // the cells that changed (box), their smoothed heights and colours two cells round that (each smoothing pass
+    // reaches one cell), and their shading three cells round (it reads the smoothed heights a cell either side).
+    // Every value is worked out by the same sums in the same order as the whole ground would be, so the mesh is the
+    // same bit for bit (checked in HEROIC_TICK_PROFILE runs).
+    private Vector3[] _vertices = [], _normals = [];
+    private Color[] _shades = [];
+    private double[] _soft = [], _scratch = [];
+    private double[][] _colours = [[], [], [], []], _smoothed = [[], [], [], []];
+    private byte[] _colourBytes = [];
+    private (Color Colour, float Roughness)[] _soilLook = [];
+    private ArrayMesh? _mesh;
+    private ImageTexture? _cellsTexture;
+    private double[] _shownHeights = [];
+    private int[] _shownSoil = [];
+    private bool[] _shownLoose = [];
+
+    private readonly record struct Box(int I0, int J0, int I1, int J1)
+    {
+        public Box Grow(int by, int nx, int nz) => new(Math.Max(I0 - by, 0), Math.Max(J0 - by, 0), Math.Min(I1 + by, nx - 1), Math.Min(J1 + by, nz - 1));
+    }
+
+    /// <summary>The box of cells whose height, soil or looseness differ from what the mesh was last made from; null if none.</summary>
+    private Box? Changed()
+    {
+        int nx = _ground.Nx, n = _ground.Heights.Length, i0 = int.MaxValue, j0 = int.MaxValue, i1 = -1, j1 = -1;
+        var h = _ground.Heights; var soil = _ground.Soil; var loose = _ground.Loose;
+        for (int k = 0; k < n; k++)
+        {
+            if (h[k] == _shownHeights[k] && soil[k] == _shownSoil[k] && loose[k] == _shownLoose[k]) continue;
+            int i = k % nx, j = k / nx;
+            i0 = Math.Min(i0, i); i1 = Math.Max(i1, i); j0 = Math.Min(j0, j); j1 = Math.Max(j1, j);
+        }
+        return i1 < 0 ? null : new Box(i0, j0, i1, j1);
+    }
+
     private ArrayMesh GroundMesh()
     {
         int nx = _ground.Nx, nz = _ground.Nz, n = nx * nz;
-        var light = new Vector3(0.4f, 1, 0.3f).Normalized();
         // Each soil's look worked out once, not once per cell: a little greyer than its table colour, so crates, a
         // rover and machines keep their own colour against what they stand on, each layer keeping its hue so the
         // crater's bands tell apart; ice-cemented ground glints where dry soil is matt.
-        var soilLook = _ground.Soils.Select(s =>
+        _soilLook = _ground.Soils.Select(s =>
         {
             var raw = Shapes.ColorFor(s.Material);
             return (Colour: Color.FromHsv(raw.H, raw.S * 0.85f, raw.V), Roughness: s.Material.Contains("ice") ? 0.3f : 0.95f);
         }).ToArray();
-        // The light falls on a smoothed copy of the ground: a slide's scar is cut cell by cell, a stair of 5 m treads,
-        // and shaded from the true heights every tread lit up as a step. The mesh's points stay the true heights, so
-        // what is seen is still what bodies land on; only the shading is smoothed.
-        var soft = Smooth(_ground.Heights.ToArray(), nx, nz);
-        Vector3 Soft(int i, int j) => new((float)_ground.CellX(i), (float)soft[i + j * nx], (float)_ground.CellZ(j));
-        var vertices = new Vector3[n];
-        var normals = new Vector3[n];
-        var shades = new Color[n];
-        // Each cell's ground colour (roughness in alpha) goes to a texture the shader samples smoothly by position;
-        // as vertex colours, anything that changed from cell to cell showed as stair-steps along the mesh's diagonals.
-        var colours = new double[4][];
-        for (int ch = 0; ch < 4; ch++) colours[ch] = new double[n];
-        for (int j = 0; j < nz; j++)
-            for (int i = 0; i < nx; i++)
+        _vertices = new Vector3[n]; _normals = new Vector3[n]; _shades = new Color[n];
+        _soft = new double[n]; _scratch = new double[n]; _colourBytes = new byte[n * 4];
+        for (int ch = 0; ch < 4; ch++) { _colours[ch] = new double[n]; _smoothed[ch] = new double[n]; }
+        _shownHeights = (double[])_ground.Heights.Clone();
+        _shownSoil = (int[])_ground.Soil.Clone();
+        _shownLoose = (bool[])_ground.Loose.Clone();
+        UpdateGround(new Box(0, 0, nx - 1, nz - 1));
+        _mesh = new ArrayMesh();
+        PutMesh();
+        _groundMaterial ??= GroundMaterial();
+        _cellsTexture = ImageTexture.CreateFromImage(Image.CreateFromData(nx, nz, false, Image.Format.Rgba8, _colourBytes));
+        _groundMaterial.SetShaderParameter("cells", _cellsTexture);
+        _mesh.SurfaceSetMaterial(0, _groundMaterial);
+        return _mesh;
+    }
+
+    /// <summary>The mesh after a change: the arrays redone round <paramref name="box"/>, uploaded whole (a few hundred KB).</summary>
+    private void ReshapeGround(Box box)
+    {
+        int nx = _ground.Nx, nz = _ground.Nz;
+        long t = TickProfile.Start();
+        UpdateGround(box);
+        TickProfile.Stop("reshape-arrays", t);
+        t = TickProfile.Start();
+        _mesh!.ClearSurfaces();
+        PutMesh();
+        _mesh.SurfaceSetMaterial(0, _groundMaterial);
+        _cellsTexture!.Update(Image.CreateFromData(nx, nz, false, Image.Format.Rgba8, _colourBytes));
+        TickProfile.Stop("reshape-upload", t);
+        var h = _ground.Heights; var soil = _ground.Soil; var loose = _ground.Loose;
+        for (int j = box.J0; j <= box.J1; j++)
+            for (int i = box.I0; i <= box.I1; i++)
             {
                 int k = i + j * nx;
-                var dx = Soft(Math.Min(i + 1, nx - 1), j) - Soft(Math.Max(i - 1, 0), j);
-                var dz = Soft(i, Math.Min(j + 1, nz - 1)) - Soft(i, Math.Max(j - 1, 0));
-                var normal = dz.Cross(dx).Normalized();
-                // hillshade, as on a map: lit from one high fixed side whatever the sun, strong enough that every
-                // slope reads (readable over realistic; the sun's own light and shadows come on top)
-                float shade = 0.45f + 0.55f * Mathf.Max(0, normal.Dot(light));
-                var (c, roughness) = soilLook[_ground.Soil[k]];
-                if (_ground.Loose[k]) c = c.Lightened(0.18f);   // spoil and slumped ground: loose, paler (#44)
-                // ground the water has cut away shows darker and wetter, ground it has laid down paler (#53); a 5 cm change at full strength
-                double m = _ground.Heights[k] - _startHeights[k];
-                if (Math.Abs(m) > 0.002)
-                    c = m < 0 ? c.Darkened(Mathf.Clamp((float)(-m / 0.05), 0, 0.45f)) : c.Lerp(new Color(0.98f, 0.95f, 0.85f), Mathf.Clamp((float)(m / 0.05), 0, 0.6f));
-                colours[0][k] = c.R; colours[1][k] = c.G; colours[2][k] = c.B; colours[3][k] = roughness;
-                vertices[k] = Centre(i, j);
-                normals[k] = normal;
-                shades[k] = new Color(shade, shade, shade);
+                (_shownHeights[k], _shownSoil[k], _shownLoose[k]) = (h[k], soil[k], loose[k]);
             }
-        // The colours are smoothed over their neighbours before they're drawn: soils and the scour and deposit cues
-        // change cell by cell (a slide lays its rubble down as its own soil), so their edges are 5 m staircases in the
-        // data. Smoothed, an edge reads as the line it is. Two passes soften it over about two cells.
-        var bytes = new byte[n * 4];
-        for (int ch = 0; ch < 4; ch++)
-        {
-            var smooth = Smooth(colours[ch], nx, nz);
-            for (int k = 0; k < n; k++) bytes[k * 4 + ch] = (byte)Math.Clamp((int)Math.Round(smooth[k] * 255), 0, 255);
-        }
+    }
+
+    private void PutMesh()
+    {
+        int nx = _ground.Nx, nz = _ground.Nz;
         // the mesh in one call from arrays (SurfaceTool's per-vertex calls cost tens of ms on a 170 x 170 crater)
         if (_indices is null || _indices.Length != (nx - 1) * (nz - 1) * 6)
         {
@@ -131,42 +166,110 @@ public partial class TerrainView : Node3D
         }
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = vertices;
-        arrays[(int)Mesh.ArrayType.Normal] = normals;
-        arrays[(int)Mesh.ArrayType.Color] = shades;
+        arrays[(int)Mesh.ArrayType.Vertex] = _vertices;
+        arrays[(int)Mesh.ArrayType.Normal] = _normals;
+        arrays[(int)Mesh.ArrayType.Color] = _shades;
         arrays[(int)Mesh.ArrayType.Index] = _indices;
-        var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-        _groundMaterial ??= GroundMaterial();
-        _groundMaterial.SetShaderParameter("cells", ImageTexture.CreateFromImage(Image.CreateFromData(nx, nz, false, Image.Format.Rgba8, bytes)));
-        mesh.SurfaceSetMaterial(0, _groundMaterial);
-        return mesh;
+        _mesh!.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
     }
+
+    private Vector3 Soft(int i, int j) => new((float)_ground.CellX(i), (float)_soft[i + j * _ground.Nx], (float)_ground.CellZ(j));
+
+    private void UpdateGround(Box box)
+    {
+        int nx = _ground.Nx, nz = _ground.Nz;
+        var light = new Vector3(0.4f, 1, 0.3f).Normalized();
+        var near2 = box.Grow(2, nx, nz); var near3 = box.Grow(3, nx, nz);
+        // The light falls on a smoothed copy of the ground: a slide's scar is cut cell by cell, a stair of 5 m treads,
+        // and shaded from the true heights every tread lit up as a step. The mesh's points stay the true heights, so
+        // what is seen is still what bodies land on; only the shading is smoothed.
+        SmoothInto(_ground.Heights, _soft, nx, nz, near2);
+        // Each cell's ground colour (roughness in alpha) goes to a texture the shader samples smoothly by position;
+        // as vertex colours, anything that changed from cell to cell showed as stair-steps along the mesh's diagonals.
+        for (int j = box.J0; j <= box.J1; j++)
+            for (int i = box.I0; i <= box.I1; i++)
+            {
+                int k = i + j * nx;
+                var (c, roughness) = _soilLook[_ground.Soil[k]];
+                if (_ground.Loose[k]) c = c.Lightened(0.18f);   // spoil and slumped ground: loose, paler (#44)
+                // ground the water has cut away shows darker and wetter, ground it has laid down paler (#53); a 5 cm change at full strength
+                double m = _ground.Heights[k] - _startHeights[k];
+                if (Math.Abs(m) > 0.002)
+                    c = m < 0 ? c.Darkened(Mathf.Clamp((float)(-m / 0.05), 0, 0.45f)) : c.Lerp(new Color(0.98f, 0.95f, 0.85f), Mathf.Clamp((float)(m / 0.05), 0, 0.6f));
+                _colours[0][k] = c.R; _colours[1][k] = c.G; _colours[2][k] = c.B; _colours[3][k] = roughness;
+                _vertices[k] = Centre(i, j);
+            }
+        for (int j = near3.J0; j <= near3.J1; j++)
+            for (int i = near3.I0; i <= near3.I1; i++)
+            {
+                int k = i + j * nx;
+                var dx = Soft(Math.Min(i + 1, nx - 1), j) - Soft(Math.Max(i - 1, 0), j);
+                var dz = Soft(i, Math.Min(j + 1, nz - 1)) - Soft(i, Math.Max(j - 1, 0));
+                var normal = dz.Cross(dx).Normalized();
+                // hillshade, as on a map: lit from one high fixed side whatever the sun, strong enough that every
+                // slope reads (readable over realistic; the sun's own light and shadows come on top)
+                float shade = 0.45f + 0.55f * Mathf.Max(0, normal.Dot(light));
+                _normals[k] = normal;
+                _shades[k] = new Color(shade, shade, shade);
+            }
+        // The colours are smoothed over their neighbours before they're drawn: soils and the scour and deposit cues
+        // change cell by cell (a slide lays its rubble down as its own soil), so their edges are 5 m staircases in the
+        // data. Smoothed, an edge reads as the line it is. Two passes soften it over about two cells.
+        for (int ch = 0; ch < 4; ch++)
+        {
+            SmoothInto(_colours[ch], _smoothed[ch], nx, nz, near2);
+            for (int j = near2.J0; j <= near2.J1; j++)
+                for (int i = near2.I0; i <= near2.I1; i++)
+                {
+                    int k = i + j * nx;
+                    _colourBytes[k * 4 + ch] = (byte)Math.Clamp((int)Math.Round(_smoothed[ch][k] * 255), 0, 255);
+                }
+        }
+    }
+
+    /// <summary>The mesh a whole rebuild would make, against the one kept up by changes: a mismatch is printed (HEROIC_TICK_PROFILE).</summary>
+    private void CheckMesh()
+    {
+        var kept = (_vertices, _normals, _shades, _colourBytes, _soft);
+        int n = _ground.Nx * _ground.Nz;
+        _vertices = new Vector3[n]; _normals = new Vector3[n]; _shades = new Color[n]; _colourBytes = new byte[n * 4]; _soft = new double[n];
+        UpdateGround(new Box(0, 0, _ground.Nx - 1, _ground.Nz - 1));
+        int bad = 0;
+        for (int k = 0; k < n; k++)
+            if (_vertices[k] != kept._vertices[k] || _normals[k] != kept._normals[k] || _shades[k] != kept._shades[k]) bad++;
+        for (int k = 0; k < n * 4; k++) if (_colourBytes[k] != kept._colourBytes[k]) bad++;
+        (_vertices, _normals, _shades, _colourBytes, _soft) = kept;
+        _meshChecks++; _meshMismatches += bad;
+        if (bad > 0) GD.Print($"[tick] MESH MISMATCH: {bad} values differ from a whole rebuild");
+    }
+    private int _meshChecks, _meshMismatches;
 
     private int[]? _indices;
 
     /// <summary>
-    /// Two passes of a 3×3 box blur over a cell field, edges clamped: a staircase edge becomes a smooth one. It uses
-    /// <paramref name="field"/> as scratch space, so pass it an array of its own.
+    /// Two passes of a 3×3 box blur over a cell field, edges clamped: a staircase edge becomes a smooth one. The
+    /// result is written for the cells in <paramref name="window"/> only (the first pass is worked out one cell
+    /// wider, in <see cref="_scratch"/>), the sums in the order a whole-map blur would take them.
     /// </summary>
-    private static double[] Smooth(double[] field, int nx, int nz)
+    private void SmoothInto(double[] field, double[] result, int nx, int nz, Box window)
     {
-        double[] from = field, to = new double[field.Length];
-        for (int pass = 0; pass < 2; pass++)
+        var wide = window.Grow(1, nx, nz);
+        Blur(field, _scratch, nx, nz, wide);
+        Blur(_scratch, result, nx, nz, window);
+    }
+
+    private static void Blur(double[] from, double[] to, int nx, int nz, Box w)
+    {
+        for (int j = w.J0; j <= w.J1; j++)
         {
-            for (int j = 0; j < nz; j++)
+            int jm = Math.Max(j - 1, 0) * nx, j0 = j * nx, jp = Math.Min(j + 1, nz - 1) * nx;
+            for (int i = w.I0; i <= w.I1; i++)
             {
-                int jm = Math.Max(j - 1, 0) * nx, j0 = j * nx, jp = Math.Min(j + 1, nz - 1) * nx;
-                for (int i = 0; i < nx; i++)
-                {
-                    int im = Math.Max(i - 1, 0), ip = Math.Min(i + 1, nx - 1);
-                    to[j0 + i] = (from[jm + im] + from[jm + i] + from[jm + ip] + from[j0 + im] + from[j0 + i] + from[j0 + ip]
-                                  + from[jp + im] + from[jp + i] + from[jp + ip]) / 9;
-                }
+                int im = Math.Max(i - 1, 0), ip = Math.Min(i + 1, nx - 1);
+                to[j0 + i] = (from[jm + im] + from[jm + i] + from[jm + ip] + from[j0 + im] + from[j0 + i] + from[j0 + ip]
+                              + from[jp + im] + from[jp + i] + from[jp + ip]) / 9;
             }
-            (from, to) = (to, from);
         }
-        return from;
     }
 
     private static Shader? _groundShader;
@@ -264,21 +367,49 @@ public partial class TerrainView : Node3D
     /// <summary>Redraws the water after a tick, five times a second; makes new boulders and reads back where the others are, every tick.</summary>
     public void Refresh(double dt)
     {
+        long whole = TickProfile.Start();
+        if (TickProfile.On)
+        {
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
+            if (_lastRefresh != 0) TickProfile.Add("period", System.Diagnostics.Stopwatch.GetElapsedTime(_lastRefresh, now).TotalMilliseconds);
+            _lastRefresh = now;
+            _tick++;
+        }
+        long t = TickProfile.Start();
         Boulders();
-        if ((_sinceDrawn += dt) < 0.2) return;
+        TickProfile.Stop("boulders", t);
+        if ((_sinceDrawn += dt) < 0.2) { TickProfile.Stop("refresh", whole); return; }
         _sinceDrawn = 0;
         Reshape();
+        t = TickProfile.Start();
         DrawWater();
+        TickProfile.Stop("drawwater", t);
+        TickProfile.Stop("refresh", whole);
     }
+
+    private long _lastRefresh;
+    private int _tick, _lastReshapeTick = -1;
+
+    public override void _ExitTree() => TickProfile.Report();
 
     private void Reshape()
     {
         if (_ground.Version == _shownVersion) return;
         // dug or heaped (issue #44): the ground's shape and its collision change with it
         _shownVersion = _ground.Version;
-        _groundMesh.Mesh = GroundMesh();
+        _lastReshapeTick = _tick; TickProfile.ReshapeTick = TickProfile.Ticks - 1;
+        long t = TickProfile.Start();
+        if (Changed() is not { } box) return;
+        ReshapeGround(box);
+        TickProfile.Stop("reshape-mesh", t);
+        t = TickProfile.Start();
+        // A new body each time, not new heights in the old shape: Jolt takes it as a new surface, and the crates and
+        // machines standing on it feel it (a crate at rest reads an impact impulse), which the traced runs include
+        // (#188: updating the shape in place changed the crates' and boulders' numbers). It costs ~1 ms.
         _body.QueueFree();
         AddChild(_body = Collision());
+        TickProfile.Stop("reshape-shape", t);
+        if (TickProfile.Check) CheckMesh();   // outside the timings above
     }
 
     /// <summary>
@@ -320,6 +451,8 @@ public partial class TerrainView : Node3D
         }
     }
 
+    private int[] _waterTri = [];
+
     private void DrawWater()
     {
         int nx = _ground.Nx, nz = _ground.Nz;
@@ -352,27 +485,30 @@ public partial class TerrainView : Node3D
                 _wetTexture.Update(Image.CreateFromData(nx, nz, false, Image.Format.R8, wet));
             }
         }
-        var st = new SurfaceTool();
-        st.Begin(Mesh.PrimitiveType.Triangles);
-        int triangles = 0;
-        void Triangle(int a, int b, int c)
-        {
-            if (!Wet(a) && !Wet(b) && !Wet(c)) return;
-            foreach (int k in new[] { a, b, c })
-            {
-                st.SetColor(Colour(k));
-                st.SetNormal(Vector3.Up);
-                st.AddVertex(Point(k));
-            }
-            triangles++;
-        }
+        // the mesh in one call from arrays (as the ground's is), not vertex by vertex through a SurfaceTool
+        if (_waterTri.Length != (nx - 1) * (nz - 1) * 6) _waterTri = new int[(nx - 1) * (nz - 1) * 6];
+        int count = 0;
         for (int j = 0; j + 1 < nz; j++)
             for (int i = 0; i + 1 < nx; i++)
             {
                 int a = i + j * nx, b = a + 1, c = a + nx, d = c + 1;
-                Triangle(a, b, c);
-                Triangle(b, d, c);
+                if (Wet(a) || Wet(b) || Wet(c)) { _waterTri[count++] = a; _waterTri[count++] = b; _waterTri[count++] = c; }
+                if (Wet(b) || Wet(d) || Wet(c)) { _waterTri[count++] = b; _waterTri[count++] = d; _waterTri[count++] = c; }
             }
-        _waterMesh.Mesh = triangles > 0 ? st.Commit() : null;
+        if (count == 0) { _waterMesh.Mesh = null; return; }
+        var vertices = new Vector3[count]; var colours = new Color[count]; var normals = new Vector3[count];
+        for (int v = 0; v < count; v++)
+        {
+            int k = _waterTri[v];
+            (vertices[v], colours[v], normals[v]) = (Point(k), Colour(k), Vector3.Up);
+        }
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = vertices;
+        arrays[(int)Mesh.ArrayType.Normal] = normals;
+        arrays[(int)Mesh.ArrayType.Color] = colours;
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        _waterMesh.Mesh = mesh;
     }
 }
