@@ -150,6 +150,7 @@ public partial class MachineView : Node3D
         Pass(BuildJoints);
         Pass(BuildImpacts);
         Pass(BuildFracture);
+        Pass(LetLooseBodiesMeetFixtures);
         Skins.FitJoints(this, Surface);   // a collar or ball wherever the physics joins two parts
         Skins.OrientGrain(this);
         Skins.PlankSeams(this);        // dark seams on wide wooden boxes (#102)
@@ -1278,6 +1279,19 @@ public partial class MachineView : Node3D
         // Springs and arms sit inside the frame; one label for the whole engine reads better than four.
         if (part.Symbol("shape", "") == "catapult-frame")
             AddLabel(part.Id, V(part.At) + new Vector3(0, box.End.Y + 0.1f, 0), pixelSize: LabelSizeFor(box));
+    }
+
+    /// <summary>
+    /// A fixture meets the loose bodies on layer 1 (issue #189). Jolt pushes a body off another only
+    /// when the other's layer is in the body's own mask, not when either mask holds the other's layer
+    /// as Godot's own physics did: the frame scanning the bolt saw the contact, but the bolt, scanning
+    /// only layer 1, felt none of it and fell through the catapulta's channel. So every body on layer 1
+    /// scans the fixtures' layer too; sprung arms, pendulums and axle bodies stay clear of them.
+    /// </summary>
+    private void LetLooseBodiesMeetFixtures()
+    {
+        foreach (var body in GetChildren().OfType<RigidBody3D>())
+            if (body.CollisionLayer == 1 && (body.CollisionMask & 1) != 0) body.CollisionMask |= FixtureLayer;
     }
 
     /// <summary>

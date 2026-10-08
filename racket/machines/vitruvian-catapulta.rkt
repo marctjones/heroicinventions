@@ -24,10 +24,9 @@
 ;; that holds the string: (right-arm catch 1) and (left-arm catch 1) hold it
 ;; drawn, 0 looses it. Held, each catch carries its spring's 300 x (60 + 40)
 ;; degrees = 300 x 1.745 = 523.6 N.m: the arms turn about the vertical, so
-;; their weight puts no turn on them. For now both open at once (#:release-after
-;; 0), loosing it at the start as before: held any longer, the bolt falls
-;; through its channel (the frame's channel does not carry it; it is only
-;; ever driven along it), so it can start held once the channel does.
+;; their weight puts no turn on them. Both open 2 s in (#:release-after 2), as
+;; the trebuchet's and onager's do; until then the 0.31 kg bolt (720 x 0.025^2
+;; x 0.693) lies in the channel, its 3.06 N carried by the frame (issue #189).
 (require racket/math)
 
 (define bolt-length (* 3 greek-span))
@@ -61,12 +60,12 @@
   (lever right-arm #:at (sx sy 0) #:length L #:material oak #:axis y #:pivot-fraction 0
          #:start-angle-deg drawn-deg #:limit-lower-deg (- stop-deg) #:limit-upper-deg (+ drawn-deg 5)
          #:spring-stiffness k #:spring-rest-deg (- rest-deg) #:damping 0.1 #:section (g (quote arm-section))
-         #:catch-deg drawn-deg #:release-after 0)
+         #:catch-deg drawn-deg #:release-after 2)
   ;; left arm: mirrored, along −x
   (lever left-arm #:at ((- sx) sy 0) #:length L #:material oak #:axis y #:pivot-fraction 1
          #:start-angle-deg (- drawn-deg) #:limit-lower-deg (- (+ drawn-deg 5)) #:limit-upper-deg stop-deg
          #:spring-stiffness k #:spring-rest-deg rest-deg #:damping 0.1 #:section (g (quote arm-section))
-         #:catch-deg (- drawn-deg) #:release-after 0)
+         #:catch-deg (- drawn-deg) #:release-after 2)
   (block bolt #:at (0 nock-y bolt-z) #:size bolt-section #:material oak
          #:dimensions (bolt-section bolt-section bolt-length))
   (rope string-right #:from (right-arm L 0 0) #:to (bolt 0 0 (/ bolt-length -2)) #:length string-len #:diameter (cm 1) #:nocked #t)
