@@ -28,7 +28,7 @@ public readonly record struct CameraProfile(Vector3 Eye, Vector3 LookAt, float F
 ///   HEROIC_LIVE_LINK=1            open the Racket live-link TCP server
 ///   HEROIC_TRACE=&lt;path&gt;          write a frame per HEROIC_TRACE_DT sim seconds
 ///                                 (default 0.1) there, for heroic/godothost
-///   HEROIC_SET="t f v; ..."       set sim fields (target field value) before the first step
+///   HEROIC_SET="t f v [at]; ..."  set sim fields (target field value) before the first step, or at [at] seconds (Main.Timed.cs)
 /// </summary>
 public partial class Main : Node3D
 {
@@ -456,10 +456,7 @@ public partial class Main : Node3D
         if (_current is not null)
         {
             var inv = System.Globalization.CultureInfo.InvariantCulture;
-            foreach (var setting in OS.GetEnvironment("HEROIC_SET").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                if (setting.Split(' ', StringSplitOptions.RemoveEmptyEntries) is [var target, var field, var value])
-                    _current.Runtime.SetField(target, field, double.Parse(value, inv));
-                else GD.PrintErr($"HEROIC_SET: expected 'target field value', got '{setting}'");
+            ApplyHeroicSet(OS.GetEnvironment("HEROIC_SET"));
             string tracePath = OS.GetEnvironment("HEROIC_TRACE");
             double traceEvery = double.TryParse(OS.GetEnvironment("HEROIC_TRACE_DT"), inv, out double traceDt) ? traceDt : 0.1;
             // a world writes one trace per placed machine, <path>.<label>
@@ -1475,6 +1472,7 @@ public partial class Main : Node3D
         else if (_running && _current is not null)
             _current.Simulate(delta); // already scaled: see SetSpeed
 
+        ApplyDueSettings(); // after the step, as SimHost's ApplyDue is: a setting due at t is seen by the sample taken at t
         if (_audit && _running && _current is not null) _current.AuditTick(delta);
 
         if (_quitAfterSimSeconds is { } limit && _current is not null && _current.Runtime.Time >= limit)
@@ -1484,7 +1482,8 @@ public partial class Main : Node3D
             _current.StopTrace();
             foreach (var v in _views) v.StopTrace();
             _linksView?.StopTrace();
-            GetTree().Quit();
+            ReportUnappliedSettings();
+            GetTree().Quit(_heroicSetFailed ? 1 : 0);
         }
 
         if (_editorQuitAfterSeconds is { } editorLimit && _buildMode is not null && (_editorTimer += delta) >= editorLimit)

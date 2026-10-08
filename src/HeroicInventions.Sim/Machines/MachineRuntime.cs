@@ -1317,6 +1317,7 @@ public sealed class MachineRuntime
         _getters["scene.relay"] = () => Weather?.Relay == true ? 1 : 0; // the relay orbiter is overhead
         _getters["scene.next-pass"] = () => Weather?.NextPass ?? -1;    // local hours to the next pass
         _getters["scene.time"] = () => Sun.Time;                        // solar hours
+        _getters["scene.elapsed"] = () => Time;                         // seconds since the run began: unlike scene.time it never wraps or holds still
         _setters["scene.time"] = h => Sun.Time = ((h % 24) + 24) % 24;
         _getters["scene.day"] = () => Sun.Day;
         _setters["scene.day"] = d => Sun.Day = Math.Clamp((int)Math.Round(d), 1, 365);
