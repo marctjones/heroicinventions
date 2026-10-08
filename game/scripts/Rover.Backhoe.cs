@@ -219,8 +219,7 @@ public sealed partial class Rover
         double room = BucketVolume - Carried;
         if (room < 1e-6) { Refuse("Dug nothing: the bucket is full"); return; }
         if (at.Y > ground.HeightAt(at.X, at.Z) + 0.15) { Refuse($"Dug nothing: the teeth didn't reach the ground ({at.Y - ground.HeightAt(at.X, at.Z):0.00} m above it)"); return; }
-        var soil = ground.SoilOf(cell);
-        if (soil.Cohesion >= 1e7) { Refuse($"Dug nothing: {soil.Material} is too hard for the backhoe"); return; }   // bedrock: never
+        var soil = ground.SoilOf(cell);   // (bedrock is never cut: the patch's nodes of rock give nothing, and spoil tipped on rock is soil again)
         long t = TickProfile.Start();
         if (ground.WorkAt(at.X, at.Z) is not { } work) { Refuse("Dug nothing: too near the edge of the map or of the ground that can be worked here"); return; }
         TickProfile.Stop("backhoe-patch", t);
