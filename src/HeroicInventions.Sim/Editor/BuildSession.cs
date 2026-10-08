@@ -35,7 +35,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (pipe id from.port to.port #:conductance C)
 ///   (connect a.port b.port)
 ///   (rope id #:from (part x y z) #:to (part x y z) #:length L [#:over ((x y z) ...)] [#:wind-on drum] [#:turns pulley]
-///         [#:release-deg d] [#:material M] [#:diameter D] [#:nocked #t] [#:bar M] [#:mu μ])   ; ends are points in each part's own frame; "world" is fixed; #:bar: the #:over points are fixed bars (capstan friction)
+///         [#:release-deg d] [#:material M] [#:diameter D] [#:nocked #t] [#:bar M] [#:mu μ] [#:tether #t [#:release-after s]])   ; ends are points in each part's own frame; "world" is fixed; #:bar: the #:over points are fixed bars (capstan friction)
 ///   (mesh gear-a gear-b)                          ; two gears in mesh
 ///   (arbor wheel wheel ...)                       ; wheels fixed on one axle; the first carries the bearing and drive
 ///   (sealed-air (tank tank ...) #:tube V [#:heat-loss W/K] [#:heat-capacity J/K])   ; tanks sharing one sealed air space
@@ -345,7 +345,9 @@ public sealed class BuildSession
         string? bar = Kw(cmd, "bar") is SSymbol b ? b.Name : null;
         double? mu = Kw(cmd, "mu") is SNumber u ? u.Value : null;
         int? links = Kw(cmd, "links") is SNumber ln ? (int)ln.Value : null;
-        var spec = new RopeSpec(id, from, to, length, over, windOn, release, material, diameter, null) { Nocked = nocked, Turns = turns, Bar = bar, Mu = mu, Links = links };
+        bool tether = Kw(cmd, "tether") is SBool { Value: true };                       // a tether (#155)
+        double? releaseAfter = Kw(cmd, "release-after") is SNumber ra ? ra.Value : null;
+        var spec = new RopeSpec(id, from, to, length, over, windOn, release, material, diameter, null) { Nocked = nocked, Turns = turns, Bar = bar, Mu = mu, Links = links, Tether = tether, ReleaseAfter = releaseAfter };
         CheckRopeFriction(spec);
         Snapshot();
         Document.AddRope(spec);
