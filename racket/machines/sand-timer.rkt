@@ -13,6 +13,13 @@
 ;;           (sqrt(h0) - k t)^2, so at half the time only a quarter of the
 ;;           water is left: 25%, against the sand's 50%. A water clock
 ;;           has to be read on a scale with the top spaced widest.
+;;   turned    the demo operator turns the sand timer over at 200 s, the moment
+;;           it is empty (193.0 s) and a little after: the click on a hopper is
+;;           "Turn the timer over" (hopper.turn). The sand is back above the
+;;           orifice, 5 kg again, and it runs another 193.0 s: empty again at
+;;           200 + 193.0 = 393.0 s (the flow, 25.9 g/s, is the same whatever the
+;;           depth, so a turn is as good as the first fill). The water tank
+;;           beside it cannot be turned.
 ;;   mars    the flow goes as sqrt(g): on Mars, in 3.71 m/s2, the sand runs at
 ;;           sqrt(3.71/9.81) = 0.615 of the rate, 15.9 g/s, and every step of
 ;;           a program takes 1.63 times as long: 313.9 s to empty.
@@ -24,4 +31,6 @@
   (hopper sand #:at (0 (m 1) 0) #:area 0.01 #:grain 5 #:orifice (mm 10) #:grain-size (mm 0.3))
   (tank water #:at ((m 0.6) (m 0.7) 0) #:area 0.01 #:height (m 0.4) #:water (L 3.125) #:material oak)
   (leak drain #:on water #:height 0 #:area 2.18e-5)
-  (hopper arch #:at ((m 1.2) (m 1) 0) #:area 0.01 #:grain 5 #:orifice (mm 8) #:grain-size (mm 2)))
+  (hopper arch #:at ((m 1.2) (m 1) 0) #:area 0.01 #:grain 5 #:orifice (mm 8) #:grain-size (mm 2))
+  ;; turned over once it has run through (issue #157); taking any control stops it
+  (operator (at 200 (sand turn 1))))

@@ -38,7 +38,8 @@ public class CatchTests
 
         var windlass = Load("ratchet-windlass");
         Assert.Equal(1, windlass.GetField("hold-pawl", "pawl"));
-        Assert.Equal(2, windlass.Catches["lower-pawl"].ReleaseAt);
+        Assert.True(double.IsPositiveInfinity(windlass.Catches["lower-pawl"].ReleaseAt));   // no longer lifts itself: the blueprint's demo operator does (#157)
+        Assert.Contains(windlass.Def.Operator, o => o.Target == "lower-pawl" && o.Field == "pawl" && o.Value == 0 && o.At == 2);
 
         var lantern = Load("kongming-lantern");
         Assert.Equal(1, lantern.GetField("mooring", "tether"));

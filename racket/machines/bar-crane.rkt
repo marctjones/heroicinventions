@@ -18,6 +18,16 @@
 ;;   seven walkers (5,408 N.m): lift it at the wheel's 3 rpm, 7.85 cm/s,
 ;;                the drum side carrying 2.908 times the stone side.
 ;; The friction's work warms the bar; it glows while the rope slides.
+;;
+;; Operated (issue #157): the seven walkers lift, hold and lower. Their motor is
+;; seven-wheel's drive (click the wheel: drive-rpm 0 holds, Shift+click reverses;
+;; right-click for drive-torque). The demo operator lets them lift for 20 s, stand
+;; still for 10, and walk the stone down for 20; the two cannot lift it and the
+;; demo leaves them alone. With 5,408 N.m against the bar's 2.908 x 1,430 = 4,160
+;; the motor has 1,250 N.m to spare and holds its 3 rpm: the stone rises 7.854
+;; cm/s (r x 3 rpm), 0.305 + 0.0785 x 20 = 1.876 m after 20 s, hangs there, and
+;; comes down at the same speed to the ground, 1.57 / 0.0785 = 20 s after the
+;; reversal (50 s), less the 0.3 s the motor takes to reach its speed.
 (require racket/math racket/list)
 
 (define wheel-r (m 2.25))
@@ -81,4 +91,6 @@
   (block seven-stone #:at ((+ dx stone-x) stone-y (+ seven-z rope-z)) #:size stone-size #:material granite)
   (rope seven-hoist #:wind-on seven-drum #:to (seven-stone 0 (/ stone-size 2) 0) #:length rope-length
         #:over (((+ dx (ox 0)) (oy 0) (+ seven-z rope-z)) ((+ dx (ox 1)) (oy 1) (+ seven-z rope-z)) ((+ dx (ox 2)) (oy 2) (+ seven-z rope-z)))
-        #:diameter (cm 4) #:bar oak))
+        #:diameter (cm 4) #:bar oak)
+  ;; the seven walkers lift for 20 s, hold the stone for 10, walk it back down (the two stay at their wheel: they cannot lift it) (issue #157)
+  (operator (at 20 (seven-wheel drive-rpm 0)) (at 30 (seven-wheel drive-rpm -3)) (at 50 (seven-wheel drive-rpm 0))))

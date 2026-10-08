@@ -13,7 +13,16 @@
 ;; reservoir base at 1.5 m: the surface settles where the weir spill
 ;; (Q_in - Q_out = 1.705 b h^1.5) and the outlet flow agree, at 1.9108 m
 ;; (h = 1.08 cm over the lip), so Q_out = 0.1187 L/s, and the 0.04 m2
-;; receiver rises 2.967 mm/s, about 1.78 cm a minute.
+;; receiver rises 2.967 mm/s, about 17.8 cm a minute: the 1.2 m receiver is
+;; full in 120 / 0.2967 = 404.5 s.
+;;
+;; Emptied and restarted. The receiver is read off, then tipped out (Shift+click
+;; it: "Empty the tank"), and the clock begins again. The demo operator does it at
+;; 410 s, just after the receiver filled: from then the level stands at
+;; 0.2967 cm/s x (t - 410) as if the clock had just been wound: 29.67 cm 100 s
+;; after, and it is full again 404.5 s after, at 814.5 s. The reservoir never
+;; notices (its surface holds at 41.08 cm throughout). Click the spring to
+;; shut the sluice at the head and stop the clock.
 ;;
 ;; Not modelled: a float and indicator rod. Nothing here makes a block
 ;; float on water, so the level is read off the receiver's water itself.
@@ -30,4 +39,6 @@
   (channel overflow #:from reservoir.spill #:to off #:end ((m -1.6) (cm 160) 0) #:width (cm 20))
   (tank receiver #:at ((m 1) 0 0) #:area 0.04 #:height (cm 120) #:water 0
         (port inlet #:height (cm 120)))
-  (pipe outflow reservoir.outlet receiver.inlet #:conductance 1.67e-4))
+  (pipe outflow reservoir.outlet receiver.inlet #:conductance 1.67e-4)
+  ;; the receiver tipped out as it fills, and the clock goes again (issue #157); taking any control stops it
+  (operator (at 410 (receiver water 0))))

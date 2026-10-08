@@ -25,8 +25,8 @@
 ;; nothing scripts the flight.
 ;;
 ;; It starts held on its catch (issue #155), as a real one waits for the
-;; trigger to be pulled: (arm catch 0) lets it go, and until demo operators
-;; exist it lets itself go 3 s in. Held, the catch carries the counterweight's
+;; trigger to be pulled: (arm catch 0) lets it go (click the arm: "Release the
+;; catch"), and the blueprint's demo operator pulls it 3 s in. Held, the catch carries the counterweight's
 ;; moment about the axle, 72.9 kg (granite, 0.3 m a side) x 9.81 x 0.27 m x
 ;; cos 50 = 124.1 N.m, less the beam's own, which leans the other way: 7.13 kg
 ;; of oak (1.8 x 0.025 x 0.22 m) with its middle 0.63 m out on the long side,
@@ -63,10 +63,12 @@
   #:source "Classic mechanics demonstration (medieval; its lever is Archimedes')"
   (lever arm #:at ((car pivot) (cadr pivot) 0) #:length arm-length #:material oak
          #:pivot-fraction pivot-fraction #:start-angle-deg cocked-deg #:limit-deg 140 #:damping 0.2
-         #:catch-deg cocked-deg #:release-after 3)
+         #:catch-deg cocked-deg)
   (block counterweight #:at ((car cw-at) (cadr cw-at) 0) #:size cw-size #:material granite)
   (rope cw-chain #:from (arm (- short-arm) 0 0) #:to (counterweight 0 (/ cw-size 2) 0)
         #:length chain #:material iron #:diameter (cm 1.5))
   (block stone #:at ((car stone-at) (cadr stone-at) 0) #:size stone-size #:material granite)
   (rope sling-rope #:from (arm long-arm 0 0) #:to (stone 0 0 0) #:length sling
-        #:release-deg 60 #:diameter (cm 1)))
+        #:release-deg 60 #:diameter (cm 1))
+  ;; the catch is pulled 3 s in, once the counterweight has settled on its chain (issue #157)
+  (operator (at 3 (arm catch 0))))

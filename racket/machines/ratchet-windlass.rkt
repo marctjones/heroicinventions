@@ -25,6 +25,14 @@
 ;;           I/r^2 = 4.894 kg at the rope, so a = 20.02 x 9.81 / (20.02 + 4.89)
 ;;           = 7.88 m/s2, not g: it reaches the floor 0.9 m down in
 ;;           sqrt(2 (0.9) / 7.88) = 0.48 s, as the free one does from the start.
+;;   held, then lowered (issue #157) the third's crank is let go at 5 s (right-click
+;;           the wheel: "Let go of the drive", drive-torque 0; the pawl alone holds) and its
+;;           block stays where the winding left it, 1 + 0.314 m (less the first
+;;           moments of the crank's start); at 10 s the pawl is lifted (click
+;;           the ratchet) and the block falls as the fourth does, at 7.88 m/s2, the
+;;           1.21 m to the floor in sqrt(2 x 1.21 / 7.883) = 0.555 s.
+;;   controls  click a wheel to stop its crank (drive-rpm), Shift+click to reverse
+;;           it; click a ratchet to lift its pawl or drop it again.
 (define drum-r (cm 10))
 (define block-size (cm 19.5))
 (define hang (m 1.0))                        ; the block's middle, above the floor
@@ -53,6 +61,9 @@
   (rope wind-rope #:wind-on wind-drum #:to (wind-load 0 (/ block-size 2) 0) #:length rope-length)
   ;; held by a pawl that is lifted 2 s in
   (wheel lower-drum #:shape (drum #:radius drum-r #:length (cm 30)) #:at (0 axle-height (m -4.5)) #:material oak)
-  (ratchet lower-pawl #:at (0 axle-height (m -4.5)) #:on lower-drum #:teeth 12 #:radius (cm 15) #:release-after 2)
+  (ratchet lower-pawl #:at (0 axle-height (m -4.5)) #:on lower-drum #:teeth 12 #:radius (cm 15))
   (block lower-load #:at (drum-r hang (m -4.5)) #:size block-size #:material granite)
-  (rope lower-rope #:wind-on lower-drum #:to (lower-load 0 (/ block-size 2) 0) #:length rope-length))
+  (rope lower-rope #:wind-on lower-drum #:to (lower-load 0 (/ block-size 2) 0) #:length rope-length)
+  ;; the pawl of the fourth lifted 2 s in; the crank of the third let go at 5 s, held by its pawl until the pawl is lifted at 10 s (issue #157)
+  (operator (at 2 (lower-pawl pawl 0))
+            (at 5 (wind-drum drive-torque 0)) (at 10 (wind-pawl pawl 0))))
