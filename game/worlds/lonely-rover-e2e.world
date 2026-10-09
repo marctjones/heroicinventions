@@ -1,19 +1,21 @@
 ;; The fastest route, end to end (issue #96; racket/heroic/tests/e2e-route-test.rkt, docs/e2e-route.md): the Lonely Rover's opening
-;; (lonely-rover-opening.world: the rim comes down on the cargo, the bank is under it), with the one change the route's stand-ins need:
-;; the found bank (#209) is found-bank-vaulted, found-bank's crate, cells and bank exactly, with a vault, a heated rock in a bimetal-lidded
-;; bin and the machine's wakes round its cells (an enclosure contains by position inside its own machine, so a vault beside the
-;; found bank could not warm it). It is the world's first machine, the one a sleep, a setting and the run's clock address.
+;; (lonely-rover-opening.world: the rim comes down on the cargo, the bank is under it), with the found bank (#209, found-bank, as in the
+;; opening) and one thing more: a vault dug round its crate where it lies (route-vault: a tight regolith vault, a heated rock in a
+;; bimetal-lidded bin and the route's wakes). The vault is a machine of its own; it holds the found bank's cells because the crate's centre
+;; is inside it (#211). It is the world's first machine, the one a sleep, a setting and the run's clock address; its clock is the found
+;; bank's (no sun given: noon at the start).
 ;; Everything else on the crater floor is the player's: the windmill, its gear train and the generator are BUILT in the game (scripted
 ;; build steps, the test's own) and wired to the bank. The scenario scales the 5 kWh bank to 25 Wh (#60, bank-capacity 0.005): 25 Wh
-;; fills in minutes of the windmill's charging, the doc's bank would need 33 hours of it.
+;; fills in minutes of the windmill's charging, the doc's bank would need 55 hours of it.
 (world lonely-rover-e2e
   (scenario
     (title "The Lonely Rover, route check")
-    (description "The opening with the route's vault round the found bank and a 25 Wh bank: for the end-to-end route test.")
+    (description "The opening with a vault dug round the found bank's crate and a 25 Wh bank: for the end-to-end route test.")
     (tuning (bank-capacity 0.005)))
   (map victoria)
   (rover (at 190.0 140.0) (heading 270))
-  (place battery-bank found-bank-vaulted (at 264.0 0 143.0))
+  (place vault route-vault (at 264.0 0 143.0))
+  (place battery-bank found-bank (at 264.0 0 143.0))
   (place solar-panels cargo-crate (at 254.62 0 147.0))
   (place gas-cylinders cargo-crate (at 249.42 0 144.0))
   (place hand-tools cargo-crate (at 242.49 0 140.0))

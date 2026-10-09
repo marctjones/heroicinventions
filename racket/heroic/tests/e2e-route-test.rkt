@@ -8,15 +8,15 @@
 ;;   1  the slide buries the bank                      G  the world's opening: the crate is held under about 4 m of rubble
 ;;   2  free the bank                                  S  GAP 1: e2e-rover-test.rkt digs at the slide (the dirt rule lets the backhoe dig now);
 ;;                                                        the sleep run below does not free the crate
-;;   3  bury it in a tight vault                       S  GAP 2: the vault is round the bank's cells in the bank's machine (an enclosure
-;;                                                        contains by position inside its own machine), a placed enclosure
+;;   3  bury it in a tight vault                       G  a vault of its own (route-vault, placed round the crate where it lies): the found
+;;                                                        bank's cells are in its air because the crate's centre is in its box (#211)
 ;;   4  a windmill with a geared generator             G  built in build mode: 10 m sails on a post, four 72:18 meshes (4:1 each, 256:1) and the
 ;;                                                        salvaged motor on the last pinion; saved with the world and loaded
 ;;   5  wire the generator to the bank                 S  the world link (from built-1 motor) (to battery-bank bank) put into the saved world's
 ;;                                                        link list (the join gesture is clicked on screen: it needs a real window, GAP 6)
 ;;   6  rock heated by heliostats, pushed into the bin S  GAP 4: the heliostat heats the rock in the bin
 ;;   7  a bimetal on the lid                           G  the strip works the lid in proportion
-;;   8  sleep until 02:49, windmill tops up, call      G  the game's own sleep (HEROIC_SLEEP=pre-dawn on the bank's machine, whose clock is the world's),
+;;   8  sleep until 02:49, windmill tops up, call      G  the game's own sleep (HEROIC_SLEEP=pre-dawn on the vault, the world's first machine),
 ;;                                                        then real time; GAP 5 (no scripted sleep step, so the world is built, saved and loaded asleep)
 ;; Predictions (worked before running):
 ;;  - the train: the sails' torque is tau* (2 - w R / (v l*)), tau* = 1/2 rho A v^2 R Cp / l* = 104.0 N.m at the world's air (0.015325 kg/m3)
@@ -27,9 +27,13 @@
 ;;    four pass it above 1.2 m/s.
 ;;  - the sails turn free in the sleep to near their free-running speed (about 2.8 rad/s) and hold 1/2 I w^2 (I = m R^2 / 3 = 50,000 kg m2):
 ;;    a few Wh go into the bank in the first minute, the wind carries on at 90 W, and the 25 Wh bank (the scenario's 0.005 of 5 kWh) is full a
-;;    few seconds before the pass opens at 73,979 s, 03:00 on sol 2, and the call goes out as the pass opens, not before.
-;;  - the vault holds the bank at the sim's 21.9 C at 02:49 (the same vault and heliostat as the earlier route's, whose 20.1 C was from a
-;;    bank 25 Wh in a different heat store: the cells here are the found bank's 16 kg).
+;;    few seconds before the pass opens at 55,484 s, 03:00 on sol 2 (the found bank's and the opening's clock: noon at the start), and the
+;;    call goes out as the pass opens, not before.
+;;  - the vault (route-vault, a machine of its own) holds the found bank's cells above 0 C at 02:49. With the stand-in of #96 (the vault
+;;    written into the bank's machine, from 07:00 at latitude -2) the cells were 21.9 C with a 1.5 m2 heliostat; here the day starts at
+;;    the opening's noon and the sun sets near 17:00, so the heliostat has the rock for 5 hours and not 11: 1.5 m2 leaves the cells at
+;;    -27.8 C, the doc's 4 m2 brings the rock to 224 C at sunset and the cells to +24.5 C at 02:49 (the C# sim with the cells written into
+;;    the vault, which the world's zone must match), the rock 92 C, the strip on the vault's 27 C air holding the lid 37% open.
 ;; Skipped when Godot is not installed.
 (require rackunit racket/list racket/match racket/math racket/system racket/port racket/string racket/file racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -41,8 +45,9 @@
 (define (first-frame run pred) (for/first ([f run] #:when (pred f)) f))
 
 (define sol-seconds 88775.0)
-(define pass-start (* 20 (/ sol-seconds 24)))   ; 03:00 after a 07:00 start: 20 local hours, 73,979 s
-(define wake-at 73300)
+(define pass-start (* 15 (/ sol-seconds 24)))   ; 03:00 after a noon start: 15 local hours, 55,484 s
+(define wake-at 54800)
+(define CELLS 24.5)   ; C at 02:49: the C# sim with the cells in the vault (route-vault's header), 24.47
 
 (define (run-game env-list)
   (define env (environment-variables-copy (current-environment-variables)))
@@ -82,7 +87,7 @@
     (run-game `(("HEROIC_LOAD" . ,save) ("HEROIC_SLEEP" . "pre-dawn") ("HEROIC_QUIT_AFTER_SIM_SECONDS" . ,(number->string (exact->inexact seconds)))
                 ("HEROIC_TRACE" . ,trace) ("HEROIC_TRACE_DT" . "10")
                 ,@(if settings `(("HEROIC_SET" . ,settings)) '()))))
-  (list lines (trace-frames (string-append trace ".battery-bank")) (trace-frames (string-append trace ".built-1"))))
+  (list lines (trace-frames (string-append trace ".battery-bank")) (trace-frames (string-append trace ".built-1")) (trace-frames (string-append trace ".vault"))))
 
 (when (godot-available?)
   ;; step 4: the player builds the windmill, its train and the generator, and the world is saved with them
@@ -100,7 +105,7 @@
           (thread (λ () (vector-set! results 1 (sleep-run wired-save #:set "heliostat area 0 0" #:seconds (+ pass-start 60)))))
           (thread (λ () (vector-set! results 2 (sleep-run (p "a.save") #:seconds (+ pass-start 60)))))))
   (for-each thread-wait threads)
-  (match-define (list lines run built-run) (vector-ref results 0))
+  (match-define (list lines run built-run vault-run) (vector-ref results 0))
   (define (has? rx ls) (for/or ([l ls]) (regexp-match? rx l)))
 
   (test-case "the player builds the windmill, a four-stage train and the generator in build mode, and the world is saved with them"
@@ -110,16 +115,21 @@
     (check-regexp-match #rx"\n  \\(build built-1 \\(at 180.0 0.0 105.0\\) \\(machine built-1 " saved)
     (check-regexp-match #rx"\\(part motor generator " saved))
 
-  (test-case "loaded asleep, the wire is back, and the game's sleep runs the day and the night to 02:49 with the vault, the rock and the bank"
+  (test-case "loaded asleep, the wire is back, the found bank's cells are in the vault, and the sleep runs the day and the night to 02:49"
     (check-true (has? #rx"^\\[build\\] loaded built-1: 11 of 11 parts running" lines))
     (check-true (has? #rx"^\\[links\\] restored 1 link\\(s\\) from the save: wire-1 \\(wire\\)" lines))
+    (check-true (has? #rx"^\\[zones\\] battery-bank.cells joined vault.vault" lines) "the vault of another machine holds the found bank's cells")
     (check-true (has? #rx"^\\[sleep\\] woke after [0-9.]+ s: scene.elapsed" lines))
     (define woke (second run))
+    (define vault-woke (second vault-run))
     (check-true (>= (car woke) wake-at) (format "the first frame after the sleep is at ~a s" (car woke)))
-    (check-true (< 30 (at woke 'rock.temperature) 70) (format "rock ~a C" (at woke 'rock.temperature)))
-    ;; the bank was frozen at -55 C at dawn; the vault round its cells held it above 0 C through the night
-    (check-= (at woke 'cells.temperature) 21.9 1.5 "C, the found bank's own cells at 02:49 (the sim: 21.89)")
-    (check-true (< 0.3 (at woke 'bin.open) 0.8) (format "lid ~a" (at woke 'bin.open))))
+    (printf "E2E vault: at ~a s the cells are ~a C, the rock ~a C, the vault ~a C, the lid ~a open\n" (car woke) (at woke 'cells.temperature)
+            (at vault-woke 'rock.temperature) (at vault-woke 'vault.temperature) (at vault-woke 'bin.open))
+    (check-= (at vault-woke 'rock.temperature) 92.1 3 "C, the rock at 02:49 (the C# sim: 92.1; its peak 224 C at sunset)")
+    ;; the bank was frozen at -63 C at noon; the vault round its crate held it above 0 C through the night
+    (check-= (at woke 'cells.temperature) CELLS 1.5 "C, the found bank's own cells at 02:49")
+    (check-true (< 0 (at woke 'cells.temperature) 45) "in the window it may charge in")
+    (check-= (at vault-woke 'bin.open) 0.37 0.1 "the strip, on the vault's air at 27 C, has the lid 37% open (the C# sim)"))
 
   (test-case "the built windmill charges the found bank over the wire, through the train, over the cut-in; only the wind has charged it"
     (define charging (filter (λ (f) (> (at f 'motor.power) 0)) built-run))
@@ -135,13 +145,13 @@
     (printf "E2E charge: mean ~a W, rotor ~a rpm over ~a samples; the doc's 5 kWh bank would take ~a h of this\n"
             (round mean-w) (round rpm) (length settled) (/ (round (* 10 (/ 5000 mean-w))) 10.0))
     (check-true (has? #rx"^\\[frontend\\] ending source wind: 25.000 Wh" lines) "the bank's record: 25 Wh, all of it wind")
-    (check-true (has? #rx"^\\[frontend\\] ending: bank sol 2 at 03:00, 25.00 of 25.00 Wh at 21.[0-9] C, sources 1" lines)))
+    (check-true (has? #rx"^\\[frontend\\] ending: bank sol 2 at 03:00, 25.00 of 25.00 Wh at [0-9]+.[0-9] C, sources 1" lines)))
 
   (test-case "the found bank is full before the pass and warm, and the call goes out as the pass opens at 03:00 on sol 2, not before"
     (define t-full (car (first-frame run (λ (f) (>= (at f 'bank.charge) 24.9999)))))
     (define t-won (car (first-frame run (λ (f) (> (at f 'bank.won) 0.5)))))
     (printf "E2E night: woke at ~a s with the bank at ~a C and the rock at ~a C; full at ~a s (~a s before the pass); call at ~a s\n"
-            (car (second run)) (at (second run) 'cells.temperature) (at (second run) 'rock.temperature) t-full (round (- pass-start t-full)) t-won)
+            (car (second run)) (at (second run) 'cells.temperature) (at (second vault-run) 'rock.temperature) t-full (round (- pass-start t-full)) t-won)
     (check-true (< wake-at t-full pass-start) (format "full at ~a s, ~a s before the pass" t-full (- pass-start t-full)))
     (check-true (<= pass-start t-won (+ pass-start 11)) (format "the call at ~a s; the pass opens at ~a s" t-won pass-start))
     (for ([f (in-list run)] #:when (< (car f) pass-start))
@@ -150,7 +160,7 @@
     (define won (first-frame run (λ (f) (> (at f 'bank.won) 0.5))))
     (check-= (at won 'scene.won) 1 0)
     (check-true (<= 3.0 (at won 'scene.time) 3.01) (format "local time ~a h" (at won 'scene.time)))
-    (check-= (at won 'scene.sol) 2 0 "sol 2: 20 hours after the 07:00 start of sol 1")
+    (check-= (at won 'scene.sol) 2 0 "sol 2: 15 hours after the noon start of sol 1")
     (check-true (< 0 (at won 'bank.temperature) 45) (format "the bank is ~a C" (at won 'bank.temperature)))
     (check-= (at won 'bank.in-window) 1 0)
     (check-= (at (last run) 'bank.won) 1 0 "and it stays won")
