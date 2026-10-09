@@ -1159,6 +1159,7 @@ public partial class Main : Node3D
                 Worked = _groundSim?.Ground.SaveWorked(),    // and the trenches and heaps the rover has dug (#199)
                 Rover = RoverSaveState(),                    // and the rover itself: pose, bucket and arm (#201)
                 Goals = GoalsForSave(),                      // and the goals and achievements earned (#68)
+                Links = LinksForSave(),                      // and every link between machines, the ones made in play too (#82)
                 Operated = _operatorLog.ToList(), OperatorTaken = _operatorTaken,   // what was done to the machine, in order (Main.Operator.cs)
             };
             string target = path ?? SavePath(auto);
@@ -1195,6 +1196,7 @@ public partial class Main : Node3D
         }
         if (save.Kind == "world") LoadWorldNamed(save.Name); else if (_machineFiles.ContainsKey(save.Name)) SelectMachine(save.Name);
         else { _hudNote.Text = $"The save is of {save.Name}, which is not here."; _hudNote.Visible = true; return; }
+        LinksRestore(save);   // the links the world had when saved, before the machines' state goes back (#82)
         int unmatched = 0;
         if (save.Ground is { } groundState && _groundSim is { } groundSim) unmatched += RuntimeState.RestoreGround(groundSim, groundState).Count;
         if (save.Boulders is { } boulders && _groundSim is { } rocky)
