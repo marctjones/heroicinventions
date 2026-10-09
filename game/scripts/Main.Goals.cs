@@ -25,6 +25,7 @@ public partial class Main
 
     private void BuildGoalsPanel()
     {
+        _routesLevel = RoutesLevelAtStart();
         _goalsPanel = new GoalsPanel(this) { Name = "GoalsPanel", Visible = OS.GetEnvironment("HEROIC_GOALS_PANEL") == "1" };
         AddChild(_goalsPanel);
         var layer = new CanvasLayer { Layer = 80, Name = "GoalToast" };
@@ -113,6 +114,8 @@ public partial class GoalsPanel : CanvasLayer
 {
     private readonly Main _main;
     private VBoxContainer _rows = null!;
+    private VBoxContainer _routeRows = null!;
+    private readonly Dictionary<RoutesPanelLevel, Button> _levelButtons = [];
 
     public GoalsPanel(Main main) { _main = main; Layer = 70; }
 
@@ -127,11 +130,37 @@ public partial class GoalsPanel : CanvasLayer
         var title = new Label { Text = "Goals (F2)" };
         title.AddThemeFontSizeOverride("font_size", 20);
         col.AddChild(title);
+        var levelRow = new HBoxContainer();
+        levelRow.AddThemeConstantOverride("separation", 4);
+        var levelLabel = new Label { Text = "Routes:", TooltipText = "How much the Routes block says: nothing, the routes you have started and how far along, or their next steps with the reasons (remembered)." };
+        levelLabel.AddThemeFontSizeOverride("font_size", 13);
+        levelRow.AddChild(levelLabel);
+        var group = new ButtonGroup();
+        foreach (var (level, text) in new[] { (RoutesPanelLevel.Off, "Off"), (RoutesPanelLevel.Outline, "Outline"), (RoutesPanelLevel.NextSteps, "Next steps") })
+        {
+            var b = new Button { Text = text, ToggleMode = true, ButtonGroup = group, ButtonPressed = _main.RoutesLevel == level, FocusMode = Control.FocusModeEnum.None };
+            b.AddThemeFontSizeOverride("font_size", 12);
+            var on = new StyleBoxFlat { BgColor = HudTheme.Bronze, ContentMarginLeft = 8, ContentMarginRight = 8, ContentMarginTop = 3, ContentMarginBottom = 3 };
+            b.AddThemeStyleboxOverride("pressed", on);
+            b.AddThemeStyleboxOverride("hover_pressed", on);
+            foreach (string c in new[] { "font_pressed_color", "font_hover_pressed_color" }) b.AddThemeColorOverride(c, HudTheme.Ink);
+            var l = level;
+            b.Pressed += () => _main.SetRoutesLevel(l);
+            _levelButtons[level] = b;
+            levelRow.AddChild(b);
+        }
+        col.AddChild(levelRow);
         var scroll = new ScrollContainer { CustomMinimumSize = new Vector2(530, 640) };
         col.AddChild(scroll);
+        var body = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        body.AddThemeConstantOverride("separation", 3);
+        scroll.AddChild(body);
+        _routeRows = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _routeRows.AddThemeConstantOverride("separation", 3);
+        body.AddChild(_routeRows);
         _rows = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         _rows.AddThemeConstantOverride("separation", 3);
-        scroll.AddChild(_rows);
+        body.AddChild(_rows);
         Refresh();
     }
 
@@ -140,9 +169,31 @@ public partial class GoalsPanel : CanvasLayer
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F2 }) { _main.ToggleGoalsPanel(); GetViewport().SetInputAsHandled(); }
     }
 
+    /// <summary>Draws the Routes block (the lines are Main.RoutesPanelLines'; none at the off level).</summary>
+    public void ShowRoutes(IReadOnlyList<PanelLine> lines)
+    {
+        if (_routeRows is null) return;
+        foreach (var c in _routeRows.GetChildren()) { _routeRows.RemoveChild(c); c.QueueFree(); }
+        if (_levelButtons.TryGetValue(_main.RoutesLevel, out var on) && !on.ButtonPressed) on.SetPressedNoSignal(true);
+        foreach (var line in lines)
+        {
+            var l = new Label { Text = line.Text, AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(500, 0) };
+            switch (line.Kind)
+            {
+                case PanelLineKind.Header: l.AddThemeFontSizeOverride("font_size", 16); _routeRows.AddChild(new HSeparator()); break;
+                case PanelLineKind.Route: l.AddThemeFontSizeOverride("font_size", 15); l.AddThemeColorOverride("font_color", HudTheme.Bronze); break;
+                case PanelLineKind.StepDim: l.AddThemeColorOverride("font_color", HudTheme.CreamDim); break;
+                case PanelLineKind.Reason:
+                    l.Text = "      " + line.Text; l.AddThemeFontSizeOverride("font_size", 12); l.AddThemeColorOverride("font_color", HudTheme.CreamDim); break;
+            }
+            _routeRows.AddChild(l);
+        }
+    }
+
     public void Refresh()
     {
         if (_rows is null) return;
+        _main.RoutesPanelRefresh(true);
         foreach (var c in _rows.GetChildren()) { _rows.RemoveChild(c); c.QueueFree(); }
         var goals = _main.CallGoals();
         void Section(string text, GoalKind kind)
@@ -173,6 +224,6 @@ public partial class GoalsPanel : CanvasLayer
         }
         Section("The path to the call", GoalKind.Path);
         Section("Heron's catalogue", GoalKind.Concept);
-        Section("Routes", GoalKind.Route);
+        Section("Route achievements", GoalKind.Route);
     }
 }
