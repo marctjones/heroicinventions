@@ -28,6 +28,8 @@ namespace HeroicInventions;
 ///   pick X Y · pickworld X Y Z   print which part is drawn at a viewport pixel, or where a world point is drawn (the run view; #151)
 ///   join A B            join two parts of two placed machines, LABEL.PART[.PORT] each, as the Join machines gesture does (a view that can: Main; #218)
 ///   joinclick A         click the part A (LABEL.PART[.PORT]) where the camera draws it, while Join machines is on: the real gesture, one end at a time
+///   joinclick A N       the same, then A's spot again: a second click on a spot offers the parts under it; take item N (from 1) of that list (#225)
+///   joinrightclick A    a right-click on A's spot, which offers that list; joinlist N takes item N of the list open
 ///   joinbutton          print the Join machines button's label (#224)
 ///   quit                end the run
 ///
@@ -167,7 +169,7 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
                 GD.Print($"[{tag}] shot {path} {image.GetWidth()}x{image.GetHeight()} {error}");
                 return Step.Next;
             }
-            case "join" or "joinbutton" or "joinclick":
+            case "join" or "joinbutton" or "joinclick" or "joinrightclick" or "joinlist":
                 if (owner is IJoinStep joiner) return joiner.JoinStep(w);
                 GD.PrintErr($"[{tag}] join: this view has no machines to join");
                 owner.GetTree().Quit(1);

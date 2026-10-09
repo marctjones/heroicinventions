@@ -1647,6 +1647,8 @@ public partial class Main : Node3D
                     if (_joining) JoinPickAt(mb.Position);
                     else if (!RoverIsPlayer) FocusMachineAt(mb.Position);   // (in the game the rover's hand focuses what it touches, without moving the follow camera)
                 }
+                else if (mb.ButtonIndex == MouseButton.Right && mb.Pressed) _joinRightAt = mb.Position;
+                else if (mb.ButtonIndex == MouseButton.Right && _joining && mb.Position.DistanceTo(_joinRightAt) < 4) JoinPickAt(mb.Position, offerList: true);   // a right-click while joining lists the parts under it (#225)
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.Middle } mb:
                 _dragging = _panning = mb.Pressed;

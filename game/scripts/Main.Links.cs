@@ -161,42 +161,115 @@ public partial class Main : ScriptedInput.IJoinStep
     {
         _joining = on && _world is not null;
         _firstPick = null;
+        _lastJoinClick = null;
+        _pickList?.Close();
         RefreshJoinLabel();
         if (_joining) GD.Print($"[links] {WorldLinkGestures.Prompt(null)}");
     }
 
-    /// <summary>
-    /// A click while joining: the part under the cursor (and, on a tank, the
-    /// port nearest the cursor) is picked; the second pick on another machine
-    /// makes the link, or is refused with the reason.
-    /// </summary>
-    private void JoinPickAt(Vector2 screen)
+    private PickList? _pickList;
+    private IReadOnlyList<(PickHit Hit, MachineView View, string Part)> _listed = [];
+    private Vector2 _joinRightAt;
+    /// <summary>Where the last join click landed, and the first pick it was made on top of, so a second click on the spot (or a right-click) can offer the parts there and replace that pick (#225).</summary>
+    private (Vector2 Screen, LinkEnd? FirstBefore)? _lastJoinClick;
+
+    /// <summary>The parts whose pick boxes the ray through <paramref name="screen"/> crosses, with their views. The generator and the bank, which the view draws no body for, get a small box at their place (<see cref="PickBoxes.SimPartSide"/>).</summary>
+    private List<(PickHit Hit, MachineView View, string Part)> PartsUnder(Vector3 from, Vector3 dir)
     {
-        var from = _camera.ProjectRayOrigin(screen);
-        var dir = _camera.ProjectRayNormal(screen);
-        (MachineView View, string Part, float T)? best = null;
-        var crossed = new List<(string Name, float T)>();
+        var crossed = new List<(PickHit, MachineView, string)>();
         foreach (var v in _views)
-            foreach (var (id, nodes) in v.PartNodes)
+            foreach (var part in v.Runtime.Def.Parts)
             {
                 Aabb? box = null;
-                foreach (var n in nodes)
-                    if (BoundsOf(n) is { Size: var s } b && s != Vector3.Zero) box = box is { } x ? x.Merge(b) : b;
+                if (v.PartNodes.TryGetValue(part.Id, out var nodes))
+                    foreach (var n in nodes)
+                        if (BoundsOf(n) is { Size: var s } b && s != Vector3.Zero) box = box is { } x ? x.Merge(b) : b;
+                if (box is null && PickBoxes.SimPartSide(part.Kind) is { } side && v.LinkPoint(part.Id, null) is { } at)
+                    box = new Aabb(at - Vector3.One * (float)(side / 2), Vector3.One * (float)side);
                 if (box is { } bb && RayHits(from, dir, bb.Grow(0.05f), out float t))
                 {
-                    crossed.Add(($"{v.Name}.{id}", t));
-                    if (best is null || t < best.Value.T) best = (v, id, t);
+                    var g = bb.Grow(0.05f);
+                    crossed.Add((new PickHit($"{v.Name}.{part.Id}", new PickBox(g.Position.X, g.Position.Y, g.Position.Z, g.End.X, g.End.Y, g.End.Z), t), v, part.Id));
                 }
             }
-        if (crossed.Count > 1)   // the nearest box takes the click: say which others it crossed, since a small part inside a big part's box can't be picked
-            GD.Print($"[links] the click crossed {crossed.Count} parts' boxes, nearest first: {string.Join(", ", crossed.OrderBy(c => c.T).Select(c => $"{c.Name} ({c.T:F1} m)"))}");
-        if (best is not { } hit) { GD.Print($"[links] nothing there to join (at {screen}, looking along {dir} from {from})"); return; }
-        var part = hit.View.Runtime.Def.Part(hit.Part)!;
+        return crossed;
+    }
+
+    private LinkEnd EndOf(MachineView view, string partId, Vector3 from, Vector3 dir)
+    {
+        var part = view.Runtime.Def.Part(partId)!;
         // on a tank, the port closest to where the ray passes
-        string? port = part.Ports.Where(p => p.Kind == "water")
-            .Select(p => (p.Name, D: DistanceToRay(hit.View.LinkPoint(hit.Part, p.Name)!.Value, from, dir)))
-            .OrderBy(p => p.D).Select(p => p.Name).FirstOrDefault();
-        Pick(new LinkEnd(hit.View.Name, hit.Part, part.Kind == "tank" ? port : null));
+        string? port = part.Kind == "tank" ? part.Ports.Where(p => p.Kind == "water")
+            .Select(p => (p.Name, D: DistanceToRay(view.LinkPoint(partId, p.Name)!.Value, from, dir)))
+            .OrderBy(p => p.D).Select(p => p.Name).FirstOrDefault() : null;
+        return new LinkEnd(view.Name, partId, port);
+    }
+
+    /// <summary>
+    /// A click while joining: the part under the cursor (and, on a tank, the port nearest the cursor) is picked; the second pick on
+    /// another machine makes the link, or is refused with the reason. Which part (#225): where the ray crosses boxes that do not hold
+    /// one another the nearest wins; where the nearest holds others (the gears inside the sails' box, the bank inside its crate's) the
+    /// smaller wins. A second click on the same spot, or a right-click (<paramref name="offerList"/>), offers the parts under the click,
+    /// nearest first, to choose from (<see cref="PickList"/>), so every part can be joined.
+    /// </summary>
+    private void JoinPickAt(Vector2 screen, bool offerList = false)
+    {
+        _pickList?.Close();
+        var from = _camera.ProjectRayOrigin(screen);
+        var dir = _camera.ProjectRayNormal(screen);
+        var under = PartsUnder(from, dir);
+        var ordered = PickBoxes.List(under.Select(u => u.Hit));
+        if (under.Count > 1)   // say which boxes it crossed, nearest first
+            GD.Print($"[links] the click crossed {under.Count} parts' boxes, nearest first: {string.Join(", ", ordered.Select(c => $"{c.Name} ({c.T:F1} m)"))}");
+        if (PickBoxes.Choose(under.Select(u => u.Hit)) is not { } chosen) { GD.Print($"[links] nothing there to join (at {screen}, looking along {dir} from {from})"); _lastJoinClick = null; return; }
+        bool again = _lastJoinClick is { } last && last.Screen.DistanceTo(screen) < 4;
+        if (under.Count > 1 && (offerList || again))
+        {
+            var firstBefore = again ? _lastJoinClick!.Value.FirstBefore : _firstPick;
+            _listed = ordered.Select(h => under.First(u => u.Hit.Name == h.Name)).ToList();
+            GD.Print($"[links] pick list at ({screen.X:F0} {screen.Y:F0}): {string.Join(", ", _listed.Select((u, i) => $"{i + 1} {u.Hit.Name}"))}");
+            _listFirstBefore = firstBefore;
+            _lastJoinClick = (screen, firstBefore);
+            _listFrom = (from, dir);
+            if (_pickList is null) AddChild(_pickList = new PickList { Name = "PickList" });
+            _pickList.Offer(screen, _listed.Select(u => $"{u.Hit.Name} ({u.Hit.T:F1} m){(u.Hit.Name == chosen.Name ? " - the click's pick" : "")}").ToList(), ChooseFromPickList);
+            return;
+        }
+        var u0 = under.First(u => u.Hit.Name == chosen.Name);
+        if (under.Count > 1 && chosen.Name != ordered[0].Name) GD.Print($"[links] {chosen.Name} lies inside {ordered[0].Name}'s box and is the smaller: it takes the click");
+        var before = _firstPick;
+        MakePick(EndOf(u0.View, u0.Part, from, dir), screen, before);
+    }
+
+    private ScriptedInput.Step ChooseListed(int n, Func<string, bool> fail)
+    {
+        if (_pickList is not { IsOpen: true }) { fail($"no pick list is open (a click is offered one only where it crosses more than one part's box)"); return ScriptedInput.Step.Next; }
+        if (n > _listed.Count) { fail($"the pick list has {_listed.Count} item(s), not {n}"); return ScriptedInput.Step.Next; }
+        ChooseFromPickList(n - 1);
+        return ScriptedInput.Step.Next;
+    }
+
+    private LinkEnd? _listFirstBefore;
+    private (Vector3 From, Vector3 Dir) _listFrom;
+
+    /// <summary>One pick from a click, remembering where, so the same spot clicked again offers the list.</summary>
+    private void MakePick(LinkEnd end, Vector2 screen, LinkEnd? firstBefore)
+    {
+        bool wasSecond = _firstPick is not null;
+        bool ok = Pick(end);
+        _lastJoinClick = wasSecond && ok ? null : (screen, firstBefore);
+    }
+
+    /// <summary>Item <paramref name="index"/> (0-based) of the open pick list is the click's pick: it takes the place of the pick the click made.</summary>
+    private void ChooseFromPickList(int index)
+    {
+        if (index < 0 || index >= _listed.Count) return;
+        var (hit, view, part) = _listed[index];
+        var screen = _lastJoinClick?.Screen ?? Vector2.Zero;
+        _pickList?.Close();
+        _firstPick = _listFirstBefore;
+        GD.Print($"[links] chosen from the list: {index + 1} {hit.Name}");
+        MakePick(EndOf(view, part, _listFrom.From, _listFrom.Dir), screen, _listFirstBefore);
     }
 
     private static float DistanceToRay(Vector3 p, Vector3 origin, Vector3 dir)
@@ -248,21 +321,33 @@ public partial class Main : ScriptedInput.IJoinStep
             GetTree().Quit(1);
             return false;
         }
-        if (w[0] == "joinclick")   // one real click on a part: where the camera draws it, through the input pipeline, while the Join machines button is on
+        if (w[0] is "joinclick" or "joinrightclick")   // one real click on a part: where the camera draws it, through the input pipeline, while the Join machines button is on
         {
-            if (w.Length != 2) { Fail("expected 'joinclick LABEL.PART[.PORT]'"); return ScriptedInput.Step.Next; }
+            bool right = w[0] == "joinrightclick";
+            // 'joinclick A N' clicks A, then A's spot again (a second click on one spot offers the list) and takes item N; 'joinrightclick A' offers the list by a right-click (take an item with 'joinlist N')
+            int? item = null;
+            if (w.Length == 3 && !right && int.TryParse(w[2], out int n) && n >= 1) item = n;
+            if (w.Length != (item is null ? 2 : 3)) { Fail($"expected '{w[0]} LABEL.PART[.PORT]{(right ? "" : " [N]")}'"); return ScriptedInput.Step.Next; }
             var bits = w[1].Split('.');
             if (bits.Length is < 2 or > 3 || !_byName.TryGetValue(bits[0], out var target)) { Fail($"no machine part '{w[1]}' to click"); return ScriptedInput.Step.Next; }
-            if (!_joining) { Fail("joinclick: joining is not on (press the Join machines button first)"); return ScriptedInput.Step.Next; }
+            if (!_joining) { Fail($"{w[0]}: joining is not on (press the Join machines button first)"); return ScriptedInput.Step.Next; }
             if (target.LinkPoint(bits[1], bits.Length == 3 ? bits[2] : null) is not { } at) { Fail($"{w[1]} has no point to click"); return ScriptedInput.Step.Next; }
             var screen = GetViewport().GetScreenTransform() * _camera.UnprojectPosition(at);
             bool shown = !_camera.IsPositionBehind(at) && GetViewport().GetVisibleRect().HasPoint(screen);
-            GD.Print($"[links] click {w[1]} at ({at.X:F2} {at.Y:F2} {at.Z:F2}) drawn at screen ({screen.X:F0} {screen.Y:F0}){(shown ? "" : ": NOT ON SCREEN")}");
+            GD.Print($"[links] {(right ? "right-click" : "click")} {w[1]} at ({at.X:F2} {at.Y:F2} {at.Z:F2}) drawn at screen ({screen.X:F0} {screen.Y:F0}){(shown ? "" : ": NOT ON SCREEN")}");
             if (!shown) { Fail($"{w[1]} is not on screen: the camera must see a part to click it"); return ScriptedInput.Step.Next; }
             Input.ParseInputEvent(new InputEventMouseMotion { Position = screen, GlobalPosition = screen });
-            foreach (bool down in new[] { true, false })
-                Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = down, Position = screen, GlobalPosition = screen });
+            var button = right ? MouseButton.Right : MouseButton.Left;
+            for (int times = item is null ? 1 : 2, k = 0; k < times; k++)
+                foreach (bool down in new[] { true, false })
+                    Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = button, Pressed = down, Position = screen, GlobalPosition = screen });
+            if (item is { } i) return ChooseListed(i, Fail);
             return ScriptedInput.Step.Next;
+        }
+        if (w[0] == "joinlist")   // item N (from 1) of the pick list the last click offered
+        {
+            if (w.Length != 2 || !int.TryParse(w[1], out int n) || n < 1) { Fail("expected 'joinlist N' (N from 1)"); return ScriptedInput.Step.Next; }
+            return ChooseListed(n, Fail);
         }
         if (w[0] == "joinbutton")   // what the button says, and whether it shows (a check of #224)
         {
