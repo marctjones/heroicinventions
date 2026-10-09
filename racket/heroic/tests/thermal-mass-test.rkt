@@ -152,6 +152,42 @@
   (check-= (v 'sunrock.gained 600) (/ (* p 600) 1e6) 1e-6 "and the energy that landed is what the mirror gave"))
 
 ;; ---------------------------------------------------------------------------
+;; A rock that is a body (issue #206): heat-rock is the tight vault of night-heat with the rock lying 1.2 m in front of an empty bin.
+;; Pushed in after 5 s: the rock has lost eps A sigma (T^4 - T_air^4) = 814.8 W x 5 s = 4.07 kJ in the open (the air is -24.0 C at 17:00), and
+;; night-heat's bank at 03:00 is +4.28 C; 0.00887 K per kJ (night-heat: 35 kg against 40 kg, 6.4 K for the 0.72 MJ above its 03:00 temperature)
+;; takes 0.036 K off: 4.24 C. Pushed in after 600 s the rock is at 186.35 C (the open-air law integrated by hand) and 458.6 kJ down: 0.21 C.
+
+(test-case "Movable rock: pushed into the bin at dusk the bank at 03:00 is night-heat's +4.3 C; late, it is lower by what the rock lost in the open"
+  (define (bank-at-03:00 . pushes)
+    (define run (simulate 'heat-rock #:seconds (* 10 hour) #:step 5 #:sample-dt (* 10 hour)
+                          #:set `((heliostat dust 1 0) ,@pushes)))
+    (last run))
+  (define early (bank-at-03:00 '(rock z 0 5)))
+  (check-= (at early 'bank.temperature) 4.24 0.15 "pushed in at 17:00:05: night-heat's 4.28 less 0.04")
+  (check-= (at early 'bank.temperature) 4.3 0.3 "and night-heat's +4.3 C of the design doc")
+  (check-= (at early 'rock.in-bin) 1 0)
+  (check-= (at early 'bin.holding) 1 0)
+  (define late (bank-at-03:00 '(rock z 0 600)))
+  (check-= (at late 'bank.temperature) 0.21 0.3 "pushed in ten minutes late: 4.28 - 0.00887 x 458.6 kJ")
+  (define never (bank-at-03:00))
+  (check-= (at never 'bank.temperature) -55 0.01 "never pushed in: the bank has no heat to get")
+  (check-= (at never 'rock.in-bin) 0 0)
+  (check-= (at never 'bin.holding) 0 0))
+
+(test-case "Movable rock: it keeps its heat across the push, and a mirror stops lighting it once it is pushed out of the beam"
+  (define run (simulate 'heat-rock #:seconds 60 #:step 0.5 #:sample-dt 1 #:set '((rock z 0 20))))
+  ;; the heliostat's 463.9 W (17:00, 4 m2) lands on the rock where it lies (at z 1.2) and is gone by the time it is in the bin
+  (check-= (value-at run 'heliostat.power 10) 472.2 3 "lit where it lies")
+  (check-= (value-at run 'rock.gained 21) (value-at run 'rock.gained 59) 1e-6 "after the push nothing more lands (the bin is 1.2 m from the spot)")
+  ;; it carries its heat: lit in the open it cools at (814.6 W - 472.2 W) / 33.6 kJ/K = 0.01019 K/s; in the bin (lid open at once, bank under 5 C)
+  ;; at the cavity's 823.8 W / 33.6 kJ/K = 0.02452 K/s, a little less as it cools; no jump between
+  (check-= (/ (- (value-at run 'rock.temperature 1) (value-at run 'rock.temperature 11)) 10) 0.01019 0.0003 "lit, in the open")
+  (check-= (/ (- (value-at run 'rock.temperature 25) (value-at run 'rock.temperature 35)) 10) 0.02448 0.0004 "in the bin")
+  (check-= (- (value-at run 'rock.temperature 19) (value-at run 'rock.temperature 25)) (* 6 0.0225) 0.03 "across the push it keeps going: no jump")
+  (check-= (value-at run 'rock.in-bin 19) 0 0)
+  (check-= (value-at run 'rock.in-bin 21) 1 0))
+
+;; ---------------------------------------------------------------------------
 ;; The DSL checks what it is given.
 
 (define (expand-machine . clauses)
@@ -193,4 +229,8 @@
              (λ () (build '(heat-store rock #:at (0 0 0) #:mass 10) '(heat-bin bin #:at (0 0 0) #:holds rock #:open-below 40 #:close-above 5))))
   (check-exn #rx"#:wall-thickness must be above 0 m" (λ () (build '(enclosure vault #:at (0 0 0) #:size (1 1 1) #:wall regolith #:wall-thickness 0))))
   (check-exn #rx"#:emissivity must be in" (λ () (build '(heat-store rock #:at (0 0 0) #:mass 10 #:emissivity 1.5))))
+  ;; a rock that is a body (#206), and a bin that takes what is pushed into it
+  (check-exn #rx"#:movable needs a solid" (λ () (build '(heat-store tank #:at (0 0 0) #:mass 10 #:contents water #:movable #t))))
+  (check-exn #rx"#:size must be above 0 m" (λ () (build '(heat-bin bin #:at (0 0 0) #:size 0))))
+  (check-not-exn (λ () (build '(heat-store rock #:at (0 0 0) #:mass 40 #:movable #t) '(heat-bin bin #:at (1 0 0) #:size 0.35 #:leak 0.1))))
   (check-not-exn (λ () (build '(heat-store rock #:at (0 0 0) #:mass 10 #:contents water #:area 0 #:conductance 6)))))
