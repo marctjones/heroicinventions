@@ -2,7 +2,7 @@
 ;; Issue #209: the bank found in the crater is the real battery-bank part, built into its crate (racket/machines/found-bank.rkt).
 ;; Run in the game's own physics (Jolt, 120 Hz); skipped when Godot is not installed. The sim-side numbers (capacity, tuning, save and
 ;; load, the goals) are tests/HeroicInventions.Sim.Tests/FoundBankTests.cs. Worked out beforehand:
-;;  - the opening: the rim comes down and buries the crate as before (cover about 3.98 m, held), and the bank inside it is the
+;;  - the opening: the rim comes down and buries the crate (cover about 1.04 m, held: the owner's ruling of 2026-10-09; it was 3.98 m at (264, 143)), and the bank inside it is the
 ;;    electrics' own: 4,000 Wh (16 kg of cells at 250 Wh/kg), empty, at Mars's ambient -63 C, so refusing charge (it is under 0 C);
 ;;  - a push: on level ground, warmed to 20 C with 1,000 Wh in it, a hand (a machine run may operate anything) drags the crate
 ;;    1.5 m sideways; its charge is the 1,000 Wh before, during and after, and its temperature is cooling by radiation alone,
@@ -18,7 +18,7 @@
     (define world (godot-simulate-world 'lonely-rover-opening #:seconds 40 #:sample-dt 10))
     (define f (last (hash-ref world 'battery-bank)))
     (check-= (at f 'crate.buried) 1 0)
-    (check-= (at f 'crate.cover) 3.98 0.2)
+    (check-= (at f 'crate.cover) 1.04 0.2)
     (check-= (at f 'bank.capacity) 5000 1e-9 "Wh")   ; the design doc's 5 kWh
     (check-= (at f 'bank.charge) 0 0)
     (check-= (at f 'bank.temperature) -63 1e-6)

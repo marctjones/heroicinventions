@@ -44,9 +44,9 @@ public sealed class GoalTracker
     // ---- the catalogue ----
     public static IReadOnlyList<GoalDef> Catalogue { get; } =
     [
-        new("find-bank", GoalKind.Path, "Find the bank", "the bank's crate, once the ground has settled, has its top clear of the ground (CrateReading.Cover <= 0); where a scene has a battery bank built into it, it is found",
+        new("find-bank", GoalKind.Path, "Find the bank (optional)", "Optional: a vault can be built round the crate where it lies, and the call needs neither this nor freeing it. The bank's crate, once the ground has settled, has its top clear of the ground (CrateReading.Cover <= 0); where a scene has a battery bank built into it, it is found",
             "The storm's rubble is off the crate: the battery bank is in sight."),
-        new("free-bank", GoalKind.Path, "Free it", "the crate has been moved 2 m or more along the ground from where it was found, and its top is clear (CrateReading X, Z, Cover)",
+        new("free-bank", GoalKind.Path, "Free it (optional)", "Optional, like finding it: the crate has been moved 2 m or more along the ground from where it was found, and its top is clear (CrateReading X, Z, Cover)",
             "The battery bank is out from the slide, hauled clear of the boulders."),
         new("keep-warm", GoalKind.Path, "Keep it warm", "a bank's temperature stayed between its charging limits (0 to 45 C: <bank>.temperature, <bank>.accepting's range) through a whole night, from the sun going under the horizon to it rising (scene.sun-elevation < 0)",
             "The bank rode out a night between 0 and 45 C."),

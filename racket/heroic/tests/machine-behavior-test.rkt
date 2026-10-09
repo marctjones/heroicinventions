@@ -2883,7 +2883,7 @@
     (define gamma (* 2700 g)) (define tan-phi 0.60)                      ; rubble over bedrock cells: loose, no cohesion
     (define k0 (- 1 (sin (atan tan-phi))))
     (define (pull cover mass) (+ (* mass g) (* gamma cover s s) (* 4 s k0 gamma tan-phi (/ (- (sqr (+ cover s)) (sqr cover)) 2))))
-    (define crates '(battery-bank solar-panels gas-cylinders hand-tools spares))
+    (define crates '(battery-bank solar-panels gas-cylinders hand-tools motors))
     (define covers
       (for/list ([c crates])
         (define f (last (hash-ref world c)))
@@ -2892,10 +2892,12 @@
         (when (> cover (* 0.25 s))
           (check-= (field f 'crate.pull-out) (pull cover 90) (* 0.01 (pull cover 90)) (format "~a: the pull to free it" c)))
         cover))
-    ;; the nearer the cliff's foot, the deeper the rubble over it
-    (check-true (apply > (take covers 3)) (format "covers fall away from the cliff: ~a" covers))
+    ;; the nearer the cliff's foot, the deeper the rubble over it: the solar-panels crate (254.6, 147) is under 2.17 m, the gas cylinders
+    ;; (249.4) under 0.29 m; the bank, moved by the owner's ruling of 2026-10-09 to (254.5, 137.9), is under 1.04 m (predicted from a scan of
+    ;; crates 1 m apart along the line: the rubble thins 0.39 m per metre, 1.24 m at x = 255 and 0.83 at 254)
+    (check-true (> (second covers) (third covers)) (format "covers fall away from the cliff: ~a" covers))
     (check-true (andmap negative? (drop covers 3)) "and the last two crates are bare")
-    (check-= (first covers) 3.98 0.2 "the battery bank is buried under about 4 m: held, 22 kN to pull, within a backhoe's reach")
+    (check-= (first covers) 1.04 0.2 "the battery bank is buried under about 1 m: held, within a backhoe's reach, and a vault can be built round it where it lies")
     (check-true (> (field (last (hash-ref world 'battery-bank)) 'crate.buried) 0.5) "the battery bank is buried")
     ;; the rock (#88): 2% of what the failed faces lost comes down as 2 m cubes of granite, floor(0.02 V / 8 m3) of them
     (define end (last ground))
@@ -2909,14 +2911,13 @@
     (define (boulder i key) (field end (string->symbol (format "boulder-~a.~a" i key))))
     (for ([i (in-range 1 (+ n 1))])
       (check-true (< (boulder i 'speed) 0.01) (format "boulder ~a has come to rest by 40 s" i)))
-    ;; pinned: one of them lies on the rubble over the battery bank, 21.6 t of granite (a rover's backhoe lifts
-    ;; hundreds of kilograms, not that): it must be got off the bank some other way
+    ;; the bank's cover is 1 m, not 4: the boulders stop on the thick rubble, and none rests on the bank now (the nearest is 7.7 m off)
     (define bank (last (hash-ref world 'battery-bank)))
     (define nearest
       (for/fold ([best #f]) ([i (in-range 1 (+ n 1))])
         (define d (sqrt (+ (sqr (- (boulder i 'x) (field bank 'crate.x))) (sqr (- (boulder i 'z) (field bank 'crate.z))))))
         (if (or (not best) (< d (car best))) (cons d i) best)))
-    (check-true (< (car nearest) 3.0) (format "boulder ~a lies ~a m from the battery bank" (cdr nearest) (car nearest)))
+    (check-true (> (car nearest) 5.0) (format "boulder ~a lies ~a m from the battery bank: none on it" (cdr nearest) (car nearest)))
     (define mass (* 2700 (expt (boulder (cdr nearest) 'size) 3)))
     (check-= mass 21600 1 "kg: too big for a backhoe")
     (check-true (> mass 5000) "far over what a rover-mounted backhoe lifts")
