@@ -70,17 +70,67 @@ public class PausedSleepChargeTests
         Assert.Equal(P, gen.SettledPower, 6);
         Assert.Equal(P, rt.GetField("motor", "settled-power"), 6);
 
+        Assert.Equal(0, rt.GetField("motor", "held-estimated"));
+
         // a rotor still speeding up (160 to 260 rad/s over 30 s: its power climbs far more than 5% across ten seconds) never settles
         var ramp = Build();
         ramp.SetField("bank", "capacity", 100);
         Watch(ramp, 30, t => 160 + 100 * t / 30);
         Assert.True(double.IsNaN(ramp.Generators["motor"].SettledPower));
-        // held, it charges nothing: there is no steady rate to hold
+        // held, it charges at the estimate from the sails and the train, marked so (the ruling of 2026-10-09)
         var held = ramp.HoldGenerators();
-        Assert.Equal(0, Assert.Single(held).Watts);
-        double before = ramp.Banks["bank"].Charge;
-        Sleep(ramp, 60);
-        Assert.Equal(before, ramp.Banks["bank"].Charge);
+        Assert.Equal(P, Assert.Single(held).Watts, 0.01 * P);
+        Assert.True(ramp.Generators["motor"].HeldEstimated);
+        Assert.Equal(1, ramp.GetField("motor", "held-estimated"));
+    }
+
+    [Fact]
+    public void TheEstimateIsTheWorkedOperatingPoint_FromTheSailsTorqueCurveAndTheTrain()
+    {
+        // the header: 255.34 (2 - w / 1.5) = 125 k (125 w - 157.08) / 0.912673 at w = 1.39583 rad/s, the rotor at 174.479, 278.30 W
+        var rt = Build();
+        var gen = rt.Generators["motor"];
+        var m = Assert.IsType<PrimeMover>(gen.Mover);
+        Assert.Equal("wind", m.Name);
+        Assert.Equal(125, m.Ratio, 9);                                       // three 100:20 meshes
+        Assert.Equal(0.97 * 0.97 * 0.97, m.Eta, 9);
+        Assert.Equal(278.30, gen.EstimatePower(), 0.003 * 278.30);
+        Assert.Equal(gen.EstimatePower(), rt.GetField("motor", "estimated-power"), 9);
+        // a still day: the sails give nothing, and nothing is estimated
+        rt.Windmills["sails"].Wind = 0;
+        Assert.Equal(0, gen.EstimatePower());
+        // 1.5 m/s: the free sails turn at 2 x 2.5 x 1.5 / 5 = 1.5 rad/s, x 125 = 187.5 rad/s over the 157.08 cut-in: some charge, far less (v^3 would be 1/8)
+        rt.Windmills["sails"].Wind = 1.5;
+        Assert.InRange(gen.EstimatePower(), 1, 278.30 / 4);
+    }
+
+    [Fact]
+    public void ABankColdAtTheSleepsStartIsChargedAtTheEstimateOnceTheVaultHasWarmedIt()
+    {
+        var rt = Build();
+        rt.SetField("bank", "capacity", 1000);
+        var bank = rt.Banks["bank"];
+        rt.HeatStores["cells"].Temperature = -2;                              // the 20 C vault warms 16 kg of cells over hours: past 0 C in about 2,400 s
+        Watch(rt, 30);                                                        // watched with the bank cold: open circuit, nothing settles
+        var gen = rt.Generators["motor"];
+        Assert.True(double.IsNaN(gen.SettledPower));
+        Assert.Equal(0, bank.Charge);
+        var (_, _, watts) = Assert.Single(rt.HoldGenerators());
+        Assert.True(gen.HeldEstimated);
+        Assert.Equal(278.30, watts, 0.003 * 278.30);
+        // asleep: nothing while the cells are under 0 C; the 20 C vault warms them, and from then on the estimate, step by step
+        double warmAt = double.NaN, inRange = 0;
+        Sleep(rt, 6000, t =>
+        {
+            if (bank.Temperature < 0) Assert.Equal(0, bank.Charge);
+            else { if (double.IsNaN(warmAt)) warmAt = t; inRange += Dt; }
+        });
+        Assert.False(double.IsNaN(warmAt), $"the vault warmed the cells past 0 C (at {bank.Temperature:0.0} C)");
+        Assert.InRange(warmAt, 600, 5400);                                    // cold for a good part of the sleep, then in range
+        Assert.Equal(watts * inRange, bank.Charge, 0.01 * watts * inRange);
+        Assert.Equal(bank.Charge, bank.Sources["wind"], 6);
+        // against the rate a watched, settled run charges at (the C# rotor held at the header's 174.479 rad/s: 278.30 W): within 5%
+        Assert.Equal(Settled().Generators["motor"].SettledPower, watts, 0.05 * watts);
     }
 
     [Fact]

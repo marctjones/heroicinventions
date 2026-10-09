@@ -20,7 +20,8 @@ namespace HeroicInventions;
 /// keep the machines turning, and a shorter one to pause them (the "Keep machines turning" box, HEROIC_SLEEP_PHYSICS).
 /// It stops at a safety limit, and wakes early for any event the player marked.
 /// A paused sleep charges (owner's ruling, 2026-10-09): a generator on a rigid body, which the paused engine leaves still, is held at its
-/// last settled power (Generator.SettledPower: its mean over its last ten steady seconds of charging) and charges its bank at that rate,
+/// last settled power (Generator.SettledPower: its mean over its last ten steady seconds of charging), or, with none, at an estimate worked
+/// from the prime mover and the train (Generator.EstimatePower, marked "estimated"), and charges its bank at that rate,
 /// by the bank's own rules, through the sleep. That is an approximation, said in the panel and the log: the wind's changes over the sleep
 /// are not followed. A generator the sim turns itself keeps its real power; a live sleep and watching are unchanged.
 /// </summary>
@@ -152,9 +153,11 @@ public partial class SleepControl : VBoxContainer
         var lines = new List<string>();
         foreach (var v in _views())
             foreach (var (id, gen, watts) in v.Runtime.HoldGenerators())
-                lines.Add(double.IsNaN(gen.SettledPower)
-                    ? $"{id}: no steady rate yet, charges nothing"
-                    : $"{id}: {watts:0.0} W into {gen.Bank?.Name} (steady {gen.SettledAgo:0} s before the sleep)");
+                lines.Add(!gen.HeldEstimated
+                    ? $"{id}: {watts:0.0} W into {gen.Bank?.Name} (steady {gen.SettledAgo:0} s before the sleep)"
+                    : watts > 0
+                    ? $"{id}: {watts:0.0} W into {gen.Bank?.Name} (estimated: no steady rate yet, worked from the {gen.DrivenBy} and the train)"
+                    : $"{id}: no steady rate yet and none estimated (nothing turns it past its cut-in): charges nothing");
         if (lines.Count == 0) { _heldNote.Visible = false; return; }
         const string Head = "Machines paused: generators charge at their last steady rate (approximate: the wind's changes overnight are not followed)";
         _heldNote.Text = Head + "\n" + string.Join("\n", lines);
