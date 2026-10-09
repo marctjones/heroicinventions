@@ -49,9 +49,14 @@
 ;; below the notch, base of it elsewhere. daily: 1 + daily cos(2 pi (hour - peak-hour) / 24), the crater
 ;; walls draining cold air down at night (peak-hour 2) and drawing warm air up by day. gusts: 1 + gust
 ;; (sin(2 pi t / 37 s) + sin(2 pi t / 91 s + 1.3)) / 2, the same gusts every run.
-(struct wind-field (through notch-deg speed width base daily peak-hour gust) #:transparent)
+;; Issue #193 gives it a heading: heading-deg, the azimuth the wind blows from (same convention, from +x toward +z), or #f for
+;; none (windmills keep the heading they were built with), and veer, degrees an hour the heading turns toward +z.
+(struct wind-field (through notch-deg speed width base daily peak-hour gust heading-deg veer) #:transparent)
 (define (corridor-wind #:through [through '(0 0)] #:notch-deg notch #:speed speed #:width width
-                       #:base [base 0.3] #:daily [daily 0.35] #:peak-hour [peak 2] #:gust [gust 0.25])
+                       #:base [base 0.3] #:daily [daily 0.35] #:peak-hour [peak 2] #:gust [gust 0.25]
+                       #:heading-deg [heading #f] #:veer [veer 0])
+  (unless (or (not heading) (real? heading)) (raise-user-error 'corridor-wind "#:heading-deg is an azimuth in degrees (from +x toward +z) or #f, got ~e" heading))
+  (unless (real? veer) (raise-user-error 'corridor-wind "#:veer is degrees an hour, got ~e" veer))
   (unless (and (list? through) (= (length through) 2) (andmap real? through))
     (raise-user-error 'corridor-wind "#:through is (x z), got ~e" through))
   (unless (and (real? speed) (> speed 0)) (raise-user-error 'corridor-wind "#:speed must be more than 0 m/s, got ~e" speed))
@@ -59,7 +64,7 @@
   (unless (and (real? base) (<= 0 base 1)) (raise-user-error 'corridor-wind "#:base is a share from 0 to 1, got ~e" base))
   (unless (and (real? daily) (<= 0 daily 1)) (raise-user-error 'corridor-wind "#:daily is a share from 0 to 1, got ~e" daily))
   (unless (and (real? gust) (<= 0 gust 1)) (raise-user-error 'corridor-wind "#:gust is a share from 0 to 1, got ~e" gust))
-  (wind-field through notch speed width base daily peak gust))
+  (wind-field through notch speed width base daily peak gust heading veer))
 
 (define registry '())
 (define (register-map! m) (set! registry (cons m registry)))
