@@ -500,3 +500,96 @@ A world whose map has a wind field (the crater's corridor, #61) draws it: pale, 
 - **The same number the sails get.** `WindField.SpeedAt` at the machine's solar hour; the rover's panel says it too, "wind 7.2 m/s here" under Driving, and a windmill that reads the map shows its own wind over its sails as before.
 
 Hidden frames (`tools/gui-check.sh --hidden`, the opening world, rover placed on the corridor's line at (-94, -34.2) and 80 m across it at (-66.6, -109.4)): 02:00 on the line 7.2 m/s (gusting): dense long bars; 02:00 off it 4.0 m/s: roughly a third as many, shorter; 14:00 on the line 3.5 m/s: a handful; 14:00 off it 1.9 m/s: a few short flecks. The map gives the wind no heading (the owner kept the default, no 200 degree notch), so every streak drifts the way the mills' wind blows, from +z, and the corridor shows as a stronger band, not as a stream from the notch. Machine runs have no map and no wind field, so none of this exists there: the six legibility references are bit-identical (sd / sep unchanged: antikythera 71 / -127, roman-crane 47 / -72, newtons-cradle 44 / -86, water-wheels 36 / -63, mars-stirling 29 / +55, herons-fountain 35 / -88).
+
+### 12.16 Why some ground reads dark (#242, 2026-10-09)
+
+The owner finds the mix of dark and light ground confusing and has not said where (#241). This is the diagnosis step: every effect that lightens or darkens ground, found in the code, with a measured luminance (0-255, `0.2126 R + 0.7152 G + 0.0722 B` of the PNG's sRGB bytes, as `tools/legibility.py`; the mean of a marked rectangle on a 1280x800 hidden shot, with `camera` printed at each). No game code, shader, world or test was changed. Shots and scripts are in `/private/tmp/claude-501/-Users-marc-Documents-GitHub-heroicinventions/f99b2200-8ada-4180-8dfd-8b6a87d8d3ae/scratchpad/ground/` (scratch space; the table below is the record).
+
+**How it was measured.** The same camera (`look YAW PITCH DIST`, pivot on the rover) at the same spot, in four setups:
+- **A, the game:** `lonely-rover-opening`, rover placed with `rover place X Z HEADING`, `HEROIC_SET="scene time H; scene clock-rate 0"` (`lonely-rover-easy` has the same crater and cargo, so the same ground). Shots `opening/<time>-<spot>.png`.
+- **B, same ground without the rover's own effects:** `crater-wind` (the same map, no rover), camera pivot set by `look ... X Y Z`. Slope tint, fine contours and the 1 m grid are all keyed to `rover_pos` (`TerrainView.cs:352`, `NoRover` at 300), so with no rover they are off. B shows no rubble or boulders (in that world the rim did not come down), so compare B with A only where the ground is not the slide: flat, rim base, steep, ice, silica; the apron in `rubbleedge`. Shots `norover/`.
+- **C, soil swatches:** B again, looking straight down from 6 m at the middle of one soil, noon, studio light. Shots `swatches/`.
+- **D, the ground's own scour, deposit and loose cues:** `trench` (a gang digs clay; no rover, so no tint). Shots `trench/`.
+- **E, a world that draws the time of day:** `rover-sleep-hint-check` (victoria map, rover, `found-electrics` first, which has a `(sun ...)`), time held at 12, 15.5, 18.5 (sun 5.8 degrees up) and 0. Shots `rover-sleep-hint-check/`. Its rim does not come down the way the opening's does (no boulders), so its `rubbleedge` and `rubbleface` rows are not comparable and are left out below.
+
+**A finding before the table: the Lonely Rover worlds have no day or night look.** `ShowSky` lights the scene from the real sun only when the focused machine has a `(sun ...)` clause or mirrors (`Main.cs:1537`, `MachineRuntime.cs:193`); otherwise the studio light stands 50 degrees up (`Main.cs:1560`). The opening and easy worlds place `found-bank` first, which has no sun, and a machine built there takes the scene's sun, which is none (`Main.Build.cs:87-91`). Noon, 15:30, dusk and 00:00 shots of the opening at the same spot differ in under 1% of pixels (the wind streaks) and the region means agree to within 1 (table, last four columns of column A). So **time of day is not what the owner sees in those worlds**, and #246 (night readability) can only be checked in a world with a sun; the night numbers below come from E. Whether the game should draw its own hours is a separate question for the owner.
+
+#### Effects that darken or lighten ground (verified in the code)
+
+| # | Effect | Where | What it does |
+|---|---|---|---|
+| 1 | **Slope tint** against the rover's limit | `TerrainView.cs:395-411` (colours `:288`) | none under 13.5 degrees; warm `#E8975A` fully on by 16.5 (mixed 38% into the soil), amber `#F5B82E` from 23.5 to 26.5 (50%), red `#E5362A` from 28.5 to 31.5 (60%); also adds `0.12 x tint` of emission. Fades out between 30 and 60 m from the rover (`:400`), so ground changes colour as the rover moves. |
+| 2 | **Hillshade** from the fixed map light | `TerrainView.cs:294,297` (Worked patch `TerrainView.Worked.cs:122`), shader remap `:391` | `0.45 + 0.55 n.L` remapped to 0.68-1.12. By arithmetic, a 20 degree slope facing away is x0.90 and one facing the light x1.10; 30 degrees x0.83 and x1.11. (The comment says the light is 40 degrees up; the vector `(0.55, 0.8, 0.4)` is 50.) |
+| 3 | **16% emission** (unlit share) | `TerrainView.cs:414` | the ground never goes below about 16% of its lit value, at night too. |
+| 4 | **Loose ground lighter** | `TerrainView.cs:198` (cells: +18% toward white); patch: `TerrainView.Worked.cs:126` + shader `:387` (at least 11% toward cream) | spoil and slumped ground. |
+| 5 | **Scoured darker** | `TerrainView.cs:199-202` (cells: up to 45% darker, reached after about 2 cm lowered); patch `TerrainView.Worked.cs:125` + shader `:386-387` (x0.51 at 0.2 m dug) | ground lowered since the start. |
+| 6 | **Deposited paler** | same lines (cells: up to 60% toward cream by 3 cm; patch: 45% toward cream at 0.1 m) | ground raised since the start. |
+| 7 | **Soil types** | `racket/maps/victoria.rkt:89-97`; colours `materials.json`; drawn at 85% saturation `TerrainView.cs:110-114` | basalt sand floor, bedrock wall, ice-cemented north wall, silica sand bay, plain regolith, `sublimed-regolith` on the weakened section **and in the rubble it sheds** (the soil travels with the material, `Earthworks.cs:60`). Swatch values below. |
+| 8 | **Colour smoothing** | `TerrainView.cs:226-235` | two 3x3 blurs: a soil edge is a gradient about two cells (10 m on the crater) wide, not a line. |
+| 9 | **Fine contours (0.5 m) and 1 m grid** near the rover | `TerrainView.cs:402-413` | pale lines on dark soil, dark on pale (`dark_soil`, `:408`), within about 30 m (grid 26 m) of the rover. The map's own contour lines (a round interval, about a dozen over the relief, `:378-379`) darken the albedo 16% (every fifth 32%, `:413`). |
+| 10 | **Wet ground** | `TerrainView.cs:382-383` | 40% darker and glossy where water is deeper than 0.5 mm. Not measured: there is no standing water in the opening. |
+| 11 | **Real sun shadows** | `Main.cs:1483-1488` (four cascades to 250 m, blended, blur 1.5) | only as bright as the sun is: see the no-sun finding above. |
+| 12 | **Time of day, night** | `SkyLook.cs:61` (daylight from -6 to +10 degrees), `:115` (ambient 0.45 on Mars; night fill `(0.16, 0.2, 0.3)`), `Main.cs:1574-1579` | only in a world with a sun. |
+| 13 | **Ambient occlusion** | `Main.cs:1458-1460` (radius 0.5 m, intensity 2.5) | darkens creases: pit walls, under the rover and crates. Not isolated. |
+| 14 | **Haze** | `Main.cs:1472-1477`, `1750-1752`, `SkyLook.cs` (Mars 2.2 camera distances) | far ground fades toward the horizon colour, so a dark floor looks paler far away (B: ice wall 73 near, 129 far, part soil and part haze). |
+| 15 | **Filmic tonemap** | `Main.cs:1463` | compresses all of it. |
+
+**Dropped:** the **large-scale value noise of about plus or minus 8%** (art direction section 3, line 83): there is no ground noise in `TerrainView.cs`, `Main.Ground.cs` or `racket/heroic/map.rkt` (the only noise is machine finishes, `Skins.cs`). The darker crater floor and paler rim are the soil table (row 7), not noise. The doc line proposed it for #103, and section 12.3 (what #103 built) never listed it: it was not implemented.
+
+#### What it measured
+
+Soil by itself (C, studio light, from straight above): **basalt sand 56.7, bedrock 102.7, regolith 107.0, sublimed-regolith (the rubble's soil) 136.6, ice-cemented 175.5, silica sand 198.1.** The darkest soil is the one the rover starts on.
+
+Patches (A = the game, B = same view without the rover's tint, contours and grid, noon, same light; E = a world with a sun, in the order noon / 15:30 / dusk / midnight):
+
+| Shot | Patch | Cause | A | B | E noon / 15:30 / dusk / night |
+|---|---|---|---|---|---|
+| flat | the floor, level | basalt sand, no tint (grid and contours add about 2: 57.9 against 55.6) | 57.9 | 55.6 | 72 / 69 / 37 / 19 |
+| flat | the dune ahead, 15-20 degrees | **same sand, warm tint** (B: 54.2, so hillshade changes nothing here) | 101.9 | 54.2 | 120 / 116 / 76 / 49 |
+| pitwide | the dune and beyond | warm tint | 119.6 | 52.9 | 140 / 136 / 93 / 62 |
+| pit | the pit's wall | dug (scour) >30 degrees: **red tint over the scour** | 111.2 | - | 129 / 126 / 78 / 54 |
+| pit | the spoil heap | deposited and loose, steep: **pink-red tint over a pale heap** | 136.6 | - | 157 / 151 / 94 / 65 |
+| pit | the floor beside it | basalt sand | 58.2 | - | 72 / 68 / 36 / 19 |
+| rubbleedge | apron near the rover (bedrock, 7-20 degrees) | warm tint | 116.1 | 68.5 | 128 / 133 / 74 / 25 (not comparable) |
+| rubbleface | low ground beside the rubble | tint | 128.1 | invalid (B has no rubble) | |
+| rubbleface | the amber band | 25-30 degrees: amber | 117.5 | | |
+| rubbleface | the rubble face | >30 degrees: red | 127.4 | | |
+| rubbleface | in a boulder's shadow | **real sun shadow** (studio light) | 104.4 | | |
+| rubbleface | beside that shadow, in sun | same ground | 132.4 | | (shadow is 21% darker) |
+| rimbase | all the ground at the rim's foot (basalt to bedrock, 14 degrees) | warm tint | 118.4 | 54.4 | 139 / 135 / 88 / 60 |
+| rimbase | the bedrock beyond | warm tint | 125.6 | 75.6 | 147 / 143 / 93 / 64 |
+| steep | bedrock 24-27 degrees | **amber** | 145.0 | 90.8 | 168 / 165 / 121 / 83 |
+| steep | bedrock beyond 30 degrees | **red** (darker than the amber it borders) | 107.8 | 89.1 | 130 / 126 / 88 / 57 |
+| ice | the wall's foot, 14 degrees | tint | 129.7 | 73.3 | 149 / 146 / 95 / 64 |
+| ice | ground 5-25 m ahead, on the ice-cemented wall (soil edge blurred over about 10 m) | tint over a pale soil (swatch 175.5) | 151.3 | 129.2 | 193 / 189 / 123 / 74 |
+| silica | the bay's foot | tint | 129.2 | 68.3 | 148 / 138 / 79 / 65 |
+| silica | ground 10-25 m ahead, where the sand turns to silica (edge blurred over about 10 m) | tint over a pale soil (swatch 198.1) | 136.9 | 104.4 | 157 / 148 / 84 / 66 |
+| pit (E) | the rover's own shadow, dusk | real sun shadow at 5.8 degrees | | | 29.1 against 37.5 beside it (22% darker); none at noon or midnight |
+| trench (D) | untouched clay | soil | 109.2 | | |
+| trench (D) | the heap | **deposited and loose** (cells, no tint) | 200.8 | | +84% on the clay |
+| trench (D) | the pit's dark edge | **scoured** (or the pit wall in shade) | 86.3 | | -21% on the clay |
+| trench (D) | the pit's floor | lit tan under the gang's frame | 111.5 | | the 45% darkening does not show on the floor |
+
+The same camera and the same soil, with and without the tint: the dune ahead is 54 and 102, the rim's foot 54 and 118, the steep bedrock 91 and 145, the silica bay's foot 68 and 129. **The tint roughly doubles the luminance of every sloping patch near the rover and turns it orange.**
+
+**The tint is the brightest ground in the frame at night** (E: 49 against the floor's 19, and a pit's red wall 54), by design (emission, row 1), but a level floor at 19 is nearly black beside it: a difference of 30, below the 50 that `legibility.py` asks of a machine against its ground.
+
+#### Which effects most likely read as "dark instead of light" (ranked)
+
+1. **The slope tint, red above all.** To someone who does not know the rule it is not a warning but the colour of the ground: the dark flat floor (57) meets an orange area (102-120, about twice as bright) at a line that is the 15 degree contour, and the red (108-111) is darker than the amber (145) and the orange next to it, so the part that means "too steep" looks dirtier, not lighter. It fills the whole view near the rover on any slope (rim foot, wall, rubble, a pit's walls), so it is most of what the player sees. It moves with the rover (fade at 30-60 m), so the same dune is dark from far off and orange close up. This is the issue's own #245, now with numbers.
+2. **Soil layers.** The floor is the darkest soil on the map (basalt sand 57) beside bedrock and regolith (103-107), the rubble's sublimed regolith (137) and two pale layers (ice-cemented 176, silica sand 198): a 3.5 to 1 step from sand to silica. These are the crater's strata by design (`victoria.rkt:12-20`), and the rubble that buried the cargo is the second-brightest soil on the map and 18% lighter again while loose. Under the tint the soils' range (57 to 198) is squeezed to 116-151 on every sloping patch measured near the rover (rim foot, wall, ice, silica, apron), so the layers are mostly invisible exactly where the rover works, and what remains is the step from the dark level floor.
+3. **Shadow, scour and deposit are all the same size of step.** A shadow is 21% to 22% darker than the same ground, a scoured edge 21% darker; a heap is 84% lighter (clay, cells) or reads pink-red (rover's patch). A player cannot tell a shadow from scoured ground from a soil change. In the rover's own patch the scour never shows as dark at all, because the pit's walls are over 30 degrees and the tint covers the scour.
+
+Not candidates in the opening and easy worlds: night, dusk, real shadows' direction, time of day (no sun, see above).
+
+#### The question to ask the owner
+
+"Where the dark and light ground confuses you, is it (a) orange, yellow or red ground that appears near the rover on slopes and changes as you drive, (b) dark grey-brown crater floor beside lighter brown or pale ground that stays the same as you drive, or (c) a darker patch where something was dug or beside a rock or the rover? A screenshot, or the rover's x and z from the rover panel and which way it faces, would settle it."
+
+#### Not measured, or not comparable
+
+- The slide at dusk or night: no world has both the slide the way the opening has it and a sun. In E the rim comes down without boulders and with a different height, so its two slide rows are dropped.
+- Wet ground (row 10), the haze and the ambient occlusion on their own, and the 15.5 hour boulder shadows; the rubble's own colour with the loose lightening (the two cannot be separated in a frame).
+- B is the same ground and light as A but not the same frame in the rubble; its slide rows are marked invalid.
+- Hidden shots drifted nothing here (the camera printed each time), but the images are 1280x800 and the HUD panels cover the left 240 pixels; every region is inside x 300-1250.
+- The easy world has the same ground; it was not shot separately.
