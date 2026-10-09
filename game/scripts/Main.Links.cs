@@ -175,15 +175,21 @@ public partial class Main : ScriptedInput.IJoinStep
         var from = _camera.ProjectRayOrigin(screen);
         var dir = _camera.ProjectRayNormal(screen);
         (MachineView View, string Part, float T)? best = null;
+        var crossed = new List<(string Name, float T)>();
         foreach (var v in _views)
             foreach (var (id, nodes) in v.PartNodes)
             {
                 Aabb? box = null;
                 foreach (var n in nodes)
                     if (BoundsOf(n) is { Size: var s } b && s != Vector3.Zero) box = box is { } x ? x.Merge(b) : b;
-                if (box is { } bb && RayHits(from, dir, bb.Grow(0.05f), out float t) && (best is null || t < best.Value.T))
-                    best = (v, id, t);
+                if (box is { } bb && RayHits(from, dir, bb.Grow(0.05f), out float t))
+                {
+                    crossed.Add(($"{v.Name}.{id}", t));
+                    if (best is null || t < best.Value.T) best = (v, id, t);
+                }
             }
+        if (crossed.Count > 1)   // the nearest box takes the click: say which others it crossed, since a small part inside a big part's box can't be picked
+            GD.Print($"[links] the click crossed {crossed.Count} parts' boxes, nearest first: {string.Join(", ", crossed.OrderBy(c => c.T).Select(c => $"{c.Name} ({c.T:F1} m)"))}");
         if (best is not { } hit) { GD.Print($"[links] nothing there to join (at {screen}, looking along {dir} from {from})"); return; }
         var part = hit.View.Runtime.Def.Part(hit.Part)!;
         // on a tank, the port closest to where the ray passes
@@ -241,6 +247,22 @@ public partial class Main : ScriptedInput.IJoinStep
             _heroicSetFailed = true;
             GetTree().Quit(1);
             return false;
+        }
+        if (w[0] == "joinclick")   // one real click on a part: where the camera draws it, through the input pipeline, while the Join machines button is on
+        {
+            if (w.Length != 2) { Fail("expected 'joinclick LABEL.PART[.PORT]'"); return ScriptedInput.Step.Next; }
+            var bits = w[1].Split('.');
+            if (bits.Length is < 2 or > 3 || !_byName.TryGetValue(bits[0], out var target)) { Fail($"no machine part '{w[1]}' to click"); return ScriptedInput.Step.Next; }
+            if (!_joining) { Fail("joinclick: joining is not on (press the Join machines button first)"); return ScriptedInput.Step.Next; }
+            if (target.LinkPoint(bits[1], bits.Length == 3 ? bits[2] : null) is not { } at) { Fail($"{w[1]} has no point to click"); return ScriptedInput.Step.Next; }
+            var screen = GetViewport().GetScreenTransform() * _camera.UnprojectPosition(at);
+            bool shown = !_camera.IsPositionBehind(at) && GetViewport().GetVisibleRect().HasPoint(screen);
+            GD.Print($"[links] click {w[1]} at ({at.X:F2} {at.Y:F2} {at.Z:F2}) drawn at screen ({screen.X:F0} {screen.Y:F0}){(shown ? "" : ": NOT ON SCREEN")}");
+            if (!shown) { Fail($"{w[1]} is not on screen: the camera must see a part to click it"); return ScriptedInput.Step.Next; }
+            Input.ParseInputEvent(new InputEventMouseMotion { Position = screen, GlobalPosition = screen });
+            foreach (bool down in new[] { true, false })
+                Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = down, Position = screen, GlobalPosition = screen });
+            return ScriptedInput.Step.Next;
         }
         if (w[0] == "joinbutton")   // what the button says, and whether it shows (a check of #224)
         {
