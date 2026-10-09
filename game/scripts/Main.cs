@@ -702,7 +702,6 @@ public partial class Main : Node3D
         BuildJoinButton(col);
         BuildBuildButtons(col);   // the game's Build section: a new machine, and the machines the player built (Main.Build.cs, #204)
         _sleep = new SleepControl(() => _views.Count > 0 ? _views : _current is null ? [] : [_current], () => _current, SetRunning, text => { _hudNote.Text = text; _hudNote.Visible = true; });
-        MachineView.LinkedShaftRpm = LinkedShaftRpmOf;
         col.AddChild(_sleep);
         _sleep.GetSpeed = () => _timeScale; _sleep.SetSpeed = SetSpeed;   // a sleep that keeps the machines turning runs the engine at speed (#207)
         _sleep.Woke += OnSleepWoke;

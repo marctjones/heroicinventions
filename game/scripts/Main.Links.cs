@@ -24,19 +24,6 @@ public partial class Main
     private readonly Queue<string> _scriptedJoins = new(
         OS.GetEnvironment("HEROIC_WORLD_JOIN").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
-    /// <summary>The rpm of the far end of a shaft link that ends on this machine's part, or null (#212).</summary>
-    private double? LinkedShaftRpmOf(string label, string part)
-    {
-        if (_links is null) return null;
-        foreach (var l in _links.All)
-        {
-            if (l.Shaft is null || l.Unfinished is not null) continue;
-            if (l.Spec.To.Label == label && l.Spec.To.Part == part) return Math.Abs(l.Shaft.From.AngularVelocity) * 60 / (2 * Math.PI);
-            if (l.Spec.From.Label == label && l.Spec.From.Part == part) return Math.Abs(l.Shaft.To.AngularVelocity) * 60 / (2 * Math.PI);
-        }
-        return null;
-    }
-
     private void BuildJoinButton(VBoxContainer col)
     {
         _joinButton = BigButton("Join machines (J)");

@@ -218,8 +218,7 @@ public partial class MachineView
             v.Cap.Position = (Vector3)v.Cap.GetMeta("gen_at") - v.Axis * 0.025f;
             // why it is or is not charging, and the rpm beside it (ChargeStatus, #212): state only
             bool rotorAsleep = SleepingPaused && _generatorLoads.Any(l => l.Gen == g);   // a sim-turned part keeps turning through a paused sleep
-            string shaft = Runtime.GeneratorShaft(g.Name);
-            v.Label.Text = ChargeStatus.Label(g, rotorAsleep, LinkedShaftRpm?.Invoke(Name, shaft), ChargeStatus.Hold.Read(Runtime.FieldGetters, g.Name));
+            v.Label.Text = ChargeStatus.Label(g, rotorAsleep, ChargeStatus.Hold.Read(Runtime.FieldGetters, g.Name));
             string why = v.Label.Text[(v.Label.Text.IndexOf('\n') + 1)..];   // the reason line(s) without the rpm: the log notes each change
             string kind = System.Text.RegularExpressions.Regex.Replace(why, "[0-9,.-]+", "#");
             if (kind != v.LastWhy) { v.LastWhy = kind; GD.Print($"[charge] {Runtime.Time:0.0} s {g.Name}: {why.Replace("\n", "")}"); }
