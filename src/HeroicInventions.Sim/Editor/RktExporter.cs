@@ -203,7 +203,13 @@ public static class RktExporter
             case "windmill":
                 return $"  (windmill {p.Id} {At()} #:radius {F(N("radius"))} #:mass {F(N("mass"))} #:wind {F(N("wind"))}" +
                        (p.Props.GetValueOrDefault("wind-from-map") is SBool { Value: true } ? " #:wind-from-map #t" : "") + $" #:load {F(N("load"))} " +
-                       $"#:cp {F(N("cp", 0.3))} #:tip-speed-ratio {F(N("tip-speed-ratio", 2.5))} {Mat()})\n";
+                       $"#:cp {F(N("cp", 0.3))} #:tip-speed-ratio {F(N("tip-speed-ratio", 2.5))}" +
+                       // the wind's heading and the sails' (issue #193), written only when they are not the +z both start at
+                       (N("wind-from-deg", 90) != 90 ? $" #:wind-from-deg {F(N("wind-from-deg", 90))}" : "") +
+                       (N("facing-deg", 90) != 90 ? $" #:facing-deg {F(N("facing-deg", 90))}" : "") +
+                       (p.Props.GetValueOrDefault("vane") is SBool { Value: true } ? " #:vane #t" : "") +
+                       (N("yaw-rate", 2) != 2 ? $" #:yaw-rate {F(N("yaw-rate", 2))}" : "") +
+                       (N("veer", 0) != 0 ? $" #:veer {F(N("veer", 0))}" : "") + $" {Mat()})\n";
             case "ball":
                 return $"  (ball {p.Id} {At()} #:radius {F(N("radius", 0.05))}" + Opt("drag-coefficient", "drag-coefficient") + Heading() + $" {Mat()})\n";
             case "hopper":

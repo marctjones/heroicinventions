@@ -1789,7 +1789,8 @@ public partial class MachineView : Node3D
                 bits.Add($"{id} {c.Turns:0.##} turns (x{c.Ratio:0.#}): " + (c.Held ? $"held by {c.Hold:0.#} N (needs {c.LeastHold:0.#} N)"
                     : c.Grounded ? "load on the ground" : $"{(c.Velocity < 0 ? "running out" : "coming in")} at {Math.Abs(c.Velocity):F2} m/s, {c.LoadTension:0} N at the load"));
             foreach (var (id, m) in Runtime.Windmills)
-                bits.Add($"{id} {m.Rpm:F1} rpm in {m.Wind:0.#} m/s, {m.Power / 1000:F2} kW of the wind's {m.WindPower / 1000:F1} kW (Cp {m.PowerCoefficient:F3}, Betz 0.593)");
+                bits.Add($"{id} {m.Rpm:F1} rpm in {m.Wind:0.#} m/s, {m.Power / 1000:F2} kW of the wind's {m.WindPower / 1000:F1} kW (Cp {m.PowerCoefficient:F3}, Betz 0.593)"
+                    + (m.MisalignmentDeg != 0 ? $", {Math.Abs(m.MisalignmentDeg):F0}° off the wind: {m.ThroughWind:0.##} m/s through the sails (cos {m.AlignmentFactor:F3})" : ""));
             foreach (var (id, p) in Runtime.Pendulums)
                 bits.Add($"{id} {p.Angle * 180 / Math.PI:F1}° (last turned at {p.Amplitude * 180 / Math.PI:F2}°, {p.Swings} swings), bearing {p.Bearing.Heat:F2} J heat, {p.Bearing.Wear:E2} mm³ worn");
             foreach (var b in Blocks) bits.Add($"{b.Name} {b.Material.Name} {b.Mass:F1} kg");

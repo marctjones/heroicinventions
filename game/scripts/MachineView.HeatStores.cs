@@ -38,6 +38,7 @@ public partial class MachineView
         foreach (var (id, store) in Runtime.HeatStores)
         {
             _building = id;
+            int firstNode = GetChildCount();
             var part = Runtime.Def.Part(id)!;
             var at = V(part.At);
             if (store.Movable) { BuildMovableStore(part, store); continue; }
@@ -94,6 +95,15 @@ public partial class MachineView
                 lid.AddChild(lidMesh);
             }
             _storeViews.Add(new StoreView(store, mat, label, store.Bin, lid, ice, height, at.Y));
+            // a store that rides a body (the found bank's cells in its crate, #211) is drawn on it, so it goes where the crate goes
+            if (CarrierBody(id) is { } host)
+                foreach (var node in Enumerable.Range(firstNode, GetChildCount() - firstNode).Select(i => GetChild(i)).OfType<Node3D>().ToList())
+                {
+                    var global = node.Transform;   // the view stands at the origin: its children's transforms are the world's
+                    RemoveChild(node);
+                    host.AddChild(node);
+                    node.Transform = host.Transform.AffineInverse() * global;
+                }
         }
 
         // a bin that takes what is pushed into it (#206)
@@ -205,6 +215,32 @@ public partial class MachineView
         }
     }
 
+    /// <summary>The body a heat store rides (<see cref="WorldZones.CarrierOf"/>), if it has one here.</summary>
+    private RigidBody3D? CarrierBody(string storeId) =>
+        WorldZones.CarrierOf(Runtime.Def, storeId) is { } on ? _bodiesById.GetValueOrDefault(on) : null;
+
+    /// <summary>
+    /// Where a heat store is in the world (#211): its #:at, carried with its body if it rides one (the transform the body has now,
+    /// against the one it was built at). Read from the body's node, a physics tick behind; that is soon enough for which room it is in.
+    /// </summary>
+    public Vec3 StorePoint(string storeId)
+    {
+        var part = Runtime.Def.Part(storeId)!;
+        // a store that is itself a body (#206) is where its body is: the centre of its cube (the room a rock lies in is worked out from this too)
+        if (Runtime.HeatStores[storeId].Movable && _bodiesById.GetValueOrDefault(storeId) is { } rock && IsInstanceValid(rock))
+        {
+            var q = rock.GlobalPosition;
+            return new Vec3(q.X, q.Y, q.Z);
+        }
+        if (CarrierBody(storeId) is { } body && IsInstanceValid(body) && Runtime.Def.Part(WorldZones.CarrierOf(Runtime.Def, storeId)!) is { } bodyPart)
+        {
+            var built = new Transform3D(YawOf(bodyPart) * new Basis(Vector3.Right, Mathf.DegToRad((float)bodyPart.Number("tilt-deg", 0))), V(bodyPart.At));
+            var p = body.GlobalTransform * (built.AffineInverse() * V(part.At));
+            return new Vec3(p.X, p.Y, p.Z);
+        }
+        return part.At;
+    }
+
     private void DrawHeatStores()
     {
         foreach (var bv in _binViews)
@@ -228,7 +264,9 @@ public partial class MachineView
             }
             if (v.Lid is not null && v.Bin is { } bin) v.Lid.RotationDegrees = new Vector3(-105f * (float)bin.Open, 0, 0);
             string text = $"{s.Name}: {s.Temperature:0} °C";
-            if (s.Movable) text += s.Bin is { } inBin ? $"\nin {inBin.Name}" : "\nloose";
+            if (s.Movable && s.Bin is { } inBin) text += $"\nin {inBin.Name}";
+            else if (s.Zone is Enclosure room && !Runtime.Enclosures.Values.Contains(room)) text += $"\nin {room.Name}";   // held by another machine's room (#211)
+            else if (s.Movable) text += "\nloose";
             if (s.Substance.Latent > 0 && s.Frozen > 0) text += $", {s.Frozen * 100:0}% ice";
             if (v.Bin is { } b) text += b.Open >= 0.995 ? "\nlid open" : b.Open > 0.005 ? $"\nlid {b.Open * 100:0}% open" : $"\nlid shut, leaks {b.Leak:0.##} W/K";
             v.Label.Text = text;

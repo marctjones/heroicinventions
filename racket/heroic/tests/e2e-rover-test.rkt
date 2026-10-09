@@ -3,10 +3,10 @@
 ;; (HEROIC_INPUT: hold left, hold up, key b), headless Godot at 120 Hz. The rest of the route is e2e-route-test.rkt; docs/e2e-route.md
 ;; has the whole list.
 ;;  - the rover turns left through 96 degrees (about 35 degrees a second) and drives north up the floor 39 m to the works (settled: 1.9 m/s
-;;    on the 3 degree floor) and stops within 10 m of the vault;
-;;  - GAP 1: at the slide the rover digs the rubble over the bank at four standing places (west, on top, east and north of the crate) and every
-;;    cycle is refused, "Dug nothing: bedrock under the teeth is too hard for the backhoe": the slide's rubble is not diggable, so the bank
-;;    cannot be freed by the rover today. This is recorded, not asserted: it prints GAP 1 lines and does not fail when the dirt rule is fixed.
+;;    on the 3 degree floor) and stops within 10 m of the windmill's place (the player builds there, 180 105);
+;;  - GAP 1: at the slide the rover digs at four standing places (west, on top, east and north of the crate). Since the dirt rule (#63) a cycle
+;;    digs and dumps (0.20 m3); it was "Dug nothing: bedrock under the teeth" before. This is recorded, not asserted: it prints GAP 1 lines.
+;;    Freeing the crate takes many cycles (about 4 m of rubble) and is not run here.
 ;; Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list racket/math racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -38,9 +38,9 @@
     (define start (pos (first rs)))
     (define arrived (pos (second rs)))
     (check-= (first start) 190 0.1) (check-= (third start) 140 0.1)
-    (define vault '(186 101))
+    (define vault '(186 101))   ; 6 m from where the route builds the windmill
     (define d (sqrt (+ (sqr (- (first arrived) (first vault))) (sqr (- (third arrived) (second vault))))))
-    (check-true (< d 10) (format "the rover stopped ~a m from the vault" d))
+    (check-true (< d 10) (format "the rover stopped ~a m from the build site" d))
     (check-true (> (- 140 (third arrived)) 30) "and drove at least 30 m north")
     (check-true (string-prefix? (arm (second rs)) "Backhoe stowed")))
 
