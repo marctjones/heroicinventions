@@ -15,8 +15,9 @@ namespace HeroicInventions;
 /// faster (a test aid: the rover hints wait minutes).
 ///
 /// In the rover game (a world with a rover the player drives) the sandbox pointers about picking a machine, the camera keys and
-/// the speed row are replaced by four that point at the player's tools and never at a route: driving and the backhoe, the speed and
-/// sleep controls, the rover log, build mode. They wait on real time (not the sim's speed), only count while no page is up, show
+/// the speed row are replaced by pointers at the player's tools and never at a route: driving and the backhoe, the speed and
+/// sleep controls, the goals panel (F2), the rover log, the bank's 0 C limit, the join tool (J), build mode, and (after a sleep over two hours
+/// that paused the machines) the Keep machines turning box. They wait on real time (not the sim's speed), only count while no page is up, show
 /// for 40 s at most and then retire like any other hint, so a player who ignores one still meets the next.
 /// </summary>
 public partial class Hints : PanelContainer
@@ -29,7 +30,7 @@ public partial class Hints : PanelContainer
                                         bool RoverDriven = false, bool LogOpened = false, bool SpeedOrSleepUsed = false,
                                         bool GoalsOpen = false, bool Joining = false, int Links = 0, int Machines = 0,
                                         bool SleepPaused = false, bool SleepLive = false, bool BankCold = false, bool BankWarm = false,
-                                        bool GoalsOpened = false, bool JoinUsed = false, bool LiveSleepSeen = false, bool BankWarmSeen = false);
+                                        bool PausedSleepSeen = false, bool GoalsOpened = false, bool JoinUsed = false, bool LiveSleepSeen = false, bool BankWarmSeen = false);
 
     private sealed record Hint(string Id, string Text, double After, Func<State, bool> When, Func<State, bool> Done, double Lifetime = 0);
 
@@ -52,6 +53,9 @@ public partial class Hints : PanelContainer
             s => s.InBuildMode && s.PartsInDesign == 0 && !s.LessonStarted, s => s.PartsInDesign > 0 || s.LessonStarted),
 
         // the rover game (#98): tools, never the route
+        // a sleep over two hours (SleepControl.LiveLimit, 7,200 s) runs with the physics engine paused; a paused sleep is over in seconds, so this waits for the wake
+        new("rover-sleep-paused", "A sleep of over two hours pauses the machines (generators charge at their last steady rate, roughly). Tick \"Keep machines turning\" in the sleep panel to run them for real; it is slower.", 2,
+            s => Playing(s) && s.PausedSleepSeen && !s.SleepPaused && !s.LiveSleepSeen, s => s.LiveSleepSeen, Lifetime: 40),
         new("rover-drive", "Arrows or W A S D drive the rover, and B works its backhoe. Drag to look around.", 20,
             s => Playing(s) && s.Running && !s.RoverDriven && !s.InBuildMode, s => s.RoverDriven, Lifetime: 40),
         new("rover-speed", "Things here take sols. The speed row runs time faster, and Sleep until… skips ahead to a time or event you name.", 150,
@@ -62,13 +66,10 @@ public partial class Hints : PanelContainer
             s => Playing(s) && !s.LogOpened && !s.InBuildMode, s => s.LogOpened, Lifetime: 40),
         new("rover-bank-cold", "The bank takes no charge below 0 °C. Its temperature is in the Bank section of the right panel.", 280,
             s => Playing(s) && s.BankCold && !s.BankWarmSeen, s => s.BankWarmSeen, Lifetime: 40),
-        new("rover-join", "Machines can be joined: press J, click a part on one machine, then a part on another.", 330,
+        new("rover-join", "Machines can be joined: the \"Join machines\" button (left panel), then click a part on one machine and a part on another. (The J key does nothing while you drive the rover.)", 330,
             s => Playing(s) && s.Machines >= 2 && !s.JoinUsed && !s.InBuildMode, s => s.JoinUsed, Lifetime: 40),
         new("rover-build", "\"Build a new machine\" (left panel) opens build mode: set parts down and watch what they do.", 350,
             s => Playing(s) && !s.InBuildMode, s => s.InBuildMode, Lifetime: 40),
-        // a sleep over two hours (SleepControl.LiveLimit, 7,200 s) runs with the physics engine paused
-        new("rover-sleep-paused", "That sleep is long enough that the machines are paused (generators charge at their last steady rate, roughly). Tick \"Keep machines turning\" in the sleep panel to run them for real; it is slower.", 4,
-            s => Playing(s) && s.SleepPaused && !s.LiveSleepSeen, s => s.LiveSleepSeen, Lifetime: 40),
     ];
 
     private readonly Func<State> _read;
@@ -81,7 +82,7 @@ public partial class Hints : PanelContainer
     private readonly double _rate = double.TryParse(OS.GetEnvironment("HEROIC_HINTS_RATE"), System.Globalization.CultureInfo.InvariantCulture, out double r) && r > 0 ? r : 1;
     // what the player has done in this rover world, kept every frame so a quick press isn't missed between two reads
     private Vector3? _roverStart;
-    private bool _driven, _logOpened, _speedUsed, _goalsOpened, _joinUsed, _liveSeen, _warmSeen;
+    private bool _pausedSeen, _driven, _logOpened, _speedUsed, _goalsOpened, _joinUsed, _liveSeen, _warmSeen;
     private int? _linksAtStart;
     private Label _text = null!;
 
@@ -143,7 +144,7 @@ public partial class Hints : PanelContainer
         double dt = _tick;
         _tick = 0;
         state = state with { RoverDriven = _driven, LogOpened = _logOpened, SpeedOrSleepUsed = _speedUsed,
-                               GoalsOpened = _goalsOpened, JoinUsed = _joinUsed, LiveSleepSeen = _liveSeen, BankWarmSeen = _warmSeen };
+                               PausedSleepSeen = _pausedSeen, GoalsOpened = _goalsOpened, JoinUsed = _joinUsed, LiveSleepSeen = _liveSeen, BankWarmSeen = _warmSeen };
 
         // anything the player has now done is retired, shown or not
         foreach (var h in All.Where(h => !_retired.Contains(h.Id) && h.Done(state)))
@@ -170,12 +171,13 @@ public partial class Hints : PanelContainer
     /// <summary>Notes, every frame, what the player has done in the rover world; reset when there is no rover.</summary>
     private State Latch(State s)
     {
-        if (!s.InRover) { _roverStart = null; _linksAtStart = null; _driven = _logOpened = _speedUsed = _goalsOpened = _joinUsed = _liveSeen = _warmSeen = false; return s; }
+        if (!s.InRover) { _roverStart = null; _linksAtStart = null; _driven = _logOpened = _speedUsed = _pausedSeen = _goalsOpened = _joinUsed = _liveSeen = _warmSeen = false; return s; }
         if (s.OnLog) _logOpened = true;
         if (s.GoalsOpen) _goalsOpened = true;
         _linksAtStart ??= s.Links;
         if (s.Joining || s.Links > _linksAtStart) _joinUsed = true;
         if (s.SleepLive) _liveSeen = true;
+        if (s.SleepPaused) _pausedSeen = true;
         if (s.BankWarm) _warmSeen = true;
         if (s.OnPage) return s;
         _roverStart ??= s.RoverPos;
