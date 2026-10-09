@@ -82,4 +82,8 @@
   ;; a free pair let go at speed, nothing to slow it: the energy check
   (wheel free-wheel #:shape wheel-100 #:at ((m 3) (m 1) 0) #:material oak #:start-rpm 300)
   (wheel free-pinion #:shape pinion-20 #:at ((+ (m 3) apart) (m 1) 0) #:material iron #:angle-deg pinion-angle #:start-rpm -1500)
-  (mesh free-wheel free-pinion))
+  (mesh free-wheel free-pinion)
+
+  ;; a sleep (#59, #207) that lets the physics engine run: the train settles within a part in 10^4 by 180 s (header), so a sleep to
+  ;; 200 s is the same as watching to 200 s (sleep-test.rkt compares them)
+  (wake settled #:when ((scene elapsed above 200)) #:limit 600))

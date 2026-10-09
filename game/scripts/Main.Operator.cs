@@ -185,9 +185,41 @@ public partial class Main
             case "operate" when _current is not null && w.Length == 4 && double.TryParse(w[3], inv, out double v):
                 Operate(_current, w[1], w[2], v);
                 return ScriptedInput.Step.Continue;
+            case "sleep" when w.Length >= 2:
+                return SleepStep(w);
             case "waitsim" when _current is not null && w.Length == 2 && double.TryParse(w[1], inv, out double t):
                 return _current.Runtime.Time >= t ? ScriptedInput.Step.Continue : ScriptedInput.Step.Again;
         }
         return null;
+    }
+
+    private bool _sleepStarted;
+
+    /// <summary>
+    /// "sleep WAKE [live|paused]" or "sleep until TARGET.FIELD above|below VALUE [limit SECONDS] [live|paused]" (issue #207): sleeps the
+    /// scene, as the Sleep panel does, and holds the script until it wakes, so a script can drive, sleep, then act. The first form
+    /// takes a wake the machine's file defines; a machine with Jolt-driven parts keeps them turning (live) unless told "paused".
+    /// A wake or field no machine has fails the run (exit 1), having said so.
+    /// </summary>
+    private ScriptedInput.Step SleepStep(string[] w)
+    {
+        if (!_sleepStarted)
+        {
+            _sleepStarted = true;
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            string? form = w[^1] is "live" or "paused" ? w[^1] : null;
+            bool ok;
+            if (w[1] == "until" && w.Length >= 5 && double.TryParse(w[4], inv, out double value))
+            {
+                double limit = w.Length >= 7 && w[5] == "limit" && double.TryParse(w[6], inv, out double l) ? l : 3600;
+                ok = _sleep.StartCondition(w[2], w[3] == "above", value, limit, form);
+            }
+            else
+                ok = _sleep.StartNamed(w[1], form);
+            if (!ok) { _heroicSetFailed = true; _sleepStarted = false; return ScriptedInput.Step.Continue; }
+        }
+        if (_sleep.Active) return ScriptedInput.Step.Again;
+        _sleepStarted = false;
+        return ScriptedInput.Step.Continue;
     }
 }

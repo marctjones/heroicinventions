@@ -9,9 +9,16 @@ namespace HeroicInventions;
 /// wake time estimated from the machine's present rates, and the simulation runs ahead as fast as the CPU allows,
 /// with no rendering of the steps in between, until it is met, then goes back to real time with the scene showing
 /// the result. It takes the machine's own fixed step, never a larger one, so it leaves what watching would have shown.
-/// The Jolt side is paused while it sleeps (rigid bodies stay where they were): this is for the slow loops the
-/// simulation core runs, water filling, fires burning down, grain running out. It stops at a safety limit, and
-/// wakes early for any event the player marked.
+/// A sleep takes one of two forms (issue #207). When nothing in the scene is a rigid body coupled to the simulation
+/// (water filling, fires burning down, grain running out) the Jolt side is paused and the simulation alone runs ahead, as fast
+/// as the CPU allows. When a machine is Jolt-driven (a geared windmill whose sails and train are bodies), pausing the engine
+/// would stop it charging and dump its flywheel on waking, so the sleep instead lets the game's own loop run at speed: every
+/// tick is the tick watching would take (the same step, 1/120 s of sim time), only the redrawing is left out, so the result is
+/// the same as watching, at the engine's pace (measured in the crater world, about 600 steps a second, 5 sim-seconds per second: 600 s took 120 s,
+/// so a night's 36,000 s would take two hours).
+/// The sleep takes this form by default only while its estimate is within <see cref="LiveLimit"/>; a longer sleep can be told to
+/// keep the machines turning, and a shorter one to pause them (the "Keep machines turning" box, HEROIC_SLEEP_PHYSICS).
+/// It stops at a safety limit, and wakes early for any event the player marked.
 /// </summary>
 public partial class SleepControl : VBoxContainer
 {
@@ -30,6 +37,21 @@ public partial class SleepControl : VBoxContainer
     private SleepSession? _session;
     private MachineView? _sleeper;
     private double _predicted = double.NaN;
+    private CheckBox _physics = null!;
+    private bool _live, _physicsChosen;
+    private int _liveSteps;
+    private double _speedBefore = 1;
+
+    /// <summary>The longest sleep, in sim seconds, that lets the physics engine run by default: about 25 minutes of CPU at the engine's pace in the crater world.</summary>
+    public const double LiveLimit = 7200;
+    /// <summary>The speed a live sleep asks of the engine: ticks are taken as fast as the CPU gives them.</summary>
+    public const double LiveSpeed = 200;
+
+    /// <summary>Set by the game: the engine's speed multiplier, read and set, which a live sleep raises and puts back.</summary>
+    public Func<double> GetSpeed { get; set; } = () => 1;
+    public Action<double> SetSpeed { get; set; } = _ => { };
+    /// <summary>True while the sleep is letting the physics engine run (the game steps the scene as ever and calls <see cref="Observe"/> after each step).</summary>
+    public bool Live => _live && Active;
 
     public SleepControl(Func<IReadOnlyList<MachineView>> views, Func<MachineView?> focus, Action<bool> setRunning, Action<string> say)
     {
@@ -87,6 +109,9 @@ public partial class SleepControl : VBoxContainer
         _any = new CheckBox { Text = "any (or)", TooltipText = "for a preset with several terms: wake at the first rather than when all are met" };
         limitRow.AddChild(_any);
         _body.AddChild(limitRow);
+        _physics = new CheckBox { Text = "Keep machines turning", TooltipText = "Let the physics engine run through the sleep, so a windmill or geared train keeps working; slower, a tick at a time. On by default for sleeps under two hours" };
+        _physics.Toggled += _ => _physicsChosen = true;
+        _body.AddChild(_physics);
         _event = new LineEdit { PlaceholderText = "wake early if  target.field ≥ value" };
         _body.AddChild(_event);
         var estimate = new Button { Text = "Estimate wake time" };
@@ -112,6 +137,7 @@ public partial class SleepControl : VBoxContainer
     {
         if (_preset is null) return;
         _preset.Clear();
+        _physicsChosen = false;
         _presets = _focus()?.Runtime.Wakes.Values.ToList() ?? [];
         _preset.AddItem("(a condition of your own)");
         foreach (var w in _presets) _preset.AddItem($"{w.Id}: {w.Describe()}");
@@ -176,6 +202,9 @@ public partial class SleepControl : VBoxContainer
             var p = SleepPlanner.Predict(view.Runtime, plan);
             _predicted = p.Seconds ?? double.NaN;
             _prediction.Text = $"Wake time: {p.Note}" + (p.Seconds is { } s ? $" ({Clock(s)})" : "");
+            bool driven = _views().Any(v => v.JoltDriven);
+            _physics.Disabled = !driven;
+            if (!_physicsChosen) _physics.SetPressedNoSignal(driven && (p.Seconds ?? plan.Limit) <= LiveLimit);
         }
         catch (MachineFormatException ex) { _prediction.Text = ex.Message; _predicted = double.NaN; }
     }
@@ -186,27 +215,91 @@ public partial class SleepControl : VBoxContainer
         if (view is null) { _prediction.Text = "Pick a machine first."; return; }
         var plan = Plan(out string problem);
         if (plan is null) { _prediction.Text = problem; return; }
+        if (!_physicsChosen) Estimate();      // the box shows what the sleep's length asks for, until the player has chosen
+        Begin(view, plan, _physics.ButtonPressed);
+    }
+
+    private void Begin(MachineView view, WakeSpec plan, bool? physics)
+    {
         try
         {
-            Estimate();
-            _session = new SleepSession(view.Runtime, plan, 1.0 / 120, double.IsNaN(_predicted) ? null : _predicted);
+            var p = SleepPlanner.Predict(view.Runtime, plan);
+            _predicted = p.Seconds ?? double.NaN;
+            _prediction.Text = $"Wake time: {p.Note}" + (p.Seconds is { } secs ? $" ({Clock(secs)})" : "");
+            _session = new SleepSession(view.Runtime, plan, 1.0 / 120, p.Seconds);
         }
         catch (MachineFormatException ex) { _prediction.Text = ex.Message; return; }
         _sleeper = view;
-        _setRunning(false);                      // the game's own stepping stops; Advance takes over
         _go.Disabled = true; _cancel.Disabled = false; _bar.Visible = true;
+        _live = !_session.Done && physics == true && _views().Any(v => v.JoltDriven);
+        _liveSteps = 0;
+        if (_live)
+        {
+            // the game's own stepping goes on, at speed, with the scene left undrawn until it wakes
+            _speedBefore = GetSpeed();
+            SetSpeed(LiveSpeed);
+            MachineView.Hurrying = true;
+            GD.Print($"[sleep] keeping the machines turning (the physics engine at {LiveSpeed:0}x) until {plan.Describe()}");
+        }
+        else
+            _setRunning(false);                  // the game's own stepping stops; Advance takes over
         if (_session.Done) Finish();
     }
 
-    /// <summary>Starts a named wake headlessly (HEROIC_SLEEP=wake-id): for scripted checks of the game's own path.</summary>
-    public void StartNamed(string id)
+    /// <summary>
+    /// Starts a named wake headlessly (HEROIC_SLEEP=wake-id, or the script's "sleep wake-id"): for scripted checks of the game's own path.
+    /// The wake is looked for on the focused machine, then on every other in the scene. <paramref name="physics"/>: "live" or "paused"
+    /// to choose the form of the sleep, else it is chosen as the panel would (HEROIC_SLEEP_PHYSICS=1 or 0 does the same from the environment).
+    /// Returns false, having said why, when no machine has the wake.
+    /// </summary>
+    public bool StartNamed(string id, string? physics = null)
     {
+        physics ??= OS.GetEnvironment("HEROIC_SLEEP_PHYSICS") switch { "1" => "live", "0" => "paused", _ => null };
+        var view = new[] { _focus() }.Concat(_views()).FirstOrDefault(v => v is not null && v.Runtime.Wakes.ContainsKey(id));
+        if (view is null) { GD.PrintErr($"[sleep] no machine has a wake called {id}"); return false; }
+        return StartPlan(view, view.Runtime.Wakes[id], physics);
+    }
+
+    /// <summary>
+    /// Starts a sleep on a condition of the script's own ("sleep until target.field above 5"): on the first machine, the focused one before the
+    /// rest, that has the target. Returns false, having said why, when none does.
+    /// </summary>
+    public bool StartCondition(string path, bool above, double value, double limit, string? physics = null)
+    {
+        physics ??= OS.GetEnvironment("HEROIC_SLEEP_PHYSICS") switch { "1" => "live", "0" => "paused", _ => null };
+        var parts = path.Split('.', 2);
+        if (parts.Length != 2) { GD.PrintErr($"[sleep] name the field as target.field, not {path}"); return false; }
+        var view = new[] { _focus() }.Concat(_views()).FirstOrDefault(v =>
+        {
+            if (v is null) return false;
+            try { v.Runtime.GetField(parts[0], parts[1]); return true; } catch (Exception) { return false; }
+        });
+        if (view is null) { GD.PrintErr($"[sleep] no machine has a field called {path}"); return false; }
+        return StartPlan(view, new WakeSpec("sleep", [new WakeTerm(parts[0], parts[1], above, value)], true, limit, []), physics);
+    }
+
+    private bool StartPlan(MachineView view, WakeSpec plan, string? physics)
+    {
+        double estimate = double.NaN;
+        try { estimate = SleepPlanner.Predict(view.Runtime, plan).Seconds ?? double.NaN; } catch (MachineFormatException) { }
+        bool live = physics switch { "live" => true, "paused" => false, _ => _views().Any(v => v.JoltDriven) && (double.IsNaN(estimate) ? plan.Limit : estimate) <= LiveLimit };
         Refresh();
-        int i = _presets.FindIndex(w => w.Id == id);
-        if (i < 0) { GD.PrintErr($"[sleep] the machine has no wake called {id}"); return; }
-        _preset.Select(i + 1);
-        PickPreset(i + 1);
-        Start();
+        Begin(view, plan, live);
+        return true;
+    }
+
+    /// <summary>After each step of a live sleep: counts it, and wakes if the condition is met. The game calls it once per physics tick while <see cref="Live"/>.</summary>
+    public void Observe()
+    {
+        if (_session is null || !_live) return;
+        _session.Observe();
+        if (++_liveSteps % 60 == 0)
+        {
+            Stepped?.Invoke();
+            _bar.Value = _session.Progress;
+            _progressText.Text = $"Sleeping… {Clock(_session.Elapsed)} slept" + (double.IsNaN(_predicted) ? "" : $" of about {Clock(_predicted)}");
+        }
+        if (_session.Done) Finish();
     }
 
     private void Cancel()
@@ -253,7 +346,8 @@ public partial class SleepControl : VBoxContainer
     private void End()
     {
         _go.Disabled = false; _cancel.Disabled = true; _bar.Visible = false;
-        _sleeper?.ShowState();
+        if (_live) { SetSpeed(_speedBefore); MachineView.Hurrying = false; _live = false; }
+        foreach (var v in _views()) v.ShowState();
         _sleeper = null;
         _setRunning(true);                       // back to real time, showing what the sleep left
     }

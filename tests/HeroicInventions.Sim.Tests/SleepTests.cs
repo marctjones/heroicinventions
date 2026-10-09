@@ -34,6 +34,22 @@ public class SleepTests
     }
 
     [Fact]
+    public void ASleepWhoseStepsAreTakenByTheCallerWakesOnTheSameStepAsOneThatTakesThem()
+    {
+        // issue #207: a live sleep lets the game's own loop step the machine and only asks whether it is time to wake (Observe)
+        var own = Cistern();
+        var theirs = Cistern();
+        var plan = Wait(50);
+        var result = SleepSession.FastForward(own, plan);                // 50 L at 2 L/s: 25 s
+        var session = new SleepSession(theirs, plan);
+        while (!session.Done) { theirs.Step(Dt); session.Observe(); }    // the caller's step, then the check
+        Assert.Equal(result.Steps, session.Result!.Steps);
+        Assert.Equal(result.Elapsed, session.Result.Elapsed, precision: 9);
+        Assert.Equal(own.GetField("cistern", "water"), theirs.GetField("cistern", "water"));
+        Assert.Equal(WakeReason.Condition, session.Result.Reason);
+    }
+
+    [Fact]
     public void ThePredictionByRateMatchesTheWakeAndDoesNotDisturbTheMachine()
     {
         var runtime = Cistern();

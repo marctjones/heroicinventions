@@ -199,11 +199,18 @@ public partial class WorldLinksView : Node3D
         _trace = null;
     }
 
+    /// <summary>After a sleep that ran the machines ahead without stepping this view: the clock it stamps its frames with catches up (#207).</summary>
+    public void SkipTo(double time) { if (time > _time) _time = time; }
+
     private void TraceTick(double dt)
     {
         if (_trace is null) return;
         _time += dt;
-        if (_time + dt / 2 >= _traceFrames * _traceDt) WriteFrame();
+        if (_time + dt / 2 >= _traceFrames * _traceDt)
+        {
+            WriteFrame();
+            _traceFrames = Math.Max(_traceFrames, (long)Math.Floor((_time + dt / 2) / _traceDt) + 1);   // as a machine's trace: not caught up a frame a tick (#207)
+        }
     }
 
     private void WriteFrame()
