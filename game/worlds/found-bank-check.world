@@ -1,0 +1,7 @@
+;; The found battery bank on level ground (issue #209): the bank in its crate (racket/machines/found-bank.rkt) with nothing over it,
+;; for checking that a push carries its charge and temperature (racket/heroic/tests/found-bank-test.rkt). Run with HEROIC_ROVER=0
+;; so that a scripted hand (HEROIC_DRAG) pushes it, as a machine run allows.
+(world found-bank-check
+  (map flood-plain)
+  (rover (at 0.0 8.0) (heading 0))
+  (place bank found-bank (at 0 0 0)))

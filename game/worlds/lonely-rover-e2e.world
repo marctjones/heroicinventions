@@ -8,7 +8,7 @@
   (map victoria)
   (rover (at 190.0 140.0) (heading 270))
   (place route e2e-route (at 180.0 0 105.0))
-  (place battery-bank cargo-crate (at 264.0 0 143.0))
+  (place battery-bank found-bank (at 264.0 0 143.0))
   (place solar-panels cargo-crate (at 254.62 0 147.0))
   (place gas-cylinders cargo-crate (at 249.42 0 144.0))
   (place hand-tools cargo-crate (at 242.49 0 140.0))

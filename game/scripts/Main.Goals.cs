@@ -44,11 +44,10 @@ public partial class Main
     private List<Sim.Machines.MachineRuntime> GoalRuntimes() =>
         (_views.Count > 0 ? _views.Select(v => v.Runtime) : _current is null ? [] : [_current.Runtime]).ToList();
 
-    /// <summary>The bank's crate in a world that has one placed as "battery-bank": its cover and place, read from the rigid body and the ground.</summary>
+    /// <summary>The bank's crate in a world that has one placed as "battery-bank": its cover and place, read from the rigid body and the ground. The bank part itself (found-bank, #209) is built into that crate, so the crate and the electrics' bank are one thing.</summary>
     private CrateReading? BankCrateReading()
     {
         if (_groundSim?.Ground is not { } ground || !_byName.TryGetValue("battery-bank", out var view)) return null;
-        if (view.Runtime.Banks.Count > 0) return null;                       // a bank built into the scene is read from the sim itself
         if (view.BodyNamed("crate") is not { } body || !IsInstanceValid(body)) return null;
         var at = PhysicsServer3D.BodyGetDirectState(body.GetRid()).Transform.Origin;
         double size = view.Runtime.Def.Part("crate")?.Number("size", 0.5) ?? 0.5;

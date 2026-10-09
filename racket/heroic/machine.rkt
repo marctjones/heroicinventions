@@ -1657,7 +1657,8 @@
     ;; and cannot be destroyed. #:volts (default 28) only turns watts into an amp readout. The call: at the relay pass, #:call-minutes
     ;; after local solar hour #:call-hour, the game is won if the bank is full and 0 to 45 deg C; left out, the pass is the scene's own
     ;; (#:weather #:passes: the one nearest 03:00, and #:pass-minutes), or 03:00 for 10 minutes in a scene with no weather.
-    ;; #:call-any-time #t is the easy setting that lets the call go at any hour.
+    ;; #:call-any-time #t is the easy setting that lets the call go at any hour. #:on <body> (#209) says the bank is built into that
+    ;; block (the found bank's crate): the view draws its charge on the body, which the rover can push or dig out; the state is the bank's.
     (pattern (battery-bank id:id
                            (~alt (~once (~seq #:at at:vec3))
                                  (~once (~seq #:in zone:id))
@@ -1667,11 +1668,14 @@
                                  (~optional (~seq #:call-hour hour-v:expr))
                                  (~optional (~seq #:call-minutes min-v:expr))
                                  (~optional (~seq #:call-any-time any-v:expr))
+                                 (~optional (~seq #:on on-body:id))
                                  (~optional (~seq #:material mat:id))) ...)
       #:attr info (bkinfo #'id #'zone)
       #:with expr #`(part 'id 'battery-bank '(~? mat iron) (list at.x at.y at.z)
-                          (list (cons 'in 'zone) (cons 'capacity (~? cap-v 4000)) (cons 'charge (~? chg-v 0)) (cons 'volts (~? volt-v 28))
+                          (append (list (cons 'in 'zone) (cons 'capacity (~? cap-v 4000)) (cons 'charge (~? chg-v 0)) (cons 'volts (~? volt-v 28))
                                 (cons 'call-hour (~? hour-v #f)) (cons 'call-minutes (~? min-v #f)) (cons 'call-any-time (~? any-v #f)))
+                                ;; #:on names the body the bank is built into (a crate): the view draws it on that body, so it moves with it (#209)
+                                (~? (list (cons 'on 'on-body)) '()))
                           '()
                           #,(loc-of this-syntax)))
 
