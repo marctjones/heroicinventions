@@ -20,7 +20,8 @@ namespace HeroicInventions;
 /// </summary>
 public partial class MachineView
 {
-    private sealed record BankView(BatteryBank Bank, MeshInstance3D Fill, StandardMaterial3D FillMat, float Height, Label3D Label, MeshInstance3D Beacon, StandardMaterial3D BeaconMat);
+    private sealed record BankView(BatteryBank Bank, MeshInstance3D Fill, StandardMaterial3D FillMat, float Height, Label3D Label, MeshInstance3D Beacon, StandardMaterial3D BeaconMat, RigidBody3D? Body = null, float Size = 0);
+    // (Body: a bank built into a body, #:on, such as the found bank's crate; its column and label then travel with the body)
     private sealed record GeneratorView(Generator Gen, Node3D Needle, MeshInstance3D Cap, Label3D Label, Vector3 Axis, double RatedAmps) { public float CapAngle; }
     private sealed class GeneratorLoad { public required Generator Gen; public required RigidBody3D Body; public required Vector3 Axis; }
 
@@ -38,6 +39,11 @@ public partial class MachineView
         {
             _building = id;
             var part = Runtime.Def.Part(id)!;
+            if (part.Symbol("on", "") is { Length: > 0 } onId && onId != "#f" && _bodiesById.GetValueOrDefault(onId) is { } host)
+            {
+                BuildMountedBank(id, bank, host, Runtime.Def.Part(onId)?.Number("size", 0.5) ?? 0.5);
+                continue;
+            }
             var at = V(part.At);
             const float w = 0.75f, h = 0.57f, d = 0.44f;   // drawn well over a real pack's size: legibility over realism
             var armour = Shapes.Mat(new Color(0.16f, 0.17f, 0.2f), metallic: 0.5f, roughness: 0.5f);
@@ -138,6 +144,30 @@ public partial class MachineView
         }
     }
 
+    /// <summary>
+    /// A bank built into a body (#209): the crate stays the oak box the rubble buries; the bank shows as a charge column running through it, a
+    /// hair proud of its faces, and a label and beacon over it, all following the body when the rover pushes it or the ground drops it.
+    /// </summary>
+    private void BuildMountedBank(string id, BatteryBank bank, RigidBody3D host, double size)
+    {
+        float s = (float)size, fh = s * 0.8f;
+        var fillMat = Shapes.Mat(BankGreen, roughness: 0.4f, outline: false);
+        var fill = Shapes.Box(new Vector3(s * 0.4f, fh, s * 1.04f), fillMat);
+        AddChild(fill);
+        fill.SetMeta("bank_base", new Vector3(0, -s / 2 + (s - fh) / 2, 0));    // in the body's frame
+        var beaconMat = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                                                 AlbedoColor = new Color(0.6f, 1f, 1f, 0.45f), NoDepthTest = false };
+        var beacon = Shapes.Cylinder(0.07f, 4f, beaconMat);
+        beacon.Visible = false;
+        AddChild(beacon);
+        var label = new Label3D
+        {
+            FontSize = 26, OutlineSize = 6, PixelSize = 0.0024f, Width = 900, NoDepthTest = true, Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+        };
+        AddChild(label);
+        _bankViews.Add(new BankView(bank, fill, fillMat, fh, label, beacon, beaconMat, host, s));
+    }
+
     private static string BankState(BatteryBank b) =>
         b.Won ? "CALLED EARTH" : b.Ready ? "full: ready to call"
         : b.Full ? "full, out of 0-45 °C"
@@ -150,8 +180,19 @@ public partial class MachineView
             var b = v.Bank;
             float frac = Mathf.Max((float)b.Fraction, 0.005f);
             var baseAt = (Vector3)v.Fill.GetMeta("bank_base");
-            v.Fill.Scale = new Vector3(1, frac, 1);
-            v.Fill.Position = baseAt + new Vector3(0, v.Height * frac / 2, 0);
+            if (v.Body is { } host)
+            {
+                if (!IsInstanceValid(host)) continue;
+                var xf = host.GlobalTransform;        // the column, label and beacon follow the body it is built into
+                v.Fill.GlobalTransform = xf * new Transform3D(Basis.FromScale(new Vector3(1, frac, 1)), baseAt + new Vector3(0, v.Height * frac / 2, 0));
+                v.Label.GlobalPosition = xf.Origin + new Vector3(0, v.Size / 2 + 0.55f, 0);
+                v.Beacon.GlobalPosition = xf.Origin + new Vector3(0, v.Size / 2 + 2f, 0);
+            }
+            else
+            {
+                v.Fill.Scale = new Vector3(1, frac, 1);
+                v.Fill.Position = baseAt + new Vector3(0, v.Height * frac / 2, 0);
+            }
             Color c = b.Ready ? BankReady : b.Full ? BankAmber : b.Temperature < b.MinChargeC ? BankCold : b.Temperature > b.MaxChargeC ? BankHot : BankGreen;
             v.FillMat.AlbedoColor = c;
             v.FillMat.EmissionEnabled = b.Ready;
