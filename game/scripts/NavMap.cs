@@ -264,7 +264,7 @@ public partial class NavMap : Control
             Text(font, name, new Vector2(rect.GetCenter().X, rect.Position.Y - 6), 15, Orange, centred: true);
         }
 
-        // the cargo's rough areas: never a point. The discs overlap (the crates lie 5 to 11 m apart, the discs are 24 m across), so the
+        // the cargo's rough areas: never a point. The discs overlap (the crates lie 5 to 11 m apart, the discs are 12 m across), so the
         // names are stacked: each at its disc's centre, pushed down to 19 px clear of the one above
         if (ShowMarkers())
         {

@@ -13,15 +13,14 @@ namespace HeroicInventions.Sim.Game;
 /// lies inside the disc (the offset is at most R/3). The disc is the crate's place plus the offset, so it follows the crate as it creeps
 /// and does not shrink towards a point as the rover nears: nothing in the game scans or surveys, so the area stays.
 /// <para>
-/// Radius 12 m: the cargo crates of the opening settle within 8 s of the rim coming down and the largest creep measured was 1.22 m
-/// (hand-tools; trace of lonely-rover-opening, 120 s, every 2 s), so 12 m is ten times that and a crate pushed a few metres by the
-/// rover still lies inside. It is also the smallest radius of the 12-20 m proposed, so that the five discs (the crates lie 5 to 11 m
-/// apart) are as separable as they can be. It is a proposal for the owner to react to; change the number, not the rule.
+/// Radius 6 m (owner's choice): the cargo crates of the opening settle within 8 s of the rim coming down and the largest creep measured
+/// was 1.22 m (hand-tools; trace of lonely-rover-opening, 120 s), so 6 m is five times that and a crate pushed a few metres by the
+/// rover still lies inside. The crates lie 5 to 11 m apart, so the discs (12 m across) mostly stand apart.
 /// </para>
 /// </summary>
 public static class RoughArea
 {
-    public const double Radius = 12;
+    public const double Radius = 6;
 
     /// <summary>The largest offset of the centre from the true place, as a share of the radius ("about a third").</summary>
     public const double MaxOffsetShare = 1.0 / 3;

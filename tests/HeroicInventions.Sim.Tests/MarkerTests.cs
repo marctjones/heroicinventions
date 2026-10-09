@@ -4,24 +4,24 @@ namespace HeroicInventions.Sim.Tests;
 
 /// <summary>
 /// The pure rules of the cargo markers, the bearing readout and the map's frame (#236, #239, #237).
-/// Predicted before the code ran, by an independent FNV-1a in Python (offset = R/3 (0.5 + 0.5 hi/65536), angle = 2 pi lo/65536, R = 12),
-/// from the crates' settled places in the opening (trace of lonely-rover-opening, t = 120 s):
-///   battery-bank  (254.487, 137.899) -> offset 2.963 at 156.2 deg -> centre (251.776, 139.095)
-///   solar-panels  (265.750, 143.500) -> offset 3.900 at 180.9 deg -> centre (261.850, 143.438)
-///   gas-cylinders (249.384, 144.000) -> offset 2.496 at  79.8 deg -> centre (249.827, 146.457)
-///   hand-tools    (241.301, 139.739) -> offset 2.739 at  38.6 deg -> centre (243.441, 141.448)
-///   motors        (233.714, 134.986) -> offset 2.950 at 289.1 deg -> centre (234.678, 132.198)
-/// each true place inside its 12 m disc. Compass: north is -z, east +x.
+/// Predicted before the code ran at R = 6 (the owner's radius), by an independent FNV-1a in Python (offset = R/3 (0.5 + 0.5 hi/65536),
+/// angle = 2 pi lo/65536), from the crates' settled places in the opening (trace of lonely-rover-opening, t = 120 s):
+///   battery-bank  (254.487, 137.899) -> offset 1.482 -> centre (253.132, 138.497)
+///   solar-panels  (265.750, 143.500) -> offset 1.950 -> centre (263.800, 143.469)
+///   gas-cylinders (249.384, 144.000) -> offset 1.248 -> centre (249.606, 145.229)
+///   hand-tools    (241.301, 139.739) -> offset 1.369 -> centre (242.371, 140.593)
+///   motors        (233.714, 134.986) -> offset 1.475 -> centre (234.196, 133.592)
+/// each true place inside its 6 m disc. Compass: north is -z, east +x.
 /// </summary>
 public class MarkerTests
 {
     private static readonly (string Id, double X, double Z, double Cx, double Cz)[] Crates =
     [
-        ("battery-bank", 254.4873, 137.8986, 251.776, 139.095),
-        ("solar-panels", 265.75, 143.5, 261.850, 143.438),
-        ("gas-cylinders", 249.3844, 144.0004, 249.827, 146.457),
-        ("hand-tools", 241.3012, 139.7389, 243.441, 141.448),
-        ("motors", 233.7137, 134.9862, 234.678, 132.198),
+        ("battery-bank", 254.4873, 137.8986, 253.132, 138.497),
+        ("solar-panels", 265.75, 143.5, 263.800, 143.469),
+        ("gas-cylinders", 249.3844, 144.0004, 249.606, 145.229),
+        ("hand-tools", 241.3012, 139.7389, 242.371, 140.593),
+        ("motors", 233.7137, 134.9862, 234.196, 133.592),
     ];
 
     [Fact]
@@ -32,9 +32,9 @@ public class MarkerTests
             var disc = RoughArea.For(id, x, z);
             Assert.Equal(cx, disc.X, 0.002);
             Assert.Equal(cz, disc.Z, 0.002);
-            Assert.Equal(12, disc.Radius);
+            Assert.Equal(6, disc.Radius);
             double off = Math.Sqrt((disc.X - x) * (disc.X - x) + (disc.Z - z) * (disc.Z - z));
-            Assert.InRange(off, 12 / 6.0 - 1e-9, 12 / 3.0 + 1e-9);   // never the exact spot, never beyond a third of the radius
+            Assert.InRange(off, 6 / 6.0 - 1e-9, 6 / 3.0 + 1e-9);   // never the exact spot, never beyond a third of the radius
             Assert.True(off < disc.Radius, $"{id}: the crate lies outside its own disc");
         }
     }

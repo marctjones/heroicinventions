@@ -5,9 +5,9 @@
 ;; The numbers are worked out beforehand:
 ;;   areas     the cargo crates settle within 8 s of the rim coming down, at (254.49 137.90) bank, (265.75 143.50) solar panels,
 ;;             (249.38 144.00) gas cylinders, (241.30 139.74) hand tools, (233.71 134.99) motors (a 120 s trace of the opening). Each
-;;             disc has radius 12 and its centre is the crate's place plus an offset of 12/6 to 12/3 = 2 to 4 m from FNV-1a of the
-;;             crate's label, the same in every run: centres (251.776 139.095) (261.850 143.438) (249.827 146.457) (243.441 141.448)
-;;             (234.678 132.198), worked out by an independent FNV-1a, and pinned in tests/HeroicInventions.Sim.Tests/MarkerTests.cs.
+;;             disc has radius 6 (the owner's) and its centre is the crate's place plus an offset of 6/6 to 6/3 = 1 to 2 m from FNV-1a of the
+;;             crate's label, the same in every run: centres (253.132 138.497) (263.800 143.469) (249.606 145.229) (242.371 140.593)
+;;             (234.196 133.592), worked out by an independent FNV-1a, and pinned in tests/HeroicInventions.Sim.Tests/MarkerTests.cs.
 ;;   readout   rover at (200, 140) facing east (compass 090): a marker at (230, 140) is 30.0 m away, bearing 090, dead ahead (0);
 ;;             at (200, 110) 30.0 m, bearing 000, 90 to the left (-90); at (230, 170) sqrt(1800) = 42.43 m, bearing 135, 45 to the right.
 ;;             North is -z, east +x, bearings clockwise from north.
@@ -42,8 +42,8 @@
   (hash "battery-bank" '(254.49 137.90) "solar-panels" '(265.75 143.50) "gas-cylinders" '(249.38 144.00)
         "hand-tools" '(241.30 139.74) "motors" '(233.71 134.99)))
 (define centres
-  (hash "battery-bank" '(251.776 139.095) "solar-panels" '(261.850 143.438) "gas-cylinders" '(249.827 146.457)
-        "hand-tools" '(243.441 141.448) "motors" '(234.678 132.198)))
+  (hash "battery-bank" '(253.132 138.497) "solar-panels" '(263.800 143.469) "gas-cylinders" '(249.606 145.229)
+        "hand-tools" '(242.371 140.593) "motors" '(234.196 133.592)))
 
 (when (godot-available?)
 
@@ -64,7 +64,7 @@
     (check-true (string-contains? text "bearing 000° N · 90° left") text)
     (check-true (string-contains? text "bearing 135° SE · 45° right") text))
 
-  (test-case "#236: five rough areas of radius 12, the crate inside each, the centre never the spot, matching the trace after 40 s, no depth said"
+  (test-case "#236: five rough areas of radius 6, the crate inside each, the centre never the spot, matching the trace after 40 s, no depth said"
     (define dir (make-temporary-file "markers~a" 'directory))
     (define trace (path->string (build-path dir "t")))
     (define lines
@@ -78,9 +78,9 @@
       (define m (regexp-match #rx"centre \\(([-0-9.]+) ([-0-9.]+)\\) radius ([0-9.]+) crate \\(([-0-9.]+) ([-0-9.]+)\\) offset ([0-9.]+) inside (yes|no) t ([0-9.]+)" l))
       (define-values (cx cz r crx crz off inside t) (apply values (cdr m)))
       (check-true (>= (string->number t) 40.0) (format "~a: read at t ~a, after 40 s of the scene's clock" label t))
-      (check-= (string->number r) 12.0 1e-9 "the radius")
+      (check-= (string->number r) 6.0 1e-9 "the radius")
       (check-equal? inside "yes" (format "~a: the crate lies inside its own disc" label))
-      (check-true (<= 2.0 (string->number off) 4.001) (format "~a: offset ~a is a sixth to a third of the radius" label off))
+      (check-true (<= 1.0 (string->number off) 2.001) (format "~a: offset ~a is a sixth to a third of the radius" label off))
       (check-= (string->number cx) (first (hash-ref centres label)) 0.05 (format "~a centre x" label))
       (check-= (string->number cz) (second (hash-ref centres label)) 0.05 (format "~a centre z" label))
       ;; the marker follows its crate: the place the disc was made from is the crate's trace position (within 0.5 m)
