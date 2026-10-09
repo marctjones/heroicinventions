@@ -54,7 +54,7 @@
     (check-= (at last-frame 'bin.temperature) (at last-frame 'rock.temperature) 1e-9 "and its temperature is the rock's")
     (check-= (at last-frame 'rock.x) 0.12 0.16 "inside the cavity (middle within 0.16 m of the bin's middle at x 0.12)")
     (check-= (at last-frame 'rock.z) 0.0 0.16 "and z 0")
-    ;; a rover never lifts a load: the hand stops 5 cm above where it took hold (the rock may tip on an edge as it is dragged, and settles again),
+    ;; a rover never lifts a load: the hand stops 5 cm above where it took hold (traced: the rock's base rises up to 0.16 m at 2 s of the first push, the hand pulling at its top face, and 0.04 m as it enters the bin, then settles; the hand's own target never rises past the slack, so this is the cube tipping, not a lift),
     ;; so it ends resting on the ground of the bin, as low as it began
     (check-= (at last-frame 'rock.y) (at (first run) 'rock.y) 0.02 "resting on the floor again, not carried up and over the wall"))
 
