@@ -11,7 +11,7 @@
   (map victoria)
   (rover (at 190.0 140.0) (heading 270))
   (place battery-bank found-bank (at 254.5 0 137.9))
-  (place solar-panels cargo-crate (at 254.62 0 147.0))
+  (place solar-panels cargo-crate (at 265.75 0 143.5))
   (place gas-cylinders cargo-crate (at 249.42 0 144.0))
   (place hand-tools cargo-crate (at 242.49 0 140.0))
   (place motors found-motor (at 233.83 0 135.0)))
