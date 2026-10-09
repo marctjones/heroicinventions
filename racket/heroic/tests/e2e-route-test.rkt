@@ -1,19 +1,21 @@
 #lang racket/base
 ;; Issue #96: the doc's fastest route as a script, run in the crater world (game/worlds/lonely-rover-e2e.world) in the real game (headless
 ;; Godot, Jolt at 120 Hz), and the win asserted. docs/e2e-route.md says step by step what the game lets a player do and what a stand-in
-;; does. Since #204, #208 and #209 the windmill, its gear train and the generator are BUILT, by scripted build steps (the game's own build
-;; path, as build-in-world-test.rkt does), and wired to the found bank, which is the bank that charges and wins.
+;; does. Since #204, #208 and #209 the windmill and its gear train are BUILT, by scripted build steps (the game's own build
+;; path, as build-in-world-test.rkt does). Since the owner's ruling of 2026-10-09 the generator is found, not built: the salvaged motor of the
+;; `motors` crate (racket/machines/found-motor.rkt) is joined to the train's last pinion by a shaft and wired to the found bank, which is the
+;; bank that charges and wins. The bank is under about 1 m of rubble there (it was 4 m).
 ;;
 ;; The route (G = done in the game as a player would, S = a stand-in; the GAPs are numbered in docs/e2e-route.md):
-;;   1  the slide buries the bank                      G  the world's opening: the crate is held under about 4 m of rubble
+;;   1  the slide buries the bank                      G  the world's opening: the crate is held under about 1 m of rubble (it was 4 m)
 ;;   2  free the bank                                  S  GAP 1: e2e-rover-test.rkt digs at the slide (the dirt rule lets the backhoe dig now);
 ;;                                                        the sleep run below does not free the crate
 ;;   3  bury it in a tight vault                       G  a vault of its own (route-vault, placed round the crate where it lies): the found
 ;;                                                        bank's cells are in its air because the crate's centre is in its box (#211)
-;;   4  a windmill with a geared generator             G  built in build mode: 10 m sails on a post, four 72:18 meshes (4:1 each, 256:1) and the
-;;                                                        salvaged motor on the last pinion; saved with the world and loaded
-;;   5  wire the generator to the bank                 S  the world link (from built-1 motor) (to battery-bank bank) put into the saved world's
-;;                                                        link list (the join gesture is clicked on screen: it needs a real window, GAP 6)
+;;   4  a windmill, a train, the salvaged motor        G  built in build mode: 10 m sails on a post, four 72:18 meshes (4:1 each, 256:1); the
+;;                                                        motor is the `motors` crate's, not built; saved with the world and loaded
+;;   5  shaft to the motor, wire it to the bank        S  the world links (from built-1 pinion-e) (to motors rotor) and (from motors motor) (to
+;;                                                        battery-bank bank) put into the saved world's link list (the join gesture is clicked on screen: it needs a real window, GAP 6)
 ;;   6  rock heated by heliostats, pushed into the bin S  GAP 4: the heliostat heats the rock in the bin
 ;;   7  a bimetal on the lid                           G  the strip works the lid in proportion
 ;;   8  sleep until 02:49, windmill tops up, call      G  the game's own sleep (HEROIC_SLEEP=pre-dawn on the vault, the world's first machine),
@@ -76,10 +78,13 @@
            (stage "wheel-b" "pinion-c" 0.225 -1.4 "pinion-b")
            (stage "wheel-c" "pinion-d" 0.45 -1.5 "pinion-c")
            (stage "wheel-d" "pinion-e" 0.675 -1.6 "pinion-d")
-           '("build (generator motor #:at (0.9 11 -1.85))" "build (set motor #:on pinion-e)"))
+           '())
    "; "))
 
-(define wire "(link wire-1 wire (from built-1 motor) (to battery-bank bank))")
+;; the salvaged motor (racket/machines/found-motor.rkt) is found in the motors crate, not built: a shaft joins the last pinion to its rotor
+;; (ratio 1: the rotor turns as the pinion does), a wire its motor to the bank
+(define shaft "(link drive-1 shaft (from built-1 pinion-e) (to motors rotor) (ratio 1))")
+(define wire "(link wire-1 wire (from motors motor) (to battery-bank bank))")
 
 (define (sleep-run save #:set [settings #f] #:seconds [seconds (+ pass-start 120)])
   (define trace (p (format "t~a" (random 1000000))))
@@ -87,37 +92,38 @@
     (run-game `(("HEROIC_LOAD" . ,save) ("HEROIC_SLEEP" . "pre-dawn") ("HEROIC_QUIT_AFTER_SIM_SECONDS" . ,(number->string (exact->inexact seconds)))
                 ("HEROIC_TRACE" . ,trace) ("HEROIC_TRACE_DT" . "10")
                 ,@(if settings `(("HEROIC_SET" . ,settings)) '()))))
-  (list lines (trace-frames (string-append trace ".battery-bank")) (trace-frames (string-append trace ".built-1")) (trace-frames (string-append trace ".vault"))))
+  (list lines (trace-frames (string-append trace ".battery-bank")) (trace-frames (string-append trace ".motors")) (trace-frames (string-append trace ".vault"))))
 
 (when (godot-available?)
   ;; step 4: the player builds the windmill, its train and the generator, and the world is saved with them
   (define built
     (run-game `(("HEROIC_INPUT" . ,(string-append "wait 360; build new 180 105; " build-steps "; build done; build list; waitsim 30; rover save " (p "a.save") "; quit")))))
-  ;; step 5: the wire, as a world link in the save's link list (the unwired save is the gate)
+  ;; step 5: the shaft to the salvaged motor and the wire, as world links in the save's link list (the shafted-only save is the gate)
   (define wired-save (p "wired.save"))
+  (define shafted-save (p "shafted.save"))
   (define saved (file->string (p "a.save")))
-  (display-to-file (string-replace saved "(links 1.0)" (string-append "(links 1.0 " wire ")")) wired-save)
+  (display-to-file (string-replace saved "(links 1.0)" (string-append "(links 1.0 " shaft " " wire ")")) wired-save)
+  (display-to-file (string-replace saved "(links 1.0)" (string-append "(links 1.0 " shaft ")")) shafted-save)
 
   ;; the three runs are independent processes: start them together
   (define results (make-vector 3 #f))
   (define threads
     (list (thread (λ () (vector-set! results 0 (sleep-run wired-save))))
           (thread (λ () (vector-set! results 1 (sleep-run wired-save #:set "heliostat area 0 0" #:seconds (+ pass-start 60)))))
-          (thread (λ () (vector-set! results 2 (sleep-run (p "a.save") #:seconds (+ pass-start 60)))))))
+          (thread (λ () (vector-set! results 2 (sleep-run shafted-save #:seconds (+ pass-start 60)))))))
   (for-each thread-wait threads)
   (match-define (list lines run built-run vault-run) (vector-ref results 0))
   (define (has? rx ls) (for/or ([l ls]) (regexp-match? rx l)))
 
-  (test-case "the player builds the windmill, a four-stage train and the generator in build mode, and the world is saved with them"
+  (test-case "the player builds the windmill and a four-stage train in build mode (no generator: the motor is the crate's), and the world is saved with them"
     (check-true (has? #rx"^\\[build\\] placed built-1 at \\(180.00 -[0-9.]+ 105.00\\)" built))
-    (check-true (has? #rx"^\\[build\\] built-1: design .*sails:windmill .*pinion-e:wheel motor:generator; running 11 parts$" built))
+    (check-true (has? #rx"^\\[build\\] built-1: design .*sails:windmill .*pinion-e:wheel; running 10 parts$" built))
     (check-false (has? #rx"BuildMode\\] error" built) "no command was refused")
-    (check-regexp-match #rx"\n  \\(build built-1 \\(at 180.0 0.0 105.0\\) \\(machine built-1 " saved)
-    (check-regexp-match #rx"\\(part motor generator " saved))
+    (check-regexp-match #rx"\n  \\(build built-1 \\(at 180.0 0.0 105.0\\) \\(machine built-1 " saved))
 
   (test-case "loaded asleep, the wire is back, the found bank's cells are in the vault, and the sleep runs the day and the night to 02:49"
-    (check-true (has? #rx"^\\[build\\] loaded built-1: 11 of 11 parts running" lines))
-    (check-true (has? #rx"^\\[links\\] restored 1 link\\(s\\) from the save: wire-1 \\(wire\\)" lines))
+    (check-true (has? #rx"^\\[build\\] loaded built-1: 10 of 10 parts running" lines))
+    (check-true (has? #rx"^\\[links\\] restored 2 link\\(s\\) from the save: drive-1 \\(shaft\\), wire-1 \\(wire\\)" lines))
     (check-true (has? #rx"^\\[zones\\] battery-bank.cells joined vault.vault" lines) "the vault of another machine holds the found bank's cells")
     (check-true (has? #rx"^\\[sleep\\] woke after [0-9.]+ s: scene.elapsed" lines))
     (define woke (second run))
@@ -144,7 +150,7 @@
     (check-= rpm 1553 15 "rpm of the rotor at the balance (worked 1,553)")
     (printf "E2E charge: mean ~a W, rotor ~a rpm over ~a samples; the doc's 5 kWh bank would take ~a h of this\n"
             (round mean-w) (round rpm) (length settled) (/ (round (* 10 (/ 5000 mean-w))) 10.0))
-    (check-true (has? #rx"^\\[frontend\\] ending source wind: 25.000 Wh" lines) "the bank's record: 25 Wh, all of it wind")
+    (check-true (has? #rx"^\\[frontend\\] ending source shaft: 25.000 Wh" lines) "the bank's record: 25 Wh, all of it from one source; 'shaft', not 'wind': the motor is in another machine than the windmill, and its source is read inside its own")
     (check-true (has? #rx"^\\[frontend\\] ending: bank sol 2 at 03:00, 25.00 of 25.00 Wh at [0-9]+.[0-9] C, sources 1" lines)))
 
   (test-case "the found bank is full before the pass and warm, and the call goes out as the pass opens at 03:00 on sol 2, not before"
@@ -166,10 +172,10 @@
     (check-= (at (last run) 'bank.won) 1 0 "and it stays won")
     (check-true (has? #rx"win: The call went out from bank on sol 2 at 03:00" lines)))
 
-  (test-case "the bank charged is the found bank in its crate, held under the slide: the opening ran"
+  (test-case "the bank charged is the found bank in its crate, held under the slide, about 1 m of rubble: the opening ran"
     (define f (second run))   ; the first frame is the load; the cover is read from the second
     (check-= (at f 'crate.buried) 1 0)
-    (check-true (> (at f 'crate.cover) 1) (format "cover ~a m" (at f 'crate.cover)))
+    (check-= (at f 'crate.cover) 1.04 0.2 "m of rubble over it since the owner's ruling of 2026-10-09 (it was 4 m)")
     (check-= (at f 'bank.capacity) 25 1e-9 "Wh: the 5 kWh bank at the scenario's 0.005"))
 
   (test-case "the cold-bank gate: with the heliostat covered the bank stays under 0 C, charges nothing, and no call goes out"
@@ -182,7 +188,7 @@
 
   (test-case "the unwired gate: the same windmill, bank warm, no wire: the generator is an open circuit, nothing is charged, no call goes out"
     (define unwired (vector-ref results 2))
-    (check-true (has? #rx"^\\[links\\] restored 0 link\\(s\\)" (first unwired)))
+    (check-true (has? #rx"^\\[links\\] restored 1 link\\(s\\)" (first unwired)))
     (for ([f (in-list (cdr (second unwired)))])
       (check-= (at f 'bank.charge) 0 1e-12)
       (check-= (at f 'bank.won) 0 0))
