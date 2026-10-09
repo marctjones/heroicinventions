@@ -77,6 +77,7 @@
       (check-true (string? l) label)
       (define m (regexp-match #rx"centre \\(([-0-9.]+) ([-0-9.]+)\\) radius ([0-9.]+) crate \\(([-0-9.]+) ([-0-9.]+)\\) offset ([0-9.]+) inside (yes|no) t ([0-9.]+)" l))
       (define-values (cx cz r crx crz off inside t) (apply values (cdr m)))
+      (check-true (>= (string->number t) 40.0) (format "~a: read at t ~a, after 40 s of the scene's clock" label t))
       (check-= (string->number r) 12.0 1e-9 "the radius")
       (check-equal? inside "yes" (format "~a: the crate lies inside its own disc" label))
       (check-true (<= 2.0 (string->number off) 4.001) (format "~a: offset ~a is a sixth to a third of the radius" label off))
@@ -101,6 +102,20 @@
     (check-equal? (length targets) 2)
     (check-true (string-contains? (first targets) "marker: battery bank") (first targets))
     (check-true (string-contains? (second targets) "marker: off") (second targets)))
+
+  (test-case "#237, #239: the keys themselves: M opens and closes the map, T chooses the next cargo area in the world's order, then none"
+    (define lines
+      (run-game "lonely-rover-opening"
+                (string-append "wait 240; map print; key m; map print; key m; map print;"
+                               " key t; marker; key t; marker; key t; key t; key t; key t; marker; quit")))
+    (check-equal? (map (λ (l) (cadr (regexp-match #rx"^\\[map\\] (open|closed)" l)))
+                       (filter (λ (l) (regexp-match? #rx"^\\[map\\] (open|closed)" l)) lines))
+                  '("closed" "open" "closed"))
+    (define targets (lines-with lines "[marker] target"))
+    (check-equal? (length targets) 3)
+    (check-true (string-prefix? (first targets) "[marker] target battery-bank:") (first targets))    ; T once: the first
+    (check-true (string-prefix? (second targets) "[marker] target solar-panels:") (second targets))  ; T again: the next
+    (check-equal? (third targets) "[marker] target none" "five more presses: past the last, none again"))
 
   (test-case "#237: a place's map position is its world position, the map fits the clear area and does not pause the game"
     (define lines

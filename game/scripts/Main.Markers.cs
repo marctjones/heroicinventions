@@ -29,7 +29,6 @@ public partial class Main
     private string? _chosenMarker;
     private Label? _markText;
     private BearingArrow? _markArrow;
-    private (double X, double Z)[] _cargoTrue = [];   // the crates' true places, for the trace-match check only (marker list); nothing is drawn from them
 
     private void EnsureMarkerNodes()
     {
@@ -103,7 +102,6 @@ public partial class Main
         if (RoverIsPlayer)
         {
             var places = CargoPlaces();
-            _cargoTrue = places.Select(c => (c.X, c.Z)).ToArray();
             foreach (var (label, x, z) in places)
             {
                 var disc = RoughArea.For(label, x, z);

@@ -380,9 +380,9 @@ public partial class NavMap : Control
             float hz = (height_at(w + vec2(0.0, e)) - height_at(w - vec2(0.0, e))) / (2.0 * e);
             vec3 n = normalize(vec3(-hx, 1.0, -hz));
             float lit = 0.45 + 0.55 * max(0.0, dot(n, normalize(light)));
-            float shade = mix(0.68, 1.12, clamp((lit - 0.45) / 0.55, 0.0, 1.0));
+            float shade = mix(0.5, 1.2, clamp((lit - 0.45) / 0.55, 0.0, 1.0));
             float t = clamp((h - low) / max(high - low, 0.001), 0.0, 1.0);
-            vec3 base = mix(vec3(0.36, 0.35, 0.36), vec3(0.74, 0.71, 0.66), t);   // low ground dark, the rim pale; grey, so the slope tint stands out
+            vec3 base = mix(vec3(0.20, 0.20, 0.23), vec3(0.88, 0.85, 0.78), t);   // low ground dark, the rim pale; grey, so the slope tint stands out
             float slope = degrees(atan(length(vec2(hx, hz))));
             float s_on = smoothstep(grade_deg - 16.5, grade_deg - 13.5, slope);
             float s_amber = smoothstep(grade_deg - 6.5, grade_deg - 3.5, slope);
