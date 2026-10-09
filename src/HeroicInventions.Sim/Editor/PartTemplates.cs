@@ -301,7 +301,7 @@ public static class PartTemplates
             {
                 ["radius"] = new SNumber(10), ["mass"] = new SNumber(1500), ["wind"] = new SNumber(6), ["load"] = new SNumber(0),
                 ["cp"] = new SNumber(0.3), ["tip-speed-ratio"] = new SNumber(2.5),
-                ["wind-from-map"] = new SBool(false),   // true: the wind of the map's wind field at its own place (issue #61)
+                ["wind-from-map"] = new SBool(true),    // the wind of the map's wind field at its own place (issue #61), the default since 2026-10-09; #f keeps the flat wind above
                 // the wind's heading and the sails' (issue #193): azimuths from +x toward +z, 90 = +z; a vane yaws the mill into the wind
                 ["wind-from-deg"] = new SNumber(90), ["facing-deg"] = new SNumber(90), ["vane"] = new SBool(false),
                 ["yaw-rate"] = new SNumber(2), ["veer"] = new SNumber(0),

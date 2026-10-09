@@ -236,7 +236,8 @@ public partial class Main
         _editButton.Visible = false;   // (not restored: ClearWorld and LoadWorld own these two) a built machine is edited from the Build section (Main.Build.cs)
         _joinButton.Visible = true;    // joining machines is building: free and of any reach (#204)
         _roverState!.Text = $"{(_running ? "Running" : "Paused")} · time ×{_timeScale:0.##}";
-        _roverDrive!.Text = $"{r.Speed:0.0} m/s · nose {r.PitchDeg:+0;-0;0}° · tilt {r.TiltDeg:0}°";
+        _roverDrive!.Text = $"{r.Speed:0.0} m/s · nose {r.PitchDeg:+0;-0;0}° · tilt {r.TiltDeg:0}°"
+            + (_windView is { } wind ? $"\nwind {wind.SpeedAt(r.Chassis.GlobalPosition):0.0} m/s here" : "");   // the crater's wind where the rover stands (WindView.cs)
         UpdateRoverAhead();
         _roverArm!.Text = $"{r.ArmStatus}\nReaches {Rover.ArmReach:0.0} m · pushes up to {RoverSpec.PushForce(r.GroundGravity) / 1000:0.0} kN · never lifts a load. B digs and dumps.";
         _roverBucket!.Text = $"{r.Carried:0.00} of {Rover.BucketVolume:0.00} m³\ndug {r.Dug:0.00} m³, dumped {r.Dumped:0.00} m³";
