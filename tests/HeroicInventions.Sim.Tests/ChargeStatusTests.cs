@@ -17,34 +17,34 @@ public class ChargeStatusTests
 
     [Fact]
     public void Unwired() =>
-        Assert.Equal("motor rotor 2,000 rpm · windmill 30 rpm · 0.00 N·m\nnot charging: unwired", ChargeStatus.Label(Rig(2000, wired: false)));
+        Assert.Equal("motor · windmill 30 rpm\nnot charging: unwired", ChargeStatus.Label(Rig(2000, wired: false)));
 
     [Fact]
     public void RotorUnderTheCutIn() =>
-        Assert.Equal("motor rotor 800 rpm · windmill 30 rpm · 0.00 N·m\nnot charging: rotor 800 rpm under 1,500", ChargeStatus.Label(Rig(800)));
+        Assert.Equal("motor · windmill 30 rpm\nnot charging: rotor 800 rpm under 1,500", ChargeStatus.Label(Rig(800)));
 
     [Fact]
     public void BankTooCold_AndTheRotorToo_NamesBoth() =>
-        Assert.Equal("motor rotor 800 rpm · windmill 30 rpm · 0.00 N·m\nnot charging: bank -63 °C outside 0-45 °C\n and rotor 800 rpm under 1,500",
+        Assert.Equal("motor · windmill 30 rpm\nnot charging: bank -63 °C outside 0-45 °C\n and rotor 800 rpm under 1,500",
                      ChargeStatus.Label(Rig(800, bankC: -63)));
 
     [Fact]
     public void BankTooColdWithTheRotorFast() =>
-        Assert.Equal("motor rotor 2,000 rpm · windmill 30 rpm · 0.00 N·m\nnot charging: bank -63 °C outside 0-45 °C", ChargeStatus.Label(Rig(2000, bankC: -63)));
+        Assert.Equal("motor · windmill 30 rpm\nnot charging: bank -63 °C outside 0-45 °C", ChargeStatus.Label(Rig(2000, bankC: -63)));
 
     [Fact]
     public void BankFull() =>
-        Assert.Equal("motor rotor 2,000 rpm · windmill 30 rpm · 0.00 N·m\nnot charging: bank full", ChargeStatus.Label(Rig(2000, chargeWh: 100)));
+        Assert.Equal("motor · windmill 30 rpm\nnot charging: bank full", ChargeStatus.Label(Rig(2000, chargeWh: 100)));
 
     [Fact]
     public void SleepingWithMachinesPaused() =>
-        Assert.Equal("motor rotor 2,000 rpm · windmill 30 rpm · 6.00 N·m\nnot charging: sleeping, machines paused", ChargeStatus.Label(Rig(2000), rotorAsleep: true));
+        Assert.Equal("motor · windmill 30 rpm\nnot charging: sleeping, machines paused", ChargeStatus.Label(Rig(2000), rotorAsleep: true));
 
     [Fact]
     public void ASleepHoldingTheLastSteadyRateSaysSo()
     {
         var g = Rig(2000);
-        Assert.Equal("motor rotor 2,000 rpm · windmill 30 rpm · 6.00 N·m\nsleeping, machines paused: charging at its last steady rate, 90 W (approximate)",
+        Assert.Equal("motor · windmill 30 rpm\nsleeping, machines paused: charging at its last steady rate, 90 W (approximate)",
                      ChargeStatus.Label(g, true, hold: new ChargeStatus.Hold(90, false)));
         Assert.Contains("estimated rate", ChargeStatus.Label(g, true, hold: new ChargeStatus.Hold(90, true)));
     }
@@ -57,7 +57,7 @@ public class ChargeStatusTests
     public void ChargingShowsThePower()
     {
         // 2,000 rpm = 209.44 rad/s: tau = 0.114592 x (209.44 - 157.08) = 6.00 N.m; P = 0.8 x 6.00 x 209.44 = 1005 W; 35.9 A at 28 V
-        Assert.Equal("motor rotor 2,000 rpm · windmill 30 rpm · 6.00 N·m\ncharging 1005 W · 35.9 A at 28 V", ChargeStatus.Label(Rig(2000)));
+        Assert.Equal("motor · windmill 30 rpm\ncharging 1005 W · 35.9 A · rotor 2,000 rpm", ChargeStatus.Label(Rig(2000)));
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public class ChargeStatusTests
     {
         var g = new Generator("motor") { Bank = new BatteryBank("bank", 3600), DrivenBy = "shaft" };
         g.Step(800 * Rpm, 0.01);
-        Assert.Equal("motor rotor 800 rpm · prime mover rpm unknown · 0.00 N·m\nnot charging: rotor 800 rpm under 1,500", ChargeStatus.Label(g));
-        Assert.StartsWith("motor rotor 800 rpm · shaft in 120 rpm", ChargeStatus.Label(g, linkedRpm: 120));
+        Assert.Equal("motor · prime mover rpm unknown\nnot charging: rotor 800 rpm under 1,500", ChargeStatus.Label(g));
+        Assert.StartsWith("motor · shaft in 120 rpm", ChargeStatus.Label(g, linkedRpm: 120));
     }
 }

@@ -23,7 +23,7 @@ public partial class MachineView
 {
     private sealed record BankView(BatteryBank Bank, MeshInstance3D Fill, StandardMaterial3D FillMat, float Height, Label3D Label, MeshInstance3D Beacon, StandardMaterial3D BeaconMat, RigidBody3D? Body = null, float Size = 0);
     // (Body: a bank built into a body, #:on, such as the found bank's crate; its column and label then travel with the body)
-    private sealed record GeneratorView(Generator Gen, Node3D Needle, MeshInstance3D Cap, Label3D Label, Vector3 Axis, double RatedAmps) { public float CapAngle; }
+    private sealed record GeneratorView(Generator Gen, Node3D Needle, MeshInstance3D Cap, Label3D Label, Vector3 Axis, double RatedAmps) { public float CapAngle; public string LastWhy = ""; }
     private sealed class GeneratorLoad { public required Generator Gen; public required RigidBody3D Body; public required Vector3 Axis; }
 
     private readonly List<BankView> _bankViews = [];
@@ -220,6 +220,9 @@ public partial class MachineView
             bool rotorAsleep = SleepingPaused && _generatorLoads.Any(l => l.Gen == g);   // a sim-turned part keeps turning through a paused sleep
             string shaft = Runtime.GeneratorShaft(g.Name);
             v.Label.Text = ChargeStatus.Label(g, rotorAsleep, LinkedShaftRpm?.Invoke(Name, shaft), ChargeStatus.Hold.Read(Runtime.FieldGetters, g.Name));
+            string why = v.Label.Text[(v.Label.Text.IndexOf('\n') + 1)..];   // the reason line(s) without the rpm: the log notes each change
+            string kind = System.Text.RegularExpressions.Regex.Replace(why, "[0-9,.-]+", "#");
+            if (kind != v.LastWhy) { v.LastWhy = kind; GD.Print($"[charge] {Runtime.Time:0.0} s {g.Name}: {why.Replace("\n", "")}"); }
         }
     }
 

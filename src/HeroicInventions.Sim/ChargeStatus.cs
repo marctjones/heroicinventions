@@ -56,18 +56,15 @@ public static class ChargeStatus
         return g.DrivenBy == "shaft" ? "prime mover rpm unknown" : null;
     }
 
-    /// <summary>The whole label: the rotor and the prime mover's rpm, the torque, the current, then why not (or how much) it charges.</summary>
+    /// <summary>The whole label: the generator and its prime mover's rpm, then why it is not charging (or how much it is, with the rotor's rpm).</summary>
     public static string Label(Generator g, bool rotorAsleep = false, double? linkedRpm = null, Hold hold = default)
     {
-        string rpm = $"{g.Name} rotor {g.Rpm:#,0} rpm" + (PrimeLine(g, linkedRpm) is { } prime ? $" · {prime}" : "") + $" · {g.Torque:0.00} N·m";
+        string head = g.Name + (PrimeLine(g, linkedRpm) is { } prime ? $" · {prime}" : "");
         if (rotorAsleep && hold.Watts is { } w)
-            return $"{rpm}\nsleeping, machines paused: charging at its last {(hold.Estimated ? "estimated" : "steady")} rate, {w:0} W (approximate)";
+            return $"{head}\nsleeping, machines paused: charging at its last {(hold.Estimated ? "estimated" : "steady")} rate, {w:0} W (approximate)";
         var reasons = Reasons(g, rotorAsleep, hold);
         if (reasons.Count == 0)
-        {
-            double volts = g.Bank!.Volts;
-            return $"{rpm}\ncharging {g.Delivered:0} W · {g.Delivered / volts:0.0} A at {volts:0} V";
-        }
-        return $"{rpm}\nnot charging: {string.Join("\n and ", reasons)}";
+            return $"{head}\ncharging {g.Delivered:0} W · {g.Delivered / g.Bank!.Volts:0.0} A · rotor {g.Rpm:#,0} rpm";
+        return $"{head}\nnot charging: {string.Join("\n and ", reasons)}";
     }
 }
