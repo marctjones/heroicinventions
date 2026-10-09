@@ -75,9 +75,9 @@ public partial class MachineView
         var arrowMat = Shapes.Mat(new Color(0.15f, 0.75f, 0.95f), roughness: 0.5f);
         var arrow = new Node3D { Position = hub + new Vector3(0, r * 1.35f, 0) };
         float len = r * 0.9f;
-        arrow.AddChild(Shapes.Rod(new Vector3(0, 0, -len / 2), new Vector3(0, 0, len / 2), 0.12f, arrowMat));
+        arrow.AddChild(Shapes.Rod(new Vector3(0, 0, -len / 2), new Vector3(0, 0, len / 2), 0.25f, arrowMat));
         foreach (float side in new[] { -1f, 1f })
-            arrow.AddChild(Shapes.Rod(new Vector3(0, 0, len / 2), new Vector3(side * len * 0.18f, 0, len / 2 - len * 0.25f), 0.12f, arrowMat));
+            arrow.AddChild(Shapes.Rod(new Vector3(0, 0, len / 2), new Vector3(side * len * 0.18f, 0, len / 2 - len * 0.25f), 0.25f, arrowMat));
         AddChild(arrow);
         _windmillYaw.Add((mill, yaw, arrow));
         if (part.Props.GetValueOrDefault("wind-from-map") is SBool { Value: true })

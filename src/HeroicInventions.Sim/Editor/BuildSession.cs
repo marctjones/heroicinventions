@@ -258,7 +258,9 @@ public sealed class BuildSession
             if (cmd.Items[i] is not SSymbol s || !s.Name.StartsWith("#:")) continue;
             string key = s.Name[2..];
             if (key is "at" or "material" or "catalogue") continue;
-            if (props.TryGetValue(key, out var existing) && existing is SNumber)
+            if (props.TryGetValue(key, out var existing) && existing is SBool && key is "vane" or "wind-from-map" && cmd.Items[i + 1] is SBool flag)
+                props[key] = flag;                         // a windmill's #:vane #t or #:wind-from-map #t (#193)
+            else if (existing is SNumber)
                 props[key] = new SNumber(Num(cmd.Items[i + 1], context));
             else if (existing is SSymbol && cmd.Items[i + 1] is SSymbol sym)
                 props[key] = sym;                          // a name, such as a sluice's #:on channel
