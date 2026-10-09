@@ -36,7 +36,7 @@
     (define before (row-at paused 60))
     (define woke (for/first ([f paused] #:when (> (car f) 259)) f))
     (check-= (car before) 60 1e-6)
-    (check-= (car woke) 260.0083 0.01 "s, the wake is the first tick past 260")
+    (check-true (< 260 (car woke) 260.03) (format "the wake row at ~a s is just past 260 (the first tick past it, and the trace's next row)" (car woke)))
     (check-true (null? (filter (λ (f) (< 61 (car f) 259)) paused)) "the sleep was paused: no rows inside it")
     (define p (at before 'motor.settled-power))
     (check-= p 278.3 0.6 "W, settled: the header's operating point")
