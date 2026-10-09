@@ -80,7 +80,8 @@ public partial class Main
     private void RoverLogTick()
     {
         var r = _rover!;
-        if (_world != _logWorld)
+        if (_world != _logWorld && _world?.Name == _logWorld?.Name && _logWorld is not null) _logWorld = _world;   // the same world edited (a build, a join): the log carries on, with no new header (#226)
+        else if (_world != _logWorld)
         {
             _logWorld = _world;
             _roverLog.Clear();

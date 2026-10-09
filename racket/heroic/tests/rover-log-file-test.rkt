@@ -5,6 +5,7 @@
 ;;   "sol 1 HH:MM t=T.Ts sol: The log begins on sol 1." (T small, the scene's clock), flushed before the game quits.
 ;;   A second run into the same folder appends a second header and a second "begins" line (older sessions are kept).
 ;;   Nothing else is written there by the log (the autosave is not made by a scripted run without a saves folder either).
+;;   #226: a session that makes three builds (each one a new world value) still has ONE header and ONE "The log begins" line.
 ;; Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list racket/file racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -34,4 +35,13 @@
     (define again (file->lines file))
     (check-equal? (length (filter (λ (l) (string-prefix? l "# rover log of")) again)) 2 "a second session appends")
     (check-equal? (take again (length lines)) lines "the first session's lines are kept")
+    (delete-directory/files dir))
+
+  (test-case "#226: three builds in one session leave one header and one 'The log begins' line"
+    (define dir (make-temporary-file "rover-log~a" 'directory))
+    (define file (build-path dir "lonely-rover-opening.rover-log.txt"))
+    (run-game! dir "frontend skip; wait 400; build new 180 105; build (post p1 #:at (0 0 0)); build done; wait 60; build new 190 105; build (post p2 #:at (0 0 0)); build done; wait 60; build new 200 105; build (post p3 #:at (0 0 0)); build done; wait 200; quit")
+    (define lines (file->lines file))
+    (check-equal? (length (filter (λ (l) (string-prefix? l "# rover log of")) lines)) 1 (format "lines: ~a" lines))
+    (check-equal? (length (filter (λ (l) (regexp-match? #rx"The log begins on sol" l)) lines)) 1 (format "lines: ~a" lines))
     (delete-directory/files dir)))

@@ -8,8 +8,10 @@
 ;;  - the found bank's cells 24.5 C, the rock 92 C, the vault's lid 37% open at the wake (54,800 s); the bank full by then (the sleep charges the
 ;;    motor at an estimate: it has never charged a warm bank), so `bank.charge` 25 in the first frame after it;
 ;;  - the call at the pass: the rover log's win line at 55,484 s (03:00, sol 2), a frame with bank.won 1 by 55,495 s, none before 55,484 s;
-;;  - the real gesture does not reach the train's last pinion, the motor or the bank (docs/e2e-route.md): the pinion click lands on the sails
-;;    (the nearest box of four crossed), and the two links are made by the `join` step.
+;;  - #225: the real gesture makes both links. The click on the train's last pinion crosses the sails' box first and picks the smaller box
+;;    inside it, built-1.pinion-e; the rotor click makes the shaft; the click on the generator (a box that overlaps the rotor's) picks
+;;    motors.motor, or, when the ray crosses the rotor's box too, the second-click list offers it (`joinclick motors.motor list`); the click on the
+;;    bank crosses the crate's box first and picks the smaller, battery-bank.bank.
 (require rackunit racket/list racket/string racket/port racket/file racket/system racket/runtime-path
          (only-in heroic/godothost godot-available?))
 
@@ -34,11 +36,13 @@
     (check-true (has? #rx"\\[build\\] built-1: design post_1:post sails:windmill wheel-a:wheel pinion-b:wheel .* pinion-e:wheel; running 10 parts") "the train is built")
     (check-false (has? #rx"BuildMode\\] error") "no command was refused"))
 
-  (test-case "the real gesture does not reach the train, the motor or the bank, and the links are made by name"
-    (check-true (has? #rx"the click crossed 4 parts' boxes, nearest first: built-1.sails") "the click meant for pinion-e lands on the sails")
-    (check-true (has? #rx"\\[links\\] joined: shaft shaft-1 from built-1.pinion-e to motors.rotor"))
-    (check-true (has? #rx"\\[links\\] joined: wire wire-1 from motors.motor to battery-bank.bank"))
-    (check-false (has? #rx"\n(\\[Main\\] )?join: ") "no join error"))
+  (test-case "the real gesture makes both links: the smaller box wins, the generator and the bank have boxes, the list is there for overlaps"
+    (check-true (has? #rx"the click crossed [0-9]+ parts' boxes, nearest first: built-1.sails") "the click on pinion-e crosses the sails' box first")
+    (check-true (has? #rx"built-1.pinion-e lies inside built-1.sails's box and is the smaller: it takes the click"))
+    (check-true (has? #rx"\\[links\\] joined: shaft shaft-1 from built-1.pinion-e to motors.rotor") "the shaft, by clicks")
+    (check-true (has? #rx"battery-bank.bank lies inside battery-bank.crate's box and is the smaller: it takes the click"))
+    (check-true (has? #rx"\\[links\\] joined: wire wire-1 from motors.motor to battery-bank.bank") "the wire, by clicks")
+    (check-false (has? #rx"\n(\\[Main\\] )?join: ") "no join error: every click landed on the part it was aimed at"))
 
   (test-case "the sleep, from the panel: the same wake as the automated route, and the same state at it"
     (check-true (has? #rx"\\[sleep\\] Machines paused: generators charge at their last steady rate .*motor: [0-9.]+ W into bank \\(estimated"))
