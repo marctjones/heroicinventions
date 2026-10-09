@@ -19,7 +19,7 @@
     (define f (last (hash-ref world 'battery-bank)))
     (check-= (at f 'crate.buried) 1 0)
     (check-= (at f 'crate.cover) 3.98 0.2)
-    (check-= (at f 'bank.capacity) 4000 1e-9 "Wh")
+    (check-= (at f 'bank.capacity) 5000 1e-9 "Wh")   ; the design doc's 5 kWh
     (check-= (at f 'bank.charge) 0 0)
     (check-= (at f 'bank.temperature) -63 1e-6)
     (check-= (at f 'bank.accepting) 0 0 "under 0 C")

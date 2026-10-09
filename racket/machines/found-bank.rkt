@@ -6,7 +6,7 @@
 ;;           exactly as before: 3.98 m).
 ;;   cells   16 kg of lithium cells (c = 1,000 J/(kg K): 16 kJ/K), a heat store, in the open at the scene's ambient, exchanging
 ;;           with the air by radiation alone in Mars's 610 Pa (conductance 0). Its temperature is the bank's own.
-;;   bank    4 kWh (16 kg at 250 Wh/kg; the scenario's bank-capacity multiplier, #60, applies), empty, charging only from 0 to 45 C of
+;;   bank    5 kWh (the design doc's bank; the scenario's bank-capacity multiplier, #60, applies), empty, charging only from 0 to 45 C of
 ;;           the cells, #:on the crate: the view draws its charge on the crate, so it travels with the crate.
 ;; The state (charge, per-source record, the cells' heat, the win) is the machine's and not the body's, so freeing the crate and
 ;; pushing it carries all of it. A generator charges it when a wire joins them (#208); in this machine alone nothing does.
@@ -15,4 +15,4 @@
   #:planet mars
   (block crate #:at (0 (cm 25) 0) #:size (cm 50) #:material oak)
   (heat-store cells #:at (0 (cm 25) 0) #:mass 16 #:contents cells)
-  (battery-bank bank #:at (0 (cm 25) 0) #:in cells #:on crate #:capacity 4000 #:charge 0))
+  (battery-bank bank #:at (0 (cm 25) 0) #:in cells #:on crate #:capacity 5000 #:charge 0))

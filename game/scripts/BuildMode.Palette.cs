@@ -277,6 +277,7 @@ public partial class BuildMode
 
     private void AddListItem(Entry e, string text)
     {
+        if (InGame && FoundOnly.Contains(e.Key)) return;   // found cargo isn't built (#204)
         int i = _paletteList.AddItem(text);
         _paletteList.SetItemMetadata(i, e.Key);
         _paletteList.SetItemTooltip(i, e.Says);

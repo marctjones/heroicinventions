@@ -194,6 +194,13 @@ public partial class BuildMode : Node3D
     private string? _lastApplied;
     private bool Live => _applyLive is not null;
 
+    /// <summary>Building in the game as the rover (#204): found cargo isn't in the parts list, and nothing ready-made can be loaded
+    /// in (no examples, no Load), per the owner (2026-10-08). The workshop and the machine runs keep everything.</summary>
+    public bool InGame { get; set; }
+
+    /// <summary>Parts that are found in the cargo, not made: the battery bank (docs/lonely-rover.html).</summary>
+    private static readonly HashSet<string> FoundOnly = ["battery-bank"];
+
     public BuildMode(MaterialLibrary materials, MachineDef running, Func<MachineDef, MachineView> applyLive, Func<MachineView> liveView)
         : this(materials)
     {
@@ -475,6 +482,7 @@ public partial class BuildMode : Node3D
         // Start from something that works, and change it.
         var examples = new OptionButton { TooltipText = "Load a working machine to change" };
         examples.AddItem("Start from an example…");
+        examples.Visible = !InGame;   // nothing ready-made in the game (#204)
         var exampleFiles = ExampleMachines();
         foreach (var (name, _) in exampleFiles) examples.AddItem(name);
         examples.ItemSelected += index =>
@@ -540,7 +548,7 @@ public partial class BuildMode : Node3D
         var saveButton = new Button { Text = "Save…", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         saveButton.Pressed += () => _saveDialog.PopupCentered(new Vector2I(700, 500));
         fileRow.AddChild(saveButton);
-        var loadButton = new Button { Text = "Load…", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var loadButton = new Button { Text = "Load…", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, Visible = !InGame };
         loadButton.Pressed += () => _loadDialog.PopupCentered(new Vector2I(700, 500));
         fileRow.AddChild(loadButton);
         leftCol.AddChild(fileRow);

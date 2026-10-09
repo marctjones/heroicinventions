@@ -25,7 +25,7 @@ public class FoundBankTests
         var bank = rt.Banks["bank"];
         Assert.Equal("cells", bank.InName);
         Assert.Equal("crate", Def().Part("bank")!.Symbol("on", ""));
-        Assert.Equal(4000 * BatteryBank.JoulesPerWattHour, bank.Capacity, 6);
+        Assert.Equal(5000 * BatteryBank.JoulesPerWattHour, bank.Capacity, 6);   // the design doc's 5 kWh
         Assert.Equal(0, bank.Charge);
         Assert.Equal(-63, bank.Temperature, 6);                  // Mars's ambient: the cells start as cold as the air
         Assert.False(bank.Accepting);                            // under 0 C it refuses charge until it is warmed
@@ -33,7 +33,7 @@ public class FoundBankTests
         rt.HeatStores["cells"].Temperature = 20;                 // warmed by the player's works
         Assert.True(bank.Accepting);
         // the scenario's bank-capacity multiplier (#60) applies to the found bank
-        Assert.Equal(1000 * BatteryBank.JoulesPerWattHour, Build(new ScenarioTuning { BankCapacity = 0.25 }).Banks["bank"].Capacity, 6);
+        Assert.Equal(1250 * BatteryBank.JoulesPerWattHour, Build(new ScenarioTuning { BankCapacity = 0.25 }).Banks["bank"].Capacity, 6);
     }
 
     [Fact]
@@ -62,9 +62,9 @@ public class FoundBankTests
     [Fact]
     public void FindFreeChargeAndTheCallAllReadTheSamePart()
     {
-        var rt = Build(new ScenarioTuning { BankCapacity = 0.0001 });             // 0.4 Wh: 1,440 J
+        var rt = Build(new ScenarioTuning { BankCapacity = 0.0001 });             // 0.5 Wh: 1,800 J
         var bank = rt.Banks["bank"];
-        Assert.Equal(1440, bank.Capacity, 6);
+        Assert.Equal(1800, bank.Capacity, 6);
         double cover = 3.98, x = 264, z = 143;
         var goals = new GoalTracker { BankCrate = () => new CrateReading(cover, 0.5, x, z) };
         rt.SetField("scene", "clock-rate", 0);
@@ -84,6 +84,6 @@ public class FoundBankTests
         Assert.Contains("charge-bank", got);
         Assert.Contains("the-call", got);
         Assert.True(rt.Won);
-        Assert.Equal(1440, bank.Sources["wind"], 6);
+        Assert.Equal(1800, bank.Sources["wind"], 6);
     }
 }

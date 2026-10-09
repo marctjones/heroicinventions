@@ -1049,6 +1049,7 @@ public partial class Main : Node3D
         if (_groundSim is { } ground) _buildMode.GroundHeight = ground.Ground.HeightAt;   // on a map, parts land on the ground (#37)
         _buildMode.ExitRequested += () => CallDeferred(MethodName.CloseLiveEdit);
         _buildMode.RunRequested += () => CallDeferred(MethodName.CloseLiveEdit);
+        _buildMode.InGame = RoverIsPlayer;   // found cargo and ready-made machines stay out of a build in the game (#204)
         AddChild(_buildMode);
         GD.Print($"[build] editing {label}{(built is not null ? " (built)" : "")}");
     }

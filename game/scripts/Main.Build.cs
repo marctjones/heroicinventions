@@ -127,6 +127,7 @@ public partial class Main
         _buildMode.StartYaw = _orbit.Yaw;   // from where the player was looking
         _buildMode.ExitRequested += () => CallDeferred(MethodName.CloseLiveEdit);
         _buildMode.RunRequested += () => CallDeferred(MethodName.CloseLiveEdit);
+        _buildMode.InGame = RoverIsPlayer;
         AddChild(_buildMode);
         GD.Print($"[build] new machine {label} at ({spot.X:F2} {spot.Y:F2} {spot.Z:F2})");
     }
