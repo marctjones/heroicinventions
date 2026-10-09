@@ -1,4 +1,5 @@
 using Godot;
+using HeroicInventions.Sim;
 using HeroicInventions.Sim.Electrics;
 using HeroicInventions.Sim.Machines;
 
@@ -22,7 +23,7 @@ public partial class MachineView
 {
     private sealed record BankView(BatteryBank Bank, MeshInstance3D Fill, StandardMaterial3D FillMat, float Height, Label3D Label, MeshInstance3D Beacon, StandardMaterial3D BeaconMat, RigidBody3D? Body = null, float Size = 0);
     // (Body: a bank built into a body, #:on, such as the found bank's crate; its column and label then travel with the body)
-    private sealed record GeneratorView(Generator Gen, Node3D Needle, MeshInstance3D Cap, Label3D Label, Vector3 Axis, double RatedAmps) { public float CapAngle; }
+    private sealed record GeneratorView(Generator Gen, Node3D Needle, MeshInstance3D Cap, Label3D Label, Vector3 Axis, double RatedAmps) { public float CapAngle; public string LastWhy = ""; }
     private sealed class GeneratorLoad { public required Generator Gen; public required RigidBody3D Body; public required Vector3 Axis; }
 
     private readonly List<BankView> _bankViews = [];
@@ -215,8 +216,12 @@ public partial class MachineView
             var capBasis = new Basis(new Quaternion(Vector3.Up, v.Axis)) * new Basis(Vector3.Up, v.CapAngle);
             v.Cap.Basis = capBasis;
             v.Cap.Position = (Vector3)v.Cap.GetMeta("gen_at") - v.Axis * 0.025f;
-            v.Label.Text = $"{g.Name} {g.Rpm:#,0} rpm · {g.Torque:0.00} N·m\n{g.Delivered:0} W · {amps:0.0} A at {g.Bank?.Volts:0} V"
-                         + (g.Rpm < g.CutInRpm ? "\nunder cut-in: nothing" : "");
+            // why it is or is not charging, and the rpm beside it (ChargeStatus, #212): state only
+            bool rotorAsleep = SleepingPaused && _generatorLoads.Any(l => l.Gen == g);   // a sim-turned part keeps turning through a paused sleep
+            v.Label.Text = ChargeStatus.Label(g, rotorAsleep, ChargeStatus.Hold.Read(Runtime.FieldGetters, g.Name));
+            string why = v.Label.Text[(v.Label.Text.IndexOf('\n') + 1)..];   // the reason line(s) without the rpm: the log notes each change
+            string kind = System.Text.RegularExpressions.Regex.Replace(why, "[0-9,.-]+", "#");
+            if (kind != v.LastWhy) { v.LastWhy = kind; GD.Print($"[charge] {Runtime.Time:0.0} s {g.Name}: {why.Replace("\n", "")}"); }
         }
     }
 

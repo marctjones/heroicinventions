@@ -85,7 +85,7 @@ public partial class Main
         if (!GameRunning || _activeTuning is not { } t) return "";
         var e = ScenarioTuning.Entries.First(x => x.Key == key);
         double v = t.Get(key);
-        return double.IsNaN(v) || v == e.Real ? "" : $" [tuned: {e.Label} {(e.Unit == "x" ? $"×{v:0.##}" : $"{v:0.##} {e.Unit}")}]";
+        return double.IsNaN(v) || v == e.Real ? "" : $" [tuned: {e.Label} {(e.Unit == "x" ? $"×{v:0.####}" : $"{v:0.##} {e.Unit}")}]";
     }
 }
 

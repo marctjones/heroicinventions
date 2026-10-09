@@ -21,7 +21,7 @@ public partial class Main
         (_views.Count > 0 ? _views : _current is null ? [] : [_current]).SelectMany(v => v.Runtime.Banks.Values.Select(b => (v, b)));
 
     private static string HoursIn(double hours) =>
-        hours < 1 / 60.0 ? "now" : hours >= 1 ? $"{(int)hours} h {(int)Math.Round((hours - (int)hours) * 60)} min" : $"{(int)Math.Round(hours * 60)} min";
+        hours < 1 / 60.0 ? "now" : hours >= 1 ? $"{(int)Math.Round(hours * 60) / 60} h {(int)Math.Round(hours * 60) % 60} min" : $"{(int)Math.Round(hours * 60)} min";
 
     /// <summary>The Bank section's text.</summary>
     private string BankReport()
