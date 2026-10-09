@@ -1913,9 +1913,12 @@
     ;; #:cp (default 0.3) — when their tips run #:tip-speed-ratio (default
     ;; 2.5) times the wind speed, less either side. #:cp can be no more than
     ;; the Betz limit, 16/27: no rotor takes more of the wind than that.
-    ;; #:wind-from-map #t, in a world whose map has a wind field (#:wind in
-    ;; define-map, issue #61), gives it the map's wind at its own place and
-    ;; time of day instead of a fixed #:wind (then 0, until the world starts).
+    ;; In a world whose map has a wind field (#:wind in define-map, issue
+    ;; #61) a windmill takes the map's wind at its own place and time of day
+    ;; instead of its fixed #:wind: by default (owner, 2026-10-09: windmill
+    ;; sites matter), or with #:wind-from-map #t (then #:wind may be left out:
+    ;; 0, until the world starts). #:wind-from-map #f keeps the flat #:wind.
+    ;; Machine runs, and maps with no wind field, are unchanged.
     ;; The wind has a heading (issue #193): #:wind-from-deg, the azimuth it
     ;; blows from, degrees from +x toward +z (default 90: from +z, where the
     ;; sails face), turning #:veer degrees an hour (default 0); the sails face
