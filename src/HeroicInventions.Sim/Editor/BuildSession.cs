@@ -27,7 +27,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (safety-valve id #:at (x y z) #:on boiler #:lift Pa #:bore D [#:coefficient Cd] [#:accumulation a])   ; a boiler's #:burst Pa rates it
 ///   (mirror id #:at (x y z) #:area m2 #:onto boiler-or-sealed-tank [#:reflectivity r])   ; a heliostat: DNI·area·r·cos(θ/2)
 ///   (capstan id #:at (x y z) #:turns n #:load kg [#:hold N] [#:mu μ] [#:drop m] [#:radius r] [#:rope hemp])   ; holds e^(μ·2πn) × the pull
-///   (windmill id #:at (x y z) #:radius R #:mass M #:wind v [#:load N·m] [#:cp Cp] [#:tip-speed-ratio λ])   ; Cp at most 16/27 (Betz)
+///   (windmill id #:at (x y z) #:radius R #:mass M #:wind v [#:load N·m] [#:cp Cp] [#:tip-speed-ratio λ] [#:wind-from-deg a] [#:facing-deg a] [#:vane #t] [#:yaw-rate d] [#:veer d])   ; Cp at most 16/27 (Betz); azimuths from +x toward +z, 90 = +z (#193)
 ///   (bellows id #:at (x y z) #:on hearth #:airflow m3/s [#:material M])   ; forces the hearth's draught past what it draws unforced
 ///   (pump id #:at (x y z) #:from tank #:to tank #:bore D #:stroke S [#:rpm n] [#:efficiency e] [#:force N] [#:temperature C])   ; #:at is the barrel's foot
 ///   (leak id #:at (x y z) #:on tank #:height H #:area A [#:coefficient Cd] [#:into catch-tank] [#:evaporation m3/s])
