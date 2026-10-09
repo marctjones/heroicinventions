@@ -240,7 +240,7 @@ public static class PartTemplates
         "generator" => new PartSpec(id, "generator", material, at,
             new Dictionary<string, SExpr>
             {
-                ["on"] = new SSymbol("?"), ["charges"] = new SSymbol("?"), ["efficiency"] = new SNumber(0.8), ["cut-in-rpm"] = new SNumber(1500),
+                ["on"] = new SSymbol("?"), ["charges"] = new SBool(false), ["efficiency"] = new SNumber(0.8), ["cut-in-rpm"] = new SNumber(1500),
                 ["rated-rpm"] = new SNumber(2500), ["rated-torque"] = new SNumber(12), ["driven-by"] = new SBool(false),
             },
             [], null),

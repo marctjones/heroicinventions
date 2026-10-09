@@ -277,7 +277,7 @@ public static class RktExporter
                        $"#:length {F(N("length", 0.1))} #:thickness {F(N("thickness", 0.001))} #:width {F(N("width", 0.01))} #:high-share {F(N("high-share", 0.5))} " +
                        $"#:shut-at {F(N("shut-at", 40))} #:straight-at {F(N("straight-at", 20))} #:travel {F(N("travel", 0.0021))} #:contact {F(N("contact", 10))} {Mat()})\n";
             case "generator":
-                return $"  (generator {p.Id} {At()} #:on {Sym("on", "?")} #:charges {Sym("charges", "?")} #:efficiency {F(N("efficiency", 0.8))} #:cut-in-rpm {F(N("cut-in-rpm", 1500))} " +
+                return $"  (generator {p.Id} {At()} #:on {Sym("on", "?")}{(p.Props.GetValueOrDefault("charges") is SSymbol bank ? $" #:charges {bank.Name}" : "")} #:efficiency {F(N("efficiency", 0.8))} #:cut-in-rpm {F(N("cut-in-rpm", 1500))} " +
                        $"#:rated-rpm {F(N("rated-rpm", 2500))} #:rated-torque {F(N("rated-torque", 12))}" +
                        (p.Props.GetValueOrDefault("driven-by") is SSymbol drv ? $" #:driven-by {drv.Name}" : "") + $" {Mat()})\n";
             case "battery-bank":

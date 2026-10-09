@@ -5,10 +5,10 @@
 ;;  - while build mode is open the rover stands: the up arrow held for a second moves it under 5 cm (driving, it covers 2 m);
 ;;  - a new machine at (200, 130), 59 m below the rim on the crater floor: a windmill (the palette's: 10 m sails, 1500 kg, 6 m/s, Cp 0.3
 ;;    at a tip-speed ratio of 2.5) on a post, a three-stage train of 72:18 meshes (module 5 mm, 4:1 a stage, 64:1) and the salvaged motor
-;;    on the last pinion. The motor has no bank to charge (the bank is found cargo, and a wire between machines is #208), so it is set
-;;    aside unfinished, as build mode sets such a part aside, and the rest runs;
+;;    on the last pinion. The motor has no bank of its own (the bank is found cargo): it builds open circuit, charging nothing and
+;;    loading nothing until a wire joins it to the found bank (#208), so all nine parts run;
 ;;  - the world is saved with the machine in it, whole ((build built-1 ...), on Mars: the world's own planet, not the default Earth),
-;;    then loaded: all nine parts are back (eight running), and it turns.
+;;    then loaded: all nine parts are back and running, and it turns.
 ;; Worked numbers: on Mars's air (rho = 0.01518 kg/m3 at 610 Pa, -63 C) the sails' torque is tau = 1/2 rho A v^2 R (Cp/l*) (2 - w/w*)
 ;; = 102.9 (2 - w/1.5) N m, so from rest with I = m R^2 / 3 = 50,000 kg m2, w(t) = 3 (1 - e^(-t/729 s)): 0.237 rad/s at 60 s, 0.275 at 70
 ;; (the Jolt train adds 0.3% to the inertia). Every pinion turns at 4 times its wheel, the last at 64 times the sails.
@@ -68,12 +68,12 @@
     (define-values (a b) (values (pos (first rs)) (pos (second rs))))
     (check-true (< (sqrt (+ (sqr (- (first a) (first b))) (sqr (- (third a) (third b))))) 0.05) (format "the rover moved from ~a to ~a" a b)))
 
-  (test-case "the build: nine parts, the motor set aside for want of a bank, the rest running"
+  (test-case "the build: nine parts, all running, the motor open circuit until it is wired"
     (define l (for/first ([l built] #:when (string-prefix? l "[build] built-1: design")) l))
     (check-not-false l)
     (check-regexp-match #rx"sails:windmill" l)
     (check-regexp-match #rx"motor:generator" l)
-    (check-regexp-match #rx"running 8 parts; unfinished motor$" l)
+    (check-regexp-match #rx"running 9 parts$" l)
     (check-false (for/or ([l built]) (regexp-match? #rx"BuildMode\\] error" l)) "no command was refused"))
 
   (test-case "the save holds the machine whole, on Mars"
@@ -83,9 +83,9 @@
     (check-regexp-match #rx"\n  \\(machine built-1 built-1 " s))
 
   (test-case "loaded, it is all there and turning: 64 to 1, at the worked speed"
-    (check-true (for/or ([l loaded]) (regexp-match? #rx"^\\[build\\] loaded built-1: 8 of 9 parts running" l)))
+    (check-true (for/or ([l loaded]) (regexp-match? #rx"^\\[build\\] loaded built-1: 9 of 9 parts running" l)))
     (check-false (for/or ([l loaded]) (regexp-match? #rx"found nothing to set" l)) "every entry of the save found its place")
-    (check-true (for/or ([l loaded]) (regexp-match? #rx"^\\[build\\] built-1: design .*running 8 parts; unfinished motor$" l)))
+    (check-true (for/or ([l loaded]) (regexp-match? #rx"^\\[build\\] built-1: design .*running 9 parts$" l)))
     (define fs (frames (p "t.built-1")))
     (check-true (> (length fs) 15) (format "~a frames" (length fs)))
     (define t0 (hash-ref (first fs) "scene.elapsed"))

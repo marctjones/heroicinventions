@@ -56,17 +56,19 @@ public class BuiltPlacementTests
         """);
 
     [Fact]
-    public void AGeneratorWithNoBankIsSetAsideAndTheRestRuns()
+    public void AGeneratorWithNoBankBuildsOpenCircuitAndTheWholeMachineRuns()
     {
+        // a new generator charges nothing until a bank is set or a wire joins it to one in another machine (#208): it builds,
+        // open circuit, putting no load on the train, so the player's windmill runs whole and can then be wired to the found bank
         var design = BuiltWindmill();
         Assert.Equal(9, design.Parts.Count);
         var unfinished = new Dictionary<string, string>();
         MachineRuntime? runtime = null;
         var built = BuildSession.Buildable(design, d => runtime = new MachineRuntime(d, Materials), unfinished);
         Assert.NotNull(built);
-        Assert.Equal(["motor"], unfinished.Keys);
-        Assert.Contains("charges ?, which is not a battery-bank", unfinished["motor"]);
-        Assert.Equal(8, built!.Parts.Count);
+        Assert.Empty(unfinished);
+        Assert.Equal(9, built!.Parts.Count);
+        Assert.Null(runtime!.Generators["motor"].Bank);
         // the sails on Mars's air: tau(omega) = 1/2 rho A v^2 R (Cp/lambda*) (2 - omega/omega*), omega* = lambda* v / R = 1.5 rad/s,
         // I = m R^2 / 3 = 50,000 kg m2, so omega(t) = 3 (1 - e^(-t/T)), T = 1.5 I / (1/2 rho A v^2 R Cp/lambda*)
         double rho = runtime!.FieldGetters["scene.air-density"]();
