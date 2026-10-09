@@ -68,6 +68,7 @@ Environment switches (all `HEROIC_*`):
 
 ## Traps already met
 
+- **A fresh worktree has no Godot import.** The first headless run in a new worktree can hang for a long time importing; run `cd game && dotnet build && /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --import` once first (then runs take seconds).
 - **Background suites must prove where they ran.** Start with `cd <worktree> || exit 1`, then write `pwd` and `racket -l racket/base -e '(displayln (collection-file-path "godothost.rkt" "heroic"))'` into the log. A run whose `cd` didn't hold tested the main checkout's stale build and hung for two hours on a win that build couldn't reach.
 - **Racket:**
   - **In a worktree, set `PLTCOLLECTS=$PWD/racket:`.** Otherwise raco silently uses the main checkout's `heroic` package.
