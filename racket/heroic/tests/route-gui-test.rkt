@@ -9,8 +9,9 @@
 ;;    motor at an estimate: it has never charged a warm bank), so `bank.charge` 25 in the first frame after it;
 ;;  - the call at the pass: the rover log's win line at 55,484 s (03:00, sol 2), a frame with bank.won 1 by 55,495 s, none before 55,484 s;
 ;;  - #225: the real gesture makes both links. The click on the train's last pinion crosses the sails' box first and picks the smaller box
-;;    inside it, built-1.pinion-e; the rotor click makes the shaft; the click on the generator (a box that overlaps the rotor's) picks
-;;    motors.motor, or, when the ray crosses the rotor's box too, the second-click list offers it (`joinclick motors.motor list`); the click on the
+;;    inside it, built-1.pinion-e; the click on the rotor's place crosses the motor can's box (0.44 m, #247) first and picks the smaller
+;;    rotor box inside it, so the shaft is made by a plain click; the plain click on the can's flank picks motors.motor (no pick list, no second
+;;    click); the click on the
 ;;    bank crosses the crate's box first and picks the smaller, battery-bank.bank.
 (require rackunit racket/list racket/string racket/port racket/file racket/system racket/runtime-path
          (only-in heroic/godothost godot-available?))
@@ -39,7 +40,9 @@
   (test-case "the real gesture makes both links: the smaller box wins, the generator and the bank have boxes, the list is there for overlaps"
     (check-true (has? #rx"the click crossed [0-9]+ parts' boxes, nearest first: built-1.sails") "the click on pinion-e crosses the sails' box first")
     (check-true (has? #rx"built-1.pinion-e lies inside built-1.sails's box and is the smaller: it takes the click"))
+    (check-true (has? #rx"motors.rotor lies inside motors.motor's box and is the smaller: it takes the click") "the rotor's click crosses the can's box first and picks the smaller rotor")
     (check-true (has? #rx"\\[links\\] joined: shaft shaft-1 from built-1.pinion-e to motors.rotor") "the shaft, by clicks")
+    (check-false (has? #rx"pick list at|chosen from the list") "both links were made by plain clicks: no pick list was needed")
     (check-true (has? #rx"battery-bank.bank lies inside battery-bank.crate's box and is the smaller: it takes the click"))
     (check-true (has? #rx"\\[links\\] joined: wire wire-1 from motors.motor to battery-bank.bank") "the wire, by clicks")
     (check-false (has? #rx"\n(\\[Main\\] )?join: ") "no join error: every click landed on the part it was aimed at"))

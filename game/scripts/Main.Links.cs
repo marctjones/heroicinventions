@@ -340,6 +340,14 @@ public partial class Main : ScriptedInput.IJoinStep
             if (bits.Length is < 2 or > 3 || !_byName.TryGetValue(bits[0], out var target)) { Fail($"no machine part '{w[1]}' to click"); return ScriptedInput.Step.Next; }
             if (!_joining) { Fail($"{w[0]}: joining is not on (press the Join machines button first)"); return ScriptedInput.Step.Next; }
             if (target.LinkPoint(bits[1], bits.Length == 3 ? bits[2] : null) is not { } at) { Fail($"{w[1]} has no point to click"); return ScriptedInput.Step.Next; }
+            // a generator is clicked on its can's flank (0.19 m to the side on the screen, inside the can's 0.22 m radius), where the player sees iron:
+            // its centre is where the rotor's wheel lies under the can, and the rotor's smaller box wins there (#247)
+            if (target.Runtime.Def.Part(bits[1]) is { Kind: "generator" })
+            {
+                var camRight = _camera.GlobalBasis.X;
+                float away = target.LinkPoint(target.Runtime.GeneratorShaft(bits[1]), null) is { } rotorAt ? (at - rotorAt).Dot(camRight) : 0;   // the side that is further from the rotor
+                at += camRight * (away < 0 ? -0.19f : 0.19f);
+            }
             var screen = GetViewport().GetScreenTransform() * _camera.UnprojectPosition(at);
             bool shown = !_camera.IsPositionBehind(at) && GetViewport().GetVisibleRect().HasPoint(screen);
             GD.Print($"[links] {(right ? "right-click" : "click")} {w[1]} at ({at.X:F2} {at.Y:F2} {at.Z:F2}) drawn at screen ({screen.X:F0} {screen.Y:F0}){(shown ? "" : ": NOT ON SCREEN")}");
