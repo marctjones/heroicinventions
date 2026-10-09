@@ -191,6 +191,7 @@ public partial class Main
         Section("Driving");
         _roverInfo.AddChild(_roverDrive = Line("Driving"));
         _roverInfo.AddChild(_roverAhead = Line("Ahead"));
+        _roverInfo.AddChild(BuildMarkRow());   // the chosen cargo area's distance, bearing and arrow (Main.Markers.cs, #239)
         Section("Arm");
         _roverInfo.AddChild(_roverArm = Line("Arm"));
         Section("Bucket");

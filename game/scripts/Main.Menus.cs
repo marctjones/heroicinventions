@@ -242,6 +242,8 @@ public partial class Main
         // shortcut fires before build mode's own keys, where Home frames the design
         int reset = m.Add("Reset Camera (Home)", ResetCamera);
         int hints = m.AddCheck("Show Hints", () => _hints.SetEnabled(!_hints.Enabled));
+        int markers = m.AddCheck("Cargo Markers", () => SetMarkersOn(!_markersOn));   // the cargo's rough areas and the bearing line (Main.Markers.cs)
+        m.Add("Navigation Map (M)", () => { EnsureMarkerNodes(); if (_groundSim is not null) _navMap!.SetOpen(!_navMap.IsOpen); });
         m.Popup.AddSeparator();
 
         var size = NewMenu("Window Size", m.Popup);
@@ -261,6 +263,7 @@ public partial class Main
             m.Check(side, _leftPanel.Visible);
             m.Enable(reset, _buildMode is null);
             m.Check(hints, _hints.Enabled);
+            m.Check(markers, _markersOn);
             m.Check(full, GetWindow().Mode == Window.ModeEnum.Fullscreen);
         };
     }
