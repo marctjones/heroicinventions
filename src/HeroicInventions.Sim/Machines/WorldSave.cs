@@ -40,6 +40,9 @@ public sealed class WorldSave
     /// <summary>The goals and achievements earned (issue #68): <c>(goals 1 (found X Z) (earned id time sol) …)</c>, or null. An older save has none, and loads with nothing earned.</summary>
     public SList? Goals { get; init; }
 
+    /// <summary>Every link between machines the world has when saved (issue #82): pipes, shafts and wires, the ones its file declares and the ones made during play. Null for a save that has none to say (a single machine, or an older save): the world file's own links stand.</summary>
+    public IReadOnlyList<LinkSpec>? Links { get; init; }
+
     /// <summary>The rover itself (issue #201): <c>(rover 1 (chassis …) (wheel K …) (drive …) (bucket …) (arm …))</c>, which the game reads back; or null. An older save has none, and the world file's rover stands where it puts it.</summary>
     public SList? Rover { get; init; }
 
@@ -67,6 +70,7 @@ public sealed class WorldSave
             items.Add(new SList([new SSymbol("operator-log"), .. (OperatorTaken ? [new SList([new SSymbol("taken"), new SBool(true)])] : Array.Empty<SExpr>()),
                                  .. Operated.Select(a => (SExpr)OperatorLog.ToForm(a))]));
         if (Goals is { } gl) items.Add(gl);   // (before the ground: the rover stays the last form of a save, as worked-save-test builds an older save by blanking its line)
+        if (Links is { } links) items.Add(new SList([new SSymbol("links"), new SNumber(1), .. links.Select(l => (SExpr)LinkForms.ToForm(l))]));
         if (Ground is { } g) items.Add(new SList([new SSymbol("ground"), g]));
         if (Boulders is { } bs) items.Add(bs);
         if (Worked is { } wk) items.Add(wk);
@@ -83,7 +87,7 @@ public sealed class WorldSave
                 new SList([new SSymbol("events"), .. s.Plan.Events.Select(Term)])]));
         }
         return ";; A saved world. Loading rebuilds the machines from their own files and lays this running state on them.\n"
-               + SExprWriter.Print(new SList(items)).Replace(" (machine ", "\n  (machine ").Replace(" (sleep ", "\n  (sleep ").Replace(" (operator-log ", "\n  (operator-log ").Replace(" (ground ", "\n  (ground ").Replace(" (boulders ", "\n  (boulders ").Replace(" (worked ", "\n  (worked ").Replace(" (rover ", "\n  (rover ").Replace(" (goals ", "\n  (goals ") + "\n";
+               + SExprWriter.Print(new SList(items)).Replace(" (machine ", "\n  (machine ").Replace(" (sleep ", "\n  (sleep ").Replace(" (operator-log ", "\n  (operator-log ").Replace(" (links ", "\n  (links ").Replace(" (ground ", "\n  (ground ").Replace(" (boulders ", "\n  (boulders ").Replace(" (worked ", "\n  (worked ").Replace(" (rover ", "\n  (rover ").Replace(" (goals ", "\n  (goals ") + "\n";
     }
 
     public static WorldSave Parse(string text)
@@ -110,6 +114,7 @@ public sealed class WorldSave
                 Num("started", 0), sl.Field("predicted")?.Items.ElementAtOrDefault(1) is SNumber pr ? pr.Value : null);
         }
         return new WorldSave { Kind = Sym("kind"), Name = Sym("name"), Machines = machines, Sleep = sleep, Ground = root.Field("ground")?.Items.ElementAtOrDefault(1) as SList, Boulders = root.Field("boulders"), Worked = root.Field("worked"), Rover = root.Field("rover"), Goals = root.Field("goals"),
+            Links = root.Field("links") is { } lk ? lk.Items.Skip(2).OfType<SList>().Where(x => x.Head == "link").Select(LinkForms.FromForm).ToList() : null,
             Operated = (root.Field("operator-log")?.Items.Skip(1) ?? []).Select(OperatorLog.FromForm).OfType<OperatorAction>().ToList(),
             OperatorTaken = root.Field("operator-log")?.Field("taken")?.Items.ElementAtOrDefault(1) is SBool { Value: true } };
     }

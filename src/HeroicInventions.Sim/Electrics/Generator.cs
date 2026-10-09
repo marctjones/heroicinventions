@@ -30,7 +30,12 @@ namespace HeroicInventions.Sim.Electrics;
 public sealed class Generator
 {
     public string Name { get; }
-    public BatteryBank? Bank { get; set; }
+    private BatteryBank? _own;
+    /// <summary>The bank it charges: the one it is wired to if a world's wire link joins it to one (#208), else its machine's own (<c>#:charges</c>, or none).</summary>
+    public BatteryBank? Bank { get => Wired ?? _own; set => _own = value; }
+    /// <summary>The bank in another machine a wire link (#208) has joined it to, or null. The wire is lossless and instant, so the generator charges this bank by the same <see cref="Apply"/> and the same open-circuit rule as its own; the bank files the charge under <see cref="DrivenBy"/> as before.</summary>
+    public BatteryBank? Wired { get => _wired; set => _wired = value; }
+    [NonSerialized] private BatteryBank? _wired;   // not state of this machine: the other machine saves its own bank (RuntimeState skips it)
     /// <summary>What turns it: the key the bank files its charge under.</summary>
     public string DrivenBy { get; set; } = "shaft";
     /// <summary>The shaft speed of the prime mover (rad/s) where the sim turns it (a windmill, water wheel, jet wheel, Stirling engine), else null.</summary>

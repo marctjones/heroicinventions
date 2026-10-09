@@ -18,7 +18,8 @@ public sealed record LinkEnd(string Label, string Part, string? Port = null)
 /// a <c>pipe</c> between two tanks' ports, carrying water by the same law as a
 /// pipe inside one machine (flow = conductance × head difference), or a
 /// <c>shaft</c> between two things turning on axles, making the driven end
-/// turn at <see cref="Ratio"/> times the driving end's speed.
+/// turn at <see cref="Ratio"/> times the driving end's speed, or a <c>wire</c>
+/// (issue #208) from a generator in one machine to a battery bank in another.
 /// </summary>
 public sealed record LinkSpec(string Id, string Kind, LinkEnd From, LinkEnd To, SourceLocation? Location = null)
 {
@@ -235,7 +236,7 @@ public sealed class WorldDef
     /// <summary>Pipes and shafts joining parts of different machines, resolved after every machine is built.</summary>
     public IReadOnlyList<LinkSpec> Links { get; init; } = [];
 
-    public static readonly string[] LinkKinds = ["pipe", "shaft"];
+    public static readonly string[] LinkKinds = ["pipe", "shaft", "wire"];
 
     /// <summary>The same world with one more link (its id must be new).</summary>
     public WorldDef WithLink(LinkSpec link)
@@ -272,7 +273,7 @@ public sealed class WorldDef
         {
             static string End(LinkEnd e) => e.Port is null ? $"{e.Label} {e.Part}" : $"{e.Label} {e.Part} {e.Port}";
             sb.Append($"\n  (link {l.Id} {l.Kind} (from {End(l.From)}) (to {End(l.To)})");
-            sb.Append(l.Kind == "pipe" ? $" (conductance {SExprWriter.Number(l.Conductance)}))" : $" (ratio {SExprWriter.Number(l.Ratio)}))");
+            sb.Append(l.Kind switch { "pipe" => $" (conductance {SExprWriter.Number(l.Conductance)}))", "wire" => ")", _ => $" (ratio {SExprWriter.Number(l.Ratio)}))" });
         }
         sb.Append(")\n");
         return sb.ToString();
@@ -282,7 +283,7 @@ public sealed class WorldDef
     {
         string at = file is null ? "" : $"{file}: ";
         if (!LinkKinds.Contains(l.Kind))
-            throw new MachineFormatException($"{at}link {l.Id}: a link is a pipe or a shaft, not {l.Kind}", l.Location);
+            throw new MachineFormatException($"{at}link {l.Id}: a link is a pipe, a shaft or a wire, not {l.Kind}", l.Location);
         foreach (var e in new[] { l.From, l.To })
             if (placements.All(p => p.Label != e.Label))
                 throw new MachineFormatException($"{at}link {l.Id}: no machine is placed as {e.Label}", l.Location);
@@ -324,7 +325,7 @@ public sealed class WorldDef
         {
             var loc = new SourceLocation(file, 0, 0);
             if (l.Items.Count < 5 || l.Items[1] is not SSymbol id || l.Items[2] is not SSymbol kind)
-                throw new MachineFormatException($"{file}: (link ID pipe|shaft (from LABEL PART [PORT]) (to LABEL PART [PORT]) ...)", loc);
+                throw new MachineFormatException($"{file}: (link ID pipe|shaft|wire (from LABEL PART [PORT]) (to LABEL PART [PORT]) ...)", loc);
             LinkEnd End(string which) =>
                 l.Field(which) is { Items.Count: 3 or 4 } e && e.Items.Skip(1).All(x => x is SSymbol)
                     ? new LinkEnd(((SSymbol)e.Items[1]).Name, ((SSymbol)e.Items[2]).Name, e.Items.Count == 4 ? ((SSymbol)e.Items[3]).Name : null)

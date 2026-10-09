@@ -80,7 +80,9 @@ public sealed partial class MachineRuntime
         foreach (var part in def.Parts.Where(p => p.Kind == "generator"))
         {
             string on = part.Symbol("on", ""), charges = part.Symbol("charges", "");
-            if (!_banks.TryGetValue(charges, out var bank))
+            // a generator may name no bank (#:charges #f): it is open circuit until a world's wire joins it to a bank in another machine (#208)
+            BatteryBank? bank = null;
+            if (charges.Length > 0 && charges != "#f" && !_banks.TryGetValue(charges, out bank))
                 throw new MachineFormatException($"generator {part.Id} charges {charges}, which is not a battery-bank", part.Location);
             double eff = part.Number("efficiency", 0.8), cut = part.Number("cut-in-rpm", 1500), rated = part.Number("rated-rpm", 2500), torque = part.Number("rated-torque", 12);
             if (!(eff > 0 && eff <= 1) || !(cut > 0) || !(rated > cut) || !(torque > 0))

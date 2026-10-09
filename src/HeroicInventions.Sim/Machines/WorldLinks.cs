@@ -1,3 +1,4 @@
+using HeroicInventions.Sim.Electrics;
 using HeroicInventions.Sim.Fluids;
 using HeroicInventions.Sim.Mechanics;
 
@@ -249,6 +250,9 @@ public sealed class WorldLinks
         public string? Unfinished { get; init; }
         public Pipe? Pipe { get; init; }
         public ShaftLink? Shaft { get; init; }
+        /// <summary>A wire (#208): the generator and the bank it is joined to.</summary>
+        public Generator? Generator { get; init; }
+        public BatteryBank? Bank { get; init; }
     }
 
     private readonly FluidNetwork _pipes = new();
@@ -277,7 +281,8 @@ public sealed class WorldLinks
                 {
                     "pipe" => w.BuildPipe(spec, machine),
                     "shaft" => BuildShaft(spec, machine, shaftFor),
-                    _ => throw new MachineFormatException($"link {spec.Id}: a link is a pipe or a shaft, not {spec.Kind}"),
+                    "wire" => w.BuildWire(spec, machine),
+                    _ => throw new MachineFormatException($"link {spec.Id}: a link is a pipe, a shaft or a wire, not {spec.Kind}"),
                 };
             }
             catch (MachineFormatException e)
@@ -296,6 +301,37 @@ public sealed class WorldLinks
         var (to, toY) = Port(spec, spec.To, machine);
         var pipe = _pipes.AddPipe(new Pipe(spec.Id, from, fromY, to, toY, spec.Conductance));
         return new Link { Spec = spec, Pipe = pipe };
+    }
+
+    private readonly List<Generator> _wired = [];
+
+    private Link BuildWire(LinkSpec spec, Func<string, MachineRuntime?> machine)
+    {
+        var from = machine(spec.From.Label) ?? throw new MachineFormatException($"link {spec.Id}: no machine is placed as {spec.From.Label}");
+        var to = machine(spec.To.Label) ?? throw new MachineFormatException($"link {spec.Id}: no machine is placed as {spec.To.Label}");
+        if (!from.Generators.TryGetValue(spec.From.Part, out var gen))
+            throw new MachineFormatException(from.Def.Part(spec.From.Part) is { } p
+                ? $"link {spec.Id}: {spec.From.Label}'s {spec.From.Part} is a {p.Kind}; a wire starts at a generator"
+                : $"link {spec.Id}: {spec.From.Label} has no part {spec.From.Part}");
+        if (!to.Banks.TryGetValue(spec.To.Part, out var bank))
+            throw new MachineFormatException(to.Def.Part(spec.To.Part) is { } p
+                ? $"link {spec.Id}: {spec.To.Label}'s {spec.To.Part} is a {p.Kind}; a wire ends at a battery bank"
+                : $"link {spec.Id}: {spec.To.Label} has no part {spec.To.Part}");
+        if (gen.Wired is not null)
+            throw new MachineFormatException($"link {spec.Id}: {spec.From} is already wired to a bank");
+        gen.Wired = bank;
+        _wired.Add(gen);
+        return new Link { Spec = spec, Generator = gen, Bank = bank };
+    }
+
+    /// <summary>
+    /// Takes the wires off the generators they were run to, so a generator charges its own machine's bank (or none) again.
+    /// Call it before building the links again (a wire is a generator's state, not a world's).
+    /// </summary>
+    public void Release()
+    {
+        foreach (var g in _wired) g.Wired = null;
+        _wired.Clear();
     }
 
     private static (Tank Tank, double Elevation) Port(LinkSpec spec, LinkEnd end, Func<string, MachineRuntime?> machine)
@@ -336,6 +372,16 @@ public sealed class WorldLinks
         _getters[$"{id}.unfinished"] = () => link.Unfinished is null ? 0 : 1;
         if (link.Pipe is { } p)
             _getters[$"{id}.flow"] = () => p.Flow * 1000;                  // L/s, + from → to
+        if (link is { Generator: { } g, Bank: { } b })
+        {
+            _getters[$"{id}.power"] = () => g.Delivered;                    // W the bank is taking down the wire
+            _getters[$"{id}.offered"] = () => g.Power;                      // W the generator makes (η τ ω)
+            _getters[$"{id}.current"] = () => g.Delivered / b.Volts;        // A at the pack's nominal voltage: a readout
+            _getters[$"{id}.charge"] = () => b.ChargeWh;                    // Wh the bank holds
+            _getters[$"{id}.open-circuit"] = () => b.Accepting ? 0 : 1;     // full or out of range: the generator runs free
+            string source = g.DrivenBy;
+            _getters[$"{id}.from-{source}"] = () => b.Sources.GetValueOrDefault(source) / BatteryBank.JoulesPerWattHour;   // Wh of the bank's charge this prime mover gave
+        }
         if (link.Shaft is { } s)
         {
             _getters[$"{id}.rpm"] = () => s.Rpm;                            // the driving end
@@ -374,5 +420,53 @@ public sealed class WorldLinks
     public void ReadLockedShafts()
     {
         foreach (var l in _links) l.Shaft?.ReadLocked();
+    }
+}
+
+
+/// <summary>
+/// A link written as one s-expression and read back, for a world save (issue #82): every link a world has, the ones its file
+/// declares and the ones made during play, in the shape the world file gives them.
+/// </summary>
+public static class LinkForms
+{
+    public static SList ToForm(LinkSpec l)
+    {
+        static SExpr End(string which, LinkEnd e) => new SList([new SSymbol(which), new SSymbol(e.Label), new SSymbol(e.Part), .. e.Port is null ? Array.Empty<SExpr>() : [new SSymbol(e.Port)]]);
+        var items = new List<SExpr> { new SSymbol("link"), new SSymbol(l.Id), new SSymbol(l.Kind), End("from", l.From), End("to", l.To) };
+        if (l.Kind == "pipe") items.Add(new SList([new SSymbol("conductance"), new SNumber(l.Conductance)]));
+        else if (l.Kind == "shaft") items.Add(new SList([new SSymbol("ratio"), new SNumber(l.Ratio)]));
+        return new SList(items);
+    }
+
+    public static LinkSpec FromForm(SList f)
+    {
+        if (f.Items is not [_, SSymbol id, SSymbol kind, ..])
+            throw new FormatException("a (link ID KIND (from LABEL PART [PORT]) (to LABEL PART [PORT])) is expected");
+        LinkEnd End(string which) =>
+            f.Field(which) is { Items.Count: 3 or 4 } e && e.Items.Skip(1).All(x => x is SSymbol)
+                ? new LinkEnd(((SSymbol)e.Items[1]).Name, ((SSymbol)e.Items[2]).Name, e.Items.Count == 4 ? ((SSymbol)e.Items[3]).Name : null)
+                : throw new FormatException($"link {id.Name} needs ({which} LABEL PART [PORT])");
+        return new LinkSpec(id.Name, kind.Name, End("from"), End("to"))
+        {
+            Conductance = f.Field("conductance")?.Items.ElementAtOrDefault(1) is SNumber c ? c.Value : 1e-3,
+            Ratio = f.Field("ratio")?.Items.ElementAtOrDefault(1) is SNumber r ? r.Value : 1,
+        };
+    }
+
+    /// <summary>
+    /// The world with exactly the links a save had (issue #82): the ones its file declares are taken off and the saved ones put on,
+    /// so a link made during play is back. A saved link that no longer fits the world (a placement it names has gone) is left out,
+    /// and <paramref name="leftOut"/> says why.
+    /// </summary>
+    public static WorldDef Restore(WorldDef world, IEnumerable<LinkSpec> saved, List<string>? leftOut = null)
+    {
+        foreach (var l in world.Links.ToList()) world = world.WithoutLink(l.Id);
+        foreach (var l in saved)
+        {
+            try { world = world.WithLink(l); }
+            catch (MachineFormatException e) { leftOut?.Add($"{l.Id}: {e.Message}"); }
+        }
+        return world;
     }
 }

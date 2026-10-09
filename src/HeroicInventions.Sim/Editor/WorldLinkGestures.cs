@@ -16,7 +16,7 @@ public static class WorldLinkGestures
     public static readonly string[] Turning = ["windmill", "waterwheel", "jetwheel", "smokejack", "wheel", "screw"];
 
     public static string Prompt(LinkEnd? first) =>
-        first is null ? "Join machines: click a tank's port or a turning part on one machine"
+        first is null ? "Join machines: click a tank's port, a turning part, a generator or a battery bank on one machine"
                       : $"Join machines: {first} picked; click a port or turning part on another machine (Esc to stop)";
 
     /// <summary>The link two picks make in <paramref name="world"/>, or an <see cref="InvalidOperationException"/> saying why they won't do.</summary>
@@ -43,8 +43,16 @@ public static class WorldLinkGestures
                 throw new InvalidOperationException($"{sa} and {sb} are already on one shaft");
             return new LinkSpec(world.NextLinkId("shaft"), "shaft", sa, sb) { Ratio = 1 };
         }
+        if (pa.Kind == "generator" && pb.Kind == "battery-bank" || pa.Kind == "battery-bank" && pb.Kind == "generator")
+        {
+            // a wire runs from the generator to the bank, whichever was clicked first
+            var (gen, bank) = pa.Kind == "generator" ? (a with { Port = null }, b with { Port = null }) : (b with { Port = null }, a with { Port = null });
+            if (world.Links.Any(l => l.Kind == "wire" && l.From == gen))
+                throw new InvalidOperationException($"{gen} is already wired to a bank");
+            return new LinkSpec(world.NextLinkId("wire"), "wire", gen, bank);
+        }
         throw new InvalidOperationException(
-            $"{a.Label}'s {pa.Id} is a {pa.Kind} and {b.Label}'s {pb.Id} a {pb.Kind}: a pipe joins two tanks' ports, a shaft two things turning on axles");
+            $"{a.Label}'s {pa.Id} is a {pa.Kind} and {b.Label}'s {pb.Id} a {pb.Kind}: a pipe joins two tanks' ports, a shaft two things turning on axles, a wire a generator to a battery bank");
     }
 
     private static PartSpec PartOf(Func<string, MachineDef?> machineOf, LinkEnd e) =>
