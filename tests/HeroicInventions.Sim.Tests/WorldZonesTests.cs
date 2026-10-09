@@ -114,4 +114,38 @@ public class WorldZonesTests
         Assert.Same(bank.Outside, cells.Zone);
         Assert.Equal(2, heat.Enclosures["tight"].Stores.Count);
     }
+
+    [Fact]
+    public void ASaveOfEitherMachineLeavesTheOtherOut_AndALoadHoldsTheStoreAgainFromWhereItIs()
+    {
+        MachineRuntime Vault() => Placed(Text("vault-night"), "vault", new Vec3(0, 0, 0));
+        MachineRuntime Bank() => Placed(Text("found-bank"), "bank", new Vec3(0, 0, 0));   // the cells at (0, 0.25, 0): inside
+        var (vault, bank) = (Vault(), Bank());
+        var zones = new WorldZones();
+        List<(string, MachineRuntime)> Pair(MachineRuntime v, MachineRuntime b) => [("vault", v), ("bank", b)];
+        Vec3 At(MachineRuntime v, MachineRuntime b, string label, string id) => (label == "vault" ? v : b).Def.Part(id)!.At;
+        zones.Update(Pair(vault, bank), (l, id) => At(vault, bank, l, id));
+        for (int i = 0; i < 600; i++) { vault.Step(1); bank.Step(1); }
+
+        static IEnumerable<string> Paths(SList state) => state.Items.Skip(1).OfType<SList>().Select(l => ((SSymbol)l.Items[0]).Name);
+        var vs = RuntimeState.Capture(vault);
+        var bs = RuntimeState.Capture(bank);
+        Assert.DoesNotContain(Paths(vs), p => p.Contains("/_stores/1/"));    // the vault's save has its own rock and not the cells (held stores are not its state)
+        Assert.Contains(Paths(bs), p => p == "runtime/_heatStores/cells/_enthalpy");   // the cells are saved by their own machine
+
+        // loaded into a fresh pair: everything finds its place, and the cells are held again once the zones are worked out. The one
+        // thing left over: the bank's save walks from its cells into the room they were in (runtime/_heatStores/cells/Zone/...), a copy
+        // of the vault's state that a load ignores, as the cells are in their own air until the zones are worked out again
+        var (vault2, bank2) = (Vault(), Bank());
+        Assert.Empty(RuntimeState.Restore(vault2, vs));
+        Assert.All(RuntimeState.Restore(bank2, bs), p => Assert.StartsWith("runtime/_heatStores/cells/Zone/", p));
+        Assert.Equal(-63, bank2.Outside.Temperature);   // the vault's air was not laid on the bank's own
+        var zones2 = new WorldZones();
+        Assert.Single(zones2.Update(Pair(vault2, bank2), (l, id) => At(vault2, bank2, l, id)));
+        Assert.Same(vault2.Enclosures["vault"], bank2.HeatStores["cells"].Zone);
+        // and goes on as the original does
+        for (int i = 0; i < 600; i++) { vault.Step(1); bank.Step(1); vault2.Step(1); bank2.Step(1); }
+        Assert.Equal(bank.HeatStores["cells"].Temperature, bank2.HeatStores["cells"].Temperature, 6);
+        Assert.Equal(vault.HeatStores["rock"].Temperature, vault2.HeatStores["rock"].Temperature, 6);
+    }
 }

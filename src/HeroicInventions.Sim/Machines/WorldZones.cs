@@ -85,7 +85,7 @@ public sealed class WorldZones
         foreach (var h in _held)
             if (!want.Any(w => ReferenceEquals(w.Room, h.Room) && ReferenceEquals(w.Store, h.Store)))
             {
-                h.Room.RemoveStore(h.Store);
+                h.Room.Release(h.Store);
                 if (ReferenceEquals(h.Store.Zone, h.Room)) h.Store.Zone = h.Home.ZoneOf(h.Hold.Store);   // back in its own machine's air
                 log.Add($"{h.Hold.StoreLabel}.{h.Hold.Store} left {h.Hold.RoomLabel}.{h.Hold.Room} at {h.Store.Temperature:0.00} C");
             }
@@ -93,7 +93,7 @@ public sealed class WorldZones
         {
             if (!_held.Any(h => ReferenceEquals(h.Room, w.Room) && ReferenceEquals(h.Store, w.Store)))
                 log.Add($"{w.Hold.StoreLabel}.{w.Hold.Store} joined {w.Hold.RoomLabel}.{w.Hold.Room} at {w.Store.Temperature:0.00} C (the room at {w.Room.Temperature:0.00} C)");
-            w.Room.AddStore(w.Store);   // no-op when it is already there
+            w.Room.Hold(w.Store);       // no-op when it is already held
             w.Store.Zone = w.Room;      // re-asserted every tick: the store's own machine no longer steps it in the open
         }
         _held = want;
@@ -105,7 +105,7 @@ public sealed class WorldZones
     {
         foreach (var h in _held)
         {
-            h.Room.RemoveStore(h.Store);
+            h.Room.Release(h.Store);
             if (ReferenceEquals(h.Store.Zone, h.Room)) h.Store.Zone = h.Home.ZoneOf(h.Hold.Store);
         }
         _held = [];

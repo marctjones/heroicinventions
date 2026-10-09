@@ -69,11 +69,16 @@ public sealed class Enclosure : Zone, IHeated
     /// <summary>The wall heat soaks into (a regolith vault), or null for a wall that only has a UA.</summary>
     public HeatSlab? Wall { get; set; }
     private readonly List<HeatStore> _stores = [];
-    /// <summary>The heat stores standing in the room.</summary>
-    public IReadOnlyList<HeatStore> Stores => _stores;
-    public void AddStore(HeatStore store) { if (!_stores.Contains(store)) _stores.Add(store); }
-    /// <summary>Takes a store out of the room (another machine's store carried out of it, #211); false if it was not in it.</summary>
-    public bool RemoveStore(HeatStore store) => _stores.Remove(store);
+    /// <summary>Other machines' stores the room holds now (#211, WorldZones): solved with its own, after them; not part of its machine's
+    /// saved state (each store is saved by its own machine, and who holds it follows from where it is).</summary>
+    [NonSerialized] private readonly List<HeatStore> _held = [];
+    /// <summary>The heat stores standing in the room: its machine's own, then any of other machines' it holds.</summary>
+    public IReadOnlyList<HeatStore> Stores => _held.Count == 0 ? _stores : [.. _stores, .. _held];
+    public void AddStore(HeatStore store) => _stores.Add(store);
+    /// <summary>Holds another machine's store (#211): it is solved in this room's network until <see cref="Release"/>d.</summary>
+    public void Hold(HeatStore store) { if (!_stores.Contains(store) && !_held.Contains(store)) _held.Add(store); }
+    /// <summary>Lets another machine's store go (carried out of the room); false if it was not held.</summary>
+    public bool Release(HeatStore store) => _held.Remove(store);
     /// <summary>m² of inner surface the stores radiate to. Default a cube of this volume's six faces.</summary>
     public double InnerArea { get => _innerArea > 0 ? _innerArea : 6 * Math.Pow(Volume, 2.0 / 3); set => _innerArea = value; }
     private double _innerArea;
@@ -178,7 +183,7 @@ public sealed class Enclosure : Zone, IHeated
     /// <summary>Heat from inside another zone (a boiler losing warmth into this room), J.</summary>
     public void AddHeat(double joules)
     {
-        if (Wall is not null || _stores.Count > 0) { _pendingHeat += joules; return; }   // a spike on a node of ~1 J/K is the network's to spread
+        if (Wall is not null || _stores.Count > 0 || _held.Count > 0) { _pendingHeat += joules; return; }   // a spike on a node of ~1 J/K is the network's to spread
         double c = HeatCapacity;
         if (c > 0) _temperature += joules / c;
     }
@@ -187,7 +192,7 @@ public sealed class Enclosure : Zone, IHeated
     {
         StepSupply(dt);
         StepLeak(dt);
-        if (Wall is null && _stores.Count == 0) StepHeat(dt); else StepNetwork(dt);
+        if (Wall is null && _stores.Count == 0 && _held.Count == 0) StepHeat(dt); else StepNetwork(dt);
     }
 
     /// <summary>Longest share of a store's time constant a sub-step may take.</summary>
@@ -195,30 +200,31 @@ public sealed class Enclosure : Zone, IHeated
 
     private void StepNetwork(double dt)
     {
+        var stores = Stores;
         double rate = 0;
-        foreach (var s in _stores)
+        foreach (var s in stores)
             if (s.HeatCapacity > 0) rate = Math.Max(rate, s.CouplingTo(_temperature, InnerArea, WallEmissivity) / s.HeatCapacity);
         int sub = Math.Clamp((int)Math.Ceiling(dt * rate / NetworkAccuracy), 1, 400);
         double extra = _pendingHeat / dt;
         _pendingHeat = 0;
-        for (int i = 0; i < sub; i++) SolveNetwork(dt / sub, extra);
+        for (int i = 0; i < sub; i++) SolveNetwork(stores, dt / sub, extra);
     }
 
-    private void SolveNetwork(double h, double extraW)
+    private void SolveNetwork(IReadOnlyList<HeatStore> stores, double h, double extraW)
     {
-        Span<double> g = stackalloc double[Math.Max(1, _stores.Count)];
+        Span<double> g = stackalloc double[Math.Max(1, stores.Count)];
         double sumG = 0, sumGT = 0;
-        for (int i = 0; i < _stores.Count; i++)
+        for (int i = 0; i < stores.Count; i++)
         {
-            g[i] = _stores[i].CouplingTo(_temperature, InnerArea, WallEmissivity);
+            g[i] = stores[i].CouplingTo(_temperature, InnerArea, WallEmissivity);
             sumG += g[i];
-            sumGT += g[i] * _stores[i].Temperature;
+            sumGT += g[i] * stores[i].Temperature;
         }
         if (Insulation > 0) { sumG += Insulation; sumGT += Insulation * Outside.Temperature; }
         double q = Heater + HeatInput + extraW, c = HeatCapacity, before = _temperature;
         if (Wall is { } wall) _temperature = wall.Step(h, c, sumG, sumGT, q);
         else if (c / h + sumG > 0) _temperature = (c / h * _temperature + sumGT + q) / (c / h + sumG);
-        for (int i = 0; i < _stores.Count; i++) _stores[i].Exchanged(g[i] * (_temperature - _stores[i].Temperature) * h, h);
+        for (int i = 0; i < stores.Count; i++) stores[i].Exchanged(g[i] * (_temperature - stores[i].Temperature) * h, h);
         if (Insulation > 0 && Outside is Enclosure parent) parent.AddHeat(Insulation * (_temperature - Outside.Temperature) * h);
     }
 
