@@ -177,6 +177,8 @@ public sealed partial class MachineRuntime
             _getters[$"{id}.cut-in-rpm"] = () => g.CutInRpm;
             _setters[$"{id}.cut-in-rpm"] = v => g.CutInRpm = Math.Max(1e-6, v);
             _getters[$"{id}.charging"] = () => g.Delivered > 0 ? 1 : 0;
+            _getters[$"{id}.settled-power"] = () => double.IsNaN(g.SettledPower) ? 0 : g.SettledPower;   // W: the last settled power (0 until it has one)
+            _getters[$"{id}.held"] = () => g.Held ? 1 : 0;                 // a paused sleep holds it at its settled power
         }
         if (_banks.Count > 0)
         {
@@ -185,11 +187,34 @@ public sealed partial class MachineRuntime
         }
     }
 
+    /// <summary>
+    /// A sleep that pauses the physics engine begins (owner's ruling, 2026-10-09): every generator the sim does not turn itself (one on a
+    /// rigid body, which the paused engine leaves still) is held at its last settled power (<see cref="Generator.SettledPower"/>) and charges
+    /// its bank at that rate each step, by the bank's own rules, until <see cref="ReleaseGenerators"/>. A generator on a part the sim turns
+    /// (a windmill, water wheel, jet wheel or Stirling engine the sim steps through the sleep) keeps its real power and is not held, so
+    /// nothing is counted twice. An approximation: the wind's changes over the sleep are not followed. Returns each held generator by id.
+    /// </summary>
+    public IReadOnlyList<(string Id, Generator Generator, double Watts)> HoldGenerators()
+    {
+        var simDriven = _simDrives.Select(d => d.Generator).ToHashSet();
+        var held = new List<(string, Generator, double)>();
+        foreach (var (id, g) in _generators)
+            if (!simDriven.Contains(g) && g.Bank is not null) held.Add((id, g, g.Hold()));
+        return held;
+    }
+
+    /// <summary>The paused sleep is over: the held generators charge from their shafts again.</summary>
+    public void ReleaseGenerators() { foreach (var g in _generators.Values) g.Release(); }
+
+    /// <summary>Some generator is held by a paused sleep.</summary>
+    public bool GeneratorsHeld => _generators.Values.Any(g => g.Held);
+
     private void PreStepElectrics() { foreach (var d in _simDrives) d.Pre(); }
 
     private void PostStepElectrics(double dt)
     {
         foreach (var d in _simDrives) d.Post(dt);
+        foreach (var g in _generators.Values) if (g.Held) g.ChargeHeld(dt);   // a paused sleep: the last settled power
         foreach (var b in _banks.Values) b.TryCall(Sun.Time, Sun.SolNumber);
     }
 }
