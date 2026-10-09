@@ -15,7 +15,9 @@ namespace HeroicInventions;
 ///   wait N              wait N more frames
 ///   move X Y            move the mouse
 ///   down X Y · up X Y   press or release the left button (shiftdown: with Shift)
+///   wheel X Y N         turn the mouse wheel N notches at X Y (negative: up), as a person scrolling a list does
 ///   drag X1 Y1 X2 Y2    press, move in ten steps, release (rdrag: right button, mdrag: middle)
+///   type TEXT           type the text into the focused text field, one key at a time
 ///   key NAME            press and release a key; modifiers join with +: ctrl+z, shift+t, meta+s
 ///   hold NAME SECONDS   keep a key down, then print how long it really was (shift+up works)
 ///   press NAME · release NAME   hold a key down across the steps between
@@ -24,6 +26,9 @@ namespace HeroicInventions;
 ///                       out, and optionally the point it looks at
 ///   shot PATH           save what the window shows as a PNG
 ///   pick X Y · pickworld X Y Z   print which part is drawn at a viewport pixel, or where a world point is drawn (the run view; #151)
+///   join A B            join two parts of two placed machines, LABEL.PART[.PORT] each, as the Join machines gesture does (a view that can: Main; #218)
+///   joinclick A         click the part A (LABEL.PART[.PORT]) where the camera draws it, while Join machines is on: the real gesture, one end at a time
+///   joinbutton          print the Join machines button's label (#224)
 ///   quit                end the run
 ///
 /// A view adds its own steps through the <c>extra</c> handler, which
@@ -33,6 +38,9 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
 {
     /// <summary>Next: wait a few frames before the next step; Continue: run the next at once; Again: this step isn't ready, try it again in a few frames.</summary>
     public enum Step { Next, Continue, Again }
+
+    /// <summary>An owner that can join machines' parts by name, as a click on each would (Main, Main.Links.cs).</summary>
+    public interface IJoinStep { Step JoinStep(string[] w); }
 
     private readonly Queue<string> _steps = new(script.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
     private int _wait;
@@ -80,6 +88,16 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
             case "move": Mouse(new Vector2(N(w, 1), N(w, 2))); return Step.Next;
             case "down": Mouse(new Vector2(N(w, 1), N(w, 2)), MouseButton.Left, true); return Step.Next;
             case "up": Mouse(new Vector2(N(w, 1), N(w, 2)), MouseButton.Left, false); return Step.Next;
+            case "wheel":
+            {
+                var at = new Vector2(N(w, 1), N(w, 2));
+                int notches = (int)N(w, 3);
+                Mouse(at);
+                for (int k = 0; k < Math.Abs(notches); k++)
+                    foreach (bool pressed in new[] { true, false })
+                        Input.ParseInputEvent(new InputEventMouseButton { Position = at, GlobalPosition = at, ButtonIndex = notches > 0 ? MouseButton.WheelDown : MouseButton.WheelUp, Pressed = pressed, Factor = 1 });
+                return Step.Next;
+            }
             case "shiftdown": Mouse(new Vector2(N(w, 1), N(w, 2)), MouseButton.Left, true, shift: true); return Step.Next;
             case "drag" or "rdrag" or "mdrag":
             {
@@ -88,6 +106,18 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
                 Mouse(a, button, true);
                 for (int k = 1; k <= 10; k++) Mouse(a.Lerp(b, k / 10f), button);
                 Mouse(b, button, false);
+                return Step.Next;
+            }
+            case "type":   // text into whatever has the keyboard (a text field): "type scene.elapsed"; spaces are kept, so it takes the rest of the line
+            {
+                foreach (char ch in string.Join(' ', w[1..]))
+                {
+                    var key = new InputEventKey { Pressed = true, Unicode = ch, Keycode = ch is >= 'a' and <= 'z' ? (Key)(ch - 32) : (Key)ch };
+                    Input.ParseInputEvent(key);
+                    var released = (InputEventKey)key.Duplicate();
+                    released.Pressed = false;
+                    Input.ParseInputEvent(released);
+                }
                 return Step.Next;
             }
             case "key":
@@ -137,6 +167,11 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
                 GD.Print($"[{tag}] shot {path} {image.GetWidth()}x{image.GetHeight()} {error}");
                 return Step.Next;
             }
+            case "join" or "joinbutton" or "joinclick":
+                if (owner is IJoinStep joiner) return joiner.JoinStep(w);
+                GD.PrintErr($"[{tag}] join: this view has no machines to join");
+                owner.GetTree().Quit(1);
+                return Step.Next;
             case "quit":
                 owner.GetTree().Quit();
                 return Step.Next;
