@@ -1,0 +1,53 @@
+;; A route to the call (issues #227, #228): the windmill. Data, not code: a new route is a new file here (or in game/routes/<world>/ for one
+;; world); a new KIND of condition is one line in src/HeroicInventions.Sim/Game/Routes.cs (RouteCondition.Kinds, which says what each reads).
+;;
+;; A route has a name, a one-line description, the test that proves it wins (#231: the game ships no route that no passing test has won by),
+;; and steps in order. A step is (step ID (title "...") (reason "...") (met CONDITION ...)): a condition is a fact read from the state of
+;; the sim (never "the player pressed this"), and any ONE of several conditions meets the step. The reason says what the route is waiting
+;; for and why, in the voice of the 'why isn't it charging' label (#212); it never names the exact build, and may carry numbers:
+;; {NAME} or {NAME|fallback} from cut-in-rpm, rotor-rpm, ratio, wind-watts, bank-wh, bank-charge-wh, bank-temp.
+;; The final goal (the call) is not a step: it is always shown. A step once met stays met; the panel hides this whole route until one of
+;; its steps has been met (#229, owner's decision on #234).
+;;
+;; Mapped to the fields the sim already has (racket/heroic/tests/e2e-route-test.rkt wins by exactly these):
+;;   windmill   a windmill part exists                          MachineRuntime.Windmills
+;;   gear-up    prime mover : rotor teeth ratio >= 100          Generator.Mover.Ratio (the e2e train is 256:1; the salvaged motor cuts in at
+;;                                                              1,500 rpm and a windmill turns at a dozen, so about 100:1 is the least)
+;;   cut-in     a rotor over its cut-in                         <generator>.rpm > <generator>.cut-in-rpm
+;;   wired      a generator has a bank (a wire link, #208)      Generator.Bank (ChargeStatus: 'unwired')
+;;   warm       a bank between 0 and 45 C                       <bank>.temperature (the bank's charging limits)
+;;   full       a bank is full                                  <bank>.full
+(route windmill
+  (name "The windmiller")
+  (description "Let the wind charge the bank: a windmill, a train that turns a generator over its cut-in, a wire to a warm bank.")
+  (proven-by "racket/heroic/tests/e2e-route-test.rkt")
+
+  (step windmill
+    (title "Something for the wind to turn")
+    (reason "Nothing in the crater turns in the wind yet, and the bank needs {bank-wh|a good many} Wh from somewhere.")
+    (met (windmill-exists)))
+
+  (step gear-up
+    (title "Turn the slow shaft much faster")
+    (reason "A windmill turns at a dozen rpm; a generator charges only above {cut-in-rpm|1,500} rpm. The train between them needs roughly 100:1 or more; yours is {ratio|not there yet}:1.")
+    (met (train-ratio-at-least 100)))
+
+  (step cut-in
+    (title "Get the generator over its cut-in")
+    (reason "The rotor turns at {rotor-rpm|0} rpm and charges only above {cut-in-rpm|1,500}. A stronger wind or more gearing lifts it.")
+    (met (rotor-over-cut-in)))
+
+  (step wired
+    (title "Wire the generator to the bank")
+    (reason "A generator with no wire to a bank charges nothing, however fast it turns.")
+    (met (generator-wired)))
+
+  (step warm
+    (title "Keep the bank warm")
+    (reason "The bank is at {bank-temp|?} °C and takes charge only between 0 and 45 °C. Heat held through the night keeps it there.")
+    (met (bank-temperature-between 0 45)))
+
+  (step full
+    (title "Fill the bank")
+    (reason "The bank needs {bank-wh|?} Wh and holds {bank-charge-wh|?}; the windmill gives about {wind-watts|some} W once it is loaded, so it takes hours of wind.")
+    (met (bank-full))))
