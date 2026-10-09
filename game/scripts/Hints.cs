@@ -26,7 +26,10 @@ public partial class Hints : PanelContainer
                                         int MachinesWatched, int PartsInDesign, bool LessonStarted = false,
                                         bool InRover = false, bool OnPage = false, bool OnLog = false, Vector3 RoverPos = default,
                                         bool ArmBusy = false, bool Sleeping = false,
-                                        bool RoverDriven = false, bool LogOpened = false, bool SpeedOrSleepUsed = false);
+                                        bool RoverDriven = false, bool LogOpened = false, bool SpeedOrSleepUsed = false,
+                                        bool GoalsOpen = false, bool Joining = false, int Links = 0, int Machines = 0,
+                                        bool SleepPaused = false, bool SleepLive = false, bool BankCold = false, bool BankWarm = false,
+                                        bool GoalsOpened = false, bool JoinUsed = false, bool LiveSleepSeen = false, bool BankWarmSeen = false);
 
     private sealed record Hint(string Id, string Text, double After, Func<State, bool> When, Func<State, bool> Done, double Lifetime = 0);
 
@@ -53,10 +56,19 @@ public partial class Hints : PanelContainer
             s => Playing(s) && s.Running && !s.RoverDriven && !s.InBuildMode, s => s.RoverDriven, Lifetime: 40),
         new("rover-speed", "Things here take sols. The speed row runs time faster, and Sleep until… skips ahead to a time or event you name.", 150,
             s => Playing(s) && !s.SpeedOrSleepUsed && !s.InBuildMode, s => s.SpeedOrSleepUsed, Lifetime: 40),
-        new("rover-log", "The rover keeps a log of what it notices, refusals included. Press I to read it.", 270,
+        new("rover-goals", "F2 opens the goals panel: the steps toward the call (some are optional) and what you have earned so far.", 200,
+            s => Playing(s) && !s.GoalsOpened && !s.InBuildMode, s => s.GoalsOpened, Lifetime: 40),
+        new("rover-log", "The rover keeps a log of what it notices, refusals included. Press I to read it.", 250,
             s => Playing(s) && !s.LogOpened && !s.InBuildMode, s => s.LogOpened, Lifetime: 40),
-        new("rover-build", "\"Build a new machine\" (left panel) opens build mode: set parts down and watch what they do.", 390,
+        new("rover-bank-cold", "The bank takes no charge below 0 °C. Its temperature is in the Bank section of the right panel.", 280,
+            s => Playing(s) && s.BankCold && !s.BankWarmSeen, s => s.BankWarmSeen, Lifetime: 40),
+        new("rover-join", "Machines can be joined: press J, click a part on one machine, then a part on another.", 330,
+            s => Playing(s) && s.Machines >= 2 && !s.JoinUsed && !s.InBuildMode, s => s.JoinUsed, Lifetime: 40),
+        new("rover-build", "\"Build a new machine\" (left panel) opens build mode: set parts down and watch what they do.", 350,
             s => Playing(s) && !s.InBuildMode, s => s.InBuildMode, Lifetime: 40),
+        // a sleep over two hours (SleepControl.LiveLimit, 7,200 s) runs with the physics engine paused
+        new("rover-sleep-paused", "That sleep is long enough that the machines are paused (generators charge at their last steady rate, roughly). Tick \"Keep machines turning\" in the sleep panel to run them for real; it is slower.", 4,
+            s => Playing(s) && s.SleepPaused && !s.LiveSleepSeen, s => s.LiveSleepSeen, Lifetime: 40),
     ];
 
     private readonly Func<State> _read;
@@ -69,7 +81,8 @@ public partial class Hints : PanelContainer
     private readonly double _rate = double.TryParse(OS.GetEnvironment("HEROIC_HINTS_RATE"), System.Globalization.CultureInfo.InvariantCulture, out double r) && r > 0 ? r : 1;
     // what the player has done in this rover world, kept every frame so a quick press isn't missed between two reads
     private Vector3? _roverStart;
-    private bool _driven, _logOpened, _speedUsed;
+    private bool _driven, _logOpened, _speedUsed, _goalsOpened, _joinUsed, _liveSeen, _warmSeen;
+    private int? _linksAtStart;
     private Label _text = null!;
 
     public Hints(Func<State> read)
@@ -129,7 +142,8 @@ public partial class Hints : PanelContainer
         if (!Enabled || (_tick += real) < 0.5) return;
         double dt = _tick;
         _tick = 0;
-        state = state with { RoverDriven = _driven, LogOpened = _logOpened, SpeedOrSleepUsed = _speedUsed };
+        state = state with { RoverDriven = _driven, LogOpened = _logOpened, SpeedOrSleepUsed = _speedUsed,
+                               GoalsOpened = _goalsOpened, JoinUsed = _joinUsed, LiveSleepSeen = _liveSeen, BankWarmSeen = _warmSeen };
 
         // anything the player has now done is retired, shown or not
         foreach (var h in All.Where(h => !_retired.Contains(h.Id) && h.Done(state)))
@@ -156,8 +170,13 @@ public partial class Hints : PanelContainer
     /// <summary>Notes, every frame, what the player has done in the rover world; reset when there is no rover.</summary>
     private State Latch(State s)
     {
-        if (!s.InRover) { _roverStart = null; _driven = _logOpened = _speedUsed = false; return s; }
+        if (!s.InRover) { _roverStart = null; _linksAtStart = null; _driven = _logOpened = _speedUsed = _goalsOpened = _joinUsed = _liveSeen = _warmSeen = false; return s; }
         if (s.OnLog) _logOpened = true;
+        if (s.GoalsOpen) _goalsOpened = true;
+        _linksAtStart ??= s.Links;
+        if (s.Joining || s.Links > _linksAtStart) _joinUsed = true;
+        if (s.SleepLive) _liveSeen = true;
+        if (s.BankWarm) _warmSeen = true;
         if (s.OnPage) return s;
         _roverStart ??= s.RoverPos;
         if (s.ArmBusy || (s.RoverPos - _roverStart.Value).Length() > 0.3f) _driven = true;

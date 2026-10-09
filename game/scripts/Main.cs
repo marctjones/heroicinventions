@@ -754,7 +754,11 @@ public partial class Main : Node3D
         _hints = new Hints(() => new Hints.State(MachineOnScreen, _running, _timeScale, _buildMode is not null, _cameraMoved,
                                                  _machinesWatched, _buildMode?.PartCount ?? 0, _buildMode?.LessonStarted ?? false,
                                                  RoverIsPlayer, _screen != Screen.None, _screen == Screen.Log, RoverIsPlayer ? _rover!.Chassis.GlobalPosition : default,
-                                                 RoverIsPlayer && _rover!.PhaseName != "Stowed", _sleep.Active));
+                                                 RoverIsPlayer && _rover!.PhaseName != "Stowed", _sleep.Active,
+                                                 GoalsOpen: _goalsPanel?.Visible ?? false, Joining: _joining, Links: _world?.Links.Count ?? 0, Machines: _views.Count,
+                                                 SleepPaused: _sleep.Active && !_sleep.Live && _views.Any(v => v.JoltDriven), SleepLive: _sleep.Live,
+                                                 BankCold: AllBanks().Any(b => !b.Bank.InRange && b.Bank.Temperature < b.Bank.MinChargeC),
+                                                 BankWarm: AllBanks().Any(b => b.Bank.InRange)));
         layer.AddChild(_hints);
     }
 
