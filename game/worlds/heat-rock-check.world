@@ -1,0 +1,6 @@
+;; Hot rock the rover pushes into a lidded bin (issue #206): a rover on the flood plain 6 m from heat-rock's vault, with 40 kg of basalt at 200 C
+;; lying 1.2 m in front of the bin. Used by racket/heroic/tests/heat-rock-test.rkt; the rover is placed by the script.
+(world heat-rock-check
+  (map flood-plain)
+  (rover (at 0.0 8.0) (heading 0))
+  (place rig heat-rock (at 0 0 0)))

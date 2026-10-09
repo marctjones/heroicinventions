@@ -1,4 +1,5 @@
 using Godot;
+using HeroicInventions.Sim.Machines;
 using HeroicInventions.Sim.Thermo;
 
 namespace HeroicInventions;
@@ -11,6 +12,10 @@ namespace HeroicInventions;
 /// ochre by 100 °C, dull red by 400. A label gives the number.</item>
 /// <item>A lidded bin round a store is an open-fronted insulated box with a lid hinged at the back, which swings up as the
 /// thermostat opens it, so a store that is letting its heat out looks open.</item>
+/// <item>A store that is a body (<c>#:movable #t</c>, issue #206) is a rigid cube of its material that the rover's hand or a person's can push:
+/// it is tinted with its own temperature as it goes, and its place is handed to the sim every tick, so a rock pushed into a lidded bin becomes
+/// that bin's store (and out again). A bin with no store of its own stands empty, walled on three sides and open at the front (+z) so a rock can be pushed in
+/// over the ground; its lid and its label show what is in it.</item>
 /// <item>A room with a wall heat soaks into (a regolith vault) shows the wall as a cut-away block of earth, and its inner
 /// face as a thin sheet washed with the temperature of that surface, so the warmth going into the wall can be seen
 /// arriving: a label says how deep it has gone.</item>
@@ -18,7 +23,9 @@ namespace HeroicInventions;
 /// </summary>
 public partial class MachineView
 {
-    private sealed record StoreView(HeatStore Store, StandardMaterial3D Block, Label3D Label, HeatBin? Bin, Node3D? Lid, MeshInstance3D? Ice, float Height, float BaseY);
+    private sealed record StoreView(HeatStore Store, StandardMaterial3D Block, Label3D Label, HeatBin? Bin, Node3D? Lid, MeshInstance3D? Ice, float Height, float BaseY, RigidBody3D? Body = null);
+    private sealed record BinView(HeatBin Bin, Node3D Lid, Label3D Label);
+    private readonly List<BinView> _binViews = [];
     private sealed record VaultView(Enclosure Room, List<StandardMaterial3D> Liners, Label3D Label);
     private readonly List<StoreView> _storeViews = [];
     private readonly List<VaultView> _vaultViews = [];
@@ -33,6 +40,7 @@ public partial class MachineView
             _building = id;
             var part = Runtime.Def.Part(id)!;
             var at = V(part.At);
+            if (store.Movable) { BuildMovableStore(part, store); continue; }
             float s = StoreSide(store);
             bool water = store.Substance.Name == "water";
             var mat = water ? Shapes.Mat(Shapes.Water, roughness: 0.3f) : PartSurface(part, s);
@@ -88,6 +96,10 @@ public partial class MachineView
             _storeViews.Add(new StoreView(store, mat, label, store.Bin, lid, ice, height, at.Y));
         }
 
+        // a bin that takes what is pushed into it (#206)
+        foreach (var (id, bin) in Runtime.HeatBins)
+            if (bin.Fixed is null) { _building = id; BuildReceivingBin(bin); }
+
         // a room with a wall heat soaks into: the earth round it, cut away at the front (+z) and the top, and a sheet on its inner face
         foreach (var (id, room) in Runtime.Enclosures)
         {
@@ -125,8 +137,83 @@ public partial class MachineView
         }
     }
 
+    /// <summary>A store that is a body: a cube of its material that Jolt moves (the rover's hand pushes it), with its label riding on it.</summary>
+    private void BuildMovableStore(PartSpec part, HeatStore store)
+    {
+        float s = (float)store.Side;
+        var mat = PartSurface(part, s);
+        var block = new MaterialBlock(_materials[store.Substance.Name], Vector3.One * s, Shapes.ColorFor(part.Material))
+        {
+            Name = part.Id, Position = V(part.At) + new Vector3(0, s / 2, 0), Freeze = true,
+        };
+        foreach (var visual in block.GetChildren().OfType<MeshInstance3D>()) visual.MaterialOverride = mat;
+        AddChild(block);
+        var label = new Label3D
+        {
+            FontSize = 24, OutlineSize = 6, PixelSize = Mathf.Clamp(s * 0.012f, 0.0025f, 0.006f), NoDepthTest = true,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, Position = new Vector3(0, s / 2 + 0.12f, 0),
+        };
+        block.AddChild(label);
+        Blocks.Add(block);
+        _freezable.Add(block);
+        _bodiesById[part.Id] = block;
+        _storeViews.Add(new StoreView(store, mat, label, null, null, null, s, (float)part.At.Y, block));
+    }
+
+    /// <summary>
+    /// A bin for rock that is pushed in (issue #206): a floor-less box on the ground, walled at the back and both sides and open at the front (+z),
+    /// its cavity <see cref="HeatBin.Inner"/> across, the same insulated wood and hinged lid as a bin round a fixed store. The walls are solid (a rock
+    /// pushed against one stops); there is no floor to climb, so a rock slides in over the ground. The hinge is on the back wall's top.
+    /// </summary>
+    private void BuildReceivingBin(HeatBin bin)
+    {
+        var at = new Vector3((float)bin.X, (float)bin.Y, (float)bin.Z);
+        float inner = (float)bin.Inner, wall = 0.025f, outer = inner + 2 * wall;
+        var woodMat = Surface(Runtime.Def.Part(bin.Name)?.Material ?? "oak");
+        void Slab(Vector3 size, Vector3 pos)
+        {
+            var body = new StaticBody3D { Position = at + pos };
+            body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
+            body.AddChild(Shapes.Box(size, woodMat));
+            AddChild(body);
+        }
+        Slab(new Vector3(outer, inner, wall), new Vector3(0, inner / 2, -(inner / 2 + wall / 2)));                         // back
+        Slab(new Vector3(wall, inner, inner), new Vector3(-(inner / 2 + wall / 2), inner / 2, 0));                          // sides
+        Slab(new Vector3(wall, inner, inner), new Vector3(inner / 2 + wall / 2, inner / 2, 0));
+        var lid = new Node3D { Position = at + new Vector3(0, inner, -(outer / 2)) };
+        AddChild(lid);
+        var lidMesh = Shapes.Box(new Vector3(outer, 0.04f, outer), woodMat);
+        lidMesh.Position = new Vector3(0, 0.02f, outer / 2);
+        lid.AddChild(lidMesh);
+        var label = new Label3D
+        {
+            FontSize = 24, OutlineSize = 6, PixelSize = 0.004f, NoDepthTest = true,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, Position = at + new Vector3(0, inner + 0.3f, 0),
+        };
+        AddChild(label);
+        _binViews.Add(new BinView(bin, lid, label));
+    }
+
+    /// <summary>Hands the sim the place of every store that is a body, each tick before it steps: a rock pushed into a bin is in it from this moment.</summary>
+    private void FeedHeatStores()
+    {
+        foreach (var v in _storeViews)
+        {
+            if (v.Body is not { } body || !IsInstanceValid(body)) continue;
+            var p = ToLocal(body.GlobalPosition);
+            Runtime.MoveHeatStore(v.Store.Name, p.X, p.Y - v.Height / 2, p.Z);
+        }
+    }
+
     private void DrawHeatStores()
     {
+        foreach (var bv in _binViews)
+        {
+            bv.Lid.RotationDegrees = new Vector3(-105f * (float)bv.Bin.Open, 0, 0);
+            var held = bv.Bin.Store;
+            string lid = bv.Bin.Open >= 0.995 ? "lid open" : bv.Bin.Open > 0.005 ? $"lid {bv.Bin.Open * 100:0}% open" : $"lid shut, leaks {bv.Bin.Leak:0.##} W/K";
+            bv.Label.Text = $"{bv.Bin.Name}: {(held is null ? "empty" : $"{held.Name} {held.Temperature:0} °C")}\n{lid}";
+        }
         foreach (var v in _storeViews)
         {
             var s = v.Store;
@@ -141,6 +228,7 @@ public partial class MachineView
             }
             if (v.Lid is not null && v.Bin is { } bin) v.Lid.RotationDegrees = new Vector3(-105f * (float)bin.Open, 0, 0);
             string text = $"{s.Name}: {s.Temperature:0} °C";
+            if (s.Movable) text += s.Bin is { } inBin ? $"\nin {inBin.Name}" : "\nloose";
             if (s.Substance.Latent > 0 && s.Frozen > 0) text += $", {s.Frozen * 100:0}% ice";
             if (v.Bin is { } b) text += b.Open >= 0.995 ? "\nlid open" : b.Open > 0.005 ? $"\nlid {b.Open * 100:0}% open" : $"\nlid shut, leaks {b.Leak:0.##} W/K";
             v.Label.Text = text;
