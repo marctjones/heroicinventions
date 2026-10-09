@@ -16,7 +16,9 @@
 (require rackunit racket/list racket/file racket/string racket/runtime-path
          heroic/godothost)
 
-(define-runtime-path saves-user "~/Library/Application Support/Godot/app_userdata/Heroic Inventions/saves")
+(define saves-user (build-path (find-system-path 'home-dir) "Library" "Application Support" "Godot" "app_userdata" "Heroic Inventions" "saves"))
+;; the one file a run of this machine's sleep would have written there (the other agents' runs write theirs): its mtime, or #f
+(define (autosave-state) (let ([f (build-path saves-user "generator-train.autosave.save")]) (and (file-exists? f) (file-or-directory-modify-seconds f))))
 
 (define (at f k) (let ([p (assq k (cdr f))]) (and p (cadr p))))
 
@@ -28,7 +30,6 @@
                 (define q (assq (car p) (cdr y)))
                 (and q (<= (abs (- (cadr p) (cadr q))) (* 1e-9 (+ 1 (abs (cadr p)))))))))))
 
-(define (listing d) (if (directory-exists? d) (for/list ([f (directory-list d)]) (list f (file-or-directory-modify-seconds (build-path d f)))) '()))
 
 (when (godot-available?)
   (define (run env #:seconds [seconds 240]) (godot-simulate 'generator-train #:seconds seconds #:sample-dt 1 #:env env))
@@ -53,7 +54,8 @@
 
   (test-case "a script sleeps until a condition and then carries on; its autosave goes to the run's own folder"
     (define dir (make-temporary-file "heroic-saves-~a" 'directory))
-    (define before (listing saves-user))
+    (define before (autosave-state))
+    (check-true (directory-exists? saves-user) "the player's saves folder is where this test looks")
     (define r (run `(("HEROIC_INPUT" . "waitsim 10; sleep until scene.elapsed above 50 limit 600; wait 1") ("HEROIC_SAVES_DIR" . ,(path->string dir))) #:seconds 120))
     (check-equal? (length r) 121 "the run goes on to 120 s at a row a second")
     (check-true (equal-runs? (take r 100) (take watched 100)) "a sleep to 50 s equals watching to 100 s")
@@ -62,12 +64,22 @@
     (define clock (string->number (cadr (regexp-match #rx"[(]clock ([0-9.]+)[)]" (file->string save)))))
     (check-= clock 50.0083 0.0001 "s: woke on the first tick past 50")
     (delete-directory/files dir)
-    (check-equal? (listing saves-user) before "the player's saves folder is as it was"))
+    (check-equal? (autosave-state) before "the player's autosave of this machine is as it was"))
 
   (test-case "a scripted run with a sleep and no saves folder of its own writes no autosave at all"
-    (define before (listing saves-user))
+    (define before (autosave-state))
     (run '(("HEROIC_SLEEP" . "settled") ("HEROIC_SAVES_DIR" . "")) #:seconds 210)
-    (check-equal? (listing saves-user) before))
+    (check-equal? (autosave-state) before))
+
+  (test-case "a script sleeps in a world with the rover and the crater: the works equal the watched run's, every trace keeps its rows"
+    (define (world env) (godot-simulate-world 'lonely-rover-e2e #:seconds 60 #:sample-dt 1 #:env env))
+    (define w0 (world '()))
+    (define w1 (world '(("HEROIC_INPUT" . "waitsim 5; sleep until scene.elapsed above 30 limit 100; wait 1"))))
+    (for ([(label rows) (in-hash w0)])
+      (check-equal? (length (hash-ref w1 label)) (length rows) (format "~a: a row a second to 60 s, 61 of them" label)))
+    (check-equal? (length (hash-ref w1 'route)) 61)
+    (check-true (hash-has-key? w1 'links))
+    (check-true (equal-runs? (hash-ref w0 'route) (hash-ref w1 'route)) "the route machine (a geared windmill in Jolt) equals the watched run's"))
 
   (test-case "a sleep no machine can wake from fails the run, saying so"
     (check-exn #rx"no machine has a wake called nope"

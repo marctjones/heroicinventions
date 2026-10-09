@@ -80,6 +80,9 @@ public partial class SleepControl : VBoxContainer
     /// <summary>Called when a sleep ends, so the game can save on waking (issue #67).</summary>
     public event Action? Woke;
 
+    /// <summary>Called when a sleep ends for any reason, woken or stopped (#207): the traces' clocks catch up with the machines'.</summary>
+    public event Action? Ended;
+
     /// <summary>True while a sleep is in progress: the game should not step the simulation itself.</summary>
     public bool Active => _session is { Done: false };
 
@@ -236,6 +239,7 @@ public partial class SleepControl : VBoxContainer
         if (_live)
         {
             // the game's own stepping goes on, at speed, with the scene left undrawn until it wakes
+            _setRunning(true);                   // a paused game runs for a live sleep: nothing else would step it
             _speedBefore = GetSpeed();
             SetSpeed(LiveSpeed);
             MachineView.Hurrying = true;
@@ -302,7 +306,8 @@ public partial class SleepControl : VBoxContainer
         if (_session.Done) Finish();
     }
 
-    private void Cancel()
+    /// <summary>Stops a sleep in progress where it is (the Stop button, and Pause while the engine runs through it).</summary>
+    public void Cancel()
     {
         if (_session is null) return;
         _progressText.Text = $"Stopped after {Clock(_session.Elapsed)}.";
@@ -349,6 +354,7 @@ public partial class SleepControl : VBoxContainer
         if (_live) { SetSpeed(_speedBefore); MachineView.Hurrying = false; _live = false; }
         foreach (var v in _views()) v.ShowState();
         _sleeper = null;
+        Ended?.Invoke();
         _setRunning(true);                       // back to real time, showing what the sleep left
     }
 
