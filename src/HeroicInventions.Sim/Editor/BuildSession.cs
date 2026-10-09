@@ -109,9 +109,9 @@ public sealed class BuildSession
         var working = EditorDocument.Load(design);
         for (int attempt = 0; attempt <= design.Parts.Count && working.Parts.Count > 0; attempt++)
         {
-            var def = working.ToMachineDef();
             try
             {
+                var def = working.ToMachineDef();
                 build(def);
                 return def;
             }
