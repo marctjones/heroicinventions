@@ -13,7 +13,7 @@
   (define run (simulate 'herons-fountain #:seconds 60 #:step 0.05 #:sample-dt 0.5))
   (check-true (> (max-of run '(nozzle jet-height)) 0.0)
               "the jet should rise above the basin at some point during the run")
-  ;; herons-fountain.rkt's supply vessel starts holding 1.5 L, and the
+  ;; herons-fountain.rkt's supply vessel starts holding 4 L, and the
   ;; getter reports water in litres (MachineRuntime converts m³ * 1000).
   (check-true (< (final-of run '(supply water)) 1.5)
               "the supply vessel should empty through the nozzle"))
@@ -588,7 +588,7 @@
   (define (pv f) (* (+ p0 (* 1000 (cadr (assq 'supply.air-pressure (cdr f))))) (cadr (assq 'supply.air-volume (cdr f)))))
   (define start (pv (car run)))
   (for ([f run]) (check-= (pv f) start (* 1e-9 start) (format "P V at ~a s" (car f))))
-  (check-true (> (max-of run '(supply air-pressure)) 1) "and it was squeezed: over 1 kPa"))
+  (check-true (> (max-of run '(supply air-pressure)) 4) "and it was squeezed: over 4 kPa (the fall's 0.5 m of head is 4.9 kPa)"))
 
 ;; ---- #13 friction and wear in a pendulum's bearing (bearing-friction.rkt)
 ;; All three pendulums are the same: 1 m of iron rod (1 cm radius) with an

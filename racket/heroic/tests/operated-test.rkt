@@ -128,20 +128,59 @@
 ;; ---------------------------------------------------------------------------------------------------------------
 ;; herons-fountain.rkt: the basin poured again
 
-(test-case "Heron's fountain: emptied, refilled and poured again at 36 s, it jets again and ends where it ended the first time (Boyle: 6.18 kPa)"
+;; The worked numbers of herons-fountain.rkt's header, from its geometry alone. Heights in m, volumes in L.
+;; basin 0.09 m2 on a floor at 0.46; supply 0.0225 m2 on 0.17 (tip of the nozzle 0.09 over the basin's floor);
+;; receiver 0.0225 m2 from 0; drain 4e-3 and nozzle 7e-4 m3/s per m of head; air 5.4 - 4 + 2.7 + 0.1 = 4.2 L at the start.
+(define hf-tip (+ 0.46 0.09))
+(define hf-gn/gd (/ 7e-4 4e-3))
+(define (hf-fall vb vr) (- (+ 0.46 (/ vb 90)) (/ vr 22.5)))                 ; basin surface to receiver surface
+(define (hf-supply-surface vs) (+ 0.17 (/ vs 22.5)))
+;; the air is stiff, so the drain gives the receiver what the nozzle takes from the supply: Gd (F - P/rho g) = Gn J,
+;; J = ss + P/rho g - tip, so J = (F + ss - tip) / (1 + Gn/Gd): the jet's rise over the nozzle, in cm
+(define (hf-rise vb vr vs) (* 100 (/ (- (+ (hf-fall vb vr) (hf-supply-surface vs)) hf-tip) (+ 1 hf-gn/gd))))
+;; the receiver full (2.7 L): the air is 1.5 + s L (s the litres the nozzle has given), P = 101.325 (4.2 / V - 1) kPa, and the jet is
+;; gone when ss + P/rho g = tip. Bisection on s.
+(define (hf-end-pressure s) (* 101.325 (- (/ 4.2 (+ 1.5 s)) 1)))
+(define hf-end-s
+  (let loop ([lo 0.0] [hi 4.0] [n 60])
+    (define mid (/ (+ lo hi) 2))
+    (define excess (- (+ (hf-supply-surface (- 4 mid)) (/ (hf-end-pressure mid) 9.81)) hf-tip))   ; > 0: still lifting past the tip
+    (cond [(zero? n) mid] [(> excess 0) (loop mid hi (sub1 n))] [else (loop lo mid (sub1 n))])))
+;; the time the receiver fills: r runs as the supply empties (r = s + d, d the squeeze), dr/dt = Gn J, J falling by
+;; (r + s) / 22.5 over 1 + Gn/Gd: r(t) = r_inf (1 - exp(-t / tau)) with tau = 11.25 (1 + Gn/Gd) / (1000 Gn) and r_inf = 11.25 (K0 + d / 22.5)
+(define hf-squeeze 0.17)   ; L: 4.2 L of air at about 4.3 kPa is compressed by 4.2 x 4.3 / 105.6
+(define hf-tau (/ (* 11.25 (+ 1 hf-gn/gd)) (* 1000 7e-4)))
+(define hf-r-inf (* 11.25 (+ (- (+ (hf-fall 6 0) (hf-supply-surface 4)) hf-tip) (/ hf-squeeze 22.5))))
+(define hf-fill-time (* (- hf-tau) (log (- 1 (/ 2.7 hf-r-inf)))))
+
+(test-case "Heron's fountain: its jet is the supply's height over the receiver's less the nozzle's rise over the basin, fills the receiver in 24 s, ends where Boyle says; emptied, refilled and poured again at 36 s it does it again"
   (define run (simulate 'herons-fountain #:seconds 100 #:step 0.05 #:sample-dt 0.5 #:actions (demo-actions 'herons-fountain)))
   (define first-peak (apply max (between run 'nozzle.jet-height 0 35)))
   (define second-peak (apply max (between run 'nozzle.jet-height 36 100)))
-  (check-true (> first-peak 30) (format "first jet ~a cm" first-peak))
+  ;; the jet's first rise: 27.6 cm if the air were rigid; a few mL have moved by the first half second
+  (define rise0 (hf-rise 6 0 4))
+  (check-= rise0 27.6 0.05 "worked: (0.527 + 0.348 - 0.55) / 1.175")
+  (check-= first-peak rise0 2.0 (format "the first rise measured ~a cm against the worked ~a" first-peak rise0))
   (check-= second-peak first-peak (* 0.03 first-peak) "the second jet is the first again")
-  (define boyle (* 101.325 (- (/ (+ 0.5 1.2 0.04) (+ (- 2 0.4) 0.04)) 1)))
-  (check-= boyle 6.178 0.001)
-  (for ([t '(35.5 99)])   ; the jet dies away in a second or two: a little settling left at 35.5 s
-    (check-= (value run 'supply.water t) 0.40 0.01 (format "supply down to 0.40 L at ~a s" t))
-    (check-= (value run 'receiver.water t) 1.2 0.001)
-    (check-= (value run 'basin.water t) 3.9 0.01)
-    (check-= (value run 'supply.air-pressure t) boyle (if (< t 50) 0.04 0.01) "kPa"))
-  (check-= (value run 'receiver.water 37) 0.2 0.3 "poured again: the receiver is filling from empty")
+  ;; and it holds as the levels move, to 0.1 cm: the same formula on the levels the run is at
+  (for ([t '(2 6 10 14 18)])
+    (check-= (value run 'nozzle.jet-height t)
+             (hf-rise (value run 'basin.water t) (value run 'receiver.water t) (value run 'supply.water t))
+             0.1 (format "jet at ~a s" t)))
+  ;; the receiver fills at about the worked time, then the drain stops
+  (define filled (first-time run 'receiver.water (λ (v) (> v 2.699))))
+  (check-= hf-fill-time 24.2 0.05 "worked time to fill the receiver")
+  (check-= filled hf-fill-time 1.0 (format "receiver full at ~a s measured against the worked ~a" filled hf-fill-time))
+  ;; the end: the receiver 2.7 L, the supply 4 - s, the basin 6 - 2.7 + s, the air 1.5 + s L at 101.325 (4.2 / V - 1) kPa
+  (define s hf-end-s)
+  (check-= s 2.5751 0.0001 "worked: litres the nozzle gives before the lift falls to the tip")
+  (check-= (hf-end-pressure s) 3.1065 0.0005 "kPa (Boyle)")
+  (for ([t '(35.5 99)])
+    (check-= (value run 'supply.water t) (- 4 s) 0.002 (format "supply down to ~a L at ~a s" (- 4 s) t))
+    (check-= (value run 'receiver.water t) 2.7 0.001)
+    (check-= (value run 'basin.water t) (+ 3.3 s) 0.002)
+    (check-= (value run 'supply.air-pressure t) (hf-end-pressure s) 0.002 "kPa"))
+  (check-= (value run 'receiver.water 37) (value run 'receiver.water 1) 0.03 "poured again: the receiver fills from empty as it did")
   (check-true (< (value run 'nozzle.jet-height 35) 0.5) "the first jet had died by 36 s"))
 
 ;; ---------------------------------------------------------------------------------------------------------------

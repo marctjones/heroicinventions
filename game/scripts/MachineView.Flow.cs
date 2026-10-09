@@ -37,35 +37,43 @@ public partial class MachineView
         public required string Id;
         public required ShaderMaterial Material;
         public required MeshInstance3D Sleeve;
+        public float Bore = PipeBore;
         public double Phase, Last = -1, NextReport;
     }
 
     private readonly List<PipeFlow> _pipeFlows = [];
 
     /// <summary>The dashes on one pipe: a sleeve a little wider than the pipe, its own material (it holds that pipe's phase).</summary>
-    private void BuildPipeFlow(PipeSpec spec, Vector3 from, Vector3 to)
+    private void BuildPipeFlow(PipeSpec spec, Vector3 from, Vector3 to, float bore = PipeBore)
     {
         float length = (to - from).Length();
         if (length < 0.02f) return;
         var material = Skins.FlowDashes(length, DashPitch);
-        var sleeve = Shapes.Rod(from, to, PipeBore * 1.12f, Shapes.Mat(Colors.White, alpha: 0.5f));
-        sleeve.Mesh = new CylinderMesh { TopRadius = PipeBore * 1.12f, BottomRadius = PipeBore * 1.12f, Height = length, CapTop = false, CapBottom = false };
+        var sleeve = Shapes.Rod(from, to, bore * 1.12f, Shapes.Mat(Colors.White, alpha: 0.5f));
+        sleeve.Mesh = new CylinderMesh { TopRadius = bore * 1.12f, BottomRadius = bore * 1.12f, Height = length, CapTop = false, CapBottom = false };
         sleeve.MaterialOverride = material;
         sleeve.Visible = false;
         AddChild(sleeve);
-        _pipeFlows.Add(new PipeFlow { Pipe = Runtime.Pipes[spec.Id], Id = spec.Id, Material = material, Sleeve = sleeve });
+        _pipeFlows.Add(new PipeFlow { Pipe = Runtime.Pipes[spec.Id], Id = spec.Id, Material = material, Sleeve = sleeve, Bore = bore });
     }
+
+    /// <summary>
+    /// A pipe whose flow the sim reports (head over conductance) but whose far end has no room: it moves no water, so
+    /// no dashes ride it. Heron's fountain's drain, once its receiver is full, reads as stopped, not running.
+    /// </summary>
+    private static bool Blocked(Pipe pipe) =>
+        pipe.Flow >= 0 ? pipe.To.WaterVolume >= pipe.To.Capacity - 1e-9 : pipe.From.WaterVolume >= pipe.From.Capacity - 1e-9;
 
     private void DrawPipeFlow()
     {
-        const double area = Math.PI * PipeBore * PipeBore;
         foreach (var f in _pipeFlows)
         {
+            double area = Math.PI * f.Bore * f.Bore;
             double now = Runtime.Time, dt = f.Last < 0 ? 0 : now - f.Last;
             f.Last = now;
             if (dt < 0 || dt > 1) dt = 0;   // a restart or a jump in the clock
             double q = f.Pipe.Flow;                 // m³/s, positive from the pipe's first port to its second
-            bool moving = Math.Abs(q) > 1e-7;
+            bool moving = Math.Abs(q) > 1e-7 && !Blocked(f.Pipe);
             f.Sleeve.Visible = moving;
             if (!moving) continue;
             double speed = q / area;                // m/s
@@ -76,7 +84,7 @@ public partial class MachineView
             if (FlowReport && now >= f.NextReport)
             {
                 f.NextReport = Math.Floor(now / 5) * 5 + 5;
-                GD.Print($"[flow] t={now:F2} pipe {f.Id}: {q * 1000:F3} L/s through a {PipeBore * 2000:F0} mm bore = {speed:F3} m/s = {dashes:F2} dashes/s (pitch {DashPitch * 100:F0} cm)");
+                GD.Print($"[flow] t={now:F2} pipe {f.Id}: {q * 1000:F3} L/s through a {f.Bore * 2000:F0} mm bore = {speed:F3} m/s = {dashes:F2} dashes/s (pitch {DashPitch * 100:F0} cm)");
             }
         }
     }

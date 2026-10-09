@@ -128,7 +128,10 @@ public partial class MachineView
             var pair = Runtime.Tanks.FirstOrDefault(t => t.Value.Air == air);
             if (pair.Value is null || !_tankShells.TryGetValue(pair.Value, out var shell)) continue;
             float side = Mathf.Sqrt((float)pair.Value.Area), height = (float)pair.Value.Height;
-            var dial = NewDial(shell, new Vector3(0, height * 0.28f, side / 2 + 0.01f), Mathf.Clamp(side * 0.32f, 0.04f, 0.2f), false);
+            // on the air tube that joins a stack's vessels, beside it, where it covers no water; else on the front of the vessel
+            var dial = _airTubeDials.TryGetValue(air, out var onTube)
+                ? NewDial(this, onTube, Mathf.Clamp(side * 0.32f, 0.04f, 0.2f), false)
+                : NewDial(shell, new Vector3(0, height * 0.28f, side / 2 + 0.01f), Mathf.Clamp(side * 0.32f, 0.04f, 0.2f), false);
             _gauges.Add(new GaugeView(pair.Key, dial, () => SignedShare(air.GaugePressure, air.Zone.Pressure, PlainScale[2]), Kpa: () => air.GaugePressure / 1000));
         }
         // a room: on its front wall, which billows out with the room (see DrawEnclosures); the dial stays at its height when the room sags, so it still reads

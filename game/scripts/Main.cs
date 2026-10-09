@@ -71,7 +71,7 @@ public partial class Main : Node3D
         ["aeolipile"] = new(new Vector3(0, 0.55f, 0.85f), new Vector3(0, 0.32f, 0), 42),
         ["shaduf"] = new(new Vector3(1.0f, 3.2f, 7.5f), new Vector3(1.0f, 1.8f, 0), 50),
         ["baghdad-battery"] = new(new Vector3(0.3f, 1.82f, 2.61f), new Vector3(0.3f, 0.1f, 0.15f), 45),   // pivot (0.3,0.1,0.15), 3 m out at 35 deg: the ten-jar lamp at x~1.2 clears the info panel (unverified against the new geometry)
-        ["herons-fountain"] = new(new Vector3(0.25f, 1.25f, 2.3f), new Vector3(0.1f, 0.85f, 0), 45),
+        ["herons-fountain"] = new(new Vector3(0.18f, 0.62f, 1.3f), new Vector3(0, 0.42f, 0), 45),   // a 0.56 m stack with its jet, 0.8 m in all
         ["material-samples"] = new(new Vector3(0, 0.7f, 1.6f), new Vector3(0, 0.3f, 0.3f), 45),
         ["branca-steam-wheel"] = new(new Vector3(0.35f, 0.95f, 1.35f), new Vector3(0.15f, 0.5f, 0), 45),
         ["kitchen-smoke-jack"] = new(new Vector3(1.5f, 1.6f, 4.2f), new Vector3(0, 1.1f, 0.2f), 50),   // takes in the spit with its joint and the rising warm-air column (unverified against the new geometry)

@@ -580,7 +580,7 @@ public static class Skins
         parent.AddChild(box);
     }
 
-    public static void HoopTank(Node3D shell, float side, float height, StandardMaterial3D iron)
+    public static void HoopTank(Node3D shell, float side, float height, StandardMaterial3D iron, bool openFront = false)
     {
         int n = Mathf.Clamp(Mathf.RoundToInt(height / (side * 0.9f)), 1, 4);
         float d = Mathf.Clamp(side * 0.02f, 0.004f, 0.015f), band = Mathf.Clamp(side * 0.07f, 0.01f, 0.07f), hs = side / 2;
@@ -589,7 +589,8 @@ public static class Skins
             float y = -height / 2 + height * i / (n + 1);
             foreach (float sign in new[] { -1f, 1f })
             {
-                Add(shell, "hoop", new Vector3(side + 2 * d, band, 2 * d), new Vector3(0, y, sign * hs), iron);
+                if (!openFront || sign < 0)   // a cut-away vessel (CutAway) has no hoop across its open front, the +Z face
+                    Add(shell, "hoop", new Vector3(side + 2 * d, band, 2 * d), new Vector3(0, y, sign * hs), iron);
                 Add(shell, "hoop", new Vector3(2 * d, band * 0.98f, side), new Vector3(sign * hs, y, 0), iron);   // a hair slimmer: no coplanar tops
             }
         }
@@ -694,6 +695,22 @@ public static class Skins
 
     /// <summary>The trigger's amber: a mark where something watches a level, and the dial's 60% mark where the strain rim begins.</summary>
     public static readonly Color Watch = new(1f, 0.75f, 0.2f);
+    /// <summary>
+    /// Air you can see (MachineView.Stacks): the tint of the air shut in over a sealed vessel's water, and of the tube
+    /// that joins sealed vessels. A pale warm cream, the one hue in the machine that is neither water blue nor metal, so
+    /// it reads as the gas; it thickens with the pressure it is squeezed to (<see cref="AirTint"/>).
+    /// </summary>
+    public static readonly Color Air = new(0.98f, 0.86f, 0.55f);
+
+    /// <summary>
+    /// The head markers' colour (MachineView.Stacks): the "falls h" and "lifts about h" brackets, drawn in the same
+    /// deep magenta so a pair reads as one rule. Chosen away from water blue, bronze, amber (<see cref="Watch"/>) and ink.
+    /// </summary>
+    public static readonly Color Head = new(0.80f, 0.10f, 0.45f);
+
+    /// <summary>The opacity of the air tint over a sealed vessel's headspace: faint at no pressure, thicker as it is squeezed (6 kPa gauge reads about 0.43), saturating near 0.6.</summary>
+    public static float AirTint(double gaugePa) => 0.18f + 0.42f * (1f - (float)Math.Exp(-Math.Max(0, gaugePa) / 6000));
+
     /// <summary>Ink for scale marks; the dial's below-ambient needle is <see cref="Vacuum"/> blue.</summary>
     public static readonly Color Ink = new(0.1f, 0.08f, 0.07f), Vacuum = new(0.2f, 0.45f, 0.95f);
 

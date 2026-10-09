@@ -16,5 +16,5 @@ check() {
 }
 check lever-demo       'look 0 10 4 0 0.5 0'       beam    # the see-saw's beam, at its pivot
 check roman-crane      'look 0 0 6 -1.6 2.6 1.05'  drum    # the drum, in front of the treadwheel behind it
-check herons-fountain  'look 20 35 1.2 0 1.03 0'   basin   # the basin's bowl
+check herons-fountain  'look 20 35 1.0 0 0.51 0'   basin   # the basin's bowl
 exit $fail
