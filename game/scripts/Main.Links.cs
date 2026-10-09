@@ -221,7 +221,7 @@ public partial class Main : ScriptedInput.IJoinStep
         var ordered = PickBoxes.List(under.Select(u => u.Hit));
         if (under.Count > 1)   // say which boxes it crossed, nearest first
             GD.Print($"[links] the click crossed {under.Count} parts' boxes, nearest first: {string.Join(", ", ordered.Select(c => $"{c.Name} ({c.T:F1} m)"))}");
-        if (PickBoxes.Choose(under.Select(u => u.Hit)) is not { } chosen) { GD.Print($"[links] nothing there to join (at {screen}, looking along {dir} from {from})"); _lastJoinClick = null; return; }
+        if (PickBoxes.Choose(under.Select(u => u.Hit)) is not { } chosen) { GD.Print($"[links] nothing there to join (at {screen}, looking along {dir} from {from})"); _lastJoinClick = null; _lastPicked = null; return; }
         bool again = _lastJoinClick is { } last && last.Screen.DistanceTo(screen) < 4;
         if (under.Count > 1 && (offerList || again))
         {
@@ -236,6 +236,7 @@ public partial class Main : ScriptedInput.IJoinStep
             return;
         }
         var u0 = under.First(u => u.Hit.Name == chosen.Name);
+        _lastPicked = chosen.Name;
         if (under.Count > 1 && chosen.Name != ordered[0].Name) GD.Print($"[links] {chosen.Name} lies inside {ordered[0].Name}'s box and is the smaller: it takes the click");
         var before = _firstPick;
         MakePick(EndOf(u0.View, u0.Part, from, dir), screen, before);
@@ -248,6 +249,10 @@ public partial class Main : ScriptedInput.IJoinStep
         ChooseFromPickList(n - 1);
         return ScriptedInput.Step.Next;
     }
+
+    private int _joinClickPhase;
+    private ScriptedInput.Step Done() { _joinClickPhase = 0; return ScriptedInput.Step.Next; }
+    private string? _lastPicked;   // LABEL.PART of the last click's pick (for the scripted joinclick ... list)
 
     private LinkEnd? _listFirstBefore;
     private (Vector3 From, Vector3 Dir) _listFrom;
@@ -324,10 +329,13 @@ public partial class Main : ScriptedInput.IJoinStep
         if (w[0] is "joinclick" or "joinrightclick")   // one real click on a part: where the camera draws it, through the input pipeline, while the Join machines button is on
         {
             bool right = w[0] == "joinrightclick";
-            // 'joinclick A N' clicks A, then A's spot again (a second click on one spot offers the list) and takes item N; 'joinrightclick A' offers the list by a right-click (take an item with 'joinlist N')
+            // 'joinclick A N' clicks A, then A's spot again (a second click on one spot offers the list) and takes item N; 'joinclick A list'
+            // clicks A and, if the pick was not A, clicks again and takes A from the list, as a person does; 'joinrightclick A' offers the list by a right-click
+            // (take an item with 'joinlist N')
             int? item = null;
+            bool named = w.Length == 3 && !right && w[2] == "list";
             if (w.Length == 3 && !right && int.TryParse(w[2], out int n) && n >= 1) item = n;
-            if (w.Length != (item is null ? 2 : 3)) { Fail($"expected '{w[0]} LABEL.PART[.PORT]{(right ? "" : " [N]")}'"); return ScriptedInput.Step.Next; }
+            if (w.Length != (item is null && !named ? 2 : 3)) { Fail($"expected '{w[0]} LABEL.PART[.PORT]{(right ? "" : " [N|list]")}'"); return ScriptedInput.Step.Next; }
             var bits = w[1].Split('.');
             if (bits.Length is < 2 or > 3 || !_byName.TryGetValue(bits[0], out var target)) { Fail($"no machine part '{w[1]}' to click"); return ScriptedInput.Step.Next; }
             if (!_joining) { Fail($"{w[0]}: joining is not on (press the Join machines button first)"); return ScriptedInput.Step.Next; }
@@ -336,13 +344,30 @@ public partial class Main : ScriptedInput.IJoinStep
             bool shown = !_camera.IsPositionBehind(at) && GetViewport().GetVisibleRect().HasPoint(screen);
             GD.Print($"[links] {(right ? "right-click" : "click")} {w[1]} at ({at.X:F2} {at.Y:F2} {at.Z:F2}) drawn at screen ({screen.X:F0} {screen.Y:F0}){(shown ? "" : ": NOT ON SCREEN")}");
             if (!shown) { Fail($"{w[1]} is not on screen: the camera must see a part to click it"); return ScriptedInput.Step.Next; }
-            Input.ParseInputEvent(new InputEventMouseMotion { Position = screen, GlobalPosition = screen });
+            // an input event is handled a frame later, so each click is one pass of this step and the next pass (Step.Again) sees what it did
             var button = right ? MouseButton.Right : MouseButton.Left;
-            for (int times = item is null ? 1 : 2, k = 0; k < times; k++)
-                foreach (bool down in new[] { true, false })
-                    Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = button, Pressed = down, Position = screen, GlobalPosition = screen });
-            if (item is { } i) return ChooseListed(i, Fail);
-            return ScriptedInput.Step.Next;
+            void Click()
+            {
+                Input.ParseInputEvent(new InputEventMouseMotion { Position = screen, GlobalPosition = screen });
+                foreach (bool down in new[] { true, false }) Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = button, Pressed = down, Position = screen, GlobalPosition = screen });
+            }
+            string want = $"{bits[0]}.{bits[1]}";
+            switch (_joinClickPhase++)
+            {
+                case 0:
+                    Click();
+                    return item is null && !named ? Done() : ScriptedInput.Step.Again;
+                case 1:
+                    if (named && _lastPicked == want) return Done();
+                    if (named) GD.Print($"[links] the click picked {_lastPicked ?? "nothing"}, not {want}: a second click on the spot offers the list");
+                    Click();
+                    return ScriptedInput.Step.Again;
+                default:
+                    int index = named ? _listed.ToList().FindIndex(u => u.Hit.Name == want) + 1 : item!.Value;
+                    if (_pickList is not { IsOpen: true } || index < 1) { _joinClickPhase = 0; Fail(named ? $"{want} is not among the parts under the click" : "no pick list is open (a click is offered one only where it crosses more than one part's box)"); return ScriptedInput.Step.Next; }
+                    _joinClickPhase = 0;
+                    return ChooseListed(index, Fail);
+            }
         }
         if (w[0] == "joinlist")   // item N (from 1) of the pick list the last click offered
         {
