@@ -6,6 +6,8 @@
 ;; the sim (never "the player pressed this"), and any ONE of several conditions meets the step. The reason says what the route is waiting
 ;; for and why, in the voice of the 'why isn't it charging' label (#212); it never names the exact build, and may carry numbers:
 ;; {NAME} or {NAME|fallback} from cut-in-rpm, rotor-rpm, ratio, wind-watts, bank-wh, bank-charge-wh, bank-temp.
+;; (shared #t) marks a step any route needs whatever its power source (the bank warm, the bank full): it counts as met and shows once the
+;; route is started, but it never starts the route or names it (an unstarted route is hidden and unnamed, owner on #234).
 ;; The final goal (the call) is not a step: it is always shown. A step once met stays met; the panel hides this whole route until one of
 ;; its steps has been met (#229, owner's decision on #234).
 ;;
@@ -45,9 +47,11 @@
   (step warm
     (title "Keep the bank warm")
     (reason "The bank is at {bank-temp|?} °C and takes charge only between 0 and 45 °C. Heat held through the night keeps it there.")
+    (shared #t)
     (met (bank-temperature-between 0 45)))
 
   (step full
     (title "Fill the bank")
     (reason "The bank needs {bank-wh|?} Wh and holds {bank-charge-wh|?}; the windmill gives about {wind-watts|some} W once it is loaded, so it takes hours of wind.")
+    (shared #t)
     (met (bank-full))))

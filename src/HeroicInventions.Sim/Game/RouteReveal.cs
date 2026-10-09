@@ -4,15 +4,14 @@ namespace HeroicInventions.Sim.Game;
 
 // The reveal rule (issue #229) and the history it needs, with the owner's decisions of 2026-10-09 (#234, #240):
 //  1. The final goal (call Earth with a full, warm bank) is always shown.
-//  2. A route is STARTED when any of its steps has ever been met (the final goal is not one of its steps).
+//  2. A route is STARTED when any of its steps has ever been met (the final goal is not one of its steps), except a SHARED step, one any
+//     route needs whatever its power source (a warm, full bank): that never starts or names a route, but shows and counts as met once started.
 //  3. For a started route: its next unmet step and the one after it, and the last step met.
 //  4. A route not started is hidden AND unnamed: it is not in the output at all.
 //  5. A step once met stays met even if the state undoes it (status DoneEarlier).
 //  6. A step with alternatives is met by any one.
 // "Next", "after" and "last" follow the route's order in its file: next = the first step never met, after = the second, last = the
 // highest-numbered step ever met. (A player who wires the generator before building the windmill still sees the windmill step as next.)
-// A step shared with every route (a warm, full bank) starts the route just as a windmill does: rule 2 as written; the owner may want a
-// per-step flag for that when a second route exists.
 
 public enum StepStatus
 {
@@ -83,7 +82,7 @@ public static class RouteReveal
         foreach (var route in routes)
         {
             var ever = route.Steps.Select(s => s.IsMet(now) || history.HasMet(route.Id, s.Id)).ToArray();
-            if (!ever.Any(e => e) && !history.IsStarted(route.Id)) continue;   // not started: hidden and unnamed
+            if (!Enumerable.Range(0, ever.Length).Any(i => ever[i] && !route.Steps[i].Shared) && !history.IsStarted(route.Id)) continue;   // not started: hidden and unnamed
             int last = Array.FindLastIndex(ever, e => e);
             var unmet = Enumerable.Range(0, ever.Length).Where(i => !ever[i]).Take(2).ToArray();
             var steps = new List<ShownStep>();
@@ -126,6 +125,7 @@ public sealed class RouteTracker
             foreach (var step in route.Steps)
             {
                 if (History.HasMet(route.Id, step.Id) || !step.IsMet(now)) continue;
+                if (step.Shared && !History.IsStarted(route.Id)) { History.RecordMet(route.Id, step.Id, time, sol); continue; }   // counts as met, starts and names nothing
                 if (!History.IsStarted(route.Id))
                 {
                     History.RecordStarted(route.Id, time, sol);

@@ -76,7 +76,7 @@ public sealed record RouteCondition(string Kind, IReadOnlyList<double> Args)
 }
 
 /// <summary>A step: an id, a title, a reason template, and conditions of which any one meets it. The template may carry <c>{name}</c> or <c>{name|fallback}</c>, a number read from state (<see cref="RouteReading.NumberNames"/>).</summary>
-public sealed record RouteStep(string Id, string Title, string Reason, IReadOnlyList<RouteCondition> Alternatives)
+public sealed record RouteStep(string Id, string Title, string Reason, IReadOnlyList<RouteCondition> Alternatives, bool Shared = false)
 {
     public bool IsMet(RouteReading r) => Alternatives.Any(c => c.Holds(r));
     public string ReasonFor(RouteReading r) => RouteText.Fill(Reason, r);
@@ -110,8 +110,10 @@ public sealed record Route(string Id, string Name, string Description, string Pr
             RouteText.Validate(reason, file, where);
             if (form.Field("met") is not { Items.Count: > 1 } met) throw new MachineFormatException($"{file}: {where} needs (met CONDITION ...), any one of which meets it");
             var alternatives = met.Items.Skip(1).Select(c => ParseCondition(c, file, where)).ToList();
-            steps.Add(new RouteStep(sid.Name, Str(form, "title", where), reason, alternatives));
+            bool shared = form.Field("shared") switch { null => false, { Items: [_, SBool b] } => b.Value, _ => throw new MachineFormatException($"{file}: {where}: shared is (shared #t) or (shared #f)") };
+            steps.Add(new RouteStep(sid.Name, Str(form, "title", where), reason, alternatives, shared));
         }
+        if (steps.Count > 0 && steps.All(s => s.Shared)) throw new MachineFormatException($"{file}: {rw} has only shared steps, so nothing could ever start it");
         if (steps.Count == 0) throw new MachineFormatException($"{file}: {rw} has no steps");
         return new Route(id.Name, Str(root, "name", rw), Str(root, "description", rw), Str(root, "proven-by", rw), steps);
     }

@@ -194,10 +194,35 @@ public class RoutesTests
     }
 
     [Fact]
-    public void AVaultWarmingTheBankStartsTheRouteThroughTheSharedWarmStep()
+    public void AVaultWarmingAndFillingTheBankDoesNotStartOrNameTheRoute()
     {
         var t = TrackerOf(Windmill());
-        Play(t, [new(26900, R(0, null, Bank(5)), "windmill:NEXT gear-up:AFTER warm:MET")]);
+        var log = new List<RouteEvent>();
+        foreach (var r in new[] { R(0, null, Bank(5)), R(0, null, Bank(5, full: true)) })
+        {
+            log.AddRange(t.Update(r, 26900, 1));
+            Assert.Empty(t.View(r).Routes);
+        }
+        Assert.Empty(log);                                              // the rover log names nothing either
+        Assert.True(t.History.HasMet("windmill", "warm"));              // but the shared steps count as met, and the playtest keeps their time
+        Assert.Equal(-1, t.TraceFields()["route.windmill.started"]());
+    }
+
+    [Fact]
+    public void ASharedStepMetBeforeAStartedStepShowsAndCountsOnceTheRouteIsStarted()
+    {
+        var t = TrackerOf(Windmill());
+        t.Update(R(0, null, Bank(5, full: true)), 100, 1);              // warm and full, quietly
+        Play(t, [new(200, R(1, null, Bank(5, full: true)), "gear-up:NEXT cut-in:AFTER full:MET")]);   // the windmill starts it: last met = full, next = gear-up
+        Assert.Equal(100, t.History.MetAt("windmill", "full")!.Value.Time);
+        Assert.Equal(200, t.History.StartedAt("windmill")!.Value.Time);
+    }
+
+    [Fact]
+    public void ARouteOfOnlySharedStepsIsRefused()
+    {
+        var e = Assert.Throws<MachineFormatException>(() => Route.Parse("(route r (name \"N\") (description \"d\") (proven-by \"x\") (step s (title \"T\") (reason \"r\") (shared #t) (met (bank-full))))", "s.route"));
+        Assert.Contains("only shared", e.Message);
     }
 
     [Fact]
