@@ -151,6 +151,25 @@
   (check-true (<= (max-of run '(breeze cp)) 16/27) "never above the Betz limit")
   (check-true (<= (max-of run '(gale cp)) 16/27) "never above the Betz limit"))
 
+(test-case "Wind heading (#193): a fixed mill 60 degrees off the wind takes cos^3 60 = 1/8, a vane turns a mill square on, a mill edge-on takes nothing"
+  ;; four mills, R = 10 m (A = 314.159 m2), 6 m/s, rho = 1.2041 kg/m3: 1/2 rho A v^3 = 40854.77 W
+  ;;   square, wind from 90: theta 0, Cp 0.3: 12256.43 W
+  ;;   skewed, wind from 30: theta 60, 3 m/s through the sails, 5106.85 W of it, stones for that: 0.3 x 5106.85 = 1532.05 W, 1/8 of square
+  ;;   vane,   wind from 30: turns 60 degrees at 2 deg/s, facing 30 after 30 s, then 12256.43 W as square
+  ;;   across, wind from 0:  theta 90, cos 90 = 0: 0 W, still
+  ;; settled: the skewed mill's time constant is I / (2 tau0 / omega0) = 50000 / 2723.6 = 18.4 s, so 400 s is 21
+  (define run (simulate 'wind-heading #:seconds 400 #:step 0.01 #:sample-dt 50))
+  (check-= (final-of run '(square power)) 12256.43 0.01)
+  (check-= (final-of run '(skewed power)) 1532.05 0.01)
+  (check-= (final-of run '(vane power)) 12256.43 0.01)
+  (check-= (final-of run '(across power)) 0 1e-6)
+  (check-= (final-of run '(across rpm)) 0 1e-9)
+  (check-= (final-of run '(vane facing)) 30 1e-6)
+  (check-= (final-of run '(skewed facing)) 90 1e-9 "a mill without a vane stays as built")
+  (check-= (final-of run '(skewed misalignment)) -60 1e-9 "wind from 30, sails facing 90: the wind is 60 degrees toward +x of the axle")
+  (check-= (/ (final-of run '(skewed wind-power)) (final-of run '(square wind-power))) 0.125 1e-9 "cos^3 60")
+  (check-= (/ (final-of run '(skewed power)) (final-of run '(square power))) 0.125 1e-6))
+
 (test-case "Capstans: a pull holds e^(mu theta) times itself -- half a turn slips, one turn just holds, two turns barely need a hand"
   ;; hemp on oak, mu = sqrt(0.5 x 0.45) = 0.474342; the load weighs 200 x 9.81 = 1962 N.
   ;;   half turn: e^(mu pi) = 4.437931, 100 N holds 443.79 N < 1962 N: the load
