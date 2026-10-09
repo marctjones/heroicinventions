@@ -122,13 +122,14 @@ public partial class Main
         bool shapeChanged = shape != _routesShape;
         if (force || shapeChanged || text != _routesText) _goalsPanel?.ShowRoutes(lines);
         double clock = GoalRuntimes() is { Count: > 0 } rt ? rt[0].Time : 0;
-        if (_routesDump && (shapeChanged || (text != _routesText && clock >= _routesDumpAt + 10)))
+        if (_routesDump && GoalRuntimes().Count > 0 && (shapeChanged || (text != _routesText && clock >= _routesDumpAt + 10)))
         {
             _routesDumpAt = clock;
             GD.Print($"[routes-panel] begin level={_routesLevel} t={clock:0.0}");
             foreach (var l in lines) GD.Print($"[routes-panel] {l.Kind}: {l.Text}");
             GD.Print("[routes-panel] end");
         }
+        if (_routesDump && GoalRuntimes().Count == 0) return;   // nothing to read yet: the first block with a scene is the one to print
         _routesShape = shape;
         _routesText = text;
     }
