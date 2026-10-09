@@ -64,6 +64,7 @@ Environment switches (all `HEROIC_*`):
 | `SLEEP=<wake>` | sleep at load until the machine's named wake. A script step does it later: `sleep WAKE [live\|paused]` or `sleep until T.F above\|below V [limit S] [live\|paused]` (#207) |
 | `SLEEP_PHYSICS=1/0` | a sleep keeps the physics engine running (default for Jolt-driven machines under 7,200 s) or pauses it |
 | `SAVES_DIR=<dir>` | where saves go instead of the player's folder; a scripted run (`QUIT_AFTER_SIM_SECONDS`) with none writes no autosave. `godothost.rkt` sets a temporary one |
+| `HINTS=1/0`, `HINTS_RATE=<n>` | first-run hints (#98) on or off in a scripted run (they are off there by default); `HINTS_RATE` runs their waiting clocks n times faster (the rover hints wait 20 s to 6.5 min). `SETTINGS=<file>` keeps the retired list out of the player's settings |
 
 ## Traps already met
 
