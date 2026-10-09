@@ -41,6 +41,17 @@ public sealed record SoilSpec(string Material, double Infiltration, double Cohes
 public sealed record WindField(double ThroughX, double ThroughZ, double NotchDeg, double Speed, double Width,
                                double Base, double Daily, double PeakHour, double Gust)
 {
+    /// <summary>
+    /// Issue #193: the azimuth the wind blows from (from +x toward +z), or null when the map gives it no heading, and
+    /// every windmill that takes the map's wind keeps the heading it was built with. With one, those mills see the wind
+    /// come from it, <see cref="VeerDegPerHour"/> degrees an hour further round as the run goes on.
+    /// </summary>
+    public double? HeadingDeg { get; init; }
+    public double VeerDegPerHour { get; init; }
+
+    /// <summary>The azimuth the wind blows from after a number of seconds into the run.</summary>
+    public double HeadingAt(double seconds) => (HeadingDeg ?? 90) + VeerDegPerHour * seconds / 3600;
+
     /// <summary>The corridor's share of the full speed at a point: 1 along its line, Base far from it.</summary>
     public double Corridor(double x, double z)
     {
@@ -249,6 +260,10 @@ public sealed partial class Terrain
             SettleRate = root.Field("settle")?.Items.ElementAtOrDefault(1) is SNumber { Value: > 0 } rate ? rate.Value : 0,
             Wind = root.Field("wind")?.Field("corridor") is { Items.Count: 10 } w
                 ? new WindField(Num(w.Items[1]), Num(w.Items[2]), Num(w.Items[3]), Num(w.Items[4]), Num(w.Items[5]), Num(w.Items[6]), Num(w.Items[7]), Num(w.Items[8]), Num(w.Items[9]))
+                {
+                    HeadingDeg = root.Field("wind")?.Field("heading") is { } hd ? Num(hd.Items[1]) : null,
+                    VeerDegPerHour = root.Field("wind")?.Field("heading") is { Items.Count: > 2 } hv ? Num(hv.Items[2]) : 0,
+                }
                 : root.Field("wind") is not null ? throw new MachineFormatException($"{file}: map {name.Name}: (wind (corridor THROUGH-X THROUGH-Z NOTCH-DEG SPEED WIDTH BASE DAILY PEAK-HOUR GUST))") : null,
             Sources = root.Fields("source").Select(s => new MapSource(((SSymbol)s.Items[1]).Name, Num(s.Items[2]), Num(s.Items[3]), Num(s.Items[4]))).ToList(),
         };
@@ -261,7 +276,7 @@ public sealed partial class Terrain
         var sb = new StringBuilder();
         sb.Append($"(map {Name}\n  (origin {N(X0)} {N(Z0)}) (cell {N(Cell)}) (size {Nx} {Nz}) (edges {(OpenEdges ? "open" : "closed")}) (roughness {N(Roughness)}){(SettleOnLoad ? (SettleRate > 0 ? $" (settle {N(SettleRate)})" : " (settle #t)") : "")}\n");
         if (Wind is { } wind)
-            sb.Append($"  (wind (corridor {N(wind.ThroughX)} {N(wind.ThroughZ)} {N(wind.NotchDeg)} {N(wind.Speed)} {N(wind.Width)} {N(wind.Base)} {N(wind.Daily)} {N(wind.PeakHour)} {N(wind.Gust)}))\n");
+            sb.Append($"  (wind (corridor {N(wind.ThroughX)} {N(wind.ThroughZ)} {N(wind.NotchDeg)} {N(wind.Speed)} {N(wind.Width)} {N(wind.Base)} {N(wind.Daily)} {N(wind.PeakHour)} {N(wind.Gust)}){(wind.HeadingDeg is { } hd ? $" (heading {N(hd)} {N(wind.VeerDegPerHour)})" : "")})\n");
         sb.Append("  (soils").Append(string.Concat(Soils.Select(s => $" ({s.Material} {N(s.Infiltration)} {N(s.Cohesion)} {N(s.Friction)} {N(s.Density)} {N(s.GrainSize)} {N(s.GrainDensity)}{(s.Boulders is { } b ? $" (boulders {N(b.Fraction)} {N(b.Size)} {b.Material})" : "")})"))).Append(")\n");
         foreach (var s in Sources) sb.Append($"  (source {s.Id} {N(s.X)} {N(s.Z)} {N(s.Flow)})\n");
         sb.Append("  (heights");

@@ -378,6 +378,11 @@ public sealed partial class MachineRuntime
                         Load = part.Number("load", 0),
                         CpMax = cp,
                         TipSpeedRatio = part.Number("tip-speed-ratio", 2.5),
+                        WindFromDeg = part.Number("wind-from-deg", 90),   // issue #193: 90 = from +z, where the sails face
+                        FacingDeg = part.Number("facing-deg", 90),
+                        Vane = part.Props.GetValueOrDefault("vane") is SBool { Value: true },
+                        YawRate = part.Number("yaw-rate", 2),
+                        Veer = part.Number("veer", 0),
                     };
                     break;
                 }
@@ -1994,6 +1999,12 @@ public sealed partial class MachineRuntime
             _getters[$"{id}.work"] = () => m.Work / 1000;              // kJ done on the millstone
             _getters[$"{id}.wind"] = () => m.Wind;
             _setters[$"{id}.wind"] = v => m.Wind = Math.Max(0, v);
+            _getters[$"{id}.wind-from"] = () => m.WindFromDeg;         // issue #193: azimuth the wind blows from, deg (from +x toward +z)
+            _setters[$"{id}.wind-from"] = v => m.WindFromDeg = v;
+            _getters[$"{id}.facing"] = () => m.FacingDeg;              // azimuth the sails face; a vane turns it, a fixed mill stays
+            _setters[$"{id}.facing"] = v => m.FacingDeg = v;
+            _getters[$"{id}.misalignment"] = () => m.MisalignmentDeg;  // deg between the sails' axis and the wind
+            _getters[$"{id}.through-wind"] = () => m.ThroughWind;      // m/s along the axle: v cos(theta)
             _getters[$"{id}.load"] = () => m.Load;
             _setters[$"{id}.load"] = t => m.Load = Math.Max(0, t);
         }
