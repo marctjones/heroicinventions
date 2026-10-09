@@ -1741,6 +1741,7 @@ public sealed partial class MachineRuntime
             _setters[$"{id}.conductance"] = k => h.Conductance = Math.Max(0, k);      // the contact film alone (h·A)
             if (!h.Movable) continue;
             // a rock the rover can push (#206): where its body lies (the body's owner feeds these every tick), and whether it is in a bin
+            // (the setters move a stand-in in a sim-only run; in the game the view feeds the body's own place every tick, which overrides them)
             _getters[$"{id}.x"] = () => h.X;
             _getters[$"{id}.y"] = () => h.Y;
             _getters[$"{id}.z"] = () => h.Z;

@@ -11,14 +11,16 @@
 ;;           x 3.71 = 89 N (basalt on loam), 4.4 times to spare; the arm reaches 1.8 m from its pivot.
 ;;
 ;; Worked before running (night-heat's, with the rock outside for T seconds first)
-;;   in the open the rock radiates to the air as a body in a room much bigger than itself: Q = eps A sigma (T^4 - T_air^4), eps 0.9. At
-;;   17:00 the air is at the scene's ambient (traced below), so it loses about 860 W at 200 C: dT/dt = Q / 33.6 kJ/K = 0.0256 K/s.
-;;   Pushed in at once (T = 5 s, 4.3 kJ lost) the night is night-heat's: bank +4.3 C at 03:00 (36,990 s). Every kJ the rock loses in the open
-;;   costs the bank at 03:00 about 0.0092 K (night-heat: 35 kg of rock, 0.69 MJ less to give, was 6.4 K lower), so a push that takes 10
-;;   minutes, with the rock cooling by the lumped open-air law on the way, leaves it lower by 0.0092 K/kJ x what the rock lost (see the test).
-;;   Never pushed in, the rock cools in the open and the bank stays near the ground's -55 C all night (it has no heat to get).
-;;   The heliostat (4 m2, 17:00 sun 463.9 W as in night-heat's sunrock) lights the rock only while the rock stands in its spot: pushed
-;;   0.5 m or more from it, nothing arrives.
+;;   in the open the rock radiates to the air as a body in a room much bigger than itself: Q = eps A sigma (T^4 - T_air^4), eps 0.9. The air is
+;;   -63 C in the first instant and -24.0 C once the weather's daily curve takes over at 17:00 (traced), so at 200 C the rock loses
+;;   0.9 x 0.3451 x 5.670374e-8 x (473.15^4 - 249.13^4) = 814.8 W: dT/dt = 814.8 W / 33.6 kJ/K = 0.02425 K/s (traced 0.02424).
+;;   Pushed in at once (T = 5 s, 4.07 kJ lost) the night is night-heat's: bank +4.28 C at 03:00 (36,990 s), less 0.036 K. Every kJ the rock
+;;   loses in the open costs the bank at 03:00 about 0.00887 K (night-heat: 35 kg of rock, 0.72 MJ less above its 03:00 temperature, was 6.4 K
+;;   lower, from -2.1 against +4.28), so: pushed in after 5 s, 4.24 C (traced 4.245); after 600 s the open-air law gives 186.35 C and 458.6 kJ
+;;   gone, so 4.28 - 0.00887 x 458.6 = +0.21 C (traced +0.02: the coefficient under-predicts the late loss, 0.0093 K/kJ in the trace).
+;;   Never pushed in, the rock cools in the open and the bank stays at the ground's -55 C all night (it has no heat to get).
+;;   The heliostat (4 m2: 472 W at 17:00 in this scene's sun, traced) lights the rock only while the rock stands within 0.5 m of its spot:
+;;   pushed further than that, nothing arrives and the mirror's spot turns red.
 
 (define-machine heat-rock
   #:source "Thermal mass: hot rock that a rover can push into the lidded bin"
