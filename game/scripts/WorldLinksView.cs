@@ -190,7 +190,7 @@ public partial class WorldLinksView : Node3D
 
     public bool Tracing => _trace is not null;
     /// <summary>More world-level readings to trace with the links' (the ground's, issue #37).</summary>
-    public IReadOnlyDictionary<string, Func<double>> ExtraFields { get; set; } = new Dictionary<string, Func<double>>();
+    public IEnumerable<KeyValuePair<string, Func<double>>> ExtraFields { get; set; } = [];
 
     public void StopTrace()
     {
