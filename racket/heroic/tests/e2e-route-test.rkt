@@ -22,15 +22,19 @@
 ;;                                                        then real time; GAP 5 (no scripted sleep step, so the world is built, saved and loaded asleep)
 ;; Predictions (worked before running):
 ;;  - the train: the sails' torque is tau* (2 - w R / (v l*)), tau* = 1/2 rho A v^2 R Cp / l* = 104.0 N.m at the world's air (0.015325 kg/m3)
-;;    and the palette windmill's 6 m/s, so at the rotor X = 256 w it balances the motor's torque k (X - 157.08) (k = 0.114592 N.m per rad/s above
-;;    the 1,500 rpm cut-in) at 256 k (X - 157.08) = 2 tau* - 0.2708 X: X = 162.7 rad/s (1,553 rpm), 5.6 rad/s over the cut-in, tau_g = 0.64 N.m,
-;;    104 W of shaft and 83 W into the bank (the sim: 1,557 rpm, 90 W; the answer is a small difference of two large numbers). Three stages (64:1)
+;;    and the map's wind where the mill stands (windmills read it by default since the owner's ruling of 2026-10-09): at (180, 105), about 37 m
+;;    across the corridor (factor 0.86), near 03:00 (the day's factor 1.34), 6 x 0.86 x 1.34 = 6.95 m/s. tau* scales as v^2 and the free speed
+;;    w* = 1.5 (v/6) rad/s as v, so at the rotor X = 256 w the motor's torque k (X - 157.08) (k = 0.114592 N.m per rad/s above the 1,500 rpm
+;;    cut-in) balances at 256 k (X - 157.08) = 2 tau* - (tau*/(256 w*)) X: X = 164.8 rad/s (1,574 rpm), tau_g = 0.89 N.m, 146 W of shaft and
+;;    117 W into the bank (at a flat 6 m/s the same balance gave 83 W against the sim's 90: the answer is a small difference of two large
+;;    numbers, and the sim ran 8% over it, which here would be about 127 W; gusts move it either way). Three stages (64:1)
 ;;    also pass the cut-in at 6 m/s (161.5 rad/s, 1,542 rpm) but only above 4.9 m/s of wind (free-running, 3 rad/s x 64 must pass 157.08);
 ;;    four pass it above 1.2 m/s.
-;;  - the sails turn free in the sleep to near their free-running speed (about 2.8 rad/s) and hold 1/2 I w^2 (I = m R^2 / 3 = 50,000 kg m2):
-;;    a few Wh go into the bank in the first minute, the wind carries on at 90 W, and the 25 Wh bank (the scenario's 0.005 of 5 kWh) is full a
-;;    few seconds before the pass opens at 55,484 s, 03:00 on sol 2 (the found bank's and the opening's clock: noon at the start), and the
-;;    call goes out as the pass opens, not before.
+;;  - the sleep (#215, owner 2026-10-09): a paused sleep charges each generator at its last steady rate, or at an estimate from the wind and
+;;    the train when it has none. The world is loaded asleep, so the motor has never charged and is held at the estimate made at the sleep's
+;;    start (about 33 W from the evening's wind: the wind's changes overnight are not followed, an approximation the panel says). That fills
+;;    the 25 Wh bank (the scenario's 0.005 of 5 kWh) before the wake; the call goes out as the pass opens at 55,484 s, 03:00 on sol 2 (the
+;;    found bank's and the opening's clock: noon at the start), not before.
 ;;  - the vault (route-vault, a machine of its own) holds the found bank's cells above 0 C at 02:49. With the stand-in of #96 (the vault
 ;;    written into the bank's machine, from 07:00 at latitude -2) the cells were 21.9 C with a 1.5 m2 heliostat; here the day starts at
 ;;    the opening's noon and the sun sets near 17:00, so the heliostat has the rock for 5 hours and not 11: 1.5 m2 leaves the cells at
@@ -137,20 +141,23 @@
     (check-true (< 0 (at woke 'cells.temperature) 45) "in the window it may charge in")
     (check-= (at vault-woke 'bin.open) 0.37 0.1 "the strip, on the vault's air at 27 C, has the lid 37% open (the C# sim)"))
 
-  (test-case "the built windmill charges the found bank over the wire, through the train, over the cut-in; only the wind has charged it"
-    (define charging (filter (λ (f) (> (at f 'motor.power) 0)) built-run))
-    (check-true (pair? charging) "the motor charged")
-    (for ([f (in-list (take charging (min 200 (length charging))))])
-      (check-true (> (at f 'motor.rpm) 1500) (format "charging only over the cut-in, at ~a s" (at f 'scene.elapsed))))
-    ;; settled: the sails' flywheel is spent after about a minute and the wind alone carries the rest
-    (define settled (filter (λ (f) (and (> (at f 'motor.power) 0) (> (at f 'scene.elapsed) (+ wake-at 200)))) built-run))
-    (define mean-w (/ (apply + (map (λ (f) (at f 'motor.power)) settled)) (length settled)))
-    (check-true (< 75 mean-w 100) (format "mean ~a W into the bank (worked 83, sim 90)" mean-w))
-    (define rpm (/ (apply + (map (λ (f) (at f 'motor.rpm)) settled)) (length settled)))
-    (check-= rpm 1553 15 "rpm of the rotor at the balance (worked 1,553)")
-    (printf "E2E charge: mean ~a W, rotor ~a rpm over ~a samples; the doc's 5 kWh bank would take ~a h of this\n"
-            (round mean-w) (round rpm) (length settled) (/ (round (* 10 (/ 5000 mean-w))) 10.0))
-    (check-true (has? #rx"^\\[frontend\\] ending source shaft: 25.000 Wh" lines) "the bank's record: 25 Wh, all of it from one source; 'shaft', not 'wind': the motor is in another machine than the windmill, and its source is read inside its own")
+  (test-case "the built windmill charges the found bank over the wire, through the train, in the sleep; only the wind has charged it"
+    ;; The owner's ruling of 2026-10-09 (#215): a paused sleep charges each generator at its last steady rate, or, when it has none (this
+    ;; motor has never charged a warm bank: the world is loaded asleep), at an estimate worked from the wind and the train. So the 25 Wh
+    ;; bank fills during the night, and the motor is open circuit once awake. Worked: the estimate at the wake, from the map's wind at the
+    ;; mill (6.95 m/s near 03:00) and the same torque balance as above, is 117 W (the sim runs a few % over the hand balance: 125 W).
+    (define held (filter (λ (f) (> (at f 'motor.held) 0.5)) built-run))
+    (check-true (pair? held) "the sleep held the motor")
+    (check-= (at (first held) 'motor.held-estimated) 1 0 "at an estimate: it had no steady rate yet")
+    (check-true (> (at (first held) 'motor.held-power) 0) "the estimate charges")
+    (define woke-built (first (filter (λ (f) (>= (at f 'scene.elapsed) wake-at)) built-run)))
+    (define woke-bank (first (filter (λ (f) (>= (at f 'scene.elapsed) wake-at)) run)))
+    (check-= (at woke-bank 'bank.charge) 25 1e-6 "Wh: the bank filled in the sleep")
+    (define est (at woke-built 'motor.estimated-power))
+    (check-true (< 100 est 150) (format "the estimate at the wake ~a W (worked 117 at the map's 6.95 m/s)" est))
+    (printf "E2E charge: held at ~a W (estimated) through the sleep; estimate at the wake ~a W; bank ~a Wh at the wake; the doc's 5 kWh bank would take ~a h at the wake's rate\n"
+            (at (first held) 'motor.held-power) (round est) (at woke-bank 'bank.charge) (/ (round (* 10 (/ 5000 est))) 10.0))
+    (check-true (has? #rx"^\\[frontend\\] ending source wind: 25.000 Wh" lines) "the bank's record: 25 Wh, all of it from the wind: the motor is in another machine than the windmill, and its source is read across the shaft link (GAP 9, #215)")
     (check-true (has? #rx"^\\[frontend\\] ending: bank sol 2 at 03:00, 25.00 of 25.00 Wh at [0-9]+.[0-9] C, sources 1" lines)))
 
   (test-case "the found bank is full before the pass and warm, and the call goes out as the pass opens at 03:00 on sol 2, not before"

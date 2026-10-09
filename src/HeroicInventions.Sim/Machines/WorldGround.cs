@@ -20,8 +20,8 @@ namespace HeroicInventions.Sim.Machines;
 /// once on the first tick, or, with a rate (issue #61), played out at that many
 /// relaxation passes a second so the collapse is watched (map.settling is 1
 /// until the ground stands, map.settle-passes counts the passes). A map with a
-/// wind field (#:wind) gives every windmill that takes its wind from the map
-/// (#:wind-from-map) the wind at its own place and time of day.
+/// wind field (#:wind) gives every windmill that takes its wind from the map the wind at its own place and time of day.
+/// A windmill does by default (<see cref="TakesMapWind"/>): only an explicit #:wind-from-map #f keeps its own flat #:wind.
 /// </summary>
 public sealed class WorldGround
 {
@@ -78,7 +78,7 @@ public sealed class WorldGround
     {
         if (_attached++ == 0) Water.Gravity = machine.Outside.Gravity;
         foreach (var d in machine.Diggers.Values) d.Attach(Ground, Water.Gravity);   // digging gangs dig this ground (#44)
-        foreach (var part in machine.Def.Parts.Where(p => p.Kind == "windmill" && p.Props.GetValueOrDefault("wind-from-map") is SBool { Value: true }))
+        foreach (var part in machine.Def.Parts.Where(p => p.Kind == "windmill" && TakesMapWind(p)))
             if (Ground.Wind is not null && machine.Windmills.TryGetValue(part.Id, out var mill))
             {
                 _fieldMills.Add((machine, mill, part.At));
@@ -112,6 +112,16 @@ public sealed class WorldGround
     private int _attached;
 
     private readonly List<(MachineRuntime Machine, Mechanics.Windmill Mill, Vec3 At)> _fieldMills = [];
+
+    /// <summary>
+    /// Whether a windmill reads the map's wind at its own place (owner, 2026-10-09): by default it does, in a world whose
+    /// map has a wind field. Only an explicit #:wind-from-map #f keeps the flat #:wind it was given. Where the map has no
+    /// wind field, or in a machine run without a map, it makes no difference: the mill keeps its own #:wind.
+    /// </summary>
+    public static bool TakesMapWind(PartSpec windmill) => windmill.Props.GetValueOrDefault("wind-from-map") is not SBool { Value: false };
+
+    /// <summary>The map's wind where a point is, at a machine's solar hour and seconds into its run (null when the map has no wind field): for the wind readout and the wind cue.</summary>
+    public double? WindHere(double x, double z, double hour, double seconds) => Ground.Wind?.SpeedAt(x, z, hour, seconds);
 
     /// <summary>The map's wind at a point, at the machine's solar hour and seconds into its run.</summary>
     private double WindAt(MachineRuntime machine, Vec3 at) =>

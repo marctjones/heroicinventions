@@ -80,7 +80,7 @@ public partial class MachineView
             arrow.AddChild(Shapes.Rod(new Vector3(0, 0, len / 2), new Vector3(side * len * 0.18f, 0, len / 2 - len * 0.25f), 0.25f, arrowMat));
         AddChild(arrow);
         _windmillYaw.Add((mill, yaw, arrow));
-        if (part.Props.GetValueOrDefault("wind-from-map") is SBool { Value: true })
+        if (Ground?.Wind is not null && WorldGround.TakesMapWind(part))
         {
             // a mill that takes the map's wind (issue #61) shows what it is getting, which changes with the gusts and the hour
             var label = new Label3D

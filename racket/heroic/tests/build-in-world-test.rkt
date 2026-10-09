@@ -9,6 +9,8 @@
 ;;    loading nothing until a wire joins it to the found bank (#208), so all nine parts run;
 ;;  - the world is saved with the machine in it, whole ((build built-1 ...), on Mars: the world's own planet, not the default Earth),
 ;;    then loaded: all nine parts are back and running, and it turns.
+;; The mill is built with #:wind-from-map #f: since the owner's ruling of 2026-10-09 a windmill in a world with a wind field reads the
+;; map's wind by default (its own test is WindSitingTests); this test is about building, saving and loading, so it pins the flat 6 m/s.
 ;; Worked numbers: on Mars's air (rho = 0.01518 kg/m3 at 610 Pa, -63 C) the sails' torque is tau = 1/2 rho A v^2 R (Cp/l*) (2 - w/w*)
 ;; = 102.9 (2 - w/1.5) N m, so from rest with I = m R^2 / 3 = 50,000 kg m2, w(t) = 3 (1 - e^(-t/729 s)): 0.237 rad/s at 60 s, 0.275 at 70
 ;; (the Jolt train adds 0.3% to the inertia). Every pinion turns at 4 times its wheel, the last at 64 times the sails.
@@ -38,7 +40,7 @@
 (define build-steps
   (string-join
    '("build (post tower #:at (0.45 0 -1.45) #:size-y 10.6 #:size-x 0.6 #:size-z 0.6)"
-     "build (windmill sails #:at (0 11 0))"
+     "build (windmill sails #:at (0 11 0) #:wind-from-map #f)"
      "build (wheel wheel-a #:catalogue involute-gear-m5-72 #:at (0 11 -1.3))" "build (arbor sails wheel-a)"
      "build (wheel pinion-b #:catalogue involute-gear-m5-18 #:at (0.225 11 -1.3))" "build (mesh wheel-a pinion-b)"
      "build (wheel wheel-b #:catalogue involute-gear-m5-72 #:at (0.225 11 -1.4))" "build (arbor pinion-b wheel-b)"

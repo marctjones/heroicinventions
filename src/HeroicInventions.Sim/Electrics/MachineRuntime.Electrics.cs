@@ -92,17 +92,15 @@ public sealed partial class MachineRuntime
             if (!(rated > cut)) rated = cut * 1.5;
             if (Tuning.GeneratorEfficiency is { } tunedEta) eff = tunedEta;
             string driven = part.Symbol("driven-by", "");
+            bool named = driven.Length > 0 && driven != "#f";
+            // the prime mover its train reaches, its speed (so the train can be read as a ratio, #68's Gear up) and the train's ratio and losses
+            var prime = PrimeMoverFrom(on);
             var gen = new Generator(part.Id)
             {
                 Bank = bank, Efficiency = eff, CutInRpm = cut, RatedRpm = rated, RatedTorque = torque,
-                DrivenBy = driven.Length > 0 && driven != "#f" ? driven : PrimeMoverOf(def, on).Name,
+                DrivenBy = named ? driven : prime?.Name ?? (Def.Ropes.Any(r => r.WindOn is { } drum && TrainOf(on).ContainsKey(drum)) ? "falling-weight" : "shaft"),
+                DrivenByNamed = named, Prime = prime,
             };
-            // the prime mover's own shaft speed, so the train between it and the rotor can be read as a ratio (#68's Gear up)
-            if (PrimeMoverOf(def, on).Id is { } primeId)
-                gen.PrimeOmega = _windmills.TryGetValue(primeId, out var pw) ? () => pw.AngularVelocity
-                    : _wheels.TryGetValue(primeId, out var pww) ? () => pww.AngularVelocity
-                    : _jetWheels.TryGetValue(primeId, out var pj) ? () => pj.AngularVelocity
-                    : _stirlings.TryGetValue(primeId, out var ps) ? () => ps.AngularVelocity : null;
             _generators[part.Id] = gen;
             if (_windmills.TryGetValue(on, out var wm)) _simDrives.Add(new(gen, () => wm.AngularVelocity, () => wm.Load, v => wm.Load = v));
             else if (_wheels.TryGetValue(on, out var ww)) _simDrives.Add(new(gen, () => ww.AngularVelocity, () => ww.Load, v => ww.Load = v));
@@ -114,25 +112,55 @@ public sealed partial class MachineRuntime
         RegisterElectricsFields();
     }
 
-    /// <summary>What turns the shaft a generator is on: the part the sim turns, or for a wheel the one it is geared, keyed or belted to, or a rope winding a falling weight on.</summary>
-    private (string Name, string? Id) PrimeMoverOf(MachineDef def, string on)
+    /// <summary>
+    /// The parts joined to <paramref name="start"/> by arbors, meshes and belts, each with its speed over the start's (a mesh turns its
+    /// partner at teeth / teeth, a belt at radius / radius, an arbor at 1; the sense is dropped) and the share of the power that passes
+    /// from it to the start (the meshes' efficiencies multiplied along the way).
+    /// </summary>
+    public IReadOnlyDictionary<string, (double Ratio, double Eta)> TrainOf(string start)
     {
-        static string Name(string kind) => kind switch { "windmill" => "wind", "waterwheel" => "water-wheel", "jetwheel" => "steam-jet", "stirling" => "stirling", _ => "shaft" };
-        // the wheels joined to this one by arbors, meshes and belts
-        var seen = new HashSet<string> { on };
-        var queue = new Queue<string>([on]);
+        var def = Def;
+        double Size(string id) => def.Part(id) is { } p ? (p.Number("teeth", 0) is > 0 and var t ? t : p.Number("pitch-radius", 0) is > 0 and var r ? r : p.Number("radius", 0)) : 0;
+        double Step(string a, string b) => Size(a) > 0 && Size(b) > 0 ? Size(a) / Size(b) : 1;   // ω_b / ω_a
+        var seen = new Dictionary<string, (double Ratio, double Eta)> { [start] = (1, 1) };
+        var queue = new Queue<string>([start]);
         while (queue.Count > 0)
         {
             string here = queue.Dequeue();
-            var next = def.Arbors.Where(a => a.Parts.Contains(here)).SelectMany(a => a.Parts)
-                .Concat(def.Meshes.Where(m => m.A == here).Select(m => m.B)).Concat(def.Meshes.Where(m => m.B == here).Select(m => m.A))
-                .Concat(def.Belts.Where(b => b.A == here).Select(b => b.B)).Concat(def.Belts.Where(b => b.B == here).Select(b => b.A));
-            foreach (var n in next) if (seen.Add(n)) queue.Enqueue(n);
+            var (ratio, eta) = seen[here];
+            var next = def.Arbors.Where(a => a.Parts.Contains(here)).SelectMany(a => a.Parts).Select(n => (n, 1.0, 1.0))
+                .Concat(def.Meshes.Where(m => m.A == here).Select(m => (m.B, Step(here, m.B), m.Efficiency)))
+                .Concat(def.Meshes.Where(m => m.B == here).Select(m => (m.A, Step(here, m.A), m.Efficiency)))
+                .Concat(def.Belts.Where(b => b.A == here).Select(b => (b.B, Step(here, b.B), 1.0)))
+                .Concat(def.Belts.Where(b => b.B == here).Select(b => (b.A, Step(here, b.A), 1.0)));
+            foreach (var (n, k, e) in next)
+                if (!seen.ContainsKey(n)) { seen[n] = (ratio * k, eta * e); queue.Enqueue(n); }
         }
-        foreach (var id in seen)
-            if (def.Part(id) is { Kind: "windmill" or "waterwheel" or "jetwheel" or "stirling" } p) return (Name(p.Kind), id);
-        if (def.Ropes.Any(r => r.WindOn is { } drum && seen.Contains(drum))) return ("falling-weight", null);
-        return ("shaft", null);
+        return seen;
+    }
+
+    /// <summary>
+    /// The prime mover a train from <paramref name="on"/> reaches in this machine (a windmill, water wheel, jet wheel or Stirling engine), with
+    /// the train's ratio ω_on / ω_prime and efficiency, or null. A windmill's torque curve comes with it, for a paused sleep's estimate.
+    /// </summary>
+    public PrimeMover? PrimeMoverFrom(string on)
+    {
+        foreach (var (id, (ratio, eta)) in TrainOf(on))
+        {
+            if (!(ratio > 0)) continue;
+            if (_windmills.TryGetValue(id, out var mill)) return new("wind", id, () => mill.AngularVelocity, 1 / ratio, eta, w => mill.TorqueAt(w) - mill.Load);
+            if (_wheels.TryGetValue(id, out var wheel)) return new("water-wheel", id, () => wheel.AngularVelocity, 1 / ratio, eta, null);
+            if (_jetWheels.TryGetValue(id, out var jet)) return new("steam-jet", id, () => jet.AngularVelocity, 1 / ratio, eta, null);
+            if (_stirlings.TryGetValue(id, out var se)) return new("stirling", id, () => se.AngularVelocity, 1 / ratio, eta, null);
+        }
+        return null;
+    }
+
+    /// <summary>A bank's <c>from-SOURCE</c> field for a source a generator has come to be filed under (a prime mover across a shaft link, GAP 9).</summary>
+    public void ShowSource(BatteryBank bank, string source)
+    {
+        foreach (var (id, b) in _banks)
+            if (b == bank) _getters.TryAdd($"{id}.from-{source}", () => b.Sources.GetValueOrDefault(source) / BatteryBank.JoulesPerWattHour);
     }
 
     private void RegisterElectricsFields()
@@ -177,6 +205,11 @@ public sealed partial class MachineRuntime
             _getters[$"{id}.cut-in-rpm"] = () => g.CutInRpm;
             _setters[$"{id}.cut-in-rpm"] = v => g.CutInRpm = Math.Max(1e-6, v);
             _getters[$"{id}.charging"] = () => g.Delivered > 0 ? 1 : 0;
+            _getters[$"{id}.settled-power"] = () => double.IsNaN(g.SettledPower) ? 0 : g.SettledPower;   // W: the last settled power (0 until it has one)
+            _getters[$"{id}.held"] = () => g.Held ? 1 : 0;                 // a paused sleep holds it at its settled power (or the estimate)
+            _getters[$"{id}.held-estimated"] = () => g.HeldEstimated ? 1 : 0;   // held at the estimate: it had no settled power
+            _getters[$"{id}.held-power"] = () => g.HeldPower;              // W it is held at (0 when not held)
+            _getters[$"{id}.estimated-power"] = () => g.EstimatePower() is var e && e > 0 ? e : 0;   // W it would charge at once loaded, from the present state
         }
         if (_banks.Count > 0)
         {
@@ -185,11 +218,34 @@ public sealed partial class MachineRuntime
         }
     }
 
+    /// <summary>
+    /// A sleep that pauses the physics engine begins (owner's ruling, 2026-10-09): every generator the sim does not turn itself (one on a
+    /// rigid body, which the paused engine leaves still) is held at its last settled power (<see cref="Generator.SettledPower"/>) and charges
+    /// its bank at that rate each step, by the bank's own rules, until <see cref="ReleaseGenerators"/>. A generator on a part the sim turns
+    /// (a windmill, water wheel, jet wheel or Stirling engine the sim steps through the sleep) keeps its real power and is not held, so
+    /// nothing is counted twice. An approximation: the wind's changes over the sleep are not followed. Returns each held generator by id.
+    /// </summary>
+    public IReadOnlyList<(string Id, Generator Generator, double Watts)> HoldGenerators()
+    {
+        var simDriven = _simDrives.Select(d => d.Generator).ToHashSet();
+        var held = new List<(string, Generator, double)>();
+        foreach (var (id, g) in _generators)
+            if (!simDriven.Contains(g) && g.Bank is not null) held.Add((id, g, g.Hold()));
+        return held;
+    }
+
+    /// <summary>The paused sleep is over: the held generators charge from their shafts again.</summary>
+    public void ReleaseGenerators() { foreach (var g in _generators.Values) g.Release(); }
+
+    /// <summary>Some generator is held by a paused sleep.</summary>
+    public bool GeneratorsHeld => _generators.Values.Any(g => g.Held);
+
     private void PreStepElectrics() { foreach (var d in _simDrives) d.Pre(); }
 
     private void PostStepElectrics(double dt)
     {
         foreach (var d in _simDrives) d.Post(dt);
+        foreach (var g in _generators.Values) if (g.Held) g.ChargeHeld(dt);   // a paused sleep: the last settled power
         foreach (var b in _banks.Values) b.TryCall(Sun.Time, Sun.SolNumber);
     }
 }

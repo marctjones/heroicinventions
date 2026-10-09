@@ -13,11 +13,12 @@
 ;; round it where it lies); the two crates beyond the rubble's foot are bare, and one of them holds
 ;; the salvaged motors (found-motor): the generator is found, not built.
 (world lonely-rover-opening
-  ;; the scenario (#60): what this world is for, as the front end lists it. No tuning: every number is the real one.
+  ;; the scenario (#60): what this world is for, as the front end lists it. Every number is the real one but the bank's size: the found
+  ;; 5 kWh bank at 0.1, 500 Wh, 5.6 h of a 90 W windmill (owner, 2026-10-09).
   (scenario
     (title "The Lonely Rover")
-    (description "Mars, a crater, a storm that has brought a weakened rim down on your cargo. Dig out the battery bank, make electricity without panels, keep the bank warm through the night, and call Earth on the pre-dawn relay pass. The real numbers.")
-    (tuning))
+    (description "Mars, a crater, a storm that has brought a weakened rim down on your cargo. Find the battery bank under about a metre of rubble (dig it out, or build a vault round it where it lies), make electricity without panels, keep the bank warm through the night, and call Earth on the pre-dawn relay pass. The real numbers, with a 500 Wh bank.")
+    (tuning (bank-capacity 0.1)))
   (map victoria)
   ;; the player's rover (#94): 45 m down the slope from the first crate, facing it (+x), where the floor is only ~7 degrees
   (rover (at 190.0 140.0) (heading 270))

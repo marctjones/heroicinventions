@@ -201,8 +201,9 @@ public static class RktExporter
                 return $"  (capstan {p.Id} {At()} #:turns {F(N("turns"))} #:load {F(N("load"))} #:hold {F(N("hold"))} #:drop {F(N("drop", 1))} " +
                        $"#:radius {F(N("radius", 0.15))}" + Opt("mu", "mu") + $" #:rope {Sym("rope", "hemp")} {Mat()})\n";
             case "windmill":
+                // taking the map's wind is the default (2026-10-09), so only a flat-wind mill says so
                 return $"  (windmill {p.Id} {At()} #:radius {F(N("radius"))} #:mass {F(N("mass"))} #:wind {F(N("wind"))}" +
-                       (p.Props.GetValueOrDefault("wind-from-map") is SBool { Value: true } ? " #:wind-from-map #t" : "") + $" #:load {F(N("load"))} " +
+                       (p.Props.GetValueOrDefault("wind-from-map") is SBool { Value: false } ? " #:wind-from-map #f" : "") + $" #:load {F(N("load"))} " +
                        $"#:cp {F(N("cp", 0.3))} #:tip-speed-ratio {F(N("tip-speed-ratio", 2.5))}" +
                        // the wind's heading and the sails' (issue #193), written only when they are not the +z both start at
                        (N("wind-from-deg", 90) != 90 ? $" #:wind-from-deg {F(N("wind-from-deg", 90))}" : "") +

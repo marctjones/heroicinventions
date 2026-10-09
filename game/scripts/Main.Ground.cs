@@ -15,6 +15,7 @@ public partial class Main
     private const string MapsDir = "res://maps";
     private WorldGround? _groundSim;
     private TerrainView? _terrainView;
+    private WindView? _windView;   // the wind's streaks over a map with a wind field, and the rover's readout (WindView.cs)
 
     /// <summary>Reads and shows the world's map, if it names one; before its machines are placed on it.</summary>
     private void LoadGround(WorldDef world)
@@ -28,6 +29,16 @@ public partial class Main
         _terrainView = new TerrainView { Name = "Terrain" };
         AddChild(_terrainView);
         _terrainView.Show(terrain, _groundSim.Water, _materials);   // the materials: for the boulders slides leave (#88)
+        if (terrain.Wind is not null)
+        {
+            _windView = new WindView
+            {
+                Name = "Wind", Ground = terrain, Running = () => _running,
+                Focus = () => RoverIsPlayer ? _rover!.Chassis.GlobalPosition : _orbit.Pivot,
+                Clock = () => _views.Count > 0 ? (_views[0].Runtime.Sun.Time, _views[0].Runtime.Sun.Sols * _views[0].Runtime.Sun.SolLength) : (12, 0),
+            };
+            AddChild(_windView);
+        }
         // the floor goes down under the lowest ground, out of sight and out of the way
         if (_floor is not null) _floor.Position = new Vector3(0, (float)terrain.Heights.Min() - 3f, 0);
     }
@@ -37,6 +48,9 @@ public partial class Main
         _groundSim = null;
         _terrainView?.QueueFree();
         _terrainView = null;
+        _windView?.GetParent()?.RemoveChild(_windView);   // detach first: a world loaded this frame must not be auto-named (the QueueFree trap)
+        _windView?.QueueFree();
+        _windView = null;
         if (_floor is not null) _floor.Position = new Vector3(0, -1f, 0);
     }
 

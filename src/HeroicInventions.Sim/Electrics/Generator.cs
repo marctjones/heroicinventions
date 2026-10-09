@@ -26,6 +26,16 @@ namespace HeroicInventions.Sim.Electrics;
 ///
 /// It records <see cref="DrivenBy"/>, what drives the shaft (wind, water-wheel, falling-weight, aeolipile, stirling ...), and
 /// charges its bank under that name, so a route achievement can tell how the game was won.
+///
+/// A paused sleep (owner's ruling, 2026-10-09). A generator on a rigid body (an arbor's rotor geared from a windmill) is turned only by
+/// the physics engine, and a sleep that pauses the engine would leave it charging nothing. So it keeps a record of its
+/// <see cref="SettledPower"/>: the mean power it charged at over its last <see cref="SettledBins"/> whole seconds, taken when every one of
+/// those seconds is within <see cref="SettledSpread"/> (5%, or 0.5 W) of that mean. Only seconds in which its bank was taking charge
+/// count: a tick on an open circuit (bank full, or out of 0 to 45 °C) runs the rotor unloaded, so its speed says nothing of the loaded
+/// power, and it starts the count again. While <see cref="Held"/> (<see cref="Machines.MachineRuntime.HoldGenerators"/>) it offers that
+/// power × dt to its bank every step, by the bank's own rules: nothing while full or out of range, filed under <see cref="DrivenBy"/>.
+/// It is an approximation: the wind's changes over the sleep (map wind, veer) are not followed. The record is saved with the machine
+/// (a world saved and loaded goes on as if it had never stopped, #67); one that has never charged ten steady seconds has none, and charges nothing.
 /// </summary>
 public sealed class Generator
 {
@@ -36,10 +46,24 @@ public sealed class Generator
     /// <summary>The bank in another machine a wire link (#208) has joined it to, or null. The wire is lossless and instant, so the generator charges this bank by the same <see cref="Apply"/> and the same open-circuit rule as its own; the bank files the charge under <see cref="DrivenBy"/> as before.</summary>
     public BatteryBank? Wired { get => _wired; set => _wired = value; }
     [NonSerialized] private BatteryBank? _wired;   // not state of this machine: the other machine saves its own bank (RuntimeState skips it)
-    /// <summary>What turns it: the key the bank files its charge under.</summary>
-    public string DrivenBy { get; set; } = "shaft";
+    /// <summary>
+    /// What turns it: the key the bank files its charge under. Its own machine's prime mover (or <c>#:driven-by</c>); where that walk finds
+    /// none ("shaft") and a world's shaft link joins its train to another machine's (GAP 9), that machine's prime mover (<see cref="LinkedPrime"/>).
+    /// </summary>
+    public string DrivenBy { get => _linkedPrime is { } l && _drivenBy == "shaft" && !DrivenByNamed ? l.Name : _drivenBy; set => _drivenBy = value; }
+    private string _drivenBy = "shaft";
+    /// <summary>The machine's file names what drives it (<c>#:driven-by</c>): no link renames it.</summary>
+    public bool DrivenByNamed { get; set; }
+    /// <summary>The prime mover in its own machine that its train reaches (a windmill, water wheel, jet wheel, Stirling engine), or null.</summary>
+    public PrimeMover? Prime { get => _prime; set => _prime = value; }
+    [NonSerialized] private PrimeMover? _prime;
+    /// <summary>The prime mover of another machine that a world's shaft link joins its train to (GAP 9), or null; set and cleared by <see cref="Machines.WorldLinks"/>.</summary>
+    public PrimeMover? LinkedPrime { get => _linkedPrime; set => _linkedPrime = value; }
+    [NonSerialized] private PrimeMover? _linkedPrime;
+    /// <summary>Its prime mover, in its own machine or across a shaft link.</summary>
+    public PrimeMover? Mover => _prime ?? _linkedPrime;
     /// <summary>The shaft speed of the prime mover (rad/s) where the sim turns it (a windmill, water wheel, jet wheel, Stirling engine), else null.</summary>
-    public Func<double>? PrimeOmega { get; set; }
+    public Func<double>? PrimeOmega => Mover?.Omega;
     /// <summary>The speed ratio the train gives: the rotor's speed over the prime mover's (1 for a generator on the prime mover itself); null where the prime mover is not turned by the sim or is still.</summary>
     public double? TrainRatio => PrimeOmega is { } p && Math.Abs(p()) > 1e-9 ? Omega / Math.Abs(p()) : null;
     public double Efficiency { get; set; } = 0.8;
@@ -91,6 +115,7 @@ public sealed class Generator
     /// <summary>Records one tick of <paramref name="dt"/> seconds with <paramref name="torque"/> N·m on the shaft at ω, and charges the bank.</summary>
     public void Apply(double omega, double torque, double dt)
     {
+        bool closed = Bank is { Accepting: true };      // the circuit this tick ran under (LoadTorque read the same)
         Omega = Math.Abs(omega);
         Torque = torque;
         ShaftPower = torque * Omega;
@@ -99,6 +124,107 @@ public sealed class Generator
         Generated += Power * dt;
         double accepted = Bank is { } bank && Power > 0 ? bank.Offer(Power * dt, DrivenBy) : 0;
         Delivered = dt > 0 ? accepted / dt : 0;
+        Record(Power, dt, closed);
+    }
+
+    // ---- the settled-power record, and the hold a paused sleep puts on it ----
+    /// <summary>Whole seconds of charging the settled power is the mean of.</summary>
+    public const int SettledBins = 10;
+    /// <summary>How far each second's mean may be from the mean of all of them for the power to count as settled: 5%, or <see cref="SettledFloor"/> W.</summary>
+    public const double SettledSpread = 0.05, SettledFloor = 0.5;
+    private double[] _bins = new double[SettledBins];   // W, the mean of each closed second, the oldest overwritten
+    private int _binsFilled, _binNext;
+    private double _binEnergy, _binTime, _clock;
+    private double _settledPower = double.NaN, _settledAt = double.NaN;
+    [NonSerialized] private bool _held, _heldEstimated;   // the sleep's, not the machine's: a resumed sleep holds it again
+    [NonSerialized] private double _heldPower;
+
+    /// <summary>W: the last settled power it charged at (see the class notes), or NaN if it has not settled in this session.</summary>
+    public double SettledPower => _settledPower;
+    /// <summary>Seconds of its own running since its power last settled (NaN if never).</summary>
+    public double SettledAgo => _clock - _settledAt;
+    /// <summary>True while a paused sleep holds it at its settled power.</summary>
+    public bool Held => _held;
+    /// <summary>W it is held at: its settled power, or the estimate if it had none; 0 when not held.</summary>
+    public double HeldPower => _held ? _heldPower : 0;
+    /// <summary>True while held at an estimate (<see cref="EstimatePower"/>) because it had no settled power.</summary>
+    public bool HeldEstimated => _held && _heldEstimated;
+
+    /// <summary>
+    /// A paused sleep begins: it will charge at its last settled power; one that has none (it has never charged ten steady seconds, say into a
+    /// bank that was cold) at the estimate of <see cref="EstimatePower"/> (owner's ruling, 2026-10-09), or nothing if there is none. Returns the watts held.
+    /// </summary>
+    public double Hold()
+    {
+        _held = true;
+        _heldEstimated = double.IsNaN(_settledPower);
+        double estimate = _heldEstimated ? EstimatePower() : double.NaN;
+        _heldPower = !_heldEstimated ? _settledPower : estimate > 0 ? estimate : 0;
+        return _heldPower;
+    }
+
+    /// <summary>
+    /// W it would charge at once loaded, from its machine's present state, by the torque balance the sim steps to. Through a train of speed
+    /// ratio G = ω_rotor / ω_prime and efficiency η_t, the prime mover feels the generator's torque as G τ_g(G ω) / η_t; where the prime mover
+    /// has a torque curve (a windmill's sails in the present wind, less their own load) the operating point is where they meet,
+    ///   τ_p(ω) = G τ_g(G ω) / η_t,   solved for ω by bisection between rest and the free speed,
+    /// and elsewhere it is the prime mover's present speed. The charge is then η τ_g(G ω) G ω. Bearing friction is left out. NaN where
+    /// no prime mover is known (<see cref="Mover"/>).
+    /// </summary>
+    public double EstimatePower()
+    {
+        if (Mover is not { Ratio: > 0 } m) return double.NaN;
+        double g = m.Ratio, eta = m.Eta is > 0 and <= 1 ? m.Eta : 1, omega;
+        if (m.Torque is { } prime)
+        {
+            double hi = 1;
+            for (int i = 0; i < 60 && prime(hi) > 0; i++) hi *= 2;              // past the free speed
+            double lo = 0;
+            if (!(prime(lo) > 0)) return 0;                                       // no wind: nothing turns it
+            for (int i = 0; i < 200; i++)
+            {
+                double mid = 0.5 * (lo + hi);
+                if (prime(mid) - g * TorqueAt(g * mid) / eta > 0) lo = mid; else hi = mid;
+            }
+            omega = 0.5 * (lo + hi);
+        }
+        else omega = Math.Abs(m.Omega?.Invoke() ?? 0);
+        double w = g * omega;
+        return Efficiency * TorqueAt(w) * w;
+    }
+
+    /// <summary>The sleep is over: back to charging from the shaft. The record goes on from where it was (the paused engine kept its bodies as they were).</summary>
+    public void Release() => _held = false;
+
+    /// <summary>One step of a paused sleep: offers the held power × dt to the bank, which takes it by its own rules (nothing full or out of 0 to 45 °C).</summary>
+    public void ChargeHeld(double dt)
+    {
+        Power = Bank is { Accepting: true } ? _heldPower : 0;     // an open circuit gives nothing
+        Generated += Power * dt;
+        double accepted = Bank is { } bank && Power > 0 ? bank.Offer(Power * dt, DrivenBy) : 0;
+        Delivered = dt > 0 ? accepted / dt : 0;
+    }
+
+    /// <summary>Adds one tick to the record; <paramref name="closed"/>: the bank was taking charge. An open-circuit tick starts the count again.</summary>
+    private void Record(double power, double dt, bool closed)
+    {
+        _clock += dt;
+        if (!closed) { _binsFilled = 0; _binEnergy = 0; _binTime = 0; return; }
+        _binEnergy += power * dt;
+        _binTime += dt;
+        if (_binTime < 1 - 1e-9) return;
+        _bins[_binNext] = _binEnergy / _binTime;
+        _binNext = (_binNext + 1) % SettledBins;
+        _binsFilled = Math.Min(_binsFilled + 1, SettledBins);
+        _binEnergy = 0; _binTime = 0;
+        if (_binsFilled < SettledBins) return;
+        double mean = 0;
+        foreach (double b in _bins) mean += b;
+        mean /= SettledBins;
+        double band = Math.Max(SettledSpread * Math.Abs(mean), SettledFloor);
+        foreach (double b in _bins) if (Math.Abs(b - mean) > band) return;
+        _settledPower = mean;
+        _settledAt = _clock;
     }
 
     /// <summary>One tick on a shaft at ω: the torque it loads with, applied and charged; returns the torque.</summary>

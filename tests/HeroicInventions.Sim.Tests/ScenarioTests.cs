@@ -23,16 +23,19 @@ public class ScenarioTests
     // ---- the format ----
 
     [Fact]
-    public void ALonelyRoverOpeningCarriesItsScenarioAndTheEasyVariantDropsThePassRequirement()
+    public void ALonelyRoverOpeningCarriesItsScenario_RealButForA500WhBank_AndTheEasyVariantDropsThePassRequirement()
     {
         var real = World("lonely-rover-opening").Scenario;
         Assert.NotNull(real);
         Assert.Equal("The Lonely Rover", real!.Title);
         Assert.False(string.IsNullOrWhiteSpace(real.Description));
-        Assert.True(real.Tuning.IsReal);                      // the real game is the real numbers
+        // the real game is the real numbers but for the bank's size: a 500 Wh bank (owner, 2026-10-09: a 5 kWh fill was 55.6 h of a 90 W windmill)
+        Assert.Equal(0.1, real.Tuning.BankCapacity);
+        Assert.True((real.Tuning with { BankCapacity = 1 }).IsReal);
         var easy = World("lonely-rover-easy").Scenario!;
         Assert.True(easy.Tuning.CallAnyTime);
         Assert.True(easy.Tuning.BankCapacity < 1 && easy.Tuning.GeneratorCutIn < 1 && easy.Tuning.Wear < 1);
+        Assert.Equal(0.02, easy.Tuning.BankCapacity);         // 100 Wh of the found bank's 5,000
         Assert.False(easy.Tuning.HasAdvanced);                // the risky constants stay the planet's
         Assert.Equal(World("lonely-rover-opening").Placements.Select(p => (p.Label, p.At)), World("lonely-rover-easy").Placements.Select(p => (p.Label, p.At)));
     }
