@@ -19,6 +19,11 @@ namespace HeroicInventions;
 /// The sleep takes this form by default only while its estimate is within <see cref="LiveLimit"/>; a longer sleep can be told to
 /// keep the machines turning, and a shorter one to pause them (the "Keep machines turning" box, HEROIC_SLEEP_PHYSICS).
 /// It stops at a safety limit, and wakes early for any event the player marked.
+/// A paused sleep charges (owner's ruling, 2026-10-09): a generator on a rigid body, which the paused engine leaves still, is held at its
+/// last settled power (Generator.SettledPower: its mean over its last ten steady seconds of charging), or, with none, at an estimate worked
+/// from the prime mover and the train (Generator.EstimatePower, marked "estimated"), and charges its bank at that rate,
+/// by the bank's own rules, through the sleep. That is an approximation, said in the panel and the log: the wind's changes over the sleep
+/// are not followed. A generator the sim turns itself keeps its real power; a live sleep and watching are unchanged.
 /// </summary>
 public partial class SleepControl : VBoxContainer
 {
@@ -29,7 +34,7 @@ public partial class SleepControl : VBoxContainer
     private OptionButton _preset = null!, _op = null!;
     private LineEdit _field = null!, _value = null!, _limit = null!, _event = null!;
     private CheckBox _any = null!;
-    private Label _prediction = null!, _progressText = null!;
+    private Label _prediction = null!, _progressText = null!, _heldNote = null!;
     private ProgressBar _bar = null!;
     private Button _go = null!, _cancel = null!;
     private VBoxContainer _body = null!;
@@ -69,6 +74,7 @@ public partial class SleepControl : VBoxContainer
         _predicted = saved.Predicted ?? double.NaN;
         _session = new SleepSession(view.Runtime, saved.Plan, 1.0 / 120, saved.Predicted, saved.StartedAt);
         _setRunning(false);
+        HoldGenerators();                        // a resumed sleep is a paused one: the generators charge at their steady rate again
         _go.Disabled = true; _cancel.Disabled = false; _bar.Visible = true;
         _body.Visible = true;
         if (_session.Done) Finish();
@@ -133,6 +139,36 @@ public partial class SleepControl : VBoxContainer
         _body.AddChild(_bar);
         _progressText = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(240, 0) };
         _body.AddChild(_progressText);
+        _heldNote = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(240, 0), Visible = false,
+                                Modulate = new Color(1f, 0.85f, 0.55f) };
+        _body.AddChild(_heldNote);
+    }
+
+    /// <summary>
+    /// A sleep that pauses the engine begins: every machine's generators on rigid bodies are held at their last settled power (see the class
+    /// notes), and the panel and the log say so, generator by generator.
+    /// </summary>
+    private void HoldGenerators()
+    {
+        var lines = new List<string>();
+        foreach (var v in _views())
+            foreach (var (id, gen, watts) in v.Runtime.HoldGenerators())
+                lines.Add(!gen.HeldEstimated
+                    ? $"{id}: {watts:0.0} W into {gen.Bank?.Name} (steady {gen.SettledAgo:0} s before the sleep)"
+                    : watts > 0
+                    ? $"{id}: {watts:0.0} W into {gen.Bank?.Name} (estimated: no steady rate yet, worked from the {gen.DrivenBy} and the train)"
+                    : $"{id}: no steady rate yet and none estimated (nothing turns it past its cut-in): charges nothing");
+        if (lines.Count == 0) { _heldNote.Visible = false; return; }
+        const string Head = "Machines paused: generators charge at their last steady rate (approximate: the wind's changes overnight are not followed)";
+        _heldNote.Text = Head + "\n" + string.Join("\n", lines);
+        _heldNote.Visible = true;
+        GD.Print($"[sleep] {Head}: {string.Join("; ", lines)}");
+    }
+
+    private void ReleaseGenerators()
+    {
+        foreach (var v in _views()) v.Runtime.ReleaseGenerators();
+        _heldNote.Visible = false;
     }
 
     /// <summary>Re-reads the focused machine's wake presets: call when the machine changes.</summary>
@@ -246,7 +282,10 @@ public partial class SleepControl : VBoxContainer
             GD.Print($"[sleep] keeping the machines turning (the physics engine at {LiveSpeed:0}x) until {plan.Describe()}");
         }
         else
+        {
             _setRunning(false);                  // the game's own stepping stops; Advance takes over
+            if (!_session.Done) HoldGenerators(); // and the generators the engine turned charge at their last steady rate
+        }
         if (_session.Done) Finish();
     }
 
@@ -352,6 +391,7 @@ public partial class SleepControl : VBoxContainer
     {
         _go.Disabled = false; _cancel.Disabled = true; _bar.Visible = false;
         if (_live) { SetSpeed(_speedBefore); MachineView.Hurrying = false; _live = false; }
+        else ReleaseGenerators();
         foreach (var v in _views()) v.ShowState();
         _sleeper = null;
         Ended?.Invoke();

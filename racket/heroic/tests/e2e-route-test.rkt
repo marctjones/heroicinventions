@@ -153,7 +153,7 @@
     (check-= rpm 1574 20 "rpm of the rotor at the balance (worked 1,574 at the map's 6.95 m/s; gusts move it a little)")
     (printf "E2E charge: mean ~a W, rotor ~a rpm over ~a samples; the doc's 5 kWh bank would take ~a h of this\n"
             (round mean-w) (round rpm) (length settled) (/ (round (* 10 (/ 5000 mean-w))) 10.0))
-    (check-true (has? #rx"^\\[frontend\\] ending source shaft: 25.000 Wh" lines) "the bank's record: 25 Wh, all of it from one source; 'shaft', not 'wind': the motor is in another machine than the windmill, and its source is read inside its own")
+    (check-true (has? #rx"^\\[frontend\\] ending source wind: 25.000 Wh" lines) "the bank's record: 25 Wh, all of it from the wind: the motor is in another machine than the windmill, and its source is read across the shaft link (GAP 9, #215)")
     (check-true (has? #rx"^\\[frontend\\] ending: bank sol 2 at 03:00, 25.00 of 25.00 Wh at [0-9]+.[0-9] C, sources 1" lines)))
 
   (test-case "the found bank is full before the pass and warm, and the call goes out as the pass opens at 03:00 on sol 2, not before"
