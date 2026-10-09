@@ -702,6 +702,7 @@ public partial class Main : Node3D
         BuildJoinButton(col);
         BuildBuildButtons(col);   // the game's Build section: a new machine, and the machines the player built (Main.Build.cs, #204)
         _sleep = new SleepControl(() => _views.Count > 0 ? _views : _current is null ? [] : [_current], () => _current, SetRunning, text => { _hudNote.Text = text; _hudNote.Visible = true; });
+        MachineView.LinkedShaftRpm = LinkedShaftRpmOf;
         col.AddChild(_sleep);
         _sleep.GetSpeed = () => _timeScale; _sleep.SetSpeed = SetSpeed;   // a sleep that keeps the machines turning runs the engine at speed (#207)
         _sleep.Woke += OnSleepWoke;
@@ -1761,6 +1762,7 @@ public partial class Main : Node3D
         }
         if (_running && !_sleep.Active) PreStepHand();   // a hand holding a body sets its target for this step (Main.Drag.cs)
         if (_views.Count > 0 && (_running || _sleep.Active)) UpdateZones();   // who holds whose heat store, from where they are now (Main.Zones.cs, #211)
+        MachineView.SleepingPaused = _sleep.Active && !_sleep.Live;   // the label on a generator says why it is not charging (#212)
         if (_sleep.Active && !_sleep.Live)
             _sleep.Advance(SleepBudgetMs);    // sleeping: run ahead as fast as it can, in place of stepping in real time
         else if (_running && _views.Count > 0)

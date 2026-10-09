@@ -1,4 +1,5 @@
 using Godot;
+using HeroicInventions.Sim;
 using HeroicInventions.Sim.Electrics;
 using HeroicInventions.Sim.Machines;
 
@@ -215,8 +216,10 @@ public partial class MachineView
             var capBasis = new Basis(new Quaternion(Vector3.Up, v.Axis)) * new Basis(Vector3.Up, v.CapAngle);
             v.Cap.Basis = capBasis;
             v.Cap.Position = (Vector3)v.Cap.GetMeta("gen_at") - v.Axis * 0.025f;
-            v.Label.Text = $"{g.Name} {g.Rpm:#,0} rpm · {g.Torque:0.00} N·m\n{g.Delivered:0} W · {amps:0.0} A at {g.Bank?.Volts:0} V"
-                         + (g.Rpm < g.CutInRpm ? "\nunder cut-in: nothing" : "");
+            // why it is or is not charging, and the rpm beside it (ChargeStatus, #212): state only
+            bool rotorAsleep = SleepingPaused && _generatorLoads.Any(l => l.Gen == g);   // a sim-turned part keeps turning through a paused sleep
+            string shaft = Runtime.GeneratorShaft(g.Name);
+            v.Label.Text = ChargeStatus.Label(g, rotorAsleep, LinkedShaftRpm?.Invoke(Name, shaft), ChargeStatus.Hold.Read(Runtime.FieldGetters, g.Name));
         }
     }
 
