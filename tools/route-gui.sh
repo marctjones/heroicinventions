@@ -13,9 +13,10 @@
 #         offsets are millimetres, so they are typed as the automated route types them
 #   4  R  press "Leave" to close build mode
 #   5  R  Join machines, then joinclick (a real click where the camera draws the part, #225): the train's last pinion (the click crosses the
-#         sails' box first; the smaller box inside it, pinion-e, wins), then, joining still on across the drive, the rotor (the shaft), the
-#         generator ('list': if the click picked the rotor, whose box it overlaps, a second click on the spot offers the list and the
-#         generator is taken from it) and the bank (inside its crate's box: the smaller wins) (the wire). The `join A B` step by name stays
+#         sails' box first; the smaller box inside it, pinion-e, wins), then, joining still on across the drive, the rotor (the shaft: the
+#         click on the wheel's own place, under the motor's can, picks the smaller rotor box inside the can's) and the generator (a click
+#         on the can's flank, 0.19 m to the side of its centre: the motor; the pick list stays for a second click on one spot, or a
+#         right-click, #247) and the bank (inside its crate's box: the smaller wins) (the wire). The `join A B` step by name stays
 #         for scripts that cannot click
 #   6  R  open "Sleep until...", pick "pre-dawn", press "Sleep" (the game's own sleep, paused: the engine does not run through it)
 #   7  R  after the wake, press 20x; the call goes out at 03:00 on sol 2 and the run ends 120 s later
@@ -53,7 +54,7 @@ steps=(
   # drive to the motor: turn right to face it, drive, turn left to face +x, drive the last metres
   "hold right 3.15; wait 10; hold up 14; wait 10; hold up 13; wait 10; hold left 0.65; wait 20; hold up 2; wait 20; rover; key home; wait 20; hold shift+up 0.5; wait 20; $(shot 08-at-motor)"
   # 5b: joining stays on across the drive, so the pinion is still the first pick; click the rotor (the shaft), then the generator and the bank (the wire), Escape
-  "joinclick motors.rotor; wait 10; $(shot 09-shaft-joined); joinclick motors.motor list; wait 10; joinclick battery-bank.bank; wait 10; key escape; wait 10; $(shot 10-joined)"
+  "joinclick motors.rotor; wait 10; $(shot 09-shaft-joined); joinclick motors.motor; wait 10; joinclick battery-bank.bank; wait 10; key escape; wait 10; $(shot 10-joined)"
   # 6: Sleep until..., the pre-dawn wake, Sleep (the left panel has the Edit built-1 button now, so the rows are 32 px lower; picking the wake shows its estimate, which pushes Sleep down to y 510)
   "$(click 126 238); wait 30; $(click 137 289); wait 20; $(click 140 339); wait 20; $(shot 11-sleep-panel)"
   "$(click 43 510); wait 120; $(shot 12-sleeping)"

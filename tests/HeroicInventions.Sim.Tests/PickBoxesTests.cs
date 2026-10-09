@@ -47,6 +47,20 @@ public class PickBoxesTests
     }
 
     [Fact]
+    public void Motor_can_holds_the_rotor_so_the_rotor_is_picked_at_its_place_and_the_motor_on_the_can()
+    {
+        // #247: the can (0.44 m cube, SimPartSide) holds the rotor's wheel box; the ray reaches the can first either way
+        double can = PickBoxes.SimPartSide("generator")!.Value;
+        var motor = new PickHit("motors.motor", PickBox.Around(0, 0.62, -0.12, can), 12.2);
+        var rotor = new PickHit("motors.rotor", PickBox.Around(0, 0.62, 0, 0.2), 12.3);
+        Assert.True(motor.Box.Encloses(rotor.Box));
+        Assert.Equal("motors.rotor", PickBoxes.Choose([motor, rotor])!.Value.Name);   // a click where the wheel lies: both crossed, the smaller
+        Assert.Equal("motors.motor", PickBoxes.Choose([motor])!.Value.Name);          // a click on the can's flank: only the can's box
+        Assert.Equal("motors.rotor", PickBoxes.Choose([rotor with { T = 12.0 }, motor])!.Value.Name);   // from the other side the rotor is nearer: still the rotor
+        Assert.Equal(2, PickBoxes.List([motor, rotor]).Count);   // and both stay in the pick list
+    }
+
+    [Fact]
     public void Generator_and_bank_get_boxes_and_other_kinds_do_not()
     {
         Assert.NotNull(PickBoxes.SimPartSide("generator"));

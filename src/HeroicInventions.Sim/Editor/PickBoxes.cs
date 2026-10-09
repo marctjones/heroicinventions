@@ -30,7 +30,7 @@ public static class PickBoxes
     /// <summary>Side of the box, metres, given to a part the view draws no body for, by kind; null for any other kind (it gets no box).</summary>
     public static double? SimPartSide(string kind) => kind switch
     {
-        "generator" => 0.2,       // the coils round a rotor: a little cube at the part's place
+        "generator" => 0.44,      // the motor can the view draws round the rotor (0.22 m radius): a cube that holds it whichever way the axle points, at the part's place; it holds the rotor's box too, so a click on the rotor's own place (the wheel's face under the can) picks the smaller rotor and a click on the can's body picks the motor (#247)
         "battery-bank" => 0.3,    // the cells in their crate, inside the crate's own 0.5 m box
         _ => null,
     };
