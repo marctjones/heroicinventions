@@ -1,4 +1,5 @@
 using Godot;
+using HeroicInventions.Sim.Fluids;
 using HeroicInventions.Sim.Machines;
 
 namespace HeroicInventions;
@@ -22,7 +23,7 @@ public partial class Main
 {
     private Rover? _rover;
     private VBoxContainer? _roverInfo;     // the rover's section of the right panel
-    private Label? _roverDrive, _roverArm, _roverBucket, _roverEnergy, _roverNear, _roverNote;
+    private Label? _roverDrive, _roverAhead, _roverArm, _roverBucket, _roverEnergy, _roverNear, _roverNote;
     private Label? _roverState;
     private readonly Dictionary<Control, bool> _roverHidden = [];   // what the game hides in the panels, as it was
     private string _roverNoteSeen = "";
@@ -189,6 +190,7 @@ public partial class Main
         _roverInfo.AddChild(_roverState = Line("State"));
         Section("Driving");
         _roverInfo.AddChild(_roverDrive = Line("Driving"));
+        _roverInfo.AddChild(_roverAhead = Line("Ahead"));
         Section("Arm");
         _roverInfo.AddChild(_roverArm = Line("Arm"));
         Section("Bucket");
@@ -235,6 +237,7 @@ public partial class Main
         _joinButton.Visible = true;    // joining machines is building: free and of any reach (#204)
         _roverState!.Text = $"{(_running ? "Running" : "Paused")} · time ×{_timeScale:0.##}";
         _roverDrive!.Text = $"{r.Speed:0.0} m/s · nose {r.PitchDeg:+0;-0;0}° · tilt {r.TiltDeg:0}°";
+        UpdateRoverAhead();
         _roverArm!.Text = $"{r.ArmStatus}\nReaches {Rover.ArmReach:0.0} m · pushes up to {RoverSpec.PushForce(r.GroundGravity) / 1000:0.0} kN · never lifts a load. B digs and dumps.";
         _roverBucket!.Text = $"{r.Carried:0.00} of {Rover.BucketVolume:0.00} m³\ndug {r.Dug:0.00} m³, dumped {r.Dumped:0.00} m³";
         _roverEnergy!.Text = "Upkeep is free for now. The energy budget is not modelled yet (#62).";
@@ -251,6 +254,31 @@ public partial class Main
         // a toast from the rest of the game (Saved ..., a part's click) shows for a few seconds, then goes
         if (_hudNote.Text != _roverNoteSeen) { _roverNoteSeen = _hudNote.Text; _roverNoteAt = Clock; }
         if (_hudNote.Text.Length > 0 && Clock - _roverNoteAt > 6) { _hudNote.Text = ""; _roverNoteSeen = ""; }
+    }
+
+    /// <summary>
+    /// The slope ahead: the steepest metre of ground along the rover's heading over the next 3 m (<see cref="GroundGrade"/>), read
+    /// from the ground's own height (the fine patch first), amber from 5 degrees under the rover's limit and red from it, in
+    /// the same colours as the ground's slope tint.
+    /// </summary>
+    private string RoverAheadText(out double grade)
+    {
+        var p = _rover!.Chassis.GlobalPosition; var f = _rover.Forward;
+        grade = GroundGrade.Ahead(_groundSim!.Ground.HeightAt, p.X, p.Z, f.X, f.Z);
+        double a = Math.Abs(grade);
+        if (a < 1) return "ahead: level";
+        string text = $"ahead: {a:0}° {(grade > 0 ? "up" : "down")}";
+        return a >= RoverSpec.GradeDeg ? text + (grade > 0 ? " · too steep to climb" : " · a steep drop") : text;
+    }
+
+    private void UpdateRoverAhead()
+    {
+        if (_roverAhead is null || _groundSim is null) return;
+        _roverAhead.Text = RoverAheadText(out double grade);
+        double a = Math.Abs(grade);
+        if (a >= RoverSpec.GradeDeg) _roverAhead.AddThemeColorOverride("font_color", TerrainView.SlopeRed.Lightened(0.25f));
+        else if (a >= RoverSpec.GradeDeg - 5) _roverAhead.AddThemeColorOverride("font_color", TerrainView.SlopeAmber);
+        else _roverAhead.RemoveThemeColorOverride("font_color");
     }
 
     /// <summary>The box round a machine's body, for how far it is from the rover (cached with the view's own bounds).</summary>
@@ -281,7 +309,7 @@ public partial class Main
         var clear = SettledClearArea();
         var box = _rover.Bounds();
         string where = ScreenRect(box) is { } s ? $"screen ({s.Position.X:F0} {s.Position.Y:F0} {s.End.X:F0} {s.End.Y:F0}) clear ({clear.Position.X:F0} {clear.Position.Y:F0} {clear.End.X:F0} {clear.End.Y:F0}) inside {(clear.Encloses(s) ? "yes" : "no")}" : "behind the camera";
-        GD.Print($"[view] rover: at ({p.X:F2} {p.Y:F2} {p.Z:F2}) ground {_groundSim!.Ground.HeightAt(p.X, p.Z):F2} speed {_rover.Speed:F2} m/s pitch {_rover.PitchDeg:F1} tilt {_rover.TiltDeg:F1} heading {Mathf.RadToDeg(RoverHeading()):F0} rescues {_rover.Rescues}; " +
+        GD.Print($"[view] rover: at ({p.X:F2} {p.Y:F2} {p.Z:F2}) ground {_groundSim!.Ground.HeightAt(p.X, p.Z):F2} speed {_rover.Speed:F2} m/s pitch {_rover.PitchDeg:F1} tilt {_rover.TiltDeg:F1} heading {Mathf.RadToDeg(RoverHeading()):F0} rescues {_rover.Rescues}; {RoverAheadText(out _)}; " +
                  $"arm: {_rover.ArmStatus}, bucket {_rover.Carried:F2} m3, dug {_rover.Dug:F3} dumped {_rover.Dumped:F3}; {where}");
         return ScriptedInput.Step.Continue;
     }

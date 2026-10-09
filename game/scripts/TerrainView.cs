@@ -37,6 +37,7 @@ public partial class TerrainView : Node3D
     public void Show(Terrain ground, ShallowWater2D water, MaterialLibrary? materials = null)
     {
         _ground = ground;
+        RegisterRoverGlobal();
         _groundMaterial = null;   // a new map: its own size, cells and wet mask
         _materials = materials;
         _boulders.Clear();
@@ -182,7 +183,6 @@ public partial class TerrainView : Node3D
     private void UpdateGround(Box box)
     {
         int nx = _ground.Nx, nz = _ground.Nz;
-        var light = new Vector3(0.4f, 1, 0.3f).Normalized();
         var near2 = box.Grow(2, nx, nz); var near3 = box.Grow(3, nx, nz);
         // The light falls on a smoothed copy of the ground: a slide's scar is cut cell by cell, a stair of 5 m treads,
         // and shaded from the true heights every tread lit up as a step. The mesh's points stay the true heights, so
@@ -212,9 +212,13 @@ public partial class TerrainView : Node3D
                 var normal = dz.Cross(dx).Normalized();
                 // hillshade, as on a map: lit from one high fixed side whatever the sun, strong enough that every
                 // slope reads (readable over realistic; the sun's own light and shadows come on top)
-                float shade = 0.45f + 0.55f * Mathf.Max(0, normal.Dot(light));
+                float shade = HillShade(normal);
                 _normals[k] = normal;
-                _shades[k] = new Color(shade, shade, shade);
+                // COLOR.b: the true slope's cosine, for the slope tint (not the smoothed ground the shading reads)
+                var h = _ground.Heights;
+                double tx = Math.Max(Math.Abs(h[k] - h[Math.Max(i - 1, 0) + j * nx]), Math.Abs(h[Math.Min(i + 1, nx - 1) + j * nx] - h[k])) / _ground.Cell;
+                double tz = Math.Max(Math.Abs(h[k] - h[i + Math.Max(j - 1, 0) * nx]), Math.Abs(h[i + Math.Min(j + 1, nz - 1) * nx] - h[k])) / _ground.Cell;
+                _shades[k] = new Color(shade, shade, Cosine(tx, tz));
             }
         // The colours are smoothed over their neighbours before they're drawn: soils and the scour and deposit cues
         // change cell by cell (a slide lays its rubble down as its own soil), so their edges are 5 m staircases in the
@@ -277,6 +281,48 @@ public partial class TerrainView : Node3D
         }
     }
 
+    /// <summary>
+    /// The slope tint's colours, the one place they are set (the rover's "ahead" line reads them too): a warm tint from 15
+    /// degrees, amber from 25, red from the rover's limit (<see cref="RoverSpec.GradeDeg"/>, which it will not climb).
+    /// </summary>
+    public static readonly Color SlopeWarm = new("E8975A"), SlopeAmber = new("F5B82E"), SlopeRed = new("E5362A");
+
+    /// <summary>
+    /// The hillshade's fixed "map light": from the south-east and 40 degrees up, whatever the sun, as a map-maker's is, so a
+    /// slope facing away stays distinguishable at night. Map and patch both shade by it.
+    /// </summary>
+    public static readonly Vector3 MapLight = new Vector3(0.55f, 0.8f, 0.4f).Normalized();
+    /// <summary>The cosine of a slope whose steepest neighbour-to-neighbour grades along x and z are tx and tz (what the tint reads, in COLOR.b).</summary>
+    public static float Cosine(double tx, double tz) => (float)(1 / Math.Sqrt(1 + tx * tx + tz * tz));
+    public static float HillShade(Vector3 normal) => 0.45f + 0.55f * Mathf.Max(0, normal.Dot(MapLight));
+
+    private static bool _roverGlobal;
+    private static readonly Vector3 NoRover = new(1e7f, 0, 1e7f);
+
+    /// <summary>The ground shader reads where the rover is (the slope tint, fine contours and grid fade out from it); a global, so the map's and each patch's material see it.</summary>
+    private static void RegisterRoverGlobal()
+    {
+        if (_roverGlobal) return;
+        _roverGlobal = true;
+        RenderingServer.GlobalShaderParameterAdd("rover_pos", RenderingServer.GlobalShaderParameterType.Vec3, NoRover);
+    }
+
+    private Rover? _rover;
+
+    /// <summary>Tells the shader where the rover stands, every tick (a lookup of the rover among this node's siblings, kept until it goes).</summary>
+    private void FollowRover()
+    {
+        if (_rover is null || !IsInstanceValid(_rover))
+        {
+            _rover = null;
+            if (GetParent() is { } parent)
+                foreach (var c in parent.GetChildren()) if (c is Rover r) { _rover = r; break; }
+        }
+        var at = _rover is { Chassis: { } chassis } && IsInstanceValid(chassis) ? chassis.GlobalPosition : NoRover;
+        if (at != _lastRoverAt) { RenderingServer.GlobalShaderParameterSet("rover_pos", at); _lastRoverAt = at; }
+    }
+    private Vector3 _lastRoverAt = NoRover;
+
     private static Shader? _groundShader;
     private ShaderMaterial? _groundMaterial;
     private byte[]? _wetBytes;
@@ -301,11 +347,22 @@ public partial class TerrainView : Node3D
                 uniform vec2 origin;   // the map's corner (X0, Z0)
                 uniform vec2 size;     // and its width and depth
                 uniform float patch = 0.0;   // 1 on a patch of worked ground (#63): COLOR.g is how far it has been dug (dark) or heaped (pale)
+                // the ground's shape near the rover (readable over realistic): a slope tint against the rover's own limit, fine
+                // contours and a draped metre grid, all fading out with distance from it
+                global uniform vec3 rover_pos;      // set each frame by TerrainView.Refresh (far away when there is no rover)
+                uniform float grade_deg = 30.0;     // the steepest slope the rover climbs (RoverSpec.GradeDeg); the tint's bands lie below it
+                uniform vec3 tint_warm : source_color = vec3(1.0, 0.6, 0.3);
+                uniform vec3 tint_amber : source_color = vec3(1.0, 0.7, 0.1);
+                uniform vec3 tint_red : source_color = vec3(1.0, 0.15, 0.1);
                 varying float height;
                 varying vec2 at;
+                varying vec2 spot;     // world x, z
+                varying float upness;  // cos(slope): 1 on the level; COLOR.b, from the true heights (the normals are smoothed, and a 1 m bank's 45 degrees would blur to 20)
                 void vertex() {
                     vec3 world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
                     height = world.y;
+                    spot = world.xz;
+                    upness = COLOR.b;
                     at = (world.xz - origin) / size;
                 }
                 float line(float h, float px) {
@@ -313,6 +370,8 @@ public partial class TerrainView : Node3D
                     float w = fwidth(h);
                     return 1.0 - smoothstep(0.0, w * px, abs(fract(h - 0.5) - 0.5));
                 }
+                // 1 where lines this far apart (in the units of h) are still more than about 7 pixels apart, 0 where they crowd
+                float room(float h) { return clamp(1.0 - (fwidth(h) - 0.14) / 0.1, 0.0, 1.0); }
                 void fragment() {
                     float h = height / interval;
                     // fine lines fade once they come closer than ~6 pixels apart; heavy ones once closer than ~4
@@ -327,7 +386,32 @@ public partial class TerrainView : Node3D
                         float tint = (COLOR.g - 0.5) * 2.0;
                         lit = tint < 0.0 ? soil * (1.0 + 0.55 * tint) : mix(soil, vec3(0.98, 0.95, 0.85), 0.45 * tint);
                     }
-                    ALBEDO = lit * COLOR.r * (1.0 - 0.16 * fine - 0.32 * heavy);   // COLOR.r: the hillshade
+                    // COLOR.r: the hillshade, from the fixed map light. Lifted (0.45 to 1 becomes 0.68 to 1.12) so slopes facing
+                    // away still stand apart, and partly unlit (emission below) so they read at night too.
+                    float shade = mix(0.68, 1.12, clamp((COLOR.r - 0.45) / 0.55, 0.0, 1.0));
+                    float away = distance(spot, rover_pos.xz);
+                    float eye = length(VERTEX);   // from the camera: marks fade out at a distance (from a far view they only crowd)
+                    // the slope against the rover's limit: none under 15 degrees (grade - 15), warm to 25, amber to the limit, red beyond it
+                    float slope = degrees(acos(clamp(upness, 0.0, 1.0)));
+                    float s_on = smoothstep(grade_deg - 16.5, grade_deg - 13.5, slope);
+                    float s_amber = smoothstep(grade_deg - 6.5, grade_deg - 3.5, slope);
+                    float s_red = smoothstep(grade_deg - 1.5, grade_deg + 1.5, slope);
+                    vec3 band = mix(mix(tint_warm, tint_amber, s_amber), tint_red, s_red);
+                    float grip = s_on * mix(mix(0.38, 0.5, s_amber), 0.6, s_red) * (1.0 - smoothstep(30.0, 60.0, away)) * (1.0 - smoothstep(150.0, 350.0, eye));
+                    // fine contours every half metre, and the metre grid draped on the ground; both pale, so they show on dark soil
+                    float near = (1.0 - smoothstep(12.0, 30.0, away)) * (1.0 - smoothstep(40.0, 110.0, eye));
+                    float h2 = height * 2.0;
+                    float fine_h = line(h2, 1.0) * room(h2) * near;
+                    float grid_near = (1.0 - smoothstep(8.0, 26.0, away)) * (1.0 - smoothstep(40.0, 110.0, eye));
+                    float grid = max(line(spot.x, 0.9) * room(spot.x), line(spot.y, 0.9) * room(spot.y)) * grid_near;
+                    // pale on dark soil, dark on pale soil (the Mars crater is dark, ice-cemented ground and rubble are not)
+                    float dark_soil = smoothstep(0.18, 0.36, dot(lit, vec3(0.2126, 0.7152, 0.0722)));
+                    vec3 pale = mix(vec3(0.9, 0.82, 0.7), vec3(0.06, 0.04, 0.03), dark_soil);
+                    float marks = max(0.45 * fine_h, 0.18 * grid);
+                    lit = mix(lit, band, grip);
+                    lit = mix(lit, pale, marks);
+                    ALBEDO = lit * shade * (1.0 - 0.16 * fine - 0.32 * heavy);
+                    EMISSION = lit * shade * 0.16 * (1.0 - 0.16 * fine - 0.32 * heavy) + band * grip * 0.12 + pale * marks * 0.12 * (1.0 - dark_soil);
                     ROUGHNESS = mix(cell.a, 0.25, damp);
                     SPECULAR = 0.5 * (1.0 - ROUGHNESS);
                 }
@@ -335,6 +419,10 @@ public partial class TerrainView : Node3D
         };
         var mat = new ShaderMaterial { Shader = _groundShader };
         mat.SetShaderParameter("interval", ContourInterval());
+        mat.SetShaderParameter("grade_deg", (float)RoverSpec.GradeDeg);
+        mat.SetShaderParameter("tint_warm", SlopeWarm);
+        mat.SetShaderParameter("tint_amber", SlopeAmber);
+        mat.SetShaderParameter("tint_red", SlopeRed);
         mat.SetShaderParameter("origin", new Vector2((float)_ground.X0, (float)_ground.Z0));
         mat.SetShaderParameter("size", new Vector2((float)_ground.Width, (float)_ground.Depth));
         _wetBytes = null;
@@ -394,6 +482,7 @@ public partial class TerrainView : Node3D
             _lastRefresh = now;
             _tick++;
         }
+        FollowRover();
         long t = TickProfile.Start();
         SyncWorked();
         TickProfile.Stop("worked", t);

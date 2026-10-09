@@ -91,7 +91,7 @@ public partial class TerrainView
                 p.Indices[t++] = b; p.Indices[t++] = d; p.Indices[t++] = c;
             }
         var material = new ShaderMaterial { Shader = _groundMaterial!.Shader };
-        foreach (var name in new[] { "interval", "origin", "size", "cells", "wet" })
+        foreach (var name in new[] { "interval", "origin", "size", "cells", "wet", "grade_deg", "tint_warm", "tint_amber", "tint_red" })
             material.SetShaderParameter(name, _groundMaterial.GetShaderParameter(name));
         material.SetShaderParameter("patch", 1f);
         p.Mesh = new ArrayMesh();
@@ -108,7 +108,6 @@ public partial class TerrainView
         var f = w.Fine;
         int nx = w.Nx, nz = w.Nz;
         var h = f.Heights;
-        var light = new Vector3(0.4f, 1, 0.3f).Normalized();
         double c2 = 2 * f.Cell;
         for (int j = 0; j < nz; j++)
             for (int i = 0; i < nx; i++)
@@ -120,13 +119,15 @@ public partial class TerrainView
                 var dx = new Vector3((i1 - i0) * (float)f.Cell, (float)(h[i1 + j * nx] - h[i0 + j * nx]), 0);
                 var dz = new Vector3(0, (float)(h[i + j1 * nx] - h[i + j0 * nx]), (j1 - j0) * (float)f.Cell);
                 var normal = dz.Cross(dx).Normalized();
-                float shade = 0.45f + 0.55f * Mathf.Max(0, normal.Dot(light));
+                float shade = HillShade(normal);
                 // how far it has been dug (dark, 0.2 m for full) or heaped (pale, 0.1 m), and spoil that has slumped a little paler than the ground
                 double delta = h[k] - w.Original[k];
                 double tint = delta < 0 ? Math.Max(delta / 0.2, -1) * 0.9 : Math.Min(delta / 0.1, 1);
                 if (f.Loose[k]) tint = Math.Max(tint, 0.25);
                 p.Normals[k] = normal;
-                p.Shades[k] = new Color(shade, (float)(0.5 + 0.5 * tint), shade);
+                double sx = Math.Max(Math.Abs(h[k] - h[i0 + j * nx]), Math.Abs(h[i1 + j * nx] - h[k])) / f.Cell;
+                double sz = Math.Max(Math.Abs(h[k] - h[i + j0 * nx]), Math.Abs(h[i + j1 * nx] - h[k])) / f.Cell;
+                p.Shades[k] = new Color(shade, (float)(0.5 + 0.5 * tint), Cosine(sx, sz));   // blue: the slope's cosine (see UpdateGround)
             }
         var arrays = new Godot.Collections.Array();
         arrays.Resize((int)Mesh.ArrayType.Max);
