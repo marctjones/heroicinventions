@@ -32,7 +32,9 @@ public partial class Main
         foreach (var (view, b) in banks)
         {
             string name = _byName.FirstOrDefault(kv => kv.Value == view).Key is { } m ? $"{b.Name} ({m})" : b.Name;
-            double watts = view.Runtime.Generators.Values.Where(g => g.Bank == b).Sum(g => g.Delivered);
+            // every generator charging it, in its own machine or wired from another (#208)
+            var machines = _views.Count > 0 ? _views : (IEnumerable<MachineView>)[view];
+            double watts = machines.SelectMany(v => v.Runtime.Generators.Values).Where(g => g.Bank == b).Sum(g => g.Delivered);
             lines.Add($"{name}: {b.ChargeWh:0.0} of {b.CapacityWh:0.0} Wh ({b.Fraction * 100:0}%) at {b.Temperature:0.0} °C" + TunedNote("bank-capacity"));
             string state = b.Won ? $"The call went out on sol {b.WonAtSol}. The game is won."
                 : b.Ready ? "Full and warm enough: ready to call."
