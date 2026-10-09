@@ -97,6 +97,41 @@ public sealed class BuildSession
         Document = EditorDocument.New(name);
     }
 
+    /// <summary>
+    /// Builds as much of a design as can be built: <paramref name="build"/> is tried on the whole design, and each time it throws,
+    /// the part its message names is set aside (with the message, in <paramref name="unfinished"/>) and the rest tried again. A mirror
+    /// not yet aimed, or a generator with no bank to charge, leaves the rest of the machine running. Returns the design that built,
+    /// or null when nothing could (then every part is in <paramref name="unfinished"/>). The editor draws a design this way, and the
+    /// game builds a machine the player built this way on loading it (issue #204), so a part left unfinished stays in the design.
+    /// </summary>
+    public static MachineDef? Buildable(MachineDef design, Action<MachineDef> build, IDictionary<string, string> unfinished)
+    {
+        var working = EditorDocument.Load(design);
+        for (int attempt = 0; attempt <= design.Parts.Count && working.Parts.Count > 0; attempt++)
+        {
+            var def = working.ToMachineDef();
+            try
+            {
+                build(def);
+                return def;
+            }
+            catch (Exception e)
+            {
+                string? culprit = working.Parts.Keys
+                    .Where(id => System.Text.RegularExpressions.Regex.IsMatch(e.Message, $@"(^|[\s(]){System.Text.RegularExpressions.Regex.Escape(id)}($|[\s:.,)])"))
+                    .OrderByDescending(id => id.Length).FirstOrDefault();
+                if (culprit is null)
+                {
+                    foreach (var id in working.Parts.Keys) unfinished[id] = e.Message;
+                    return null;
+                }
+                unfinished[culprit] = e.Message;
+                working.RemovePart(culprit);
+            }
+        }
+        return null;
+    }
+
     /// <summary>Runs one command; returns a human-readable result for a console to print. Throws FormatException/InvalidOperationException/MachineFormatException on a bad command.</summary>
     public string Execute(string line)
     {

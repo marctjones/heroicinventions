@@ -5,6 +5,14 @@ public sealed record Placement(string Label, string Machine, Vec3 At, SourceLoca
 {
     /// <summary>The machine's heading (issue #83): degrees turned about the vertical through its placement point, counter-clockwise seen from above.</summary>
     public double Heading { get; init; }
+
+    /// <summary>
+    /// A machine the player built in the world (issue #204), not one from a file: its definition as it stands, in world
+    /// coordinates (the build is made, and live-edited, where it stands, so <see cref="WorldDef.Placed"/> is not applied
+    /// to it). <see cref="Machine"/> is then the label again, and <see cref="At"/> the spot the build was started at.
+    /// Null for an ordinary placement of a machine file.
+    /// </summary>
+    public MachineDef? Built { get; init; }
 }
 
 /// <summary>One end of a link between machines: a placement's label, a part of its machine, and (for a pipe) the part's port.</summary>
@@ -245,6 +253,59 @@ public sealed class WorldDef
         return new WorldDef { Name = Name, Map = Map, Rover = Rover, Scenario = Scenario, Placements = Placements, Links = [.. Links, link] };
     }
 
+    /// <summary>The same world with one more placement (issue #204: a machine the player has started building); its label must be new.</summary>
+    public WorldDef WithPlacement(Placement placement)
+    {
+        if (Placements.Any(p => p.Label == placement.Label)) throw new MachineFormatException($"world {Name} already has a machine placed as {placement.Label}");
+        return new WorldDef { Name = Name, Map = Map, Rover = Rover, Scenario = Scenario, Placements = [.. Placements, placement], Links = Links };
+    }
+
+    /// <summary>The same world with a built placement's definition replaced (a live edit of a machine the player built, #204).</summary>
+    public WorldDef WithBuilt(string label, MachineDef def)
+    {
+        if (Placements.FirstOrDefault(p => p.Label == label) is not { Built: not null } old)
+            throw new MachineFormatException($"world {Name} has no built machine placed as {label}");
+        return new WorldDef { Name = Name, Map = Map, Rover = Rover, Scenario = Scenario, Links = Links,
+                              Placements = Placements.Select(p => p.Label == label ? old with { Built = def } : p).ToList() };
+    }
+
+    /// <summary>The same world without the named placement, and without the links to it (a build the player emptied of parts, #204).</summary>
+    public WorldDef WithoutPlacement(string label) =>
+        new() { Name = Name, Map = Map, Rover = Rover, Scenario = Scenario, Placements = Placements.Where(p => p.Label != label).ToList(),
+                Links = Links.Where(l => l.From.Label != label && l.To.Label != label).ToList() };
+
+    /// <summary>A placement label not yet used in this world: built-1, built-2, …</summary>
+    public string NextPlacementLabel(string stem)
+    {
+        for (int i = 1; ; i++)
+            if (Placements.All(p => p.Label != $"{stem}-{i}")) return $"{stem}-{i}";
+    }
+
+    /// <summary>
+    /// A built placement as a form (issue #204): <c>(build LABEL (at x y z) (machine NAME …))</c>, the machine written whole by
+    /// <see cref="MachineWriter"/> in world coordinates. The same form in a world file and in a world save.
+    /// </summary>
+    public static SList BuiltForm(Placement p)
+    {
+        if (p.Built is not { } def) throw new ArgumentException($"{p.Label} is not a built placement");
+        var machine = SExprReader.ReadAll(MachineWriter.Write(def)).OfType<SList>().First(l => l.Head == "machine");
+        return new SList([new SSymbol("build"), new SSymbol(p.Label),
+            new SList([new SSymbol("at"), new SNumber(p.At.X), new SNumber(p.At.Y), new SNumber(p.At.Z)]), machine]);
+    }
+
+    /// <summary>Reads <see cref="BuiltForm"/> back.</summary>
+    public static Placement ParseBuilt(SList form, string file)
+    {
+        var loc = new SourceLocation(file, 0, 0);
+        if (form.Items.ElementAtOrDefault(1) is not SSymbol label || form.Field("machine") is not { } machine)
+            throw new MachineFormatException($"{file}: (build LABEL (at x y z) (machine NAME ...))", loc);
+        var at = form.Field("at") is { Items: [_, SNumber x, SNumber y, SNumber z] } ? new Vec3(x.Value, y.Value, z.Value) : new Vec3(0, 0, 0);
+        MachineDef def;
+        try { def = MachineDef.Parse(SExprWriter.Print(machine)); }
+        catch (MachineFormatException e) { throw new MachineFormatException($"{file}: build {label.Name}: {e.Message}", loc); }
+        return new Placement(label.Name, label.Name, at, loc) { Built = def };
+    }
+
     /// <summary>The same world without the named link.</summary>
     public WorldDef WithoutLink(string id) =>
         new() { Name = Name, Map = Map, Rover = Rover, Scenario = Scenario, Placements = Placements, Links = Links.Where(l => l.Id != id).ToList() };
@@ -265,9 +326,11 @@ public sealed class WorldDef
         if (Scenario is { } sc) sb.Append("\n  " + sc.Write());
         if (Rover is { } r)
             sb.Append($"\n  (rover (at {SExprWriter.Number(r.X)} {SExprWriter.Number(r.Z)})" + (r.Heading != 0 ? $" (heading {SExprWriter.Number(r.Heading)})" : "") + ")");
-        foreach (var p in Placements)
+        foreach (var p in Placements.Where(p => p.Built is null))
             sb.Append($"\n  (place {p.Label} {p.Machine} (at {SExprWriter.Number(p.At.X)} {SExprWriter.Number(p.At.Y)} {SExprWriter.Number(p.At.Z)})"
                       + (p.Heading != 0 ? $" (heading {SExprWriter.Number(p.Heading)})" : "") + ")");
+        foreach (var p in Placements.Where(p => p.Built is not null))
+            sb.Append("\n  " + SExprWriter.Print(BuiltForm(p)));
         foreach (var l in Links)
         {
             static string End(LinkEnd e) => e.Port is null ? $"{e.Label} {e.Part}" : $"{e.Label} {e.Part} {e.Port}";
@@ -318,6 +381,13 @@ public sealed class WorldDef
             if (placements.Any(q => q.Label == label.Name))
                 throw new MachineFormatException($"{file}: two placements are labelled {label.Name}", loc);
             placements.Add(new Placement(label.Name, machine.Name, at, loc) { Heading = heading });
+        }
+        foreach (var b in root.Fields("build"))   // machines the player built (#204), whole, in world coordinates
+        {
+            var built = ParseBuilt(b, file);
+            if (placements.Any(q => q.Label == built.Label))
+                throw new MachineFormatException($"{file}: two placements are labelled {built.Label}", built.Location);
+            placements.Add(built);
         }
         var links = new List<LinkSpec>();
         foreach (var l in root.Fields("link"))

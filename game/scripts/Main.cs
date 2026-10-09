@@ -590,6 +590,7 @@ public partial class Main : Node3D
             // a world writes one trace per placed machine, <path>.<label>
             if (!string.IsNullOrEmpty(tracePath) && _views.Count > 0)
             {
+                _worldTrace = (tracePath, traceEvery);   // a machine built later is traced too (Main.Build.cs, #204)
                 foreach (var v in _views) v.StartTrace($"{tracePath}.{v.Name}", traceEvery);
                 StartLinksTrace(tracePath, traceEvery);
             }
@@ -696,6 +697,7 @@ public partial class Main : Node3D
         _editButton.Pressed += EditFocused;
         col.AddChild(_editButton);
         BuildJoinButton(col);
+        BuildBuildButtons(col);   // the game's Build section: a new machine, and the machines the player built (Main.Build.cs, #204)
         _sleep = new SleepControl(() => _views.Count > 0 ? _views : _current is null ? [] : [_current], () => _current, SetRunning, text => { _hudNote.Text = text; _hudNote.Visible = true; });
         col.AddChild(_sleep);
         _sleep.Woke += () => SaveWorld(auto: true);        // a long sleep is worth keeping
@@ -873,6 +875,7 @@ public partial class Main : Node3D
         _viewMachine.Clear();
         _viewBounds.Clear();
         _world = null;
+        RefreshBuiltList();
     }
 
     /// <summary>
@@ -890,16 +893,20 @@ public partial class Main : Node3D
         LoadGround(world);
         foreach (var p in world.Placements)
         {
-            if (!_machineFiles.TryGetValue(p.Machine, out var path)) { GD.PushError($"world {world.Name}: no machine named {p.Machine}"); continue; }
-            // on a map a machine stands on the ground (issue #37)
-            var def = WorldDef.Placed(MachineDef.Parse(Godot.FileAccess.GetFileAsString(path)), p, _groundSim?.Ground);
-            var runtime = new MachineRuntime(def, _materials, _activeTuning);
-            _groundSim?.Attach(p.Label, runtime);
-            var view = new MachineView(runtime, _materials) { Name = p.Label, Position = Vector3.Zero, Ground = _groundSim?.Ground };
-            AddChild(view);
-            _views.Add(view);
-            _viewMachine[view] = p.Machine;
-            _byName[p.Label] = view;
+            MachineRuntime runtime;
+            if (p.Built is { } design)   // a machine the player built (#204): its design, in world coordinates, built as far as it can be
+            {
+                if (BuiltRuntime(p.Label, design) is not { } built) continue;
+                runtime = built;
+            }
+            else
+            {
+                if (!_machineFiles.TryGetValue(p.Machine, out var path)) { GD.PushError($"world {world.Name}: no machine named {p.Machine}"); continue; }
+                // on a map a machine stands on the ground (issue #37)
+                var def = WorldDef.Placed(MachineDef.Parse(Godot.FileAccess.GetFileAsString(path)), p, _groundSim?.Ground);
+                runtime = new MachineRuntime(def, _materials, _activeTuning);
+            }
+            AddPlacedView(p.Label, p.Machine, runtime);
         }
         if (_views.Count == 0) return;
         _world = world;
@@ -957,6 +964,19 @@ public partial class Main : Node3D
         _joinButton.Visible = true;
         RebuildLinks();
         SpawnRover(world);   // a world that places a rover is the game: the player drives it (Main.Rover.cs)
+        RefreshBuiltList();   // the Build section (Main.Build.cs, #204)
+    }
+
+    /// <summary>One placed machine's view, added to the world under its label (LoadWorld, and a machine the player builds, #204).</summary>
+    private MachineView AddPlacedView(string label, string machine, MachineRuntime runtime)
+    {
+        _groundSim?.Attach(label, runtime);
+        var view = new MachineView(runtime, _materials) { Name = label, Position = Vector3.Zero, Ground = _groundSim?.Ground };
+        AddChild(view);
+        _views.Add(view);
+        _viewMachine[view] = machine;
+        _byName[label] = view;
+        return view;
     }
 
     /// <summary>
@@ -997,19 +1017,46 @@ public partial class Main : Node3D
     /// </summary>
     private void EditFocused()
     {
-        if (_current is null || _views.Count == 0 || _buildMode is not null) return;
-        var target = _current;
+        if (_current is not null) EditMachine(_current);
+    }
+
+    /// <summary>
+    /// Opens build mode on a placed machine, live. In the game (a world with a rover) only a machine the player built can be
+    /// rebuilt (#204): the cargo was found, not built. A built machine is opened on its design, unfinished parts and all, and
+    /// every change is kept in the world's placement as well as rebuilt in place.
+    /// </summary>
+    private void EditMachine(MachineView start)
+    {
+        if (_views.Count == 0 || _buildMode is not null) return;
+        var target = start;
+        string label = target.Name;
+        var built = _world?.Placements.FirstOrDefault(p => p.Label == label && p.Built is not null);
+        if (RoverIsPlayer && built is null)
+        {
+            _hudNote.Text = $"{label} was found, not built: it can't be rebuilt. Build a new machine instead.";
+            _hudNote.Visible = true;
+            GD.Print($"[build] refused: {label} is found cargo, not a machine the player built");
+            return;
+        }
         _leftPanel.Visible = false;
         _infoPanel.Visible = false;
-        _buildMode = new BuildMode(_materials, target.Runtime.Def, def => target = ReplaceView(target, def), () => target);
+        _buildMode = new BuildMode(_materials, built?.Built ?? target.Runtime.Def, def =>
+        {
+            if (built is not null) _world = _world!.WithBuilt(label, _buildMode!.CurrentMachineDef());   // the design, unfinished parts and all
+            return target = ReplaceView(target, def);
+        }, () => target);
+        _buildingLabel = built is not null ? label : null;
         if (_groundSim is { } ground) _buildMode.GroundHeight = ground.Ground.HeightAt;   // on a map, parts land on the ground (#37)
         _buildMode.ExitRequested += () => CallDeferred(MethodName.CloseLiveEdit);
         _buildMode.RunRequested += () => CallDeferred(MethodName.CloseLiveEdit);
         AddChild(_buildMode);
+        GD.Print($"[build] editing {label}{(built is not null ? " (built)" : "")}");
     }
 
     private void CloseLiveEdit()
     {
+        SyncBuiltDesign();   // the design as the player left it, into the world's placement (Main.Build.cs, #204)
+        _buildingLabel = null;
         _buildMode?.QueueFree();
         _buildMode = null;
         _leftPanel.Visible = true;
@@ -1144,6 +1191,7 @@ public partial class Main : Node3D
     private void SaveWorld(bool auto, string? path = null)
     {
         if (SaveName is null || (_current is null && _views.Count == 0)) return;
+        SyncBuiltDesign();   // a build in progress is saved as it stands (Main.Build.cs, #204)
         try
         {
             var views = _views.Count > 0 ? _views : [_current!];
@@ -1160,6 +1208,7 @@ public partial class Main : Node3D
                 Rover = RoverSaveState(),                    // and the rover itself: pose, bucket and arm (#201)
                 Goals = GoalsForSave(),                      // and the goals and achievements earned (#68)
                 Operated = _operatorLog.ToList(), OperatorTaken = _operatorTaken,   // what was done to the machine, in order (Main.Operator.cs)
+                Built = _world?.Placements.Where(p => p.Built is not null).ToList() ?? [],   // and the machines the player built, whole (#204)
             };
             string target = path ?? SavePath(auto);
             save.WriteAtomic(target);
@@ -1196,6 +1245,7 @@ public partial class Main : Node3D
         if (save.Kind == "world") LoadWorldNamed(save.Name); else if (_machineFiles.ContainsKey(save.Name)) SelectMachine(save.Name);
         else { _hudNote.Text = $"The save is of {save.Name}, which is not here."; _hudNote.Visible = true; return; }
         int unmatched = 0;
+        PlaceSavedBuilds(save);   // the machines the player built, before their state is laid on (Main.Build.cs, #204)
         if (save.Ground is { } groundState && _groundSim is { } groundSim) unmatched += RuntimeState.RestoreGround(groundSim, groundState).Count;
         if (save.Boulders is { } boulders && _groundSim is { } rocky)
         {
@@ -1548,8 +1598,11 @@ public partial class Main : Node3D
         if (FrontEndInput(@event)) return;   // a front-end page takes every key and click; I opens the rover log (Main.FrontEnd.cs, #95)
         if (RoverInput(@event)) return;   // the game: the rover's keys (Main.Rover.cs)
         if (!RoverIsPlayer && AimInput(@event)) return;   // dragging a mirror's spot, Alt+click, a click on the ground for a digger (Main.Aim.cs): a machine run's; the rover digs with its own backhoe
-        OperateInput(@event);   // hover, click-to-operate, right-click list (Main.Operate.cs); consumes nothing. In the game every action passes the rover's capability check (#163)
-        if (HandleHandInput(@event)) return;   // a press on a dynamic body drags it instead of orbiting (Main.Drag.cs)
+        if (!_joining)   // joining machines is building, free and of any reach (#204): its clicks are not the rover's hand
+        {
+            OperateInput(@event);   // hover, click-to-operate, right-click list (Main.Operate.cs); consumes nothing. In the game every action passes the rover's capability check (#163)
+            if (HandleHandInput(@event)) return;   // a press on a dynamic body drags it instead of orbiting (Main.Drag.cs)
+        }
         switch (@event)
         {
             case InputEventKey { Pressed: true, Echo: false } key:
@@ -1657,7 +1710,7 @@ public partial class Main : Node3D
             case "pick": PrintPick(new Vector2(float.Parse(w[1]), float.Parse(w[2]))); return ScriptedInput.Step.Next;   // which part is drawn at that pixel (#151)
             case "pickworld": PrintPick(_camera.UnprojectPosition(new Vector3(float.Parse(w[1]), float.Parse(w[2]), float.Parse(w[3])))); return ScriptedInput.Step.Next;   // ... or where that point of the world is drawn
         }
-        return OperatorStep(w) ?? ClickStep(w) ?? AimStep(w) ?? RoverStep(w) ?? FrontEndStep(w);   // aim spots and the digger (Main.Aim.cs); operate / waitsim (Main.Operator.cs), hovered (Main.Operate.cs)
+        return OperatorStep(w) ?? ClickStep(w) ?? AimStep(w) ?? RoverStep(w) ?? FrontEndStep(w) ?? BuildStep(w);   // aim spots and the digger (Main.Aim.cs); operate / waitsim (Main.Operator.cs), hovered (Main.Operate.cs)
     }
 
     public override void _Process(double delta)

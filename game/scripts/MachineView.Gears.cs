@@ -348,6 +348,26 @@ public partial class MachineView
             throw new MachineFormatException($"{a.Id} and {b.Id} are {apart * 1000:F1} mm apart; to mesh they must be {want * 1000:F1} mm (the sum of their pitch radii)", at);
     }
 
+    /// <summary>
+    /// After a save is laid on (RestoreView): the bodies have jumped to their saved angles, so every link of a train takes up from
+    /// where its gears now stand. Without it the jump was counted as turning, and the angle pull (capped at a tenth of the speed)
+    /// held a train off its ratio for as long as the jump took to wear off: 72:18 meshes ran at 4.4, found-electrics' 125:1 at 137.5 (#204).
+    /// </summary>
+    private void ResyncGearAngles()
+    {
+        foreach (var g in _gearFollowers)
+        {
+            (g.LastRaw, g.LastRootRaw) = (RawAngle(g.Body, g.Axis), RawAngle(g.Root, _hinges[g.Root].Axis));
+            g.Angle = g.RootAngle = 0;
+        }
+        foreach (var d in _drivenLinks)
+        {
+            d.LastTo = RawAngle(d.ToBody!, _hinges[d.ToBody!].Axis);
+            d.LastFrom = d.FromBody is not null ? RawAngle(d.FromBody, _hinges[d.FromBody].Axis) : SimAngle(d.FromId);
+            d.FromAngle = d.ToAngle = 0;
+        }
+    }
+
     private void DriveGearTrains()
     {
         foreach (var g in _gearFollowers)
