@@ -427,8 +427,13 @@
        (unless (and (real? (prop 'emissivity)) (> (prop 'emissivity) 0) (<= (prop 'emissivity) 1))
          (bad (format "#:emissivity must be in (0, 1], got ~e" (prop 'emissivity))))
        (unless (and (real? (prop 'conductance)) (>= (prop 'conductance) 0))
-         (bad (format "#:conductance must be 0 W/K or more, got ~e" (prop 'conductance))))]
+         (bad (format "#:conductance must be 0 W/K or more, got ~e" (prop 'conductance))))
+       (unless (boolean? (prop 'movable)) (bad (format "#:movable is #t or #f, got ~e" (prop 'movable))))
+       (when (and (prop 'movable) (eq? (prop 'contents) 'water))
+         (bad "#:movable needs a solid (a rock, a block of iron), not water"))]
       [(heat-bin)
+       (unless (or (not (prop 'size)) (and (real? (prop 'size)) (> (prop 'size) 0)))
+         (bad (format "#:size must be above 0 m (the side of its cavity), got ~e" (prop 'size))))
        (unless (and (real? (prop 'leak)) (>= (prop 'leak) 0)) (bad (format "#:leak must be 0 W/K or more, got ~e" (prop 'leak))))
        (unless (and (real? (prop 'open)) (<= 0 (prop 'open) 1)) (bad (format "#:open must be in [0, 1], got ~e" (prop 'open))))
        (for ([k '(open-below close-above)])
@@ -1551,6 +1556,10 @@
     ;; room, or to the open air. Cooled with only a conductance it falls to its
     ;; room's temperature as e^(-t m c/G). Water freezes at 0 deg C, holding there
     ;; while the 334 kJ/kg leaves. A heat-bin round it works its lid.
+    ;; #:movable #t (issue #206) makes it a body, a cube of its volume that a rover or a hand can push (a rock, not water): it carries its
+    ;; temperature and heat wherever it goes, stands in the room it lies in, is bare to that room's air, and a mirror that lights it
+    ;; stops lighting it once it is pushed out of the beam. Pushed into a lidded heat-bin (one that does not #:hold a store of its own) it
+    ;; becomes that bin's store; pulled out, it is bare again.
     (pattern (heat-store id:id
                          (~alt (~once (~seq #:at at:vec3))
                                (~once (~seq #:mass mass-v:expr))
@@ -1559,6 +1568,7 @@
                                (~optional (~seq #:area area-v:expr))
                                (~optional (~seq #:emissivity eps-v:expr))
                                (~optional (~seq #:conductance k-v:expr))
+                               (~optional (~seq #:movable movable-v:expr))
                                (~optional (~seq #:material mat:id))) ...)
       #:fail-unless (or (not (attribute stuff)) (eq? (syntax-e (attribute stuff)) 'water) (memq (syntax-e (attribute stuff)) known-materials))
                     "#:contents is water or a material of the table (basalt, iron, granite ...)"
@@ -1566,7 +1576,8 @@
       #:with expr #`(part 'id 'heat-store '(~? mat basalt) (list at.x at.y at.z)
                           (list (cons 'mass mass-v) (cons 'contents '(~? stuff basalt))
                                 (cons 'temperature (~? temp-v #f)) (cons 'area (~? area-v #f))
-                                (cons 'emissivity (~? eps-v 0.9)) (cons 'conductance (~? k-v 0)))
+                                (cons 'emissivity (~? eps-v 0.9)) (cons 'conductance (~? k-v 0))
+                                (cons 'movable (~? movable-v #f)))
                           '()
                           #,(loc-of this-syntax)))
 
@@ -1580,18 +1591,23 @@
     ;; store has cooled to #:open-below (default 5 deg C) and shuts when it has
     ;; warmed to #:close-above (default 40), and is left between. A bimetal
     ;; that #:drives the bin takes its place. It is drawn on the store, wherever #:at is.
+    ;; Without #:holds (or with the name of a #:movable store, which then is the only one it takes; issue #206) the bin stands empty at #:at,
+    ;; the middle of its floor, open at its front (+z) and walled on the other three sides, #:size m across inside (default the biggest
+    ;; movable store's side and 8 cm, so that a rock pushed in a little askew does not jam): a rock pushed in so that its middle is inside becomes the bin's store, and the lid, the thermostat
+    ;; and the room's walls act on it. Sideways is all a rover can do: the rock lies on the floor of its cavity.
     (pattern (heat-bin id:id
                        (~alt (~once (~seq #:at at:vec3))
-                             (~once (~seq #:holds held:id))
+                             (~optional (~seq #:holds held:id))
+                             (~optional (~seq #:size size-v:expr))
                              (~optional (~seq #:leak leak-v:expr))
                              (~optional (~seq #:open open-v:expr))
                              (~optional (~seq #:sense sensed:id))
                              (~optional (~seq #:open-below lo-v:expr))
                              (~optional (~seq #:close-above hi-v:expr))
                              (~optional (~seq #:material mat:id))) ...)
-      #:attr info (hbinfo #'id #'held (attribute sensed))
+      #:attr info (hbinfo #'id (attribute held) (attribute sensed))
       #:with expr #`(part 'id 'heat-bin '(~? mat oak) (list at.x at.y at.z)
-                          (list (cons 'holds 'held) (cons 'leak (~? leak-v 0.1)) (cons 'open (~? open-v 0))
+                          (list (cons 'holds '(~? held #f)) (cons 'size (~? size-v #f)) (cons 'leak (~? leak-v 0.1)) (cons 'open (~? open-v 0))
                                 (cons 'sense '(~? sensed #f)) (cons 'open-below (~? lo-v 5)) (cons 'close-above (~? hi-v 40)))
                           '()
                           #,(loc-of this-syntax)))

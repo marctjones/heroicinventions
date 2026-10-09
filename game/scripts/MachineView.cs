@@ -1529,6 +1529,7 @@ public partial class MachineView : Node3D
         DriveRatchets(dt);
         DriveCatches();
         TestTriggers();
+        FeedHeatStores();   // a rock the rover pushed into a bin is in it before the sim steps (#206)
         ApplyBuoyancy();
         ApplyLift();
         ApplyDrag();

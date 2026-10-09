@@ -23,8 +23,8 @@ public sealed class Mirror(Sun sun, Vec3 at, Vec3 target, double area, double re
     public Vec3 At { get; } = at;
     /// <summary>The point it is aimed at. A person may aim it elsewhere (#162); the heat goes only to what stands at <see cref="Receiver"/>.</summary>
     public Vec3 Target { get; set; } = target;
-    /// <summary>Where the receiver it was built to light stands.</summary>
-    public Vec3 Receiver { get; } = target;
+    /// <summary>Where the receiver it was built to light stands now (a movable heat store carries it, issue #206).</summary>
+    public Vec3 Receiver { get; set; } = target;
     /// <summary>How far from <see cref="Receiver"/>'s centre the aim may fall and still light it, m.</summary>
     public double ReceiverRadius { get; init; } = 0.5;
     /// <summary>

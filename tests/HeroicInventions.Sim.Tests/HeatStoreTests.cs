@@ -345,4 +345,175 @@ public class HeatStoreTests
         Assert.Equal(500, fire.HeatOut, 6);
         Assert.Equal(20 + 50_000.0 / 33_600, rock.Temperature, 9);
     }
+
+    // ------------------------------------------------------------------ issue #206: a heat store that is a body
+
+    private const double Hour = 3699.0;   // a local hour on Mars (88,775 s in 24)
+
+    /// <summary>heat-rock at 17:00 with the heliostat dusted out, the rock pushed into the bin at <paramref name="pushedAt"/> s and the night run to 03:00 at 5 s steps.</summary>
+    private static (MachineRuntime Run, double RockWhenPushed) NightWithRockPushedAt(double pushedAt)
+    {
+        var rt = Machine("heat-rock");
+        rt.SetField("heliostat", "dust", 1);
+        double t = 0, atPush = double.NaN;
+        while (t < 10 * Hour - 1e-9)
+        {
+            if (double.IsNaN(atPush) && t >= pushedAt) { atPush = rt.GetField("rock", "temperature"); rt.SetField("rock", "z", 0); }
+            rt.Step(5); t += 5;
+        }
+        return (rt, atPush);
+    }
+
+    [Fact]
+    public void ARockThatIsPushedIntoTheBinBecomesItsStoreAndKeepsItsHeat()
+    {
+        var rt = Machine("heat-rock");
+        var rock = rt.HeatStores["rock"];
+        var bin = rt.HeatBins["bin"];
+        var vault = rt.Enclosures["vault"];
+        Assert.True(rock.Movable);
+        // lying 1.2 m in front of the bin: loose, in the open air, nothing in the bin
+        Assert.Null(rock.Bin);
+        Assert.Null(bin.Store);
+        Assert.Same(rt.Outside, rock.Zone);
+        Assert.DoesNotContain(rock, vault.Stores);
+        Assert.Equal(0, rt.GetField("bin", "holding"));
+        // 40 kg of basalt is a cube of 0.2398 m (2,900 kg/m3), and the bin's cavity is that and 8 cm
+        Assert.Equal(Math.Pow(40 / 2900.0, 1.0 / 3), rock.Side, 9);
+        Assert.Equal(rock.Side + 0.08, bin.Inner, 9);
+        // pushed in sideways, over the ground: its middle inside the cavity (0.16 m of the bin's middle), base on the floor
+        rt.MoveHeatStore("rock", 0.12, 0, 0.5);
+        Assert.Null(rock.Bin);                                          // still outside (and outside the vault's 0.5 m footprint)
+        rt.MoveHeatStore("rock", 0.12, 0, 0.3);
+        Assert.Null(rock.Bin);
+        rt.MoveHeatStore("rock", 0.12, 0, 0.1);
+        Assert.Same(bin, rock.Bin);
+        Assert.Same(rock, bin.Store);
+        Assert.Same(vault, rock.Zone);
+        Assert.Contains(rock, vault.Stores);
+        Assert.Equal(1, rt.GetField("rock", "in-bin"));
+        Assert.Equal(200, rock.Temperature, 9);                         // it carries its temperature and its heat (the move adds and takes none)
+        Assert.Equal(40 * 840 * 200.0, rock.Heat, 3);
+        // the bin's own fields now read the rock
+        Assert.Equal(200, rt.GetField("bin", "temperature"), 9);
+        // pulled out again: bare to the air, out of the room
+        rt.MoveHeatStore("rock", 0.12, 0, 0.8);
+        Assert.Null(rock.Bin);
+        Assert.Null(bin.Store);
+        Assert.Same(rt.Outside, rock.Zone);
+        Assert.DoesNotContain(rock, vault.Stores);
+        // lifted clear of the floor (a rover cannot, a hand can): over the bin, not in it
+        rt.MoveHeatStore("rock", 0.12, 0.6, 0.0);
+        Assert.Null(rock.Bin);
+        // a bin that has one in it takes no second: only one rock fits
+        Assert.Equal(1, rt.HeatStores.Values.Count(h => h.Movable));
+    }
+
+    [Fact]
+    public void TheNightPredictionHoldsForARockPushedInAtDusk()
+    {
+        // night-heat's tight vault at 03:00, from the same 40 kg of basalt at 200 C and a bank frozen at -55 C: +4.28 C (traced there, 5 s steps).
+        // Pushed in after 5 s the rock has lost eps A sigma (T^4 - T_air^4) dt = 814.8 W x 5 s = 4.07 kJ in the open (the air at 17:00 is -24.0 C):
+        // at the night's 0.00887 K per kJ (night-heat: 5 kg less rock, 0.72 MJ less to give above its 03:00 temperature, was 6.4 K lower) that is
+        // 0.036 K, so the bank is at 4.24 C.
+        var (run, rockWhenPushed) = NightWithRockPushedAt(5);
+        Assert.Equal(200 - 0.1212, rockWhenPushed, 2);                 // 814.8 W / 33.6 kJ/K = 0.02425 K/s, 5 s
+        Assert.Equal(4.24, run.GetField("bank", "temperature"), 1);
+        Assert.Equal(1, run.GetField("rock", "in-bin"));
+        Assert.Equal(1, run.GetField("bin", "openings"));
+    }
+
+    [Fact]
+    public void ARockPushedInTenMinutesLateGivesTheBankLessByWhatItLostInTheOpen()
+    {
+        // 600 s at the open-air law dT/dt = -eps A sigma (T^4 - T_air^4) / (m c) from 200 C (integrated by hand at 0.05 s): 186.35 C, 458.6 kJ gone
+        // = 0.0089 K per kJ x 458.6 kJ less than the +4.28 of night-heat: +0.21 C. The 0.0089 is night-heat's own (35 kg against 40), so +-0.3 C.
+        var (run, rockWhenPushed) = NightWithRockPushedAt(600);
+        Assert.InRange(rockWhenPushed, 186.25, 186.45);
+        Assert.Equal(0.21, run.GetField("bank", "temperature"), 0);
+        Assert.True(Math.Abs(run.GetField("bank", "temperature") - 0.21) < 0.3);
+    }
+
+    [Fact]
+    public void ARockNeverPushedInLeavesTheBankFrozen()
+    {
+        var rt = Machine("heat-rock");
+        rt.SetField("heliostat", "dust", 1);
+        for (double t = 0; t < 10 * Hour - 1e-9; t += 5) rt.Step(5);
+        Assert.Equal(-55, rt.GetField("bank", "temperature"), 0);     // no heat to get: the bank stays at the ground's -55 C
+        Assert.True(rt.GetField("rock", "temperature") < 0, $"rock {rt.GetField("rock", "temperature")}");   // and the rock has cooled in the open (traced -10 C, the air at -80)
+    }
+
+    [Fact]
+    public void TheHeliostatLightsARockOnlyWhileItLiesInItsSpot()
+    {
+        // 463.9 W at 17:00 (night-heat's sunrock: 188.3 W/m2 x 4 m2 x 0.85 x cos(theta/2) 0.7248) on a rock in the spot; nothing 0.6 m from it
+        var rt = Machine("heat-rock");
+        rt.Step(1);
+        double lit = rt.GetField("rock", "gained");
+        Assert.True(lit > 0.0004, $"{lit} MJ in the first second");              // about 0.00047 MJ
+        Assert.Equal(0.00047, lit, 4);
+        rt.MoveHeatStore("rock", 0.12, 0, 0.6);                                   // 0.6 m from the spot at z 1.2: out of its 0.5 m
+        rt.Step(1);
+        Assert.Equal(lit, rt.GetField("rock", "gained"), 9);
+        rt.MoveHeatStore("rock", 0.12, 0, 1.0);                                   // pushed back to within 0.2 m of it
+        rt.Step(1);
+        Assert.True(rt.GetField("rock", "gained") > lit + 0.0004);
+    }
+
+    [Fact]
+    public void AnEditedMachineAndASavedStateKeepARockInTheBin()
+    {
+        var running = Machine("heat-rock");
+        running.SetField("heliostat", "dust", 1);
+        running.SetField("rock", "z", 0);
+        for (int i = 0; i < 720; i++) running.Step(5);                            // an hour in the bin
+        double hot = running.GetField("rock", "temperature");
+        Assert.True(hot < 160 && hot > 100, $"{hot}");
+        // an edit of the machine while it runs (issue #75)
+        var edited = new MachineRuntime(running.Def, Materials);
+        edited.TakeStateFrom(running);
+        Assert.Same(edited.HeatBins["bin"], edited.HeatStores["rock"].Bin);
+        Assert.Contains(edited.HeatStores["rock"], edited.Enclosures["vault"].Stores);
+        Assert.Equal(hot, edited.GetField("rock", "temperature"), 9);
+        // and a saved state laid on a fresh build
+        var state = RuntimeState.Capture(running);
+        var loaded = new MachineRuntime(running.Def, Materials);
+        Assert.Null(loaded.HeatStores["rock"].Bin);
+        Assert.Empty(RuntimeState.Restore(loaded, state));
+        Assert.Same(loaded.HeatBins["bin"], loaded.HeatStores["rock"].Bin);
+        Assert.Equal(hot, loaded.GetField("rock", "temperature"), 9);
+        Assert.Equal(running.GetField("bank", "temperature"), loaded.GetField("bank", "temperature"), 9);
+        for (int i = 0; i < 360; i++) { running.Step(5); loaded.Step(5); edited.Step(5); }
+        Assert.Equal(running.GetField("bank", "temperature"), loaded.GetField("bank", "temperature"), 6);
+        Assert.Equal(running.GetField("bank", "temperature"), edited.GetField("bank", "temperature"), 6);
+    }
+
+    [Fact]
+    public void TheEditorMakesARockMovableAndABinThatTakesIt()
+    {
+        var s = new BuildSession(Materials, catalogue: [], machinesDir: Path.GetTempPath(), name: "bench");
+        s.Execute("(enclosure vault #:at (0 0 0) #:size (0.5 0.5 0.5) #:wall regolith #:wall-thickness 0.5 #:material limestone)");
+        s.Execute("(heat-store rock #:at (0.12 0 1.2) #:mass 40 #:material basalt)");
+        s.Execute("(set rock #:movable #t)");
+        s.Execute("(heat-bin bin #:at (0.12 0 0) #:material oak)");               // no #:holds: it takes what is pushed in
+        s.Execute("(set bin #:size 0.35)");
+        string rkt = RktExporter.Write(s.Document.ToMachineDef());
+        Assert.Contains("(heat-store rock #:at (0.12 0 1.2) #:mass 40 #:contents basalt #:emissivity 0.9 #:conductance 0 #:movable #t #:material basalt)", rkt);
+        Assert.Contains("(heat-bin bin #:at (0.12 0 0) #:size 0.35 #:leak 0.1 #:open 0 #:material oak)", rkt);
+        Assert.StartsWith("ok", s.Execute("(check)"));
+        var def = MachineDef.Parse(MachineWriter.Write(s.Document.ToMachineDef()));
+        var rt = new MachineRuntime(def, Materials);
+        Assert.True(rt.HeatStores["rock"].Movable);
+        Assert.Equal(0.35, rt.HeatBins["bin"].Inner, 9);
+        rt.MoveHeatStore("rock", 0.12, 0, 0);
+        Assert.Same(rt.HeatBins["bin"], rt.HeatStores["rock"].Bin);
+    }
+
+    [Fact]
+    public void WaterCannotBeMovable()
+    {
+        var def = MachineDef.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "machines", "heat-rock.machine")).Replace("(contents basalt) (temperature 200.0)", "(contents water) (temperature 20.0)"));
+        Assert.Contains("not water", Assert.Throws<MachineFormatException>(() => new MachineRuntime(def, Materials)).Message);
+    }
 }

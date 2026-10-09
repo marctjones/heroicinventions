@@ -6,6 +6,6 @@
   (weather (daily #t) (passes 3.0 15.0) (pass-minutes 10.0))
   (sun (latitude -2.0) (day 100) (time 17.0))
   (part vault enclosure (material hemp) (at 0.0 0.0 0.0) (props (size-x 0.5) (size-y 0.5) (size-z 0.5) (pressure 610.0) (temperature -55.0) (insulation 0.0) (heat-capacity 0.0) (heater 0.0) (leak 0.0) (supply 0.0) (coefficient 0.6) (wall regolith) (wall-thickness 0.5) (ground -55.0) (o2 #f) (n2 #f) (co2 #f) (h2o #f) (ar #f)) (ports) (srcloc "racket/machines/vault-night.rkt" 19 2))
-  (part rock heat-store (material basalt) (at 0.12 0.0 0.0) (props (mass 40.0) (contents basalt) (temperature 200.0) (area #f) (emissivity 0.9) (conductance 0.0)) (ports) (srcloc "racket/machines/vault-night.rkt" 21 2))
-  (part bin heat-bin (material oak) (at 0.12 0.0 0.0) (props (holds rock) (leak 0.1) (open 1.0) (sense #f) (open-below 5.0) (close-above 40.0)) (ports) (srcloc "racket/machines/vault-night.rkt" 22 2))
+  (part rock heat-store (material basalt) (at 0.12 0.0 0.0) (props (mass 40.0) (contents basalt) (temperature 200.0) (area #f) (emissivity 0.9) (conductance 0.0) (movable #f)) (ports) (srcloc "racket/machines/vault-night.rkt" 21 2))
+  (part bin heat-bin (material oak) (at 0.12 0.0 0.0) (props (holds rock) (size #f) (leak 0.1) (open 1.0) (sense #f) (open-below 5.0) (close-above 40.0)) (ports) (srcloc "racket/machines/vault-night.rkt" 22 2))
   (wake night (when (scene elapsed above 36990.0)) (join and) (limit 40000.0) (events) (srcloc "racket/machines/vault-night.rkt" 23 2)))

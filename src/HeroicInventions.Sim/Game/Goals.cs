@@ -209,13 +209,13 @@ public sealed class GoalTracker
                 var bin = strip.Bin;
                 if (bin is null) continue;
                 var bank = rt.Banks.Values.FirstOrDefault(b => b.InName == strip.SensesName);
-                bool holds = bank is { InRange: true } && bin.Store.Temperature > 100 && bin.Open < 1;     // the lid not wide open: the strip is holding the heat back
+                bool holds = bank is { InRange: true } && bin.Store is { Temperature: > 100 } && bin.Open < 1;     // the lid not wide open: the strip is holding the heat back
                 if (Held($"thermostat/{i}/{strip.Name}", holds, HourS)) { Earn("thermostat"); Earn("harrison"); }
             }
             foreach (var bin in rt.HeatBins.Values.Where(b => b.Sense is not null))
             {
                 var bank = rt.Banks.Values.FirstOrDefault(b => b.InName == bin.Sense!.Name);
-                bool holds = bank is { InRange: true } && bin.Store.Temperature > 100 && bin.Openings >= 1;
+                bool holds = bank is { InRange: true } && bin.Store is { Temperature: > 100 } && bin.Openings >= 1;
                 if (Held($"switch/{i}/{bin.Name}", holds, HourS)) Earn("thermostat");
             }
 
