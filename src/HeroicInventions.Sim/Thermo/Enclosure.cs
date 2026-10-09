@@ -71,7 +71,9 @@ public sealed class Enclosure : Zone, IHeated
     private readonly List<HeatStore> _stores = [];
     /// <summary>The heat stores standing in the room.</summary>
     public IReadOnlyList<HeatStore> Stores => _stores;
-    public void AddStore(HeatStore store) => _stores.Add(store);
+    public void AddStore(HeatStore store) { if (!_stores.Contains(store)) _stores.Add(store); }
+    /// <summary>Takes a store out of the room (another machine's store carried out of it, #211); false if it was not in it.</summary>
+    public bool RemoveStore(HeatStore store) => _stores.Remove(store);
     /// <summary>m² of inner surface the stores radiate to. Default a cube of this volume's six faces.</summary>
     public double InnerArea { get => _innerArea > 0 ? _innerArea : 6 * Math.Pow(Volume, 2.0 / 3); set => _innerArea = value; }
     private double _innerArea;
