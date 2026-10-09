@@ -152,7 +152,7 @@ public partial class Main : ScriptedInput.IJoinStep
 
     private void StartLinksTraceIfLinked()
     {
-        if (_linksView is not null) _linksView.ExtraFields = GroundFields;
+        if (_linksView is not null) _linksView.ExtraFields = new Dictionary<string, Func<double>>(GroundFields.Concat(RouteFields));
         if (_linksTrace is { } t && _linksView is not null && !_linksView.Tracing && (_world is { Links.Count: > 0 } || _groundSim is not null))
             _linksView.StartTrace(t.Path, t.Every, _current?.Runtime.Time ?? 0);
     }

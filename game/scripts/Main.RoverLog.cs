@@ -143,6 +143,7 @@ public partial class Main
             seen.Won = bank.Won;
             _logBanks[bank] = seen;
         }
+        RoutesFlushLog();   // route steps met before this world's log began (Main.Routes.cs, #233)
     }
 
     // ------------------------------------------------------------------ screen

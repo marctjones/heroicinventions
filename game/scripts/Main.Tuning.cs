@@ -41,6 +41,7 @@ public partial class Main
         _tuningPanel?.Refresh();
         _goals?.RestartRun();   // a world (re)started: the path starts over, the achievements stay (a save loaded next puts its own back)
         _goalsKey = world.Name;
+        _routes.RestartRun();   // and the route steps met: a new run (a save loaded next puts its own back)
     }
 
     private void BuildTuningPanel()
@@ -48,6 +49,7 @@ public partial class Main
         _tuningPanel = new TuningPanel(this) { Name = "TuningPanel", Visible = OS.GetEnvironment("HEROIC_TUNING_PANEL") == "1" };
         AddChild(_tuningPanel);
         BuildGoalsPanel();   // the goals panel and the achievement toast (Main.Goals.cs, #68)
+        _sleep.Stepped += RoutesTick;   // routes are seen as a sleep runs through them (Main.Routes.cs, #233)
     }
 
     /// <summary>Shows or hides the tuning panel.</summary>

@@ -1229,6 +1229,7 @@ public partial class Main : Node3D
                 Worked = _groundSim?.Ground.SaveWorked(),    // and the trenches and heaps the rover has dug (#199)
                 Rover = RoverSaveState(),                    // and the rover itself: pose, bucket and arm (#201)
                 Goals = GoalsForSave(),                      // and the goals and achievements earned (#68)
+                Routes = RoutesForSave(),                    // and when each route step was first met (#229, #233)
                 Links = LinksForSave(),                      // and every link between machines, the ones made in play too (#82)
                 Operated = _operatorLog.ToList(), OperatorTaken = _operatorTaken,   // what was done to the machine, in order (Main.Operator.cs)
                 Built = _world?.Placements.Where(p => p.Built is not null).ToList() ?? [],   // and the machines the player built, whole (#204)
@@ -1278,6 +1279,7 @@ public partial class Main : Node3D
         }
         if (save.Worked is { } worked && _groundSim is { } dug) dug.Ground.LoadWorked(worked);   // the trenches and heaps, and their water (#199, #200)
         GoalsRestore(save);   // the goals and achievements the save had earned (#68)
+        RoutesRestore(save);  // and the route steps it had met (#229)
         if (save.Rover is { } roverState) RoverLoadState(roverState);   // the rover where it was, with its bucket and arm (#201)
         foreach (var m in save.Machines)
         {
@@ -1776,7 +1778,7 @@ public partial class Main : Node3D
             _current.Simulate(delta); // already scaled: see SetSpeed
         PostStepHand();
         if (_sleep.Live) _sleep.Observe();      // a sleep that lets the engine run counts this tick and wakes if it is time (#207)
-        if (!_sleep.Active) GoalsTick();   // goals and achievements, from the state the step left (Main.Goals.cs, #68); a sleep calls it itself every half second
+        if (!_sleep.Active) { GoalsTick(); RoutesTick(); }   // goals and achievements, from the state the step left (Main.Goals.cs, #68); a sleep calls it itself every half second
         ToastTick(delta);
 
         ApplyDueSettings(); // after the step, as SimHost's ApplyDue is: a setting due at t is seen by the sample taken at t
