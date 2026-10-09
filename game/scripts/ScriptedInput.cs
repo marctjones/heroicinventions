@@ -24,6 +24,8 @@ namespace HeroicInventions;
 ///                       out, and optionally the point it looks at
 ///   shot PATH           save what the window shows as a PNG
 ///   pick X Y · pickworld X Y Z   print which part is drawn at a viewport pixel, or where a world point is drawn (the run view; #151)
+///   join A B            join two parts of two placed machines, LABEL.PART[.PORT] each, as the Join machines gesture does (a view that can: Main; #218)
+///   joinbutton          print the Join machines button's label (#224)
 ///   quit                end the run
 ///
 /// A view adds its own steps through the <c>extra</c> handler, which
@@ -33,6 +35,9 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
 {
     /// <summary>Next: wait a few frames before the next step; Continue: run the next at once; Again: this step isn't ready, try it again in a few frames.</summary>
     public enum Step { Next, Continue, Again }
+
+    /// <summary>An owner that can join machines' parts by name, as a click on each would (Main, Main.Links.cs).</summary>
+    public interface IJoinStep { Step JoinStep(string[] w); }
 
     private readonly Queue<string> _steps = new(script.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
     private int _wait;
@@ -137,6 +142,11 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
                 GD.Print($"[{tag}] shot {path} {image.GetWidth()}x{image.GetHeight()} {error}");
                 return Step.Next;
             }
+            case "join" or "joinbutton":
+                if (owner is IJoinStep joiner) return joiner.JoinStep(w);
+                GD.PrintErr($"[{tag}] join: this view has no machines to join");
+                owner.GetTree().Quit(1);
+                return Step.Next;
             case "quit":
                 owner.GetTree().Quit();
                 return Step.Next;

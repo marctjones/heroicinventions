@@ -12,7 +12,7 @@ namespace HeroicInventions;
 /// resolved again against the new machine, which has already taken over the
 /// old one's water and speed, so the flow and the turning carry on.
 /// </summary>
-public partial class Main
+public partial class Main : ScriptedInput.IJoinStep
 {
     private WorldLinks? _links;
     private WorldLinksView? _linksView;
@@ -26,10 +26,22 @@ public partial class Main
 
     private void BuildJoinButton(VBoxContainer col)
     {
-        _joinButton = BigButton("Join machines (J)");
+        _joinButton = BigButton(JoinLabel());
         _joinButton.Visible = false;
         _joinButton.Pressed += () => SetJoining(!_joining);
+        _joinButton.Draw += RefreshJoinLabel;   // the rover may be spawned after the button is made, and the world can change under it
         col.AddChild(_joinButton);
+    }
+
+    /// <summary>
+    /// The button's text. J joins in a machine run, but the rover game uses the key up (Main.Rover.cs: RoverInput swallows J while you
+    /// drive), so there the label does not offer it (#224).
+    /// </summary>
+    private string JoinLabel() => _joining ? "Stop joining (Esc)" : RoverIsPlayer ? "Join machines" : "Join machines (J)";
+
+    private void RefreshJoinLabel()
+    {
+        if (_joinButton is not null && _joinButton.Text != JoinLabel()) _joinButton.Text = JoinLabel();
     }
 
     /// <summary>Resolves the world's links against the machines as they now stand, and draws them.</summary>
@@ -94,6 +106,7 @@ public partial class Main
     /// <summary>One tick of a world: the locked shafts read after Jolt's step, water through the cross-machine pipes, every machine, then the shafts, then the records.</summary>
     private void StepWorld(double delta)
     {
+        RefreshJoinLabel();
         _links?.ReadLockedShafts();   // what the locked shafts carried through Jolt's last step (#191)
         _links?.StepPipes(delta);
         foreach (var v in _views) v.SimulateUntraced(delta);
@@ -148,7 +161,7 @@ public partial class Main
     {
         _joining = on && _world is not null;
         _firstPick = null;
-        if (_joinButton is not null) _joinButton.Text = _joining ? "Stop joining (Esc)" : "Join machines (J)";
+        RefreshJoinLabel();
         if (_joining) GD.Print($"[links] {WorldLinkGestures.Prompt(null)}");
     }
 
@@ -186,14 +199,15 @@ public partial class Main
         return (d - dir * d.Dot(dir)).Length();
     }
 
-    private void Pick(LinkEnd end)
+    /// <summary>One pick of the join gesture (a click's part, or a scripted <c>join</c>'s). False when the second pick was refused.</summary>
+    private bool Pick(LinkEnd end)
     {
-        if (_world is null) return;
+        if (_world is null) return false;
         if (_firstPick is not { } first)
         {
             _firstPick = end;
             GD.Print($"[links] {WorldLinkGestures.Prompt(end)}");
-            return;
+            return true;
         }
         _firstPick = null;
         try
@@ -202,11 +216,57 @@ public partial class Main
             _world = _world.WithLink(link);
             RebuildLinks();
             GD.Print($"[links] joined: {link.Kind} {link.Id} from {link.From} to {link.To}");
+            return true;
         }
         catch (Exception e) when (e is InvalidOperationException or MachineFormatException)
         {
             GD.Print($"[links] can't join: {e.Message}");
+            return false;
         }
+    }
+
+    /// <summary>
+    /// The scripted step "join A B" (#218), anywhere in a script, after a build or not: A and B are LABEL.PART or LABEL.PART.PORT
+    /// (a tank's port), the parts of two machines placed in the world. It is the gesture without the screen: the Join machines button's
+    /// SetJoining, then the two picks a click on each part would make (<see cref="Pick"/>, what <see cref="JoinPickAt"/> ends in, so the
+    /// same rules, the same link and the same rebuild), then joining off as Esc does. The parts may be tens of metres apart, which a
+    /// click on one screen cannot reach. A name no machine or part answers to, or a join the rules refuse, prints the error, sets the
+    /// run's failure and ends it with exit code 1.
+    /// </summary>
+    public ScriptedInput.Step JoinStep(string[] w)
+    {
+        bool Fail(string why)
+        {
+            GD.PrintErr($"join: {why}");
+            _heroicSetFailed = true;
+            GetTree().Quit(1);
+            return false;
+        }
+        if (w[0] == "joinbutton")   // what the button says, and whether it shows (a check of #224)
+        {
+            GD.Print($"[links] join button: '{_joinButton.Text}' visible {_joinButton.IsVisibleInTree()} rover {RoverIsPlayer}");
+            return ScriptedInput.Step.Continue;
+        }
+        if (w.Length != 3) { Fail($"expected 'join LABEL.PART[.PORT] LABEL.PART[.PORT]', got '{string.Join(' ', w)}'"); return ScriptedInput.Step.Next; }
+        if (_world is null) { Fail("no world is open"); return ScriptedInput.Step.Next; }
+        var ends = new List<LinkEnd>();
+        foreach (string text in w[1..])
+        {
+            var bits = text.Split('.');
+            if (bits.Length is < 2 or > 3 || bits.Any(b => b.Length == 0)) { Fail($"'{text}' is not LABEL.PART[.PORT]"); return ScriptedInput.Step.Next; }
+            if (!_byName.TryGetValue(bits[0], out var view)) { Fail($"no machine is placed as '{bits[0]}' (in '{text}'); placed: {string.Join(' ', _byName.Keys)}"); return ScriptedInput.Step.Next; }
+            if (!view.PartNodes.ContainsKey(bits[1]) || view.Runtime.Def.Part(bits[1]) is null)
+            {
+                Fail($"{bits[0]} has no drawn part '{bits[1]}' (in '{text}'); its parts: {string.Join(' ', view.PartNodes.Keys)}");
+                return ScriptedInput.Step.Next;
+            }
+            ends.Add(new LinkEnd(bits[0], bits[1], bits.Length == 3 ? bits[2] : null));
+        }
+        SetJoining(true);
+        bool ok = Pick(ends[0]) && Pick(ends[1]);
+        SetJoining(false);
+        if (!ok) Fail($"'{w[1]}' and '{w[2]}' were not joined (see the [links] line above)");
+        return ScriptedInput.Step.Next;
     }
 
     /// <summary>
