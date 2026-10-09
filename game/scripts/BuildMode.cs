@@ -232,6 +232,7 @@ public partial class BuildMode : Node3D
         BuildEntries(catalogue);
 
         BuildUi();
+        if (GroundHeight is { } groundOf) AddChild(new BuriedMarker { Name = "BuriedMarker", Ground = groundOf, Rooms = () => _session.Document.Parts.Values });   // the found bank's crate under the soil, drawn while building (#213)
         if (GroundHeight is null) BuildGrid();   // on a map the ground is the bench (#37); a grid round the map's origin would float far off
         _camera = new Camera3D { Fov = 50 };
         AddChild(_camera);
@@ -656,8 +657,43 @@ public partial class BuildMode : Node3D
     /// action and the console both use), echoes it and its result, and
     /// redraws from the session's document.
     /// </summary>
+    /// <summary>
+    /// What a new enclosure is made with (#213), written into the command the console shows, so the player sees it and can change it.
+    /// Where the air is below freezing (the planet's own temperature: Mars's -63 C, not Earth's 20 C) it is a regolith vault: a #:wall
+    /// of regolith for the heat to soak into, where the template's own default is no wall and a hand-built room has no insulation
+    /// unless the player finds the setting. A wall also replaces the fixed #:insulation (W/K to the outside air), as the DSL has it
+    /// ("#:insulation is then 0 unless given", machine.rkt): the template's 2 W/K would drain a warm vault into the night air and
+    /// undo the wall (the 03:00 bank at -27 C instead of +4 C). A command that names its own #:wall or #:insulation is left as written.
+    /// Still the player's to change: #:wall some-other-material, #:wall #f for none, #:insulation n, or the inspector's Wall list.
+    /// </summary>
+    private string WithPlaceDefaults(string command)
+    {
+        string t = command.TrimEnd();
+        if (!t.StartsWith("(enclosure ") || !t.EndsWith(')')) return command;
+        if (!t.Contains("#:wall") && _session.Document.Planet.Temperature < 0) t = $"{t[..^1]} #:wall regolith)";
+        if (!t.Contains("#:insulation") && System.Text.RegularExpressions.Regex.IsMatch(t, @"#:wall\s+(?!#f)\S")) t = $"{t[..^1]} #:insulation 0)";
+        return t;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex SetWall = new(@"^\(set\s+(\S+)\s+#:wall\s+(\S+?)\)$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// The same rule when the wall is changed on a room that is already there (#213): giving it a wall takes the template's 2 W/K of
+    /// insulation off (the wall is the insulation now), and taking the wall away puts it back; an insulation the player has set to
+    /// anything else is left alone.
+    /// </summary>
+    private void WallChanged(string command)
+    {
+        if (SetWall.Match(command.Trim()) is not { Success: true } m || !_session.Document.Parts.TryGetValue(m.Groups[1].Value, out var part) || part.Kind != "enclosure") return;
+        string id = m.Groups[1].Value;
+        double ua = part.Number("insulation", 2);
+        if (m.Groups[2].Value != "#f" && ua == 2) RunCommand($"(set {id} #:insulation 0)");
+        else if (m.Groups[2].Value == "#f" && ua == 0) RunCommand($"(set {id} #:insulation 2)");
+    }
+
     private bool RunCommand(string command, string? loadFrom = null)
     {
+        if (loadFrom is null) command = WithPlaceDefaults(command);
         _console.AddText($"> {command}\n");
         GD.Print($"[BuildMode] > {command}");
         bool ok = true;
@@ -676,6 +712,7 @@ public partial class BuildMode : Node3D
         if (_selectedId is { } id && !_session.Document.Parts.ContainsKey(id)) _selectedId = null;
         Redraw();
         LessonCheck();
+        if (ok && loadFrom is null) WallChanged(command);
         return ok;
     }
 
@@ -994,6 +1031,19 @@ public partial class BuildMode : Node3D
                     clear.Pressed += () => RunCommand($"(set {id} #:{key} #f)");
                     row.AddChild(clear);
                 }
+            }
+            else if (key == "wall" && part.Kind == "enclosure" && value is SBool or SSymbol)
+            {
+                // the enclosure's wall (#213): a material heat soaks into, or none. A list, not a number field or a part's name.
+                var pick = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, TooltipText = "What the room's wall is made of: heat soaks into it, so a thick regolith wall keeps a room warm through the night. None is a bare box in the air." };
+                var walls = _materials.All.Where(m => m.Conductivity is not null && m.SpecificHeat is not null).OrderBy(m => m.Id).Select(m => m.Id).ToList();
+                string now = value is SSymbol w ? w.Name : "none";
+                if (now != "none" && !walls.Contains(now)) walls.Insert(0, now);
+                walls.Insert(0, "none");
+                foreach (var o in walls) pick.AddItem(o);
+                pick.Select(walls.IndexOf(now));
+                pick.ItemSelected += index => RunCommand($"(set {id} #:wall {(walls[(int)index] == "none" ? "#f" : walls[(int)index])})");
+                row.AddChild(pick);
             }
             else if (value is SSymbol sym && SymbolChoices(key) is { } choices)
             {
