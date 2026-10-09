@@ -22,13 +22,16 @@
 ;;                                                        then real time; GAP 5 (no scripted sleep step, so the world is built, saved and loaded asleep)
 ;; Predictions (worked before running):
 ;;  - the train: the sails' torque is tau* (2 - w R / (v l*)), tau* = 1/2 rho A v^2 R Cp / l* = 104.0 N.m at the world's air (0.015325 kg/m3)
-;;    and the palette windmill's 6 m/s, so at the rotor X = 256 w it balances the motor's torque k (X - 157.08) (k = 0.114592 N.m per rad/s above
-;;    the 1,500 rpm cut-in) at 256 k (X - 157.08) = 2 tau* - 0.2708 X: X = 162.7 rad/s (1,553 rpm), 5.6 rad/s over the cut-in, tau_g = 0.64 N.m,
-;;    104 W of shaft and 83 W into the bank (the sim: 1,557 rpm, 90 W; the answer is a small difference of two large numbers). Three stages (64:1)
+;;    and the map's wind where the mill stands (windmills read it by default since the owner's ruling of 2026-10-09): at (180, 105), about 37 m
+;;    across the corridor (factor 0.86), near 03:00 (the day's factor 1.34), 6 x 0.86 x 1.34 = 6.95 m/s. tau* scales as v^2 and the free speed
+;;    w* = 1.5 (v/6) rad/s as v, so at the rotor X = 256 w the motor's torque k (X - 157.08) (k = 0.114592 N.m per rad/s above the 1,500 rpm
+;;    cut-in) balances at 256 k (X - 157.08) = 2 tau* - (tau*/(256 w*)) X: X = 164.8 rad/s (1,574 rpm), tau_g = 0.89 N.m, 146 W of shaft and
+;;    117 W into the bank (at a flat 6 m/s the same balance gave 83 W against the sim's 90: the answer is a small difference of two large
+;;    numbers, and the sim ran 8% over it, which here would be about 127 W; gusts move it either way). Three stages (64:1)
 ;;    also pass the cut-in at 6 m/s (161.5 rad/s, 1,542 rpm) but only above 4.9 m/s of wind (free-running, 3 rad/s x 64 must pass 157.08);
 ;;    four pass it above 1.2 m/s.
 ;;  - the sails turn free in the sleep to near their free-running speed (about 2.8 rad/s) and hold 1/2 I w^2 (I = m R^2 / 3 = 50,000 kg m2):
-;;    a few Wh go into the bank in the first minute, the wind carries on at 90 W, and the 25 Wh bank (the scenario's 0.005 of 5 kWh) is full a
+;;    a few Wh go into the bank in the first minute, the wind carries on at about 117-130 W, and the 25 Wh bank (the scenario's 0.005 of 5 kWh) is full a
 ;;    few seconds before the pass opens at 55,484 s, 03:00 on sol 2 (the found bank's and the opening's clock: noon at the start), and the
 ;;    call goes out as the pass opens, not before.
 ;;  - the vault (route-vault, a machine of its own) holds the found bank's cells above 0 C at 02:49. With the stand-in of #96 (the vault
@@ -145,9 +148,9 @@
     ;; settled: the sails' flywheel is spent after about a minute and the wind alone carries the rest
     (define settled (filter (λ (f) (and (> (at f 'motor.power) 0) (> (at f 'scene.elapsed) (+ wake-at 200)))) built-run))
     (define mean-w (/ (apply + (map (λ (f) (at f 'motor.power)) settled)) (length settled)))
-    (check-true (< 75 mean-w 100) (format "mean ~a W into the bank (worked 83, sim 90)" mean-w))
+    (check-true (< 100 mean-w 150) (format "mean ~a W into the bank (worked 117 at the map's 6.95 m/s; a flat 6 m/s gave 83 worked, 90 sim)" mean-w))
     (define rpm (/ (apply + (map (λ (f) (at f 'motor.rpm)) settled)) (length settled)))
-    (check-= rpm 1553 15 "rpm of the rotor at the balance (worked 1,553)")
+    (check-= rpm 1574 20 "rpm of the rotor at the balance (worked 1,574 at the map's 6.95 m/s; gusts move it a little)")
     (printf "E2E charge: mean ~a W, rotor ~a rpm over ~a samples; the doc's 5 kWh bank would take ~a h of this\n"
             (round mean-w) (round rpm) (length settled) (/ (round (* 10 (/ 5000 mean-w))) 10.0))
     (check-true (has? #rx"^\\[frontend\\] ending source shaft: 25.000 Wh" lines) "the bank's record: 25 Wh, all of it from one source; 'shaft', not 'wind': the motor is in another machine than the windmill, and its source is read inside its own")
