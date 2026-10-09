@@ -752,7 +752,9 @@ public partial class Main : Node3D
 
         // first-run hints (#98), above the panels
         _hints = new Hints(() => new Hints.State(MachineOnScreen, _running, _timeScale, _buildMode is not null, _cameraMoved,
-                                                 _machinesWatched, _buildMode?.PartCount ?? 0, _buildMode?.LessonStarted ?? false));
+                                                 _machinesWatched, _buildMode?.PartCount ?? 0, _buildMode?.LessonStarted ?? false,
+                                                 RoverIsPlayer, _screen != Screen.None, _screen == Screen.Log, RoverIsPlayer ? _rover!.Chassis.GlobalPosition : default,
+                                                 RoverIsPlayer && _rover!.PhaseName != "Stowed", _sleep.Active));
         layer.AddChild(_hints);
     }
 
