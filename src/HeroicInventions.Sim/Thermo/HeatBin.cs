@@ -15,10 +15,30 @@ namespace HeroicInventions.Sim.Thermo;
 /// has warmed to <see cref="CloseAbove"/>, and left as it is between; an ideal switch that senses the bank's own temperature with no
 /// lag. A strip on the lid takes its place (the runtime clears <see cref="Sense"/>).
 /// </summary>
-public sealed class HeatBin(string name, HeatStore store, double leak)
+public sealed class HeatBin(string name, HeatStore? store, double leak)
 {
     public string Name { get; } = name;
-    public HeatStore Store { get; } = store;
+    /// <summary>The store built into it (issue #71), or null for a bin that takes what is put in it (issue #206).</summary>
+    public HeatStore? Fixed { get; } = store;
+    /// <summary>The movable store lying in it now (issue #206): a rock pushed in becomes this bin's store. Not saved: it is found again from where the body lies.</summary>
+    [field: NonSerialized] public HeatStore? Occupant { get; set; }
+    /// <summary>The store it holds now, built in or put in, or null while it is empty.</summary>
+    public HeatStore? Store => Fixed ?? Occupant;
+    /// <summary>Where the middle of its floor stands, m, and the side of its square cavity: a movable store whose middle is inside it, standing on the floor, has been put in (<see cref="Admits"/>).</summary>
+    public double X { get; init; }
+    public double Y { get; init; }
+    public double Z { get; init; }
+    public double Inner { get; init; } = 0.3;
+    /// <summary>Taller than this above the floor, m, is not in it: a load that stands on the floor of its cavity (the rover cannot lift one over the lid).</summary>
+    public const double Height = 0.35;
+    /// <summary>Whether only the movable store of this name goes in it (the machine said <c>#:holds</c> of one), or null for any.</summary>
+    public string? Only { get; init; }
+
+    /// <summary>Whether a movable store lying at its position is inside this bin's cavity (middle within its footprint, base on its floor).</summary>
+    public bool Admits(HeatStore s) =>
+        (Only is null || Only == s.Name) && Fixed is null
+        && Math.Abs(s.X - X) <= Inner / 2 && Math.Abs(s.Z - Z) <= Inner / 2
+        && s.Y - Y is >= -0.05 and <= Height - 0.05;
     public double Leak { get; set; } = leak;                       // W/K through the shut lid
     public double Open { get => _open; set => _open = Math.Clamp(value, 0, 1); }
     private double _open;

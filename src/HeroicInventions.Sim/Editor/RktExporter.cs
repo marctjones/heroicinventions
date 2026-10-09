@@ -267,9 +267,11 @@ public static class RktExporter
                        $"#:emissivity {F(N("emissivity", 0.9))}" + Opt("temperature", "temperature") + $" {Mat()})\n";
             case "heat-store":
                 return $"  (heat-store {p.Id} {At()} #:mass {F(N("mass", 10))} #:contents {Sym("contents", "basalt")}" + Opt("temperature", "temperature") + Opt("area", "area") +
-                       $" #:emissivity {F(N("emissivity", 0.9))} #:conductance {F(N("conductance"))} {Mat()})\n";
+                       $" #:emissivity {F(N("emissivity", 0.9))} #:conductance {F(N("conductance"))}" +
+                       (p.Props.GetValueOrDefault("movable") is SBool { Value: true } ? " #:movable #t" : "") + $" {Mat()})\n";
             case "heat-bin":
-                return $"  (heat-bin {p.Id} {At()} #:holds {Sym("holds", "?")} #:leak {F(N("leak", 0.1))} #:open {F(N("open"))}" +
+                return $"  (heat-bin {p.Id} {At()}" + (p.Props.GetValueOrDefault("holds") is SSymbol { Name: not "?" } holds ? $" #:holds {holds.Name}" : "") + Opt("size", "size") +
+                       $" #:leak {F(N("leak", 0.1))} #:open {F(N("open"))}" +
                        (p.Props.GetValueOrDefault("sense") is SSymbol sense ? $" #:sense {sense.Name} #:open-below {F(N("open-below", 5))} #:close-above {F(N("close-above", 40))}" : "") +
                        $" {Mat()})\n";
             case "bimetal":

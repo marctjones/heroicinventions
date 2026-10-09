@@ -30,7 +30,12 @@ public static class RuntimeState
     }
 
     /// <summary>Lays a captured state back on a freshly built runtime of the same machine. Returns the paths that found nothing to set (the machine has changed since).</summary>
-    public static IReadOnlyList<string> Restore(MachineRuntime runtime, SList state) => RestoreFrom(Roots(runtime), state);
+    public static IReadOnlyList<string> Restore(MachineRuntime runtime, SList state)
+    {
+        var unused = RestoreFrom(Roots(runtime), state);
+        runtime.ReseatHeatStores();   // a rock that was in a bin when it was saved is in it again (issue #206)
+        return unused;
+    }
 
     private static IReadOnlyList<string> RestoreFrom(IEnumerable<(string Path, object Holder)> roots, SList state)
     {

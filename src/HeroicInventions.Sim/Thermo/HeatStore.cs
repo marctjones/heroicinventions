@@ -61,6 +61,18 @@ public sealed class HeatStore(string name, Substance substance, double mass, dou
     /// <summary>The lidded bin round it, if any.</summary>
     public HeatBin? Bin { get; set; }
 
+    /// <summary>
+    /// A store that is a body (issue #206): a rock the rover can push. It carries its temperature and heat wherever it goes, stands in the
+    /// zone it lies in, and when it lies inside a lidded bin it becomes that bin's store. The body's place is fed in by whoever owns the
+    /// body (<c>MachineRuntime.MoveHeatStore</c>): X and Z the middle, Y the base, m, in the machine's frame.
+    /// </summary>
+    public bool Movable { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
+    public double Z { get; set; }
+    /// <summary>The length of one side of a cube of this store's volume, m (how big the body is).</summary>
+    public double Side => Math.Pow(Mass / Substance.Density, 1.0 / 3);
+
     // J above the solid at 0 °C: m c_s T when colder; 0 … m L at 0 °C while freezing/thawing; m (L + c T) when liquid
     private double _enthalpy = Enthalpy(substance, mass, temperatureC);
     /// <summary>W given to the zone through the walls or lid, last step (negative: taking heat).</summary>

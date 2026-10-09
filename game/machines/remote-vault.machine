@@ -4,5 +4,5 @@
   (sun (latitude 31.2) (day 172) (time 2.9166666666666665))
   (part shelf post (material oak) (at 3.0 0.0 -1.6) (props (size-x 1.6) (size-y 5.4) (size-z 0.9) (round #f) (breakable #f)) (ports) (srcloc "racket/machines/remote-vault.rkt" 10 2))
   (part vault enclosure (material hemp) (at 3.0 5.4 -1.6) (props (size-x 1.5) (size-y 0.8) (size-z 0.8) (pressure #f) (temperature 20.0) (insulation 2.0) (heat-capacity 0.0) (heater 0.0) (leak 0.0) (supply 0.0) (coefficient 0.6) (o2 #f) (n2 #f) (co2 #f) (h2o #f) (ar #f)) (ports) (srcloc "racket/machines/remote-vault.rkt" 11 2))
-  (part cells heat-store (material basalt) (at 2.5 5.4 -1.6) (props (mass 16.0) (contents cells) (temperature 20.0) (area #f) (emissivity 0.9) (conductance 0.0)) (ports) (srcloc "racket/machines/remote-vault.rkt" 12 2))
+  (part cells heat-store (material basalt) (at 2.5 5.4 -1.6) (props (mass 16.0) (contents cells) (temperature 20.0) (area #f) (emissivity 0.9) (conductance 0.0) (movable #f)) (ports) (srcloc "racket/machines/remote-vault.rkt" 12 2))
   (part bank battery-bank (material iron) (at 3.3 5.4 -1.6) (props (in cells) (capacity 10.0) (charge 0.0) (volts 28.0) (call-hour #f) (call-minutes #f) (call-any-time #f)) (ports) (srcloc "racket/machines/remote-vault.rkt" 13 2)))

@@ -211,19 +211,19 @@ public static class PartTemplates
                 ["on"] = new SSymbol("?"), ["heater"] = new SNumber(0), ["temperature"] = new SBool(false), ["coefficient"] = new SNumber(3.6e-8),
             },
             [], null),
-        // 10 kg of basalt, a block that stores heat (#71): set #:contents water or any material, #:mass, #:temperature; aim a mirror at it
+        // 10 kg of basalt, a block that stores heat (#71): set #:contents water or any material, #:mass, #:temperature; aim a mirror at it; #:movable #t makes it a body a rover can push into a bin (#206)
         "heat-store" => new PartSpec(id, "heat-store", material, at,
             new Dictionary<string, SExpr>
             {
                 ["mass"] = new SNumber(10), ["contents"] = new SSymbol("basalt"), ["temperature"] = new SBool(false),
-                ["area"] = new SBool(false), ["emissivity"] = new SNumber(0.9), ["conductance"] = new SNumber(0),
+                ["area"] = new SBool(false), ["emissivity"] = new SNumber(0.9), ["conductance"] = new SNumber(0), ["movable"] = new SBool(false),
             },
             [], null),
-        // an insulated bin round the heat store #:holds, its lid leaking 0.1 W/K shut; #:open 1 raises the lid, #:sense a store gives it a thermostat (#71)
+        // an insulated bin round the heat store #:holds (? or none: it stands empty, open at the front, and takes a #:movable store pushed into it, #206), its lid leaking 0.1 W/K shut; #:open 1 raises the lid, #:sense a store gives it a thermostat (#71)
         "heat-bin" => new PartSpec(id, "heat-bin", material, at,
             new Dictionary<string, SExpr>
             {
-                ["holds"] = new SSymbol("?"), ["leak"] = new SNumber(0.1), ["open"] = new SNumber(0), ["sense"] = new SBool(false),
+                ["holds"] = new SSymbol("?"), ["size"] = new SBool(false), ["leak"] = new SNumber(0.1), ["open"] = new SNumber(0), ["sense"] = new SBool(false),
                 ["open-below"] = new SNumber(5), ["close-above"] = new SNumber(40),
             },
             [], null),

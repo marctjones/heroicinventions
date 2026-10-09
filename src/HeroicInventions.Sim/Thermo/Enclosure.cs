@@ -68,10 +68,11 @@ public sealed class Enclosure : Zone, IHeated
     public double Insulation { get; set; } = 2;                      // W/K through the walls (UA)
     /// <summary>The wall heat soaks into (a regolith vault), or null for a wall that only has a UA.</summary>
     public HeatSlab? Wall { get; set; }
-    private readonly List<HeatStore> _stores = [];
+    [NonSerialized] private readonly List<HeatStore> _stores = [];   // found again from the machine's own store list when a state is laid back (a rock moves in and out, #206)
     /// <summary>The heat stores standing in the room.</summary>
     public IReadOnlyList<HeatStore> Stores => _stores;
     public void AddStore(HeatStore store) => _stores.Add(store);
+    public void RemoveStore(HeatStore store) => _stores.Remove(store);
     /// <summary>m² of inner surface the stores radiate to. Default a cube of this volume's six faces.</summary>
     public double InnerArea { get => _innerArea > 0 ? _innerArea : 6 * Math.Pow(Volume, 2.0 / 3); set => _innerArea = value; }
     private double _innerArea;

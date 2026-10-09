@@ -53,6 +53,7 @@ public sealed partial class MachineRuntime
     private readonly Dictionary<string, Crucible> _crucibles = [];
     private readonly Dictionary<string, HeatStore> _heatStores = [];
     private readonly Dictionary<string, HeatBin> _heatBins = [];
+    private readonly List<(HeatStore Store, Mirror Mirror)> _storeMirrors = [];   // the mirrors that light a store: a movable one carries their receiver with it (#206)
     private readonly Dictionary<string, BimetalStrip> _bimetals = [];
     private readonly Dictionary<string, Envelope> _envelopes = [];
     private readonly Dictionary<string, Pane> _panes = [];
@@ -264,6 +265,7 @@ public sealed partial class MachineRuntime
         foreach (var (id, bank) in _banks)
             if (previous._banks.TryGetValue(id, out var was))
                 foreach (var (source, joules) in was.Sources) bank.Sources[source] = joules;
+        ReseatHeatStores();   // rocks that were pushed lie where they lay; their bins and rooms are this machine's own
         StateCopy.Carry(previous.Sun, baseline.Sun, Sun);
         StateCopy.Carry(previous.Fluids, baseline.Fluids, Fluids);
         // sealed air belongs to its tanks, in the order they were declared
@@ -469,9 +471,13 @@ public sealed partial class MachineRuntime
                     double emissivity = part.Number("emissivity", 0.9), conductance = part.Number("conductance", 0);
                     if (area < 0 || !(emissivity > 0 && emissivity <= 1) || conductance < 0)
                         throw new MachineFormatException($"heat-store {part.Id}: #:area must be 0 or more, #:emissivity in (0, 1], #:conductance 0 or more", part.Location);
+                    bool movable = part.Props.GetValueOrDefault("movable") is SBool { Value: true };
+                    if (movable && stuff.Latent > 0)
+                        throw new MachineFormatException($"heat-store {part.Id}: #:movable needs a solid (a rock, a block of iron), not water", part.Location);
                     _heatStores[part.Id] = new HeatStore(part.Id, stuff, mass, TemperatureOr(part, "temperature", freezing: false))
                     {
                         Area = area, Emissivity = emissivity, Conductance = conductance,
+                        Movable = movable, X = part.At.X, Y = part.At.Y, Z = part.At.Z,
                     };
                     break;
                 }
@@ -588,18 +594,31 @@ public sealed partial class MachineRuntime
         foreach (var part in def.Parts.Where(p => p.Kind == "heat-bin"))
         {
             string holds = part.Symbol("holds", ""), sense = part.Symbol("sense", "");
-            if (!_heatStores.TryGetValue(holds, out var held))
+            if (holds == "?") holds = "";   // the editor's placeholder: a bin that stands empty and takes what is pushed into it (#206)
+            HeatStore? held = null;
+            if (holds != "" && !_heatStores.TryGetValue(holds, out held))
                 throw new MachineFormatException($"heat-bin {part.Id} holds {holds}, which is not a heat-store", part.Location);
-            if (held.Bin is not null)
+            if (held is not null && held.Bin is not null)
                 throw new MachineFormatException($"heat-store {holds} is already in a bin", part.Location);
             double leak = part.Number("leak", 0.1), lo = part.Number("open-below", 5), hi = part.Number("close-above", 40);
             if (leak < 0 || !(lo < hi))
                 throw new MachineFormatException($"heat-bin {part.Id}: #:leak must be 0 or more and #:open-below under #:close-above", part.Location);
-            var bin = new HeatBin(part.Id, held, leak) { Open = part.Number("open", 0), OpenBelow = lo, CloseAbove = hi };
+            // a bin round a store that stays where it is is drawn on that store; one for rock that is pushed in (#206) stands where its own #:at says,
+            // sized (#:size, the side of its cavity) for the biggest rock that can be put in it, with 4 cm to spare each side for a hand that pushes it in a little askew
+            bool takesMovable = held is null || held.Movable;
+            var fitting = takesMovable ? (held is { } one ? [one] : _heatStores.Values.Where(h => h.Movable).ToList()) : [];
+            double inner = part.Number("size", takesMovable ? (fitting.Count > 0 ? fitting.Max(h => h.Side) + 0.08 : 0.3) : (held!.Side + 0.03));
+            if (!(inner > 0)) throw new MachineFormatException($"heat-bin {part.Id}: #:size must be above 0 m", part.Location);
+            var anchor = takesMovable ? part.At : def.Part(holds)!.At;
+            var bin = new HeatBin(part.Id, takesMovable ? null : held, leak)
+            {
+                Open = part.Number("open", 0), OpenBelow = lo, CloseAbove = hi,
+                X = anchor.X, Y = anchor.Y, Z = anchor.Z, Inner = inner, Only = takesMovable && held is not null ? held.Name : null,
+            };
             if (sense != "")
                 bin.Sense = _heatStores.TryGetValue(sense, out var sensed) ? sensed
                     : throw new MachineFormatException($"heat-bin {part.Id} senses {sense}, which is not a heat-store", part.Location);
-            held.Bin = bin;
+            if (!takesMovable) held!.Bin = bin;
             _heatBins[part.Id] = bin;
         }
         foreach (var part in def.Parts.Where(p => p.Kind == "bimetal"))
@@ -670,6 +689,7 @@ public sealed partial class MachineRuntime
                 ReceiverRadius = Math.Max(0.5, targetPart.Number("radius", 0) * 2),
             };
             _mirrors[part.Id] = mirror;
+            if (target is HeatStore lit) _storeMirrors.Add((lit, mirror));
             // a crucible's spot takes only the share of the mirror's image that falls on it
             if (target is Crucible c) AddHeatSource(target, () => mirror.Delivered * Math.Min(1, c.Spot / mirror.Image));
             // likewise a hot-air engine's aperture
@@ -1211,6 +1231,54 @@ public sealed partial class MachineRuntime
             if (Around(part) is Enclosure e) _zoneOfPart[part.Id] = e;
     }
 
+    /// <summary>
+    /// A heat store that is a body lies here now (issue #206): X and Z the middle, y the base, m, in the machine's frame. Whoever owns the
+    /// body (the view) hands it in every tick. Where it lies decides what it is part of: inside a lidded bin it becomes that bin's store
+    /// (the bin's lid works on it, the room round the bin warms and cools it); out of the bin it is bare to the air of whatever room it
+    /// lies in; and a mirror that lights it follows it, so a rock pushed out of the light stops being lit.
+    /// </summary>
+    public void MoveHeatStore(string id, double x, double y, double z)
+    {
+        var s = _heatStores[id];
+        if (!s.Movable) throw new InvalidOperationException($"heat-store {id} is not #:movable");
+        s.X = x; s.Y = y; s.Z = z;
+        Reseat(s);
+    }
+
+    /// <summary>Puts every movable store where it lies: after a state is laid back on this runtime, or an edited machine takes over a running one.</summary>
+    public void ReseatHeatStores()
+    {
+        foreach (var b in _heatBins.Values) b.Occupant = null;
+        foreach (var h in _heatStores.Values) if (h.Movable) { h.Bin = null; Reseat(h); }
+    }
+
+    private void Reseat(HeatStore s)
+    {
+        var bin = _heatBins.Values.FirstOrDefault(b => (b.Occupant is null || b.Occupant == s) && b.Admits(s));
+        if (s.Bin != bin)
+        {
+            if (s.Bin is { } old) old.Occupant = null;
+            s.Bin = bin;
+            if (bin is not null) bin.Occupant = s;
+        }
+        var zone = bin is not null ? ZoneOf(bin.Name) : ZoneAt(s.X, s.Z);
+        if (!ReferenceEquals(s.Zone, zone) || zone is Enclosure room && !room.Stores.Contains(s))
+        {
+            if (s.Zone is Enclosure was) was.RemoveStore(s);
+            s.Zone = zone;
+            if (zone is Enclosure now && !now.Stores.Contains(s)) now.AddStore(s);
+        }
+        foreach (var (lit, mirror) in _storeMirrors)
+            if (lit == s) mirror.Receiver = new Vec3(s.X, s.Y, s.Z);
+    }
+
+    /// <summary>The innermost enclosure whose footprint holds this point, or the open air.</summary>
+    private Zone ZoneAt(double x, double z) =>
+        Def.Parts.Where(b => b.Kind == "enclosure" && _enclosures.ContainsKey(b.Id)
+                             && Math.Abs(x - b.At.X) <= b.Number("size-x") / 2 && Math.Abs(z - b.At.Z) <= b.Number("size-z") / 2)
+                 .OrderBy(b => b.Number("size-x") * b.Number("size-y") * b.Number("size-z"))
+                 .Select(b => (Zone)_enclosures[b.Id]).FirstOrDefault() ?? Outside;
+
     /// <summary>Stands every part in its zone: the gravity it falls under, the air it breathes and pushes against.</summary>
     private void SetZones()
     {
@@ -1220,6 +1288,7 @@ public sealed partial class MachineRuntime
         foreach (var (id, c) in _crucibles) c.Zone = ZoneOf(id);
         foreach (var (id, h) in _heatStores)
         {
+            if (h.Movable) { Reseat(h); continue; }                                       // a rock that has been pushed stands where it lies now
             h.Zone = ZoneOf(id);
             if (h.Zone is Enclosure room && !room.Stores.Contains(h)) room.AddStore(h);   // a room solves its stores with its wall
         }
@@ -1670,6 +1739,15 @@ public sealed partial class MachineRuntime
             _getters[$"{id}.conductance"] = () => h.ExposedConductance(h.Zone.Temperature, h.Zone is Enclosure room ? room.InnerArea : double.PositiveInfinity,
                                                                          h.Zone is Enclosure r2 ? r2.WallEmissivity : 1);   // W/K, bare to its room now
             _setters[$"{id}.conductance"] = k => h.Conductance = Math.Max(0, k);      // the contact film alone (h·A)
+            if (!h.Movable) continue;
+            // a rock the rover can push (#206): where its body lies (the body's owner feeds these every tick), and whether it is in a bin
+            _getters[$"{id}.x"] = () => h.X;
+            _getters[$"{id}.y"] = () => h.Y;
+            _getters[$"{id}.z"] = () => h.Z;
+            _setters[$"{id}.x"] = v => MoveHeatStore(id, v, h.Y, h.Z);
+            _setters[$"{id}.y"] = v => MoveHeatStore(id, h.X, v, h.Z);
+            _setters[$"{id}.z"] = v => MoveHeatStore(id, h.X, h.Y, v);
+            _getters[$"{id}.in-bin"] = () => h.Bin is null ? 0 : 1;
         }
         foreach (var (id, b) in _heatBins)
         {
@@ -1678,8 +1756,9 @@ public sealed partial class MachineRuntime
             _getters[$"{id}.leak"] = () => b.Leak;                             // W/K through the shut lid
             _setters[$"{id}.leak"] = k => b.Leak = Math.Max(0, k);
             _getters[$"{id}.openings"] = () => b.Openings;
-            _getters[$"{id}.power"] = () => b.Store.Exchange;                  // W the bin gives its room
-            _getters[$"{id}.temperature"] = () => b.Store.Temperature;         // °C of what it holds
+            _getters[$"{id}.power"] = () => b.Store?.Exchange ?? 0;            // W the bin gives its room
+            _getters[$"{id}.temperature"] = () => b.Store?.Temperature ?? 0;   // °C of what it holds (0 while it is empty: see holding)
+            _getters[$"{id}.holding"] = () => b.Store is null ? 0 : 1;         // 1 while a store is in it (a rock pushed in, #206)
         }
         foreach (var (id, b) in _bimetals)
         {
