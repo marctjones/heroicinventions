@@ -11,6 +11,10 @@ public partial class MachineView
     /// </summary>
     public static bool Hurrying { get; set; }
 
+    /// <summary>True while a sleep is on that does not run the physics engine (set by Main each frame): rotors the engine turns stand still (#212's label says so).</summary>
+    public static bool SleepingPaused { get; set; }
+
+
     /// <summary>
     /// True when part of this machine lives in the physics engine and is coupled to the simulation: geared trains and driven
     /// shafts, axles, or any body that is awake and moving. A sleep that pauses the engine would leave these where they were
