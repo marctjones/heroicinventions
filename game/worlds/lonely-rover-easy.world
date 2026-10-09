@@ -7,7 +7,7 @@
   (scenario
     (title "The Lonely Rover, easy")
     (description "The same crater and cargo, kinder numbers: a 1 kWh bank, a motor that charges from 750 rpm, the call at any hour once the bank is full and warm, slower wear and faster sleep. The physics is the real physics.")
-    (tuning (bank-capacity 0.2) (generator-cut-in 0.5) (call-any-time #t) (wear 0.25) (sleep-speed 4)))
+    (tuning (bank-capacity 0.02) (generator-cut-in 0.5) (call-any-time #t) (wear 0.25) (sleep-speed 4)))
   (map victoria)
   (rover (at 190.0 140.0) (heading 270))
   (place battery-bank found-bank (at 264.0 0 143.0))
