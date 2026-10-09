@@ -67,6 +67,15 @@ Environment switches (all `HEROIC_*`):
 | `SAVES_DIR=<dir>` | where saves go instead of the player's folder; a scripted run (`QUIT_AFTER_SIM_SECONDS`, `INPUT`) with none writes no autosave and no rover log. The rover log (#217) is `<scene>.rover-log.txt` there (or in `user://saves` for a player), one line appended as it is made. `godothost.rkt` sets a temporary one |
 | `HINTS=1/0`, `HINTS_RATE=<n>` | first-run hints (#98) on or off in a scripted run (they are off there by default); `HINTS_RATE` runs their waiting clocks n times faster (the rover hints wait 20 s to about 6 min; at rate 1 a fixed-fps run counts game seconds, so it is the real threshold). `SETTINGS=<file>` keeps the retired list out of the player's settings |
 
+## Routes to the win (#227)
+
+A route is a data file, `game/routes/*.route` (and `game/routes/<world>/*.route` for one world): `(route ID (name ..) (description ..) (proven-by "path of the test that wins by it") (step ID (title ..) (reason ".. {NAME|fallback} ..") (met CONDITION ..)) ..)`. Conditions are a closed set (`RouteCondition.Kinds` in `src/HeroicInventions.Sim/Game/Routes.cs`, each documented with the sim field it reads); any one of a step's conditions meets it. The reveal rule, `RouteReveal.Reveal(routes, history, reading)`, is a pure function; `RouteTracker` keeps the history (first time of each step, in the world save as `(routes 1 ..)`, `WorldSave.Routes`) and the rover log gets a line for each first time. A malformed file fails with the file and step named.
+
+- **Gate (#231):** `RoutesTests.EveryShippedRouteNamesATestThatExists` fails if a shipped route's `proven-by` is not a file. Add a route only with a passing test that wins by it.
+- **Playtest (#233):** the links trace (`<TRACE>.links`) carries `route.ROUTE.started`, `route.ROUTE.STEP` and `route.final.the-call`: the scene's clock at the first time, -1 before.
+- **Routes in the design doc that wait for another issue before they may ship:** the Stirling route on mirror heat (#220, never built in the crater); the hydraulic miner and its hot-water night store (a hushing flood and a night store that charge a bank: no issue yet, and a winning test needs a generator driver as well); the gravity battery (a winning test, which the design doc calls "clever and weak"); the water wheel (designed as "effectively never": a documented reason would have to replace the test); the siege engineer (shatter the boulders with a trebuchet, #43, then any power route, so it waits for a passing test of both).
+- `export_presets.cfg` needs `routes/*.route` (and `routes/*/*.route`) in each `include_filter` for an exported game to see them.
+
 ## Traps already met
 
 - **A fresh worktree has no Godot import.** The first headless run in a new worktree can hang for a long time importing; run `cd game && dotnet build && /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --import` once first (then runs take seconds).
