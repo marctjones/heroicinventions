@@ -7,11 +7,15 @@
 ;; stands is the scenario's choice (#60). The battery bank's place was picked for its cover (owner
 ;; ruling 2026-10-09: about 1 m, not the 4 m it had at (264, 143)): the rubble thins down the slope
 ;; at about 0.39 m per metre (measured along the line from the cliff, crates 1 m apart: 3.99 m at
-;; x = 262, 2.03 at 257, 1.24 at 255, 0.83 at 254), so (254.5, 137.9) is under 1.04 m. A boulder no
-;; longer rests on it (the nearest, boulder 5, lies 7.7 m away): the boulders stop on the thick
-;; rubble, and the thick rubble is not here. Freeing the bank is optional (a vault can be built
-;; round it where it lies); the two crates beyond the rubble's foot are bare, and one of them holds
-;; the salvaged motors (found-motor): the generator is found, not built.
+;; x = 262, 2.03 at 257, 1.24 at 255, 0.83 at 254), so (254.5, 137.9) is under 1.04 m. No boulder rests on the
+;; bank (the nearest, boulder 5, lies 7.7 m away): the boulders stop on the thick rubble, and the thick rubble is
+;; not here. Freeing the bank is optional (a vault can be built round it where it lies). A boulder is meant to
+;; rest on a crate the win does not need, so that undermining it and levering it stay reachable (owner ruling
+;; 2026-10-09): the solar-panels crate, moved from (254.62, 147.0) to (265.75, 143.5), lies under 2.15 m of
+;; rubble (it was under 2.17 m) 1.78 m from boulder 4's centre (265.75, 141.72), a 21.6 t cube too big for a
+;; backhoe to lift. The boulders do not move for a crate's place (measured: the same to 1 cm with the crate
+;; anywhere), so the crate was put where the boulder lies; the two crates beyond the rubble's foot are bare, and
+;; one of them holds the salvaged motors (found-motor): the generator is found, not built.
 (world lonely-rover-opening
   ;; the scenario (#60): what this world is for, as the front end lists it. Every number is the real one but the bank's size: the found
   ;; 5 kWh bank at 0.1, 500 Wh, 5.6 h of a 90 W windmill (owner, 2026-10-09).
@@ -23,7 +27,7 @@
   ;; the player's rover (#94): 45 m down the slope from the first crate, facing it (+x), where the floor is only ~7 degrees
   (rover (at 190.0 140.0) (heading 270))
   (place battery-bank found-bank (at 254.5 0 137.9))
-  (place solar-panels cargo-crate (at 254.62 0 147.0))
+  (place solar-panels cargo-crate (at 265.75 0 143.5))
   (place gas-cylinders cargo-crate (at 249.42 0 144.0))
   (place hand-tools cargo-crate (at 242.49 0 140.0))
   (place motors found-motor (at 233.83 0 135.0)))
