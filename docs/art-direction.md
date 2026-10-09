@@ -264,6 +264,13 @@ Frames: `docs/art/skins/joint-fittings.png`. The rest of #102 is in 12.10.
 | talus | 26 / −43 | 57 / −109 |
 | flood-plain | 19 / −35 | 51 / −100 |
 
+**Reading the ground's shape while driving (2026-10-08, ground-read).** The crater's contours are metres apart, so near the rover the ground was one flat brown. The ground shader now adds, all fading with distance from the rover (`rover_pos`, a global shader parameter `TerrainView.Refresh` sets each tick) and from the camera:
+- **Slope tint** against the rover's own limit (`RoverSpec.GradeDeg`, 30): none under 15 degrees, warm `#E8975A` 15 to 25, amber `#F5B82E` 25 to the limit, red `#E5362A` beyond it. Faded out between 30 and 60 m of the rover. The slope is the true one (COLOR.b, from neighbour-to-neighbour grades of the unsmoothed heights; the smoothed normals blurred a 1 m 45 degree bank to 20), so it reads on the 5 m crater cells, the 1 m dig-bank cells and the 0.25 m worked patch alike. The colours are `TerrainView.SlopeWarm/Amber/Red`; the rover panel's "ahead" line uses them.
+- **Fine contours** every 0.5 m of height within about 30 m, and a **draped 1 m grid** within about 25 m (it bends over bumps and dips). Both pale on dark soil and dark on pale soil, fixed one to a few pixels wide, faded where they would crowd and beyond 40 to 110 m from the camera.
+- **Brighter hillshade** from a fixed map light (`TerrainView.MapLight`, from the south-east, 40 degrees up; map and patch share `HillShade`), remapped to 0.68 to 1.12 in the shader, with 16% of it unlit (emission) so slopes facing away, the tint, the lines and the grid still read at night; before, the crater at night was black.
+- **Panel:** the Driving section's "ahead" line gives the steepest metre of ground along the heading over the next 3 m (`GroundGrade.Ahead`), amber from 25 degrees and red from 30 with "too steep to climb". The steepest metre, not the 3 m mean: a 1 m bank at 45 degrees averages 18 over 3 m.
+
+
 Also mars-stirling 23/+48 → 29/+60, mars-sols +73. Crater frame rate in a 1280x800 window is 113 fps steady (123 on the old terrain).
 
 Frames: `docs/art/skins/terrain-before-after.png`, `terrain-crater-cargo.png`. Not done:
