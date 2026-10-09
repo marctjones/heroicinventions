@@ -49,7 +49,7 @@ Environment switches (all `HEROIC_*`):
 | `SPEED=<n>` | sim speed |
 | `TRACE=<path>`, `TRACE_DT=<s>` | write a trace |
 | `WORLD=<name\|gallery>` | open a world |
-| `SET="target field value [at]"` | set a field (timed settings) |
+| `SET="target field value [at]"` | set a field (timed settings); in a world the first machine's, or `label:target` for another placed machine |
 | `ACTIONS=<file>` | replay an operator log |
 | `DRAG=...` | replay hand drags |
 | `FRAMING_REPORT=1` | share outside the clear area; label counts |

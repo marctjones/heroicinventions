@@ -868,6 +868,7 @@ public partial class Main : Node3D
         if (_editButton is not null) _editButton.Visible = false;
         if (_joinButton is not null) _joinButton.Visible = false;
         ClearLinks();
+        ClearZones();   // other machines' stores go back to their own air (Main.Zones.cs, #211)
         ClearRover();   // the player's rover goes with its world (Main.Rover.cs)
         ClearGround();
         // out of the tree now, not at the frame's end: a world loaded straight after (a save's load) names its views by
@@ -1744,6 +1745,7 @@ public partial class Main : Node3D
             _scriptedSavePath = null;
         }
         if (_running && !_sleep.Active) PreStepHand();   // a hand holding a body sets its target for this step (Main.Drag.cs)
+        if (_views.Count > 0 && (_running || _sleep.Active)) UpdateZones();   // who holds whose heat store, from where they are now (Main.Zones.cs, #211)
         if (_sleep.Active)
             _sleep.Advance(SleepBudgetMs);    // sleeping: run ahead as fast as it can, in place of stepping in real time
         else if (_running && _views.Count > 0)

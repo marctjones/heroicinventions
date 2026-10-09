@@ -1,0 +1,9 @@
+;; A vault in one machine, the found bank in another (issue #211; racket/heroic/tests/vault-zone-test.rkt): night-heat's tight vault
+;; (racket/machines/vault-night.rkt) on level ground, and the found bank's crate (racket/machines/found-bank.rkt) 1.5 m beside it. A hand
+;; (a machine run may operate anything: run with HEROIC_ROVER=0) pushes the crate into the vault, or out again, and the cells join the
+;; vault's air or leave it. The vault is the first machine: a sleep, a setting and the run's clock address it.
+(world vault-check
+  (map flood-plain)
+  (rover (at 0.0 8.0) (heading 0))
+  (place vault vault-night (at 0 0 0))
+  (place bank found-bank (at 1.5 0 0)))
