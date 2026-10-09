@@ -1,0 +1,8 @@
+;; A wire between machines (issue #208): found-electrics' windmill, 125:1 train and salvaged motor stand in one machine, the
+;; battery bank in its vault (racket/machines/remote-vault.rkt) in another, and a wire runs from the motor to the bank. The wire loses
+;; nothing and takes no time, so the bank is charged as found-electrics charges its own: 0.8 x 347.9 W = 278.3 W, full in about 140 s,
+;; filed as wind. (works' own bank, which the motor charges when it is not wired, takes nothing: the motor's charge goes down the wire.)
+(world wired-electrics
+  (place works found-electrics (at 0 0 0))
+  (place vault remote-vault (at 6 0 0))
+  (link wire-1 wire (from works motor) (to vault bank)))

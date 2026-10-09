@@ -13,7 +13,8 @@ namespace HeroicInventions;
 /// turning part to the other, spinning at the driving end's speed with a
 /// dark stripe so the turning shows. A link whose part or port has gone is
 /// drawn red, with the reason on its tag, as unfinished parts are in build
-/// mode. Each link carries a tag with its live numbers.
+/// mode. A wire (issue #208) is a copper line from the generator up over to the
+/// bank, glowing while it carries charge. Each link carries a tag with its live numbers.
 /// </summary>
 public partial class WorldLinksView : Node3D
 {
@@ -21,6 +22,7 @@ public partial class WorldLinksView : Node3D
     {
         public required WorldLinks.Link Link;
         public MeshInstance3D? Water;
+        public List<StandardMaterial3D> Copper = [];
         public Node3D? Spinner;
         public double Angle;
         public Label3D? Tag;
@@ -70,6 +72,25 @@ public partial class WorldLinksView : Node3D
                     mat.Emission = Shapes.Water;
                     AddChild(water);
                     d.Water = water;
+                }
+            }
+            else if (link.Spec.Kind == "wire")
+            {
+                // a copper wire from the generator up, across at a height clear of both and down to the bank (lossless: it is only drawn)
+                float top = Mathf.Max(from.Y, to.Y) + 1.2f;
+                Vector3 up = @from with { Y = top }, over = to with { Y = top };
+                foreach (var (p, q) in new[] { (@from, up), (up, over), (over, to) })
+                {
+                    var mat = broken ? Shapes.Mat(Unfinished) : Shapes.Mat(Shapes.Copper, metallic: 0.7f, roughness: 0.4f);
+                    AddChild(Shapes.Rod(p, q, 0.02f, mat));
+                    if (!broken) d.Copper.Add(mat);
+                }
+                mid = (up + over) / 2;
+                foreach (var end in new[] { @from, to })
+                {
+                    var lug = Shapes.Box(new Vector3(0.14f, 0.14f, 0.14f), Shapes.Mat(new Color(0.25f, 0.25f, 0.27f), metallic: 0.6f, roughness: 0.5f));
+                    lug.Position = end;
+                    AddChild(lug);
                 }
             }
             else
@@ -132,6 +153,20 @@ public partial class WorldLinksView : Node3D
                 water.Scale = new Vector3(thick, 1, thick);
                 ((StandardMaterial3D)water.MaterialOverride).EmissionEnergyMultiplier = Mathf.Clamp((float)q / 4, 0.1f, 1.2f);
                 if (d.Tag is not null) d.Tag.Text = $"{l.Spec.Id} · {pipe.Flow * 1000:F2} L/s";
+            }
+            if (l is { Generator: { } gen, Bank: { } bank })
+            {
+                // the copper glows while it carries charge, in step with the share of the rated power
+                double watts = gen.Delivered;
+                float glow = watts > 0 ? Mathf.Clamp((float)(watts / Math.Max(1, gen.Efficiency * gen.RatedTorque * gen.RatedOmega)) * 3f, 0.3f, 1.5f) : 0f;
+                foreach (var m in d.Copper)
+                {
+                    m.EmissionEnabled = glow > 0;
+                    m.Emission = new Color(1f, 0.6f, 0.25f);
+                    m.EmissionEnergyMultiplier = glow;
+                }
+                if (d.Tag is not null)
+                    d.Tag.Text = $"{l.Spec.Id} · {watts:F0} W · {watts / bank.Volts:F1} A · {bank.ChargeWh:F1}/{bank.CapacityWh:F0} Wh" + (bank.Accepting ? "" : " (open circuit)");
             }
             if (l.Shaft is { } shaft && d.Spinner is { } spinner)
             {

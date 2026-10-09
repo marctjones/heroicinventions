@@ -37,6 +37,7 @@ public partial class Main
     {
         if (_world is null) { ClearLinks(); return; }
         UnlockShafts();   // a shaft end is its own machine's arbor: undo the locks' mates before resolving the ends again
+        _links?.Release();   // and take the wires off their generators: a wire is the generator's state, run again below
         _links = WorldLinks.Build(_world.Links,
             label => _byName.GetValueOrDefault(label)?.Runtime,
             end => _byName.GetValueOrDefault(end.Label)?.ShaftEnd(end.Part));
@@ -82,6 +83,7 @@ public partial class Main
     private void ClearLinks()
     {
         UnlockShafts();
+        _links?.Release();
         _links = null;
         _linksView?.StopTrace();
         _linksView?.QueueFree();
@@ -101,6 +103,29 @@ public partial class Main
         foreach (var v in _views) v.TraceStep(delta);
         _linksView?.Refresh(delta);
         if (_scriptedJoins.Count > 0) RunScriptedJoin();
+    }
+
+    /// <summary>
+    /// Every link the world has now, for a save (issue #82): the ones its file declares and the ones joined during play. Null outside a world.
+    /// Main.SaveWorld puts it in <c>WorldSave.Links</c>.
+    /// </summary>
+    private IReadOnlyList<LinkSpec>? LinksForSave() => _world?.Links;
+
+    /// <summary>
+    /// A save's links laid on the world just loaded from its file (issue #82): the world has exactly the links the save had,
+    /// resolved against the machines again, so a link made during play is back and working. A save with no link list (an older
+    /// one) leaves the file's links as they are. A link naming a placement this world no longer has is left out and said so.
+    /// Call it before the machines' saved state is laid on: the links hold the machines' parts, which the state is restored into.
+    /// </summary>
+    private void LinksRestore(WorldSave save)
+    {
+        if (_world is null || save.Links is not { } saved) return;
+        var left = new List<string>();
+        var world = LinkForms.Restore(_world, saved, left);
+        foreach (var why in left) GD.PrintErr($"[links] the save's link was left out: {why}");
+        _world = world;
+        RebuildLinks();
+        GD.Print($"[links] restored {world.Links.Count} link(s) from the save: {string.Join(", ", world.Links.Select(l => $"{l.Id} ({l.Kind})"))}");
     }
 
     private (string Path, double Every)? _linksTrace;
