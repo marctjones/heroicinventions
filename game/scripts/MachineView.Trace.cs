@@ -60,7 +60,13 @@ public partial class MachineView
     private void TraceTick(double dt)
     {
         if (_trace is null) return;
-        if (Runtime.Time + dt / 2 >= _traceFrames * _traceDt) WriteTraceFrame();
+        if (Runtime.Time + dt / 2 >= _traceFrames * _traceDt)
+        {
+            WriteTraceFrame();
+            // a clock that jumped (a sleep that ran the sim ahead, #207) is not caught up one frame a tick: the next sample is the
+            // next grid point after now, so the file holds a frame per sample interval whatever the clock did in between
+            _traceFrames = Math.Max(_traceFrames, (long)Math.Floor((Runtime.Time + dt / 2) / _traceDt) + 1);
+        }
     }
 
     private IEnumerable<RigidBody3D> TracedBodies() =>

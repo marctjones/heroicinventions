@@ -703,7 +703,9 @@ public partial class Main : Node3D
         BuildBuildButtons(col);   // the game's Build section: a new machine, and the machines the player built (Main.Build.cs, #204)
         _sleep = new SleepControl(() => _views.Count > 0 ? _views : _current is null ? [] : [_current], () => _current, SetRunning, text => { _hudNote.Text = text; _hudNote.Visible = true; });
         col.AddChild(_sleep);
-        _sleep.Woke += () => SaveWorld(auto: true);        // a long sleep is worth keeping
+        _sleep.GetSpeed = () => _timeScale; _sleep.SetSpeed = SetSpeed;   // a sleep that keeps the machines turning runs the engine at speed (#207)
+        _sleep.Woke += OnSleepWoke;
+        _sleep.Ended += () => { if (_current is not null) _linksView?.SkipTo(_current.Runtime.Time); };
         var saveRow = new HBoxContainer();
         var saveButton = new Button { Text = "Save", TooltipText = "Save the whole running world, machines and all, to disk", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         saveButton.Pressed += () => SaveWorld(auto: false);
@@ -1186,7 +1188,16 @@ public partial class Main : Node3D
     private string? SaveName => _world?.Name ?? _currentName;
 
     private string SavePath(bool auto) =>
-        ProjectSettings.GlobalizePath($"{SavesDir}/{SaveName}{(auto ? ".autosave" : "")}.save");
+        OS.GetEnvironment("HEROIC_SAVES_DIR") is { Length: > 0 } dir
+            ? System.IO.Path.Combine(dir, $"{SaveName}{(auto ? ".autosave" : "")}.save")   // a scripted run's own folder (#207)
+            : ProjectSettings.GlobalizePath($"{SavesDir}/{SaveName}{(auto ? ".autosave" : "")}.save");
+
+    /// <summary>A sleep woke: a long sleep is worth keeping, except in a scripted run, which has no saves folder of the player's to write to (#207; HEROIC_SAVES_DIR gives it one).</summary>
+    private void OnSleepWoke()
+    {
+        bool scripted = OS.GetEnvironment("HEROIC_QUIT_AFTER_SIM_SECONDS") is { Length: > 0 };
+        if (!scripted || OS.GetEnvironment("HEROIC_SAVES_DIR") is { Length: > 0 }) SaveWorld(auto: true);
+    }
 
     /// <summary>
     /// Writes the whole running scene to disk, atomically: each machine's clock and simulation state, what the rigid
@@ -1362,6 +1373,8 @@ public partial class Main : Node3D
 
     private void SetRunning(bool running)
     {
+        if (!running && _sleep.Live) { _sleep.Cancel(); return; }   // Pause during a sleep that runs the engine stops the sleep (else it would never end, #207); press Pause again to pause
+
         _running = running;
         _current?.SetFrozen(!running);
         foreach (var v in _views) v.SetFrozen(!running);
@@ -1746,13 +1759,14 @@ public partial class Main : Node3D
         }
         if (_running && !_sleep.Active) PreStepHand();   // a hand holding a body sets its target for this step (Main.Drag.cs)
         if (_views.Count > 0 && (_running || _sleep.Active)) UpdateZones();   // who holds whose heat store, from where they are now (Main.Zones.cs, #211)
-        if (_sleep.Active)
+        if (_sleep.Active && !_sleep.Live)
             _sleep.Advance(SleepBudgetMs);    // sleeping: run ahead as fast as it can, in place of stepping in real time
         else if (_running && _views.Count > 0)
             StepWorld(delta); // a world: every machine, stepped together, and the links between them
         else if (_running && _current is not null)
             _current.Simulate(delta); // already scaled: see SetSpeed
         PostStepHand();
+        if (_sleep.Live) _sleep.Observe();      // a sleep that lets the engine run counts this tick and wakes if it is time (#207)
         if (!_sleep.Active) GoalsTick();   // goals and achievements, from the state the step left (Main.Goals.cs, #68); a sleep calls it itself every half second
         ToastTick(delta);
 
@@ -1794,6 +1808,7 @@ public partial class Main : Node3D
             _liveEditAfter = null;
             CallDeferred(MethodName.EditFocused);   // after this physics step, as a click would be
         }
+        if (_sleep.Live) return;   // a sleep that lets the engine run draws nothing between ticks: the scene is shown once, on waking (#207)
         FollowMissile();
         KeepActionInFrame();   // a ball off the ramp's foot, a cart along the floor (Main.Framing.cs)
         DrawTrail(delta);

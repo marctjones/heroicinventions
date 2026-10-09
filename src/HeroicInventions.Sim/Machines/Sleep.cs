@@ -78,6 +78,18 @@ public sealed class SleepSession
         return taken;
     }
 
+    /// <summary>
+    /// Checks the wake after the caller has stepped the machine itself (issue #207): a sleep that lets the physics engine run
+    /// takes its steps from the game's own loop, one tick at a time, so the sim is stepped exactly as watching steps it and the
+    /// session only counts the step and asks whether it is time to wake.
+    /// </summary>
+    public void Observe()
+    {
+        if (Done) return;
+        Steps++;
+        Check(Steps);
+    }
+
     private void Check(long steps)
     {
         foreach (var e in Plan.Events)

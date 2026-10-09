@@ -61,6 +61,9 @@ Environment switches (all `HEROIC_*`):
 | `FRONTEND=1/0` | force the title page on or off (a plain launch opens it; any of WORLD, AUTOSELECT, AUTORUN, EDITOR, INPUT or LOAD skips it) |
 | `TUNING_PANEL=1`, `GOALS_PANEL=1` | open the game-tuning panel (F3, #60) or the goals panel (F2, #68) at the start, for frames |
 | `GOALS_REPORT=1` | print the bank crate's cover and the goals earned every 2 s of the scene's clock |
+| `SLEEP=<wake>` | sleep at load until the machine's named wake. A script step does it later: `sleep WAKE [live\|paused]` or `sleep until T.F above\|below V [limit S] [live\|paused]` (#207) |
+| `SLEEP_PHYSICS=1/0` | a sleep keeps the physics engine running (default for Jolt-driven machines under 7,200 s) or pauses it |
+| `SAVES_DIR=<dir>` | where saves go instead of the player's folder; a scripted run (`QUIT_AFTER_SIM_SECONDS`) with none writes no autosave. `godothost.rkt` sets a temporary one |
 
 ## Traps already met
 
