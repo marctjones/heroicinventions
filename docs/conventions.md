@@ -63,8 +63,8 @@ Environment switches (all `HEROIC_*`):
 | `GOALS_REPORT=1` | print the bank crate's cover and the goals earned every 2 s of the scene's clock |
 | `SLEEP=<wake>` | sleep at load until the machine's named wake. A script step does it later: `sleep WAKE [live\|paused]` or `sleep until T.F above\|below V [limit S] [live\|paused]` (#207) |
 | `SLEEP_PHYSICS=1/0` | a sleep keeps the physics engine running (default for Jolt-driven machines under 7,200 s) or pauses it |
-| `SAVES_DIR=<dir>` | where saves go instead of the player's folder; a scripted run (`QUIT_AFTER_SIM_SECONDS`) with none writes no autosave. `godothost.rkt` sets a temporary one |
-| `HINTS=1/0`, `HINTS_RATE=<n>` | first-run hints (#98) on or off in a scripted run (they are off there by default); `HINTS_RATE` runs their waiting clocks n times faster (the rover hints wait 20 s to 6.5 min). `SETTINGS=<file>` keeps the retired list out of the player's settings |
+| `SAVES_DIR=<dir>` | where saves go instead of the player's folder; a scripted run (`QUIT_AFTER_SIM_SECONDS`, `INPUT`) with none writes no autosave and no rover log. The rover log (#217) is `<scene>.rover-log.txt` there (or in `user://saves` for a player), one line appended as it is made. `godothost.rkt` sets a temporary one |
+| `HINTS=1/0`, `HINTS_RATE=<n>` | first-run hints (#98) on or off in a scripted run (they are off there by default); `HINTS_RATE` runs their waiting clocks n times faster (the rover hints wait 20 s to about 6 min; at rate 1 a fixed-fps run counts game seconds, so it is the real threshold). `SETTINGS=<file>` keeps the retired list out of the player's settings |
 
 ## Traps already met
 

@@ -1,0 +1,8 @@
+;; A check for the rover's "a long sleep pauses the machines" hint (#216): the rover on the crater floor beside found-electrics (a windmill
+;; geared to a generator on a rigid rotor: a Jolt-driven machine), so a sleep over two hours has something to pause.
+(world rover-sleep-hint-check
+  (scenario (title "Rover sleep hint check") (description "For the hint check: a bank too big to fill in a sleep, so the call is not made.")
+    (tuning (bank-capacity 100)))
+  (map victoria)
+  (rover (at -80.0 -34.2) (heading 270))
+  (place mill found-electrics (at -94.0 0 -34.2)))

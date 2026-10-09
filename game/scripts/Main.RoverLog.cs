@@ -11,12 +11,12 @@ namespace HeroicInventions;
 /// the log is read off what the game already keeps, once a frame (<see cref="RoverLogTick"/>, from FrontEndTick): the last refusal
 /// (<c>_roverSaid</c>, the same text the panel shows and the "[rover] refused" print), the rover's own counters and arm phase
 /// (<c>Dug</c>, <c>Dumped</c>, <c>Rescues</c>, <c>PhaseName</c>), each bank's charge and temperature, and the sun's sol number. The log is of
-/// this session: a loaded save starts a new one, and it is not in the save file (the save format is the sim's).
+/// this session: a loaded save starts a new one, and it is not in the save file (the save format is the sim's). It is also written, line by line, to "<scene>.rover-log.txt" in the saves folder (#217).
 /// The achievements the design doc names (#68) are not here; when they exist, their earning is one more <see cref="AddLog"/> line.
 /// </summary>
 public partial class Main
 {
-    private sealed record LogEntry(int Sol, double Hour, string Kind, string Text);
+    private sealed record LogEntry(int Sol, double Hour, string Kind, string Text, double Time = 0);
 
     private readonly List<LogEntry> _roverLog = [];
     private WorldDef? _logWorld;                       // the world the log is of: a new one starts it again
@@ -34,11 +34,45 @@ public partial class Main
         return view is null ? (0, 0) : (view.Runtime.Sun.SolNumber, view.Runtime.Sun.Time);
     }
 
+    /// <summary>
+    /// The log file (#217): "&lt;scene&gt;.rover-log.txt" in the saves folder, beside the autosave (the same folder logic as <c>SavePath</c>,
+    /// HEROIC_SAVES_DIR included). Null in a scripted run with no HEROIC_SAVES_DIR, which must not write into the player's folder.
+    /// </summary>
+    private string? LogFilePath()
+    {
+        if (SaveName is null) return null;
+        string name = $"{SaveName}.rover-log.txt";
+        if (OS.GetEnvironment("HEROIC_SAVES_DIR") is { Length: > 0 } dir) return System.IO.Path.Combine(dir, name);
+        bool scripted = OS.GetEnvironment("HEROIC_QUIT_AFTER_SIM_SECONDS") is { Length: > 0 } || OS.GetEnvironment("HEROIC_INPUT") is { Length: > 0 }
+                        || OS.GetEnvironment("HEROIC_EDITOR_INPUT") is { Length: > 0 };
+        return scripted ? null : ProjectSettings.GlobalizePath($"{SavesDir}/{name}");
+    }
+
+    /// <summary>Appends one line to the file as it is made (so a crash or a quit loses nothing). A new log adds a session header; older sessions stay above it.</summary>
+    private void WriteLogFile(string line, bool newSession = false)
+    {
+        if (LogFilePath() is not { } path) return;
+        try
+        {
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+            string head = newSession ? $"# rover log of {SaveName}, session begun {DateTime.Now:yyyy-MM-dd HH:mm:ss} (times: sol, local solar hour, scene clock in seconds)\n" : "";
+            System.IO.File.AppendAllText(path, head + line + "\n");   // opened, written and closed: flushed
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            GD.PushError($"could not write the rover log {path}: {e.Message}");
+        }
+    }
+
     private void AddLog(string kind, string text)
     {
         var (sol, hour) = LogClock();
-        _roverLog.Add(new LogEntry(sol, hour, kind, text));
+        var view = _views.Count > 0 ? _views[0] : _current;
+        var entry = new LogEntry(sol, hour, kind, text, view?.Runtime.Time ?? 0);
+        bool first = _roverLog.Count == 0;
+        _roverLog.Add(entry);
         GD.Print($"[log] sol {sol} {MachineView.HoursText(hour)} {kind}: {text}");
+        WriteLogFile($"sol {sol} {MachineView.HoursText(hour)} t={entry.Time:0.0}s {kind}: {text}", first);
         if (_logText is not null && IsInstanceValid(_logText)) AppendLogLine(_logText, _roverLog[^1]);
     }
 
