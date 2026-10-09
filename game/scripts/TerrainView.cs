@@ -432,9 +432,12 @@ public partial class TerrainView : Node3D
     }
 
     /// <summary>A round contour interval, 1, 2 or 5 times a power of ten, giving about a dozen lines over the map's relief.</summary>
-    private float ContourInterval()
+    private float ContourInterval() => ContourIntervalOf(_ground);
+
+    /// <summary>The same interval for any ground, so the navigation map (NavMap.cs) draws the contours this view does.</summary>
+    public static float ContourIntervalOf(Terrain ground)
     {
-        double relief = Math.Max(_ground.Heights.Max() - _ground.Heights.Min(), 0.5);
+        double relief = Math.Max(ground.Heights.Max() - ground.Heights.Min(), 0.5);
         double raw = relief / 12, power = Math.Pow(10, Math.Floor(Math.Log10(raw)));
         double step = raw / power < 1.5 ? 1 : raw / power < 3.5 ? 2 : 5;
         return (float)(step * power);

@@ -1624,6 +1624,7 @@ public partial class Main : Node3D
     {
         if (_buildMode is not null) return; // build mode handles its own camera, keys and clicks
         if (FrontEndInput(@event)) return;   // a front-end page takes every key and click; I opens the rover log (Main.FrontEnd.cs, #95)
+        if (MarkersInput(@event)) return;   // M the map, T the next cargo area (Main.Markers.cs)
         if (RoverInput(@event)) return;   // the game: the rover's keys (Main.Rover.cs)
         if (!RoverIsPlayer && AimInput(@event)) return;   // dragging a mirror's spot, Alt+click, a click on the ground for a digger (Main.Aim.cs): a machine run's; the rover digs with its own backhoe
         if (!_joining)   // joining machines is building, free and of any reach (#204): its clicks are not the rover's hand
@@ -1740,7 +1741,7 @@ public partial class Main : Node3D
             case "pick": PrintPick(new Vector2(float.Parse(w[1]), float.Parse(w[2]))); return ScriptedInput.Step.Next;   // which part is drawn at that pixel (#151)
             case "pickworld": PrintPick(_camera.UnprojectPosition(new Vector3(float.Parse(w[1]), float.Parse(w[2]), float.Parse(w[3])))); return ScriptedInput.Step.Next;   // ... or where that point of the world is drawn
         }
-        return OperatorStep(w) ?? ClickStep(w) ?? AimStep(w) ?? RoverStep(w) ?? FrontEndStep(w) ?? BuildStep(w);   // aim spots and the digger (Main.Aim.cs); operate / waitsim (Main.Operator.cs), hovered (Main.Operate.cs)
+        return OperatorStep(w) ?? ClickStep(w) ?? AimStep(w) ?? RoverStep(w) ?? MarkerStep(w) ?? FrontEndStep(w) ?? BuildStep(w);   // aim spots and the digger (Main.Aim.cs); operate / waitsim (Main.Operator.cs), hovered (Main.Operate.cs)
     }
 
     public override void _Process(double delta)
@@ -1752,6 +1753,7 @@ public partial class Main : Node3D
         _environment.FogDepthBegin = d * _hazeReach;
         _environment.FogDepthEnd = d * _hazeReach * 6;
         _inputScript?.Process(delta);
+        MarkersProcess();   // the cargo areas, the bearing line, the map (Main.Markers.cs)
         OperateHoverTick(delta); OperatePanelTick();   // (in the game the tooltip says why the rover can't)
         if (!_fpsReport || (_fpsTimer += delta) < 2) return;
         _fpsTimer = 0;
