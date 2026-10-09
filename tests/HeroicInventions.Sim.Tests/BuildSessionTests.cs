@@ -874,6 +874,35 @@ public class BuildSessionTests
         Assert.Contains("#:cp 0.3 #:tip-speed-ratio 2.5 #:material bronze)", File.ReadAllText(rkt));
     }
 
+    /// <summary>The wind's heading on a windmill (issue #193) goes through the editor: set from the console, saved, exported to Racket, and read back from the export.</summary>
+    [Fact]
+    public void WindmillHeadingVaneAndVeerRoundTripThroughSaveAndRacketExport()
+    {
+        var session = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "mill");
+        session.Execute("(windmill sails #:at (0 10 0) #:radius 10 #:mass 1500 #:wind 6 #:wind-from-deg 30 #:facing-deg 100 #:vane #t #:yaw-rate 5 #:veer 12)");
+        session.Execute("(windmill plain #:at (30 10 0) #:radius 10 #:mass 1500 #:wind 6)");
+        string saved = Path.Combine(TempDir(), "mill.machine");
+        session.SaveFile(saved);
+        var def = MachineDef.Parse(File.ReadAllText(saved));
+        var part = def.Part("sails")!;
+        Assert.Equal(30, part.Number("wind-from-deg"));
+        Assert.Equal(100, part.Number("facing-deg"));
+        Assert.Equal(new SBool(true), part.Props["vane"]);
+        Assert.Equal(5, part.Number("yaw-rate"));
+        Assert.Equal(12, part.Number("veer"));
+        string rkt = RktExporter.Write(session.Document.ToMachineDef());
+        Assert.Contains("#:tip-speed-ratio 2.5 #:wind-from-deg 30 #:facing-deg 100 #:vane #t #:yaw-rate 5 #:veer 12 #:material", rkt);
+        // a mill left as built writes none of it: older exports are unchanged
+        Assert.Contains("(windmill plain #:at (30 10 0) #:radius 10 #:mass 1500 #:wind 6 #:load 0 #:cp 0.3 #:tip-speed-ratio 2.5 #:material bronze)", rkt);
+        // and the export reads back into the same mill
+        var again = new BuildSession(Materials, catalogue: [], machinesDir: TempDir(), name: "mill2");
+        again.Execute(rkt.Split('\n').First(l => l.TrimStart().StartsWith("(windmill sails")).Trim());
+        var back = again.Document.ToMachineDef().Part("sails")!;
+        Assert.Equal(30, back.Number("wind-from-deg"));
+        Assert.Equal(new SBool(true), back.Props["vane"]);
+        Assert.Equal(12, back.Number("veer"));
+    }
+
     /// <summary>
     /// A hearth isn't itself placeable from the palette (it needs a boiler
     /// or sealed vessel to heat), so this starts from the shipped

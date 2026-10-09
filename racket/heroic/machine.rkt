@@ -553,7 +553,12 @@
     (unless (and (real? (prop 'cp)) (> (prop 'cp) 0) (<= (prop 'cp) 16/27))
       (bad (format "#:cp must be above 0 and at most the Betz limit, 16/27 = 0.593 (no rotor takes more of the wind), got ~e" (prop 'cp))))
     (unless (and (real? (prop 'tip-speed-ratio)) (> (prop 'tip-speed-ratio) 0))
-      (bad (format "#:tip-speed-ratio must be above 0, got ~e" (prop 'tip-speed-ratio)))))
+      (bad (format "#:tip-speed-ratio must be above 0, got ~e" (prop 'tip-speed-ratio))))
+    (for ([k '(wind-from-deg facing-deg veer)] [w '("#:wind-from-deg" "#:facing-deg" "#:veer")])
+      (define v (assq k (part-props p)))
+      (unless (or (not v) (real? (cdr v))) (bad (format "~a is degrees (an azimuth from +x toward +z), got ~e" w (cdr v)))))
+    (let ([v (assq 'yaw-rate (part-props p))])
+      (unless (or (not v) (and (real? (cdr v)) (>= (cdr v) 0))) (bad (format "#:yaw-rate is degrees a second, 0 or more, got ~e" (cdr v))))))
   parts)
 
 (define (make-machine name source ambient sun planet-v weather-v items)
@@ -1895,6 +1900,16 @@
     ;; #:wind-from-map #t, in a world whose map has a wind field (#:wind in
     ;; define-map, issue #61), gives it the map's wind at its own place and
     ;; time of day instead of a fixed #:wind (then 0, until the world starts).
+    ;; The wind has a heading (issue #193): #:wind-from-deg, the azimuth it
+    ;; blows from, degrees from +x toward +z (default 90: from +z, where the
+    ;; sails face), turning #:veer degrees an hour (default 0); the sails face
+    ;; #:facing-deg (default 90). Only the wind along the axle goes through the
+    ;; disc, v cos(theta), so a fixed mill takes 1/2 rho A v^3 cos^3(theta) and
+    ;; nothing across the wind or with its back to it. #:vane #t puts a tail
+    ;; vane on it: it turns into the wind at #:yaw-rate degrees a second
+    ;; (default 2) -- a slow tail pole, tunable. A world map's wind may carry
+    ;; a heading of its own (corridor-wind #:heading-deg), which then overrides
+    ;; #:wind-from-deg for a #:wind-from-map mill.
     (pattern (windmill id:id
                        (~alt (~once (~seq #:at at:vec3))
                              (~once (~seq #:radius radius-v:expr))
@@ -1904,6 +1919,11 @@
                              (~optional (~seq #:load load-v:expr))
                              (~optional (~seq #:cp cp-v:expr))
                              (~optional (~seq #:tip-speed-ratio tsr-v:expr))
+                             (~optional (~seq #:wind-from-deg from-v:expr))
+                             (~optional (~seq #:facing-deg facing-v:expr))
+                             (~optional (~seq #:vane vane-v:expr))
+                             (~optional (~seq #:yaw-rate yaw-v:expr))
+                             (~optional (~seq #:veer veer-v:expr))
                              (~optional (~seq #:material mat:id))) ...)
       #:fail-unless (or (attribute wind-v) (attribute map-v)) "a windmill needs a #:wind (m/s), or #:wind-from-map #t"
       #:attr info (pinfo #'id 'windmill (attribute mat) '())
@@ -1911,7 +1931,13 @@
                           (list (cons 'radius radius-v) (cons 'mass mass-v) (cons 'wind (~? wind-v 0))
                                 (cons 'load (~? load-v 0)) (cons 'cp (~? cp-v 0.3))
                                 (cons 'tip-speed-ratio (~? tsr-v 2.5))
-                                (~@ . (~? ((cons 'wind-from-map (and map-v #t))) ())))
+                                (~@ . (~? ((cons 'wind-from-map (and map-v #t))) ()))
+                                ;; issue #193: only written when given, so every older windmill's file is unchanged
+                                (~@ . (~? ((cons 'wind-from-deg from-v)) ()))
+                                (~@ . (~? ((cons 'facing-deg facing-v)) ()))
+                                (~@ . (~? ((cons 'vane (and vane-v #t))) ()))
+                                (~@ . (~? ((cons 'yaw-rate yaw-v)) ()))
+                                (~@ . (~? ((cons 'veer veer-v)) ())))
                           '()
                           #,(loc-of this-syntax)))
 

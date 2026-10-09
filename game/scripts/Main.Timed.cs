@@ -4,7 +4,7 @@ namespace HeroicInventions;
 
 /// <summary>
 /// HEROIC_SET="target field value [at]; ...": what a test's hand does to a
-/// running machine. A setting with no time is applied before the first step;
+/// running machine (in a world, the first placed; "label:target" names another). A setting with no time is applied before the first step;
 /// one with a time waits in a queue until the run's clock reaches it, then is
 /// applied at the top of the next physics step -- the order SimHost's
 /// ApplyDue uses, so the same list means the same thing in both run paths
@@ -47,7 +47,9 @@ public partial class Main
             try
             {
                 // a person's hand on a rope or a wheel's drive is the view's to do (MachineView.Hooks.cs), the rest the runtime's
-                if (!_current.TrySetViewField(due.Target, due.Field, due.Value)) _current.Runtime.SetField(due.Target, due.Field, due.Value);
+                // in a world, "label:target" addresses another placed machine than the first (the found bank beside a vault, #211)
+                var (view, target) = due.Target.Split(':') is [var label, var part] && _byName.TryGetValue(label, out var placed) ? (placed, part) : (_current, due.Target);
+                if (!view.TrySetViewField(target, due.Field, due.Value)) view.Runtime.SetField(target, due.Field, due.Value);
                 if (due.Source is not null) LogOperatorAction(new Sim.Machines.OperatorAction(due.At, due.Target, due.Field, due.Value));
             }
             catch (Exception e) { SettingFailed($"'{due.Target} {due.Field} {due.Value} {due.At}': {e.Message}", due.Source is ReplaySource ? "HEROIC_ACTIONS" : "HEROIC_SET"); }

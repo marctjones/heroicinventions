@@ -22,6 +22,16 @@ namespace HeroicInventions.Sim.Mechanics;
 /// settle at λ = λ*(2 − τ_L/τ₀), τ₀ = ½ρAv²R·CpMax/λ*. Set the stones to
 /// τ₀ and they run at λ*, taking CpMax of the wind: power that grows as
 /// the cube of the wind speed.
+///
+/// The wind has a heading (issue #193): <see cref="WindFromDeg"/>, the azimuth it
+/// blows from, in degrees from +x toward +z (the map's convention). The sails
+/// face <see cref="FacingDeg"/>; both start at 90, +z, where every mill was built
+/// to face. Only the part of the wind along the axle goes through the disc, v·cos θ
+/// for θ the angle between them, so a fixed mill's power is ½ρAv³·cos³θ: cos θ in the
+/// speed, and the cube of it in the power. Across the wind (θ = 90°) or with its back
+/// to it (cos θ ≤ 0) it takes nothing. A mill with a <see cref="Vane"/> turns itself
+/// toward the wind at most <see cref="YawRate"/> degrees a second; without one it
+/// stays as built.
 /// </summary>
 public sealed class Windmill(string name, double radius, double momentOfInertia) : IShaft
 {
@@ -31,7 +41,25 @@ public sealed class Windmill(string name, double radius, double momentOfInertia)
     public string Name { get; } = name;
     public double Radius { get; } = radius;                   // m, hub to sail tip
     public double MomentOfInertia { get; } = momentOfInertia; // kg·m²
-    public double Wind { get; set; }                          // m/s through the sails
+    public double Wind { get; set; }                          // m/s of the wind itself
+    public double WindFromDeg { get; set; } = 90;             // azimuth the wind blows from (from +x toward +z); 90 = from +z
+    public double FacingDeg { get; set; } = 90;               // azimuth the sails face; 90 = +z
+    public bool Vane { get; init; }                           // a tail vane (or fantail) that yaws the sails into the wind
+    public double YawRate { get; init; } = 2;                 // deg/s the vane can turn the mill (a tail-pole mill is slow)
+    public double Veer { get; init; }                         // deg/hour the wind's heading turns (positive: from +x toward +z)
+    /// <summary>The angle from the sails' axis to the wind's, degrees, in (-180, 180].</summary>
+    public double MisalignmentDeg
+    {
+        get
+        {
+            double d = (WindFromDeg - FacingDeg) % 360;
+            return d > 180 ? d - 360 : d <= -180 ? d + 360 : d;
+        }
+    }
+    /// <summary>cos θ, the share of the wind's speed along the axle; none when the mill has its back to it.</summary>
+    public double AlignmentFactor => Math.Max(0, Math.Cos(MisalignmentDeg * Math.PI / 180));
+    /// <summary>The wind speed through the sails (m/s): v·cos θ.</summary>
+    public double ThroughWind => Wind * AlignmentFactor;
     public double Load { get; set; }                          // N·m the millstone resists with while turning
     public double AirDensity { get; set; } = Physics.AirDensity; // kg/m³: cold air is denser and carries more power
 
@@ -58,21 +86,28 @@ public sealed class Windmill(string name, double radius, double momentOfInertia)
 
     public double SweptArea => Math.PI * Radius * Radius;
     /// <summary>The wind's kinetic power through the swept disc, ½ρAv³, W.</summary>
-    public double WindPower => 0.5 * AirDensity * SweptArea * Wind * Wind * Wind;
-    public double TipSpeedRatioNow => Wind > 0 ? AngularVelocity * Radius / Wind : 0;
+    public double WindPower => 0.5 * AirDensity * SweptArea * ThroughWind * ThroughWind * ThroughWind;
+    public double TipSpeedRatioNow => ThroughWind > 0 ? AngularVelocity * Radius / ThroughWind : 0;
     /// <summary>The fraction of the wind's power the sails are taking.</summary>
     public double PowerCoefficient => WindPower > 0 ? Torque * AngularVelocity / WindPower : 0;
 
     /// <summary>The sails' torque at angular velocity ω in the current wind.</summary>
     public double TorqueAt(double omega)
     {
-        if (Wind <= 0) return 0;
-        double stall = 0.5 * AirDensity * SweptArea * Wind * Wind * Radius * CpMax / TipSpeedRatio;
-        return Math.Max(0, stall * (2 - omega * Radius / Wind / TipSpeedRatio));
+        double wind = ThroughWind;
+        if (wind <= 0) return 0;
+        double stall = 0.5 * AirDensity * SweptArea * wind * wind * Radius * CpMax / TipSpeedRatio;
+        return Math.Max(0, stall * (2 - omega * Radius / wind / TipSpeedRatio));
     }
 
     public void Step(double dt)
     {
+        if (Veer != 0) WindFromDeg += Veer / 3600 * dt;
+        if (Vane)
+        {
+            double step = YawRate * dt, d = MisalignmentDeg;
+            FacingDeg += Math.Abs(d) <= step ? d : Math.Sign(d) * step;
+        }
         Torque = TorqueAt(AngularVelocity);
         // the millstone holds still until the wind can turn it
         if (AngularVelocity <= 1e-9 && Torque <= Load) { AngularVelocity = 0; return; }

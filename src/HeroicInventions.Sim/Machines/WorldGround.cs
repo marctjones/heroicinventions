@@ -83,6 +83,7 @@ public sealed class WorldGround
             {
                 _fieldMills.Add((machine, mill, part.At));
                 mill.Wind = WindAt(machine, part.At);
+                HeadWind(machine, mill);
             }
         // tanks spill onto the ground under them, holes with nothing to catch them pour there, and drains take the
         // water standing over them into their tanks (#90): water crosses between the machine and the map, all of it counted
@@ -115,6 +116,12 @@ public sealed class WorldGround
     /// <summary>The map's wind at a point, at the machine's solar hour and seconds into its run.</summary>
     private double WindAt(MachineRuntime machine, Vec3 at) =>
         Ground.Wind!.SpeedAt(at.X, at.Z, machine.Sun.Time, machine.Sun.Sols * machine.Sun.SolLength);
+
+    /// <summary>A map that gives its wind a heading (and a veer, #193) turns every field mill's wind to it; without one the mill keeps its own.</summary>
+    private void HeadWind(MachineRuntime machine, Mechanics.Windmill mill)
+    {
+        if (Ground.Wind is { HeadingDeg: not null } w) mill.WindFromDeg = w.HeadingAt(machine.Sun.Sols * machine.Sun.SolLength);
+    }
 
     /// <summary>Water a tank lets go of onto the ground at a world point; off the map, it runs away (#90).</summary>
     private void PourOnto(double x, double z, double m3)
@@ -154,7 +161,7 @@ public sealed class WorldGround
             }
         }
         StepProfile.Stop("ground-settle", t);
-        foreach (var (machine, mill, at) in _fieldMills) mill.Wind = WindAt(machine, at);
+        foreach (var (machine, mill, at) in _fieldMills) { mill.Wind = WindAt(machine, at); HeadWind(machine, mill); }
         t = StepProfile.Start();
         Water.Step(dt);
         StepProfile.Stop("ground-water", t);

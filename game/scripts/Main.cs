@@ -129,6 +129,7 @@ public partial class Main : Node3D
         ["suction-limit"] = new(new Vector3(3.6f, 6.9f, 16f), new Vector3(3.6f, 6.7f, 0), 50),
         ["bellows-forge"] = new(new Vector3(1.2f, 1.1f, 2.2f), new Vector3(0, 0.5f, 0), 45),
         ["windmills"] = new(new Vector3(0, 9f, 46f), new Vector3(0, 8f, 0), 50),
+        ["wind-heading"] = new(new Vector3(0, 12f, 100f), new Vector3(0, 8f, 0), 50),
         ["capstans"] = new(new Vector3(0, 2.6f, 7.5f), new Vector3(0, 1.6f, 0), 50),
         ["steam-engines-mars"] = new(new Vector3(0.4f, 2.4f, 10f), new Vector3(0.4f, 1.0f, 0), 55),
         ["mars-stirling"] = new(new Vector3(0, 14f, 34f), new Vector3(0, 0.8f, 0), 55),
@@ -269,6 +270,7 @@ public partial class Main : Node3D
         ["heading-rig"] = "Parts at a Heading",
         ["bellows-forge"] = "Bellows and Forced Draught",
         ["windmills"] = "Windmills and the Betz Limit",
+        ["wind-heading"] = "Windmills and the Wind's Heading",
         ["capstans"] = "Capstans: Rope Friction on a Post",
         ["rope-over-bars"] = "Rope over a Fixed Bar",
         ["drop-test"] = "Drop Test: Impacts and Restitution",
@@ -407,6 +409,7 @@ public partial class Main : Node3D
         ["rope-over-bars"] = "Four fixed oak bars, each with a 173 kg granite block on one side of a hemp rope and a smaller one on the other. Where the rope drags over a bar, the tight side can carry up to e^(mu theta) times the slack side (the capstan equation): 4.44 over half a turn, 87 over a turn and a half. Left to right: half a turn with 21.6 kg (95.9 kg's worth, too little: the rope slides, the pair accelerate at 2.81 m/s2 and the bar glows), half a turn with 72.9 kg (holds), a turn and a half with 0.93 kg (81 kg's worth: slides at 3.57 m/s2), and with 2.7 kg (236 kg's worth: holds). The label over each bar gives its two tensions.",
         ["bar-crane"] = "The Roman crane with its pulley swapped for a fixed oak bar, as ropes ran over beam ends before sheaves. The rope turns 129 degrees over the bar, so lifting, the drum side must pull e^(mu theta) = 2.91 times the stone's 5.7 kN. Two walkers, who lift the stone over a pulley, now pull 6.2 kN at the drum and only 2.1 kN reaches the stone: it stays on the ground. Seven walkers lift it at the wheel's 3 rpm, the drum side carrying 16.7 kN, and the bar glows with the friction's heat.",
         ["capstans"] = "Three oak bollards, each with 200 kg hanging a metre below on a hemp rope, and a sailor holding the other end with 100 N. Friction where rope slides on a post takes off tension in proportion to the tension there, so round the post it falls off exponentially: the tight end carries e^(mu theta) times the slack one (the capstan equation, Euler 1762). Hemp on oak, mu = 0.474. Half a turn multiplies the pull by 4.4 - 444 N, not the load's 1962 N, so it runs out and falls. One turn multiplies it by 19.7 - just enough. Two turns by 388: 5 N would hold it. Try one-turn.hold 99, or haul in over half a turn with half-turn.hold 10000.",
+        ["wind-heading"] = "Four post mills in one 6 m/s wind, all built facing +z; the bright arrow over each is the way its wind blows. Only the wind along the axle goes through the sails, v cos(theta), so a fixed mill takes 1/2 rho A v^3 cos^3(theta). Square on it takes 12.26 kW. The second has the wind 60 degrees off: cos^3 60 = 1/8, so 5.11 kW goes through its sails and, with its stones set for the 3 m/s it gets, 1.53 kW comes out. The third has the same wind and a tail vane, which swings the sails round at 2 degrees a second; once square on (30 s) it takes the full 12.26 kW. The fourth stands edge-on to the wind (cos 90 = 0) and takes nothing. A poor choice stays yours: nothing stops a mill being built across the wind.",
         ["windmills"] = "Two post mills, sails 10 m from hub to tip. The wind carries 1/2 rho A v^3 through the disc they sweep; the sails take a share of it, Cp, that depends on how fast their tips run for the wind - most, 0.3 here, at 2.5 times its speed. No rotor can take more than 16/27 (Betz, 1919): the air behind it has to keep moving. Each miller sets the stones to hold the sails at that best speed: the left, in a 6 m/s breeze, turns at 14.3 rpm and grinds with 12.3 kW; the right, in a 9 m/s wind, at 21.5 rpm with 41.4 kW. Half again the wind, (1.5)^3 = 3.4 times the power. Set the right one's stones light (gale.load 8171) and it races to 33 rpm but takes only 0.21 of the wind.",
         ["bellows-forge"] = "Two forges, each 1 kg of wood at 5 kW. The left burns on its own draught: its steady burn already draws power / density x wood's 6:1 air-fuel ratio, 2 g/s of air, and takes 3000 s to burn the kilogram out. The right has a bellows forcing in 5 L/s more (air's density, 1.204 kg/m3, makes that 6.02 g/s) — 4.01x the air, so 4.01x the burn rate, out in 748 s. Both give up the same 15 MJ; the bellows only ever buys speed, not heat.",
         ["ball-ramp"] = "Two balls roll down a 2 m limestone ramp at 15 degrees: a 12 cm iron one from 1.5 m up the slope and a 6 cm bronze one from 0.5 m. A solid sphere puts 2/7 of the energy it loses into turning, so both gain speed at 5/7 g sin 15 = 1.81 m/s2, whatever their size or mass, where a sliding block would have 2.54. The big ball arrives after 1.29 s at 2.33 m/s, turning at 38.9 rad/s without slipping.",
@@ -867,6 +870,7 @@ public partial class Main : Node3D
         if (_editButton is not null) _editButton.Visible = false;
         if (_joinButton is not null) _joinButton.Visible = false;
         ClearLinks();
+        ClearZones();   // other machines' stores go back to their own air (Main.Zones.cs, #211)
         ClearRover();   // the player's rover goes with its world (Main.Rover.cs)
         ClearGround();
         // out of the tree now, not at the frame's end: a world loaded straight after (a save's load) names its views by
@@ -1754,6 +1758,7 @@ public partial class Main : Node3D
             _scriptedSavePath = null;
         }
         if (_running && !_sleep.Active) PreStepHand();   // a hand holding a body sets its target for this step (Main.Drag.cs)
+        if (_views.Count > 0 && (_running || _sleep.Active)) UpdateZones();   // who holds whose heat store, from where they are now (Main.Zones.cs, #211)
         if (_sleep.Active && !_sleep.Live)
             _sleep.Advance(SleepBudgetMs);    // sleeping: run ahead as fast as it can, in place of stepping in real time
         else if (_running && _views.Count > 0)

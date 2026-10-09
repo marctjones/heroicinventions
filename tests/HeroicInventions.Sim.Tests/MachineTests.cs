@@ -55,6 +55,7 @@ public class MachineFileTests
     [InlineData("tank-leaks")]
     [InlineData("sluice-demo")]
     [InlineData("windmills")]
+    [InlineData("wind-heading")]
     [InlineData("water-wheels")]
     [InlineData("boiler-safety")]
     [InlineData("bellows-forge")]
