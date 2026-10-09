@@ -2865,7 +2865,7 @@
 ;; The map's own numbers are checked in tests/HeroicInventions.Sim.Tests/CraterTests.cs; here the game
 ;; plays them: the weakened rim comes down on screen over a few seconds and buries the cargo at its foot,
 ;; and two mills on the floor each take the wind of the field where they stand.
-(test-case "The crater's opening (Jolt): the weakened rim comes down over about four seconds, buries the cargo as deep as its distance from the cliff, and leaves boulders, one on the battery bank; the same each run"
+(test-case "The crater's opening (Jolt): the weakened rim comes down over about four seconds, buries the cargo as deep as its distance from the cliff, and leaves boulders, one over the solar-panels crate and none on the battery bank; the same each run"
   (when (godot-available?)
     (define (run-it) (godot-simulate-world 'lonely-rover-opening #:seconds 40 #:sample-dt 1))
     (define world (run-it))
@@ -2892,7 +2892,7 @@
         (when (> cover (* 0.25 s))
           (check-= (field f 'crate.pull-out) (pull cover 90) (* 0.01 (pull cover 90)) (format "~a: the pull to free it" c)))
         cover))
-    ;; the nearer the cliff's foot, the deeper the rubble over it: the solar-panels crate (254.6, 147) is under 2.17 m, the gas cylinders
+    ;; the nearer the cliff's foot, the deeper the rubble over it: the solar-panels crate, moved by the owner's ruling of 2026-10-09 to (265.75, 143.5) under a boulder, is under 2.15 m (2.17 m at (254.6, 147)), the gas cylinders
     ;; (249.4) under 0.29 m; the bank, moved by the owner's ruling of 2026-10-09 to (254.5, 137.9), is under 1.04 m (predicted from a scan of
     ;; crates 1 m apart along the line: the rubble thins 0.39 m per metre, 1.24 m at x = 255 and 0.83 at 254)
     (check-true (> (second covers) (third covers)) (format "covers fall away from the cliff: ~a" covers))
@@ -2918,6 +2918,21 @@
         (define d (sqrt (+ (sqr (- (boulder i 'x) (field bank 'crate.x))) (sqr (- (boulder i 'z) (field bank 'crate.z))))))
         (if (or (not best) (< d (car best))) (cons d i) best)))
     (check-true (> (car nearest) 5.0) (format "boulder ~a lies ~a m from the battery bank: none on it" (cdr nearest) (car nearest)))
+    ;; owner ruling 2026-10-09: a boulder rests over a crate the win does not need (not the bank, not the motors), so that undermining it and a
+    ;; lever stay reachable: boulder 4 (265.75, 141.72) lies 1.78 m (x-z) from the solar-panels crate (265.75, 143.5), which is held under 2.15 m
+    (define solar (last (hash-ref world 'solar-panels)))
+    (define (xz-from-solar i) (sqrt (+ (sqr (- (boulder i 'x) (field solar 'crate.x))) (sqr (- (boulder i 'z) (field solar 'crate.z))))))
+    (define over-solar (argmin xz-from-solar (range 1 (+ n 1))))
+    (check-= (xz-from-solar over-solar) 1.78 0.1 (format "boulder ~a lies over the solar-panels crate" over-solar))
+    (check-true (< (xz-from-solar over-solar) 1.8) "its centre within 1.8 m of the crate's")
+    (check-= (field solar 'crate.cover) 2.15 0.15 "the crate is under about 2 m, as the cargo was before the move")
+    (check-= (field solar 'crate.buried) 1 0 "and held")
+    (check-= (* 2700 (expt (boulder over-solar 'size) 3)) 21600 1 "kg: a 21.6 t cube over the crate, too big for a backhoe")
+    (for ([c '(gas-cylinders hand-tools motors)])
+      (define f (last (hash-ref world c)))
+      (check-true (> (for/fold ([m 1e9]) ([i (in-range 1 (+ n 1))]) (min m (sqrt (+ (sqr (- (boulder i 'x) (field f 'crate.x))) (sqr (- (boulder i 'z) (field f 'crate.z)))))))
+                     4.0)
+                  (format "no boulder rests near ~a" c)))
     (define mass (* 2700 (expt (boulder (cdr nearest) 'size) 3)))
     (check-= mass 21600 1 "kg: too big for a backhoe")
     (check-true (> mass 5000) "far over what a rover-mounted backhoe lifts")

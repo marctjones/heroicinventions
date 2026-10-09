@@ -106,13 +106,17 @@
     ;; the two allowed actions are in the operator log, the refused ones are not (the log is the replayable record)
     (check-equal? (length (lines-with lines "[operate]")) 2 "tap 1 and water 0 only"))
 
-  (test-case "the 21.6 t boulder nearest the battery bank can't be lifted or dragged: refused with its mass, and it does not move"
-    ;; the opening's slide has come down and settled by 3000 frames (25 s); the boulder nearest the battery bank (6.4 m from its crate in this run:
-    ;; none came to rest on it, the opening's own check #61 owns that) is 21.6 t of granite; the refusal is by its mass, wherever it lies
+  (test-case "the 21.6 t boulder resting over the solar-panels crate can't be lifted or dragged: refused with its mass, and it does not move"
+    ;; the opening's slide has come down and settled by 3000 frames (25 s); the boulder nearest the solar-panels crate (1.78 m from its centre in x-z,
+    ;; owner ruling 2026-10-09: a boulder rests on a crate the win does not need, so undermining and levers stay reachable; none rests on the battery
+    ;; bank, which the opening's own check #61 owns) is 21.6 t of granite; the refusal is by its mass, wherever it lies
     (define lines
       (run-game "lonely-rover-opening"
-                (string-append "wait 3000; rover nearboulder battery-bank:crate 1.0; wait 60; rover body boulder:last;"
+                (string-append "wait 3000; rover nearboulder solar-panels:crate 1.0; wait 60; rover body boulder:last;"
                                " rover press boulder:last; wait 120; rover body boulder:last; quit")))
+    (define near (first (lines-with lines "[rover] nearboulder")))
+    (check-true (string-contains? near "boulder-4: 21.6 t") near)
+    (check-true (string-contains? near "from solar-panels:crate") near)
     (define why (refusals lines))
     (check-equal? (length why) 1)
     (check-true (string-prefix? (first why) "Too heavy for the rover's arm: 21.6 t") (first why))
