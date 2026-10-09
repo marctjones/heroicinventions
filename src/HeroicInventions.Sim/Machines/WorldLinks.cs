@@ -290,9 +290,41 @@ public sealed class WorldLinks
                 link = new Link { Spec = spec, Unfinished = e.Message };
             }
             w._links.Add(link);
-            w.Register(link);
         }
+        w.FindLinkedPrimeMovers(machine);       // before the wires' fields are named by their sources
+        foreach (var link in w._links) w.Register(link);
         return w;
+    }
+
+    private readonly List<Generator> _linkedPrimes = [];
+
+    /// <summary>
+    /// GAP 9: a generator whose own machine has no prime mover on its train (a salvaged motor in a crate machine) but whose train a shaft
+    /// link joins to another machine's is driven by that machine's prime mover: it files its charge under that name (wind, not shaft), reads
+    /// that part's speed (so Gear up sees the ratio), and has the whole train's ratio and losses for a paused sleep's estimate. Through a
+    /// link the To end turns at Ratio × the From end's speed. One link is crossed; a generator named by #:driven-by keeps its name.
+    /// </summary>
+    private void FindLinkedPrimeMovers(Func<string, MachineRuntime?> machine)
+    {
+        foreach (var link in _links)
+        {
+            if (link.Shaft is null) continue;
+            var spec = link.Spec;
+            foreach (var (end, other, k) in new[] { (spec.To, spec.From, 1 / spec.Ratio), (spec.From, spec.To, spec.Ratio) })   // k = ω_other / ω_end
+            {
+                if (machine(end.Label) is not { } rt || machine(other.Label) is not { } far || ReferenceEquals(rt, far)) continue;
+                foreach (var (id, gen) in rt.Generators)
+                {
+                    if (gen.Prime is not null || gen.LinkedPrime is not null || gen.DrivenByNamed) continue;
+                    if (!rt.TrainOf(rt.GeneratorShaft(id)).TryGetValue(end.Part, out var near) || !(near.Ratio > 0)) continue;
+                    if (far.PrimeMoverFrom(other.Part) is not { } prime || !(k > 0) || !double.IsFinite(k)) continue;
+                    // ω_end = near.Ratio ω_rotor, ω_other = k ω_end, ω_other = prime.Ratio ω_prime: ω_rotor / ω_prime = prime.Ratio / (k near.Ratio)
+                    gen.LinkedPrime = prime with { Ratio = prime.Ratio / (k * near.Ratio), Eta = prime.Eta * near.Eta };
+                    _linkedPrimes.Add(gen);
+                    if (gen.Bank is { } own && gen.Wired is null) rt.ShowSource(own, gen.DrivenBy);
+                }
+            }
+        }
     }
 
     private Link BuildPipe(LinkSpec spec, Func<string, MachineRuntime?> machine)
@@ -332,6 +364,8 @@ public sealed class WorldLinks
     {
         foreach (var g in _wired) g.Wired = null;
         _wired.Clear();
+        foreach (var g in _linkedPrimes) g.LinkedPrime = null;
+        _linkedPrimes.Clear();
     }
 
     private static (Tank Tank, double Elevation) Port(LinkSpec spec, LinkEnd end, Func<string, MachineRuntime?> machine)
