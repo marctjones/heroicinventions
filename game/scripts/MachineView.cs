@@ -149,7 +149,9 @@ public partial class MachineView : Node3D
         Pass(BuildMirrors);
         Pass(BuildPumps);
         Pass(BuildPistonDrives);
+        Pass(BuildSealedAir);   // the air tube, and the air over the water, in sealed vessels (MachineView.Stacks)
         Pass(BuildGauges);   // after the boilers, cylinders, tanks and rooms it sits on (#170)
+        Pass(BuildHeadMarks);   // "falls h" and "lifts about h" on a jet that sealed air throws (MachineView.Stacks)
         Pass(BuildCarriedWheels);
         Pass(BuildMillstones);
         Pass(BuildAxleFriction);
@@ -309,8 +311,8 @@ public partial class MachineView : Node3D
     {
         float side = Mathf.Sqrt((float)part.Number("area"));
         float height = (float)part.Number("height");
-        var shell = Shapes.Box(new Vector3(side, height, side),
-                               Shapes.Glass());
+        bool cut = IsCutAway(part);   // sealed or stacked: its near walls are cut away so the water and the air in it show (MachineView.Stacks)
+        var shell = Shapes.Box(new Vector3(side, height, side), cut ? CutAwayGlass() : Shapes.Glass());
         shell.Position = V(part.At) + new Vector3(0, height / 2, 0);
         AddChild(shell);
         // an iron frame on its twelve edges: a glass box reads as a vessel, not as a ghost of one, at any size and
@@ -325,7 +327,7 @@ public partial class MachineView : Node3D
                 shell.AddChild(Shapes.Rod(new Vector3(b * hs, a * hh, -hs), new Vector3(b * hs, a * hh, hs), e, frame));   // along Z, top and bottom
             }
 
-        Skins.HoopTank(shell, side, height, Surface("iron"));   // iron hoops, a few by its height (#102)
+        Skins.HoopTank(shell, side, height, Surface("iron"), openFront: cut);   // iron hoops, a few by its height (#102)
         Graduate(shell, part.Id, side / 2, side / 2, -height / 2, height, side * side);   // a scale on the wall, amber where the machine watches the level (#174)
 
         // nearly opaque: water held in a vessel must read against a pale sky through its glass (readable first)
@@ -345,7 +347,12 @@ public partial class MachineView : Node3D
             AddLabel(part.Id, new Vector3(0, height / 2 + 0.06f, 0), shell);
             return;   // it hangs on its rope, not on a post
         }
-        AddLabel(part.Id, V(part.At) + new Vector3(0, height + 0.06f, 0));
+        // in a stack the name is written on the front of its own vessel, up in the air over the water, clear of the pipes
+        // at its sides; an open tank at the top of one has it over the rim, off to the left of the jet
+        AddLabel(part.Id, V(part.At) + (!InStack(part) ? new Vector3(0, height + 0.06f, 0)
+                                       : Runtime.Tanks[part.Id].Air is null ? new Vector3(-side * 0.3f, height + 0.05f, 0)
+                                       : new Vector3(0, height - 0.03f, side / 2 + 0.005f)));
+        if (TankBelow(part) is not null) { AddNeckPosts(part); return; }   // it rests on the vessel below, not on the ground
 
         // A tank raised above the ground (Heron's fountain's three
         // vessels all are) otherwise just floats in mid-air with nothing
@@ -493,8 +500,15 @@ public partial class MachineView : Node3D
         var bronze = Surface("iron");   // dark, so the water dashes riding it read and the pipe stands off a pale ground (#171)
         var from = PortPosition(pipe.From);
         var to = PortPosition(pipe.To);
-        AddChild(Shapes.Rod(from, to, PipeBore, bronze));
-        BuildPipeFlow(pipe, from, to);   // dashes that ride it with the flow (#171)
+        float bore = PipeBore;
+        var route = new List<Vector3> { from, to };
+        if (ColumnRoute(pipe, from, to) is { } column) (route, bore) = column;   // up a stack: round the vessels in the way (MachineView.Stacks)
+        for (int i = 0; i + 1 < route.Count; i++)
+        {
+            AddChild(Shapes.Rod(route[i], route[i + 1], bore, bronze));
+            BuildPipeFlow(pipe, route[i], route[i + 1], bore);   // dashes that ride it with the flow (#171)
+            if (i > 0) { var elbow = Shapes.Sphere(bore * 1.1f, bronze); elbow.Position = route[i]; AddChild(elbow); }
+        }
         if (!pipe.Jet) return;
 
         // Thicker and brighter than the still water elsewhere, with a
@@ -505,7 +519,7 @@ public partial class MachineView : Node3D
         jetMat.EmissionEnabled = true;
         jetMat.Emission = new Color(0.3f, 0.7f, 1.0f);
         jetMat.EmissionEnergyMultiplier = 0.6f;
-        var jet = Shapes.Cylinder(0.016f, 1, jetMat);
+        var jet = Shapes.Cylinder(Mathf.Min(0.016f, bore * 0.8f), 1, jetMat);   // never fatter than the nozzle it leaves
         AddChild(jet);
         _jets.Add((Runtime.Pipes[pipe.Id], to, jet));
     }
@@ -1684,6 +1698,8 @@ public partial class MachineView : Node3D
         DrawFloats();
         DrawSluiceBoxes();
         DrawProducts();
+        DrawSealedAir();
+        DrawHeadMarks();
         DrawGauges();   // last: a room's dial follows its walls
     }
 
