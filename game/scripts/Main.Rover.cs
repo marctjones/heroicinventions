@@ -12,7 +12,8 @@ namespace HeroicInventions;
 /// a world that has one, for tests that need the old behaviour.
 ///
 /// The side panels show the rover (#196): the right panel its speed, nose and tilt, its arm and bucket and what it last refused; the
-/// left panel only what the rover can do (sleep until, save and load, menu, speed). Editing and joining machines are build mode's.
+/// left panel only what the rover can do (sleep until, save and load, menu, speed), and building (#204: a new machine, joining
+/// machines, and editing the machines the player built; Main.Build.cs). The found cargo can't be rebuilt.
 ///
 /// Keys: arrows or W A S D drive (forward, back, turn); B runs the backhoe's dig-and-dump; Shift+arrows orbit the camera, + and -
 /// (or Page Up / Down) zoom it, Home puts it back behind the rover; the mouse orbits and zooms as everywhere.
@@ -129,6 +130,7 @@ public partial class Main
         if (!RoverIsPlayer) return false;
         var rover = _rover!;
         rover.Frozen = !_running;
+        if (_buildMode is not null) { rover.Command = (0, 0); return true; }   // build mode has the keys and its own camera (#204): the rover stands
         bool free = !Typing() && !Input.IsKeyPressed(Key.Ctrl) && !Input.IsKeyPressed(Key.Meta) && !Input.IsKeyPressed(Key.Alt);
         double forward = 0, turn = 0;
         float dt = (float)delta;
@@ -229,7 +231,8 @@ public partial class Main
         var r = _rover;
         // Main re-shows these when it focuses a machine or folds the menu; keep them away while the rover is the player
         foreach (var c in _roverHidden.Keys) if (IsInstanceValid(c) && c.Visible) c.Visible = false;
-        _editButton.Visible = _joinButton.Visible = false;   // (not restored: ClearWorld and LoadWorld own these two)
+        _editButton.Visible = false;   // (not restored: ClearWorld and LoadWorld own these two) a built machine is edited from the Build section (Main.Build.cs)
+        _joinButton.Visible = true;    // joining machines is building: free and of any reach (#204)
         _roverState!.Text = $"{(_running ? "Running" : "Paused")} · time ×{_timeScale:0.##}";
         _roverDrive!.Text = $"{r.Speed:0.0} m/s · nose {r.PitchDeg:+0;-0;0}° · tilt {r.TiltDeg:0}°";
         _roverArm!.Text = $"{r.ArmStatus}\nReaches {Rover.ArmReach:0.0} m · pushes up to {RoverSpec.PushForce(r.GroundGravity) / 1000:0.0} kN · never lifts a load. B digs and dumps.";

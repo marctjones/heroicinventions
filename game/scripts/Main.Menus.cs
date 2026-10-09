@@ -166,11 +166,15 @@ public partial class Main
         m.Add("Build Mode", SelectBuildMode);
         m.Popup.AddSeparator();
         int edit = m.Add("Edit This Machine", EditFocused);
+        int build = m.Add("Build a New Machine", () => StartNewBuild(null));   // in a world (#204, Main.Build.cs)
         int join = m.Add("Join Machines", () => SetJoining(!_joining));
 
         m.Popup.AboutToPopup += () =>
         {
-            m.Enable(edit, _views.Count > 0 && _buildMode is null);
+            // in the game only a machine the player built can be rebuilt: the cargo was found (#204)
+            m.Enable(edit, _views.Count > 0 && _buildMode is null
+                           && (!RoverIsPlayer || _world?.Placements.Any(p => p.Label == _current?.Name && p.Built is not null) == true));
+            m.Enable(build, _world is not null && _buildMode is null);
             m.Enable(join, _world is not null);
             m.Label(join, _joining ? "Stop Joining" : "Join Machines");
         };

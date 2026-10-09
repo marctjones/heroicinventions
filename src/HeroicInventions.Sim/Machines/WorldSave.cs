@@ -46,6 +46,13 @@ public sealed class WorldSave
     /// <summary>The rover itself (issue #201): <c>(rover 1 (chassis …) (wheel K …) (drive …) (bucket …) (arm …))</c>, which the game reads back; or null. An older save has none, and the world file's rover stands where it puts it.</summary>
     public SList? Rover { get; init; }
 
+    /// <summary>
+    /// The machines the player built in the world (issue #204), each whole as it stood at the save: <c>(build LABEL (at x y z) (machine …))</c>,
+    /// the same form a world file takes (<see cref="WorldDef.BuiltForm"/>). Loading places them again, after the world file's own, before the
+    /// running state is laid on, so their state comes back by label like any other machine's. An older save has none.
+    /// </summary>
+    public IReadOnlyList<Placement> Built { get; init; } = [];
+
     /// <summary>Everything the person (or a demo operator, or a replay) has done to the run so far (issue #153), in order; empty when nothing was done.</summary>
     public IReadOnlyList<OperatorAction> Operated { get; init; } = [];
     /// <summary>True once the person has taken a control: a blueprint's demo operator stays stopped after loading.</summary>
@@ -66,6 +73,8 @@ public sealed class WorldSave
             if (m.View is { } v) parts.Add(v);
             items.Add(new SList(parts));
         }
+        // a built machine's own clauses are kept on its one line (the line breaks below are for the save's top-level forms only)
+        for (int i = 0; i < Built.Count; i++) items.Add(new SSymbol($"@build-{i}@"));
         if (Operated.Count > 0 || OperatorTaken)
             items.Add(new SList([new SSymbol("operator-log"), .. (OperatorTaken ? [new SList([new SSymbol("taken"), new SBool(true)])] : Array.Empty<SExpr>()),
                                  .. Operated.Select(a => (SExpr)OperatorLog.ToForm(a))]));
@@ -86,8 +95,10 @@ public sealed class WorldSave
                 new SList([new SSymbol("when"), .. s.Plan.Terms.Select(Term)]),
                 new SList([new SSymbol("events"), .. s.Plan.Events.Select(Term)])]));
         }
-        return ";; A saved world. Loading rebuilds the machines from their own files and lays this running state on them.\n"
-               + SExprWriter.Print(new SList(items)).Replace(" (machine ", "\n  (machine ").Replace(" (sleep ", "\n  (sleep ").Replace(" (operator-log ", "\n  (operator-log ").Replace(" (links ", "\n  (links ").Replace(" (ground ", "\n  (ground ").Replace(" (boulders ", "\n  (boulders ").Replace(" (worked ", "\n  (worked ").Replace(" (rover ", "\n  (rover ").Replace(" (goals ", "\n  (goals ") + "\n";
+        string text = SExprWriter.Print(new SList(items)).Replace(" (machine ", "\n  (machine ").Replace(" (sleep ", "\n  (sleep ").Replace(" (operator-log ", "\n  (operator-log ").Replace(" (links ", "\n  (links ").Replace(" (ground ", "\n  (ground ").Replace(" (boulders ", "\n  (boulders ").Replace(" (worked ", "\n  (worked ").Replace(" (rover ", "\n  (rover ").Replace(" (goals ", "\n  (goals ");
+        for (int i = 0; i < Built.Count; i++) text = text.Replace($" @build-{i}@", "\n  " + SExprWriter.Print(WorldDef.BuiltForm(Built[i])));
+        return ";; A saved world. Loading rebuilds the machines from their own files (and a machine the player built from its own (build …) form) and lays this running state on them.\n"
+               + text + "\n";
     }
 
     public static WorldSave Parse(string text)
@@ -115,6 +126,7 @@ public sealed class WorldSave
         }
         return new WorldSave { Kind = Sym("kind"), Name = Sym("name"), Machines = machines, Sleep = sleep, Ground = root.Field("ground")?.Items.ElementAtOrDefault(1) as SList, Boulders = root.Field("boulders"), Worked = root.Field("worked"), Rover = root.Field("rover"), Goals = root.Field("goals"),
             Links = root.Field("links") is { } lk ? lk.Items.Skip(2).OfType<SList>().Where(x => x.Head == "link").Select(LinkForms.FromForm).ToList() : null,
+            Built = root.Fields("build").Select(b => WorldDef.ParseBuilt(b, "<save>")).ToList(),
             Operated = (root.Field("operator-log")?.Items.Skip(1) ?? []).Select(OperatorLog.FromForm).OfType<OperatorAction>().ToList(),
             OperatorTaken = root.Field("operator-log")?.Field("taken")?.Items.ElementAtOrDefault(1) is SBool { Value: true } };
     }

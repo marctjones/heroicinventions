@@ -223,7 +223,7 @@ public partial class BuildMode : Node3D
         BuildEntries(catalogue);
 
         BuildUi();
-        BuildGrid();
+        if (GroundHeight is null) BuildGrid();   // on a map the ground is the bench (#37); a grid round the map's origin would float far off
         _camera = new Camera3D { Fov = 50 };
         AddChild(_camera);
         _camera.MakeCurrent();
@@ -249,7 +249,7 @@ public partial class BuildMode : Node3D
         }
         Redraw();
 
-        if (Live) FrameAll();
+        if (Live && _session.Document.Parts.Count > 0) FrameAll();
 
         string script = OS.GetEnvironment("HEROIC_EDITOR_INPUT");
         if (!string.IsNullOrEmpty(script)) _inputScript = new ScriptedInput("BuildMode", script, this, () => _orbit, EditorStep);
@@ -709,46 +709,35 @@ public partial class BuildMode : Node3D
         {
             // One unfinished part (a mirror not yet aimed at anything) used to
             // stop the whole machine being drawn. Set such parts aside one at a
-            // time, naming what each still needs, and draw the rest for real.
-            var working = EditorDocument.Load(doc.ToMachineDef());
-            for (int attempt = 0; attempt <= doc.Parts.Count && working.Parts.Count > 0; attempt++)
+            // time, naming what each still needs, and draw the rest for real
+            // (BuildSession.Buildable, which the game also builds a player's machine with, #204).
+            BuildSession.Buildable(doc.ToMachineDef(), def =>
             {
+                if (Live)
+                {
+                    // rebuild the running machine only if the design really changed
+                    string text = MachineWriter.Write(def);
+                    _preview = text == _lastApplied ? _liveView!() : _applyLive!(def);
+                    _lastApplied = text;
+                    return;
+                }
                 try
                 {
-                    if (Live)
-                    {
-                        // rebuild the running machine only if the design really changed
-                        var def = working.ToMachineDef();
-                        string text = MachineWriter.Write(def);
-                        _preview = text == _lastApplied ? _liveView!() : _applyLive!(def);
-                        _lastApplied = text;
-                        break;
-                    }
-                    var view = new MachineView(new MachineRuntime(working.ToMachineDef(), _materials), _materials)
+                    var view = new MachineView(new MachineRuntime(def, _materials), _materials)
                     {
                         ProcessMode = ProcessModeEnum.Disabled, // out of physics: a frozen snapshot of what will run
                     };
                     AddChild(view);
                     view.SetFrozen(true);
                     _preview = view;
-                    break;
                 }
-                catch (Exception e)
+                catch
                 {
-                    if (!Live) _preview?.QueueFree();
+                    _preview?.QueueFree();
                     _preview = null;
-                    string? culprit = working.Parts.Keys
-                        .Where(id => System.Text.RegularExpressions.Regex.IsMatch(e.Message, $@"(^|[\s(]){System.Text.RegularExpressions.Regex.Escape(id)}($|[\s:.,)])"))
-                        .OrderByDescending(id => id.Length).FirstOrDefault();
-                    if (culprit is null)
-                    {
-                        foreach (var id in working.Parts.Keys) _unfinished[id] = e.Message;
-                        break;
-                    }
-                    _unfinished[culprit] = e.Message;
-                    working.RemovePart(culprit);
+                    throw;
                 }
-            }
+            }, _unfinished);
             foreach (var id in _unfinished.Keys)
                 if (doc.Parts.TryGetValue(id, out var part))
                 {
@@ -1153,12 +1142,19 @@ public partial class BuildMode : Node3D
 
     private void FrameAll() => Frame(_session.Document.Parts.Keys);
 
-    /// <summary>Where the camera starts: a workbench's view of the middle of the grid.</summary>
+    /// <summary>Where the camera starts: a workbench's view of the middle of the grid, or of <see cref="StartPivot"/>.</summary>
     private void StartingView()
     {
-        (_orbit.Pivot, _orbit.Distance, _orbit.Yaw, _orbit.Pitch) = (new Vector3(0, 0.4f, 0), 2.5f, 0.5f, 0.55f);
+        if (StartPivot is { } spot)
+            (_orbit.Pivot, _orbit.Distance, _orbit.Yaw, _orbit.Pitch) = (spot, 14f, StartYaw, 0.45f);   // a new machine in a world: the spot, from the side a machine is seen from
+        else
+            (_orbit.Pivot, _orbit.Distance, _orbit.Yaw, _orbit.Pitch) = (new Vector3(0, 0.4f, 0), 2.5f, 0.5f, 0.55f);
         _orbit.Apply();
     }
+
+    /// <summary>A new machine started in a world (issue #204): the spot on the ground the camera starts looking at, and from which side (radians).</summary>
+    public Vector3? StartPivot { get; set; }
+    public float StartYaw { get; set; } = 0.5f;
 
     // --------------------------------------------------------------- input
 
@@ -1864,6 +1860,9 @@ public partial class BuildMode : Node3D
     }
 
     // ------------------------------------------------------------- hooks
+
+    /// <summary>Runs one command through the same path as the console and the mouse (scripted builds in a world, #204); false if it was refused.</summary>
+    public bool Command(string command) => RunCommand(command);
 
     /// <summary>The machine currently on the bench, for "Run this machine".</summary>
     public MachineDef CurrentMachineDef() => _session.Document.ToMachineDef();

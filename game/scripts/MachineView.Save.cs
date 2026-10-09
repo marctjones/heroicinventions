@@ -75,6 +75,7 @@ public partial class MachineView
                 default: missed++; break;
             }
         }
+        ResyncGearAngles();   // the trains take up from where their gears now stand (MachineView.Gears.cs)
         return missed;
     }
 }
