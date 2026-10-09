@@ -71,16 +71,14 @@
     (run '(("HEROIC_SLEEP" . "settled") ("HEROIC_SAVES_DIR" . "")) #:seconds 210)
     (check-equal? (autosave-state) before))
 
-  (test-case "a script sleeps in a world with the rover and the crater: the works equal the watched run's, every trace keeps its rows"
-    (define (world env) (godot-simulate-world 'lonely-rover-e2e #:seconds 60 #:sample-dt 1 #:env env))
+  (test-case "a script sleeps in a world (a geared windmill in Jolt beside a sim-only machine): every machine and the links equal the watched run's, at their dt"
+    (define (world env) (godot-simulate-world 'sleep-check #:seconds 60 #:sample-dt 1 #:env env))
     (define w0 (world '()))
     (define w1 (world '(("HEROIC_INPUT" . "waitsim 5; sleep until scene.elapsed above 30 limit 100; wait 1"))))
+    (check-equal? (sort (hash-keys w1) symbol<?) (sort (hash-keys w0) symbol<?))
     (for ([(label rows) (in-hash w0)])
-      (check-equal? (length (hash-ref w1 label)) (length rows) (format "~a: a row a second to 60 s, 61 of them" label)))
-    (check-equal? (length (hash-ref w1 'route)) 61)
-    (check-true (hash-has-key? w1 'links))
-    (check-true (equal-runs? (hash-ref w0 'route) (hash-ref w1 'route)) "the route machine (a geared windmill in Jolt) equals the watched run's"))
-
+      (check-equal? (length (hash-ref w1 label)) 61 (format "~a: a row a second to 60 s" label))
+      (check-true (equal-runs? rows (hash-ref w1 label)) (format "~a equals the watched run's" label))))
   (test-case "a sleep no machine can wake from fails the run, saying so"
     (check-exn #rx"no machine has a wake called nope"
                (λ () (run '(("HEROIC_INPUT" . "sleep nope")) #:seconds 5)))))

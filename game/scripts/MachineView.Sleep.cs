@@ -17,6 +17,6 @@ public partial class MachineView
     /// while the simulation's clock ran on, and they would catch up on waking.
     /// </summary>
     public bool JoltDriven =>
-        _drivenLinks.Count > 0 || _gearFollowers.Count > 0 || _axles.Count > 0 ||
+        _drivenLinks.Count > 0 || _drivenShaftLinks.Count > 0 || _gearFollowers.Count > 0 || _axles.Count > 0 || _hinges.Count > 0 ||
         _freezable.Any(b => !b.Sleeping && (b.LinearVelocity.LengthSquared() > 1e-6f || b.AngularVelocity.LengthSquared() > 1e-6f));
 }

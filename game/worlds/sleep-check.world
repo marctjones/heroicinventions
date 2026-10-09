@@ -1,0 +1,5 @@
+;; Issue #207: a world whose first machine is Jolt-driven (generator-train: a 5 m windmill geared 125:1 up to a rotor) beside a sim-only one
+;; (wake-clock), for racket/heroic/tests/sleep-live-test.rkt: a scripted sleep in a world must leave both as watching leaves them.
+(world sleep-check
+  (place train generator-train (at 0 0 0))
+  (place clock wake-clock (at 30 0 0)))
