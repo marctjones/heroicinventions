@@ -198,8 +198,10 @@ public partial class BuildMode : Node3D
     /// in (no examples, no Load), per the owner (2026-10-08). The workshop and the machine runs keep everything.</summary>
     public bool InGame { get; set; }
 
-    /// <summary>Parts that are found in the cargo, not made: the battery bank (docs/lonely-rover.html).</summary>
-    private static readonly HashSet<string> FoundOnly = ["battery-bank"];
+    /// <summary>Parts that are found in the cargo, not made: the battery bank and the salvaged motor that is the generator (docs/lonely-rover.html;
+    /// the owner's ruling of 2026-10-09). The game's crates hold motors (racket/machines/found-motor.rkt), joined to a built shaft and the bank
+    /// by the world's join tool. Outside the game (the workshop, machine runs) the palette keeps both.</summary>
+    private static readonly HashSet<string> FoundOnly = ["battery-bank", "generator"];
 
     public BuildMode(MaterialLibrary materials, MachineDef running, Func<MachineDef, MachineView> applyLive, Func<MachineView> liveView)
         : this(materials)
@@ -328,6 +330,10 @@ public partial class BuildMode : Node3D
     {
         switch (w[0])
         {
+            case "palette-has":   // "palette-has NAME": prints whether the full parts list (show-all) has that entry; the game's omits found parts
+                SetShowAll(true);
+                GD.Print($"[BuildMode] palette-has {w[1]} {(ListIndexOf(EntryKeyOf(w[1])) >= 0 ? "yes" : "no")} (InGame {InGame})");
+                return ScriptedInput.Step.Next;
             case "palette":   // "palette NAME": an entry (block, lever, gear…) or one catalogue size (pulley-10cm), as a click in the list would
             {
                 string key = EntryKeyOf(w[1]);

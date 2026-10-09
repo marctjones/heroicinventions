@@ -6,7 +6,7 @@
 ;;    on the 3 degree floor) and stops within 10 m of the windmill's place (the player builds there, 180 105);
 ;;  - GAP 1: at the slide the rover digs at four standing places (west, on top, east and north of the crate). Since the dirt rule (#63) a cycle
 ;;    digs and dumps (0.20 m3); it was "Dug nothing: bedrock under the teeth" before. This is recorded, not asserted: it prints GAP 1 lines.
-;;    Freeing the crate takes many cycles (about 4 m of rubble) and is not run here.
+;;    Freeing the crate takes many cycles (about 1 m of rubble since the owner's ruling of 2026-10-09; it was 4 m) and is not run here: freeing it is optional.
 ;; Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list racket/math racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -27,7 +27,7 @@
 (define (arm l) (cadr (regexp-match #rx"arm: ([^,]*)," l)))
 
 (when (godot-available?)
-  (define attempts '("262 143 270" "264 141 270" "268 143 90" "264 137 0"))
+  (define attempts '("252.5 137.9 270" "254.5 135.9 270" "258.5 137.9 90" "254.5 132.9 0"))   ; west, on top, east and north of the crate (254.5, 137.9)
   (define lines
     (run-game (string-append "wait 3000; rover; hold left 2.74; hold up 20; wait 120; rover; "
                              (string-join (for/list ([a attempts]) (format "rover place ~a; wait 240; key b; rover until Stowed; rover" a)) "; ")
