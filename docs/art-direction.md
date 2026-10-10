@@ -718,3 +718,40 @@ Paler for loose or tipped soil and darker for dug soil, as the map key says (12.
 - Granite, bronze and oak keep their table colours. On Mars all three read warm. Making the boulders greyer would mean changing `materials.rktd`, which every granite part shares.
 - The frost hides the bank's violet band while it is cold. The lamp, the terminals and the gauge still mark it as the bank.
 
+
+### 12.20 The placeholders sweep (2026-10-10, owner: "prioritize improving the visuals of the oak and the other blocks of resources and things displayed in the game now that are just placeholders ... cartoonish but recognizable")
+
+A sweep of all 117 machines in `game/machines/` (one hidden frame each at the machine's own camera, then close-ups) for anything still drawn as a plain box, cylinder or capsule where it stands for something you could name. Look only, as in 12.19: no part, body, mass, collision or sim number moved; every new piece rides on its body or view node as scenery (`MachineView.MarkScenery`, so `Floats.BoxSize`, picking and reach skip it); a block's own mesh, where it is replaced, keeps the block's box exactly (faces on the box's planes, or a sliver reaching the face).
+
+**Why roman-crane's "Granite 583.2 kg" still looked like a box.** BlockLooks did apply (it is a plain granite `block`, Stone category): 12.19's facets cut 10 to 24% of a side off each corner, which at the crane's camera distance reads as a grey box with soft corners. A crane's load is also not a rock but a squared building stone. Now any stone hung by a rope tied at its top is drawn as one (below), and loose stones' facets are deeper.
+
+**Placeholders found, by how often they are on screen (fixed unless marked):**
+
+| What | Where | Was | Now |
+|---|---|---|---|
+| A fire under a boiler | every boiler (25: boiler-safety, boiler-shells, newcomen, aeolipile, branca, steam engines, stove pots...) | a square orange slab 1.8 radii across | a round ember bed just wider than the boiler and eight flame tongues (orange round yellow, unshaded) licking up round its foot; shown while lit (`MachineView.BuildBoiler`) |
+| A hearth's fuel | 19 hearths (fireboxes, campfires, stoves) | one glowing box, squashed as the fuel burned | split logs laid crossed in two layers on a glowing ember bed, or a heap of black lumps for charcoal and coal; the heap shrinks to a quarter as the fuel goes, and three flame tongues stand over it while it burns, taller with the draught (`MachineView.Structures.cs`) |
+| The hearth's ring of stones | the same | ten square bricks | ten knocked-off fieldstones (`BlockLooks.Truncated`) |
+| People | capstans (3 haulers), buried-crate and trench-crew (digging gangs) | a purple rod with a ball head; beige cylinders with a ball head | the scale figure's person (`Figures.Person`, shared with `Main.Composition`): a hauler leaning on the rope with both hands, facing the post, in a violet tunic; a labourer holding a spade, in a brown one, at 0.9 scale |
+| A stone hung on a rope | roman-crane and its two reloads, crane-hoist, bar-crane, ratchet-windlass, rope-over-bars, shaduf's counterweights, trebuchet's counterweight, capstans' loads, Heron's temple-door counterweight | a grey box (or 12.19's lightly faceted rock) | a squared block with its twelve edges dressed back (`BlockLooks.Chamfered`) tied in a hemp sling, two bands crossing over the top to an iron ring where the rope takes it (`DressHungStone`). "Hung" is read from the machine: a rope whose end is on the block at least 0.3 of its height above its centre |
+| Shaduf buckets | shaduf (`half-bucket`, `full-bucket`, `empty-bucket`) | granite cubes | wooden buckets: a staved tub wider at the rim with two iron hoops, water standing in the full and half ones (the empty one dark inside), an iron bail to the rope; labelled "bucket" and its mass (`DressBucket`). The whole bucket stays in the block's box: the tub is 68% of its height and the bail fills the rest |
+| Loose stones | boulders in the worlds and `boulder`, material samples, lever-demo, drop-test, post-and-lintel's stones | 12.19's facets, 10 to 24% | deeper facets, 16 to 34% of the shortest side, so a boulder reads as a rock from across the field |
+| A hemp bale | drop-test | a plain box | two twine bands round it, and the cut stalks ruled on its ends (Fibre category in `BlockLooks.Dress`) |
+| Heat stores of rock, the vault rooms | heat-rock, night-heat, route-vault, vault-night, bimetal-night | brown boxes | **not done.** A store is a block the size of its volume washed with its temperature (12.9) and the rover pushes one in heat-rock; a heap of stones would have to keep that box and the warmth wash. Next in line |
+| Plinths, piers, posts, millstone beds, the sawmill's stone slab, trip-hammer heads | many | plain boxes and cylinders | **left**: structure, and plain shapes read as what they are there (12.6: structure recedes) |
+
+**Nothing found in the rover worlds** beyond the boulders (above) and what 12.19 dressed (crates, bank, dug ground, figure).
+
+**The trap from 12.19 again.** A double-sided mesh (an inner face of the bucket's staves) carries the outline pass over its outside: the outline is drawn from the back faces grown along their normals, so an inner face's outline is a black shell over the outer face, and the first bucket rendered solid black. The tub's mesh is single-sided and its open mouth is a separate disc (water, or the dark inside).
+
+**Physics unchanged (A/B `HEROIC_TRACE`, 20 s headless at a fixed 60 fps, trace every 0.1 s).** roman-crane, shaduf, trebuchet, ratchet-windlass, rope-over-bars, capstans, floats, crane-hoist, post-and-lintel-crane, component-gallery, drop-test, buried-crate, boiler-safety, bar-crane, boulder, trip-sluice, heron-temple-doors, newcomen-hearth, stove-rooms: all 19 trace files byte-identical before (46edf41) and after (`cmp`). WORLD_AB
+
+**Legibility** (`tools/legibility.py`, 1280 x 800 hidden, shot at frame 600, fresh settings file each; sd / sep, before -> after): antikythera 71 / -127, roman-crane 47 / -72, newtons-cradle 44 / -86, water-wheels 36 / -63, mars-stirling 29 / +55, herons-fountain 49 / -91: all six identical before and after. Machines this sweep changed: capstans 44 / -75 -> 46 / -76, trench-crew 36 / -96 -> 41 / -115, shaduf 48 / -89 -> 48 / -90, rope-over-bars 50 / -84 -> 50 / -85, ratchet-windlass 43 / -69 -> 43 / -70, boiler-safety 34 / -106 -> 34 / -106, newcomen-hearth 42 / -67 -> 42 / -67, stove-rooms 23 / -101 -> 23 / -102, boulder 23 / -89 -> 23 / -89. None is worse.
+
+**Frames** (`docs/art/placeholders/`, before left and after right, the same `look` and frame count): `roman-crane-hoist.png`, `ratchet-windlass.png`, `heron-doors-close.png` (the counterweight behind the doors), `shaduf.png`, `shaduf-bucket.png`, `capstans.png`, `trench-crew-close.png`, `boulder.png`, `boiler-safety.png`, `newcomen-hearth.png`, `stove-rooms.png`, `drop-test-close.png`.
+
+**For the owner.**
+- The shaduf's buckets are drawn as wood with water in them; the machine still weighs each as a granite block of the bucket's mass (its `.rkt` stands a block in for a bucket of water). Only the picture changed.
+- The haulers' violet and the diggers' brown tunics are a proposal, chosen to tell them from the slate-blue scale figure.
+- A slung stone resting on the ground has its sling's bottom bands a centimetre or two under the floor, where they cannot be seen.
+- The rock heat stores (brown boxes) are the largest placeholder left; see the table.
