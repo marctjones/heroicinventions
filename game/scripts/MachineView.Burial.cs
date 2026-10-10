@@ -67,7 +67,7 @@ public partial class MachineView
             {
                 tag.Visible = held;
                 tag.Position = new Vector3(at.X, (float)surface + 0.4f, at.Z);
-                tag.Text = $"{id} buried {b.Cover:F2} m · {b.Pull / 1000:F1} kN to pull out";
+                tag.Text = BurialTagText(id, b);   // no depth or pull until found (#240, MachineView.Found.cs)
             }
         }
     }

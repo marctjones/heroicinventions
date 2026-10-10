@@ -43,6 +43,9 @@ public sealed class WorldSave
     /// <summary>When each route step was first met and each route started (issues #229, #233): <c>(routes 1 (started ROUTE time sol) (met ROUTE STEP time sol) …)</c>, or null. An older save has none, and loads with nothing met.</summary>
     public SList? Routes { get; init; }
 
+    /// <summary>The buried crates the rover has found (owner decision on #240): <c>(found-cargo 1 (crate LABEL BLOCK) …)</c>, or null. An older save has none, and loads with nothing found (Game/CargoFind.cs).</summary>
+    public SList? FoundCargo { get; init; }
+
     /// <summary>Every link between machines the world has when saved (issue #82): pipes, shafts and wires, the ones its file declares and the ones made during play. Null for a save that has none to say (a single machine, or an older save): the world file's own links stand.</summary>
     public IReadOnlyList<LinkSpec>? Links { get; init; }
 
@@ -83,6 +86,7 @@ public sealed class WorldSave
                                  .. Operated.Select(a => (SExpr)OperatorLog.ToForm(a))]));
         if (Goals is { } gl) items.Add(gl);   // (before the ground: the rover stays the last form of a save, as worked-save-test builds an older save by blanking its line)
         if (Routes is { } rts) items.Add(rts);
+        if (FoundCargo is { } fc) items.Add(fc);
         if (Links is { } links) items.Add(new SList([new SSymbol("links"), new SNumber(1), .. links.Select(l => (SExpr)LinkForms.ToForm(l))]));
         if (Ground is { } g) items.Add(new SList([new SSymbol("ground"), g]));
         if (Boulders is { } bs) items.Add(bs);
@@ -99,7 +103,7 @@ public sealed class WorldSave
                 new SList([new SSymbol("when"), .. s.Plan.Terms.Select(Term)]),
                 new SList([new SSymbol("events"), .. s.Plan.Events.Select(Term)])]));
         }
-        string text = SExprWriter.Print(new SList(items)).Replace(" (machine ", "\n  (machine ").Replace(" (sleep ", "\n  (sleep ").Replace(" (operator-log ", "\n  (operator-log ").Replace(" (links ", "\n  (links ").Replace(" (ground ", "\n  (ground ").Replace(" (boulders ", "\n  (boulders ").Replace(" (worked ", "\n  (worked ").Replace(" (rover ", "\n  (rover ").Replace(" (goals ", "\n  (goals ").Replace(" (routes ", "\n  (routes ");
+        string text = SExprWriter.Print(new SList(items)).Replace(" (machine ", "\n  (machine ").Replace(" (sleep ", "\n  (sleep ").Replace(" (operator-log ", "\n  (operator-log ").Replace(" (links ", "\n  (links ").Replace(" (ground ", "\n  (ground ").Replace(" (boulders ", "\n  (boulders ").Replace(" (worked ", "\n  (worked ").Replace(" (rover ", "\n  (rover ").Replace(" (goals ", "\n  (goals ").Replace(" (routes ", "\n  (routes ").Replace(" (found-cargo ", "\n  (found-cargo ");
         for (int i = 0; i < Built.Count; i++) text = text.Replace($" @build-{i}@", "\n  " + SExprWriter.Print(WorldDef.BuiltForm(Built[i])));
         return ";; A saved world. Loading rebuilds the machines from their own files (and a machine the player built from its own (build …) form) and lays this running state on them.\n"
                + text + "\n";
@@ -128,7 +132,7 @@ public sealed class WorldSave
                 new WakeSpec("sleep", Terms(sl.Field("when")), sl.Field("join")?.Items.ElementAtOrDefault(1) is not SSymbol { Name: "or" }, Num("limit", 3600), Terms(sl.Field("events"))),
                 Num("started", 0), sl.Field("predicted")?.Items.ElementAtOrDefault(1) is SNumber pr ? pr.Value : null);
         }
-        return new WorldSave { Kind = Sym("kind"), Name = Sym("name"), Machines = machines, Sleep = sleep, Ground = root.Field("ground")?.Items.ElementAtOrDefault(1) as SList, Boulders = root.Field("boulders"), Worked = root.Field("worked"), Rover = root.Field("rover"), Goals = root.Field("goals"), Routes = root.Field("routes"),
+        return new WorldSave { Kind = Sym("kind"), Name = Sym("name"), Machines = machines, Sleep = sleep, Ground = root.Field("ground")?.Items.ElementAtOrDefault(1) as SList, Boulders = root.Field("boulders"), Worked = root.Field("worked"), Rover = root.Field("rover"), Goals = root.Field("goals"), Routes = root.Field("routes"), FoundCargo = root.Field("found-cargo"),
             Links = root.Field("links") is { } lk ? lk.Items.Skip(2).OfType<SList>().Where(x => x.Head == "link").Select(LinkForms.FromForm).ToList() : null,
             Built = root.Fields("build").Select(b => WorldDef.ParseBuilt(b, "<save>")).ToList(),
             Operated = (root.Field("operator-log")?.Items.Skip(1) ?? []).Select(OperatorLog.FromForm).OfType<OperatorAction>().ToList(),
