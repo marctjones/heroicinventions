@@ -71,6 +71,10 @@ What a player cannot yet do, the issue it belongs to, and the stand-in used. "NE
 
 Not done: the doc's Stirling engine, a second sol (the rover re-heating the rock each sol), the rover's own vault digging, the boulder undermining, the join gesture itself, the overheating gate in this world (electrics-test.rkt and bimetal-night own it), and the full 5 kWh bank (the scenario scales it to 25 Wh; it would take 55.6 hours of this windmill).
 
+## The road and the bank dug free, in the director's solve (road plan, 2026-10-10)
+
+The automated solve (`game/routes/lonely-rover-opening/solve.steps`, run by `Main.Director.cs`) no longer builds the vault through the rubble: the rover cuts a road (`build-road-to 254.5 137.9 20`, `Main.Road.cs`, planned by `RoadPlanner`) down to the level rock shelf at -44.98 that lies under the rubble from x 251 to the crate, carrying every bucket back down to haul spots behind its run up the bare 25-27 degree rock (where it can stop and start again), then digs the bank free from the road's end (`dig until battery-bank:crate.cover below 0.12 max 8 left`) and builds the vault round the freed crate on the pit floor. Headless (2026-10-10): 33 stations, 49 cycles, 4.48 m3 dug, 23 hauls, no rescue, the shelf at -44.98 from x 251.3 to 253.1; free after 3 buckets. The rover's grip on the rock below the shelf is the hard part: it stalls from rest there and slides a few tenths of a metre down the fall line at every stop, so the road builder takes a 7 m run at each station instead of easing. This closes the first half of GAP 1 for the solve (the bank is dug free by the rover); the vault, mill and mirror are still conjured.
+
 ## A vault built by hand round the buried bank (#213)
 
 Run as a person would, in the opening (the bank's crate at (254.5, 137.9) under 1.04 m of rubble), with `tools/gui-check.sh --hidden` (camera printed at each shot) and, for the numbers, `racket/heroic/tests/hand-vault-test.rkt`.

@@ -186,9 +186,19 @@ public partial class RoverDigEval : Node3D
         double deep = w.Fine.Heights.Min(); int count = 0;
         for (int k = 0; k < w.Fine.Heights.Length; k++) if (w.Fine.Heights[k] < deep / 2) count++;
         Say("trench-nodes-below-half-depth", count);
-        double steep = 0;
-        for (int j = 1; j < w.Nz - 1; j++) for (int i = 1; i < w.Nx - 2; i++) steep = Math.Max(steep, Math.Abs(w.Fine.Heights[i + 1 + j * w.Nx] - w.Fine.Heights[i + j * w.Nx]) / w.Fine.Cell);
+        // the steepest step anywhere but against the rover's wheels, and there: a heap tipped beside a wheel stops at it (the wheel
+        // holds it as a crate does, BodyAt, road plan 2026-10-10), so the soil can stand steeper than repose against the tyre
+        double steep = 0, atWheels = 0;
+        bool ByWheel(int i, int j) => _rover.Wheels.Any(wh => Math.Abs(wh.GlobalPosition.X - w.NodeX(i)) < 0.35 && Math.Abs(wh.GlobalPosition.Z - w.NodeZ(j)) < 0.35);
+        for (int j = 1; j < w.Nz - 1; j++)
+            for (int i = 1; i < w.Nx - 2; i++)
+            {
+                double g = Math.Abs(w.Fine.Heights[i + 1 + j * w.Nx] - w.Fine.Heights[i + j * w.Nx]) / w.Fine.Cell;
+                if (ByWheel(i, j) || ByWheel(i + 1, j)) atWheels = Math.Max(atWheels, g);
+                else steep = Math.Max(steep, g);
+            }
         Say("steepest-step-grade", steep);
+        Say("steepest-step-grade-at-wheels", atWheels);
         Say("rover-above-ground", _rover.Chassis.GlobalPosition.Y - _terrain.HeightAt(_rover.Chassis.GlobalPosition.X, _rover.Chassis.GlobalPosition.Z));
         Profile("trench");
     }

@@ -66,10 +66,10 @@ public partial class Main
     {
         var inv = CultureInfo.InvariantCulture;
         double D(int i) => double.Parse(w[i], inv);
-        if (_heroicSetFailed && w[0] is "drive-to" or "turn-to" or "dig" or "build-road-to" or "join-gesture" or "expect") return ScriptedInput.Step.Again;   // failed: hold until the quit lands
+        if (_heroicSetFailed && w[0] is "drive-to" or "turn-to" or "dig" or "build-road-to" or "back-to" or "join-gesture" or "expect") return ScriptedInput.Step.Again;   // failed: hold until the quit lands
         switch (w[0])
         {
-            case "drive-to" or "turn-to" or "dig" or "build-road-to":
+            case "drive-to" or "turn-to" or "dig" or "build-road-to" or "back-to":
                 if (_directorGoal is not null) return ScriptedInput.Step.Again;
                 if (_directorFinished) { _directorFinished = false; return ScriptedInput.Step.Next; }
                 if (_rover is null) { DirectorFail($"{w[0]}: no rover in this world"); return ScriptedInput.Step.Next; }
@@ -78,6 +78,7 @@ public partial class Main
                     "drive-to" => DriveGoal(D(1), D(2), w.Length > 3 ? D(3) : 0.5),
                     "turn-to" => TurnGoal(D(1)),
                     "build-road-to" => RoadGoal(D(1), D(2), w.Length > 3 ? D(3) : 20),   // Main.Road.cs
+                    "back-to" => BackGoal(D(1), D(2)),
                     _ => DigGoal(w),
                 };
                 return ScriptedInput.Step.Again;
@@ -97,6 +98,13 @@ public partial class Main
                 orbit.Apply();
                 _directorCamera = true;
                 return ScriptedInput.Step.Next;
+            }
+            case "where":   // where LABEL.PART: prints the part's place and the ground's height there (to derive a build's offsets from)
+            {
+                var bits = w[1].Split('.');
+                if (!_byName.TryGetValue(bits[0], out var view) || view.LinkPoint(bits[1], null) is not { } at) { DirectorFail($"where: no part {w[1]}"); return ScriptedInput.Step.Next; }
+                GD.Print($"[director] where {w[1]}: ({at.X:0.000} {at.Y:0.000} {at.Z:0.000}), the ground there {_groundSim?.Ground.HeightAt(at.X, at.Z):0.000}");
+                return ScriptedInput.Step.Continue;
             }
             case "follow":
                 _directorCamera = false;
@@ -217,7 +225,12 @@ public partial class Main
             {
                 case 0:
                     if (Math.Abs(rover.Speed) > 0.05) return false;
-                    rover.StartCycle(side);
+                    // dig until a machine's part is free: the dig is swung onto that part (the rover need not face it square)
+                    double swing = 0;
+                    if (untilPath is not null && _byName.TryGetValue(untilPath[..untilPath.IndexOf(':')], out var aimView)
+                        && aimView.LinkPoint(untilPath[(untilPath.IndexOf(':') + 1)..].Split('.')[0], null) is { } aim)
+                        swing = AimSwing(aim.X, aim.Z);
+                    rover.StartCycle(side, swing);
                     phase = 1; waited = 0;
                     return false;
                 case 1:

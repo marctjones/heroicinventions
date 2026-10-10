@@ -42,6 +42,23 @@ public partial class Main
         };
     }
 
+    /// <summary>back-to X Z: backs the rover straight down along its heading, steering to hold its line, until it is level with (x, z) (out of a road's cut, where it cannot turn).</summary>
+    private Func<double, bool> BackGoal(double x, double z)
+    {
+        var p = _rover!.Chassis.GlobalPosition;
+        var line = new RoadLine(p.X, p.Z, Mathf.RadToDeg(RoverHeading()));
+        var steps = Ease(line, line.Of(x, z).Along, 0.3).GetEnumerator();
+        GD.Print($"[director] back-to ({x:0.##} {z:0.##}) from ({p.X:0.##} {p.Z:0.##})");
+        return delta =>
+        {
+            _roadDelta = delta;
+            if (steps.MoveNext()) return false;
+            var q = _rover!.Chassis.GlobalPosition;
+            GD.Print($"[director] back-to reached ({q.X:0.00} {q.Z:0.00}) heading {Mathf.RadToDeg(RoverHeading()):0}");
+            return true;
+        };
+    }
+
     /// <summary>Runs a director goal (drive-to, turn-to) to its end inside the road's steps.</summary>
     private IEnumerable<int> Until(Func<double, bool> goal)
     {
@@ -154,7 +171,8 @@ public partial class Main
         // the pad: where the teeth land on the target (the road's last stretch, held level on, takes the rover's wheels there)
         GD.Print($"[road] the cut is done: onto the pad, the teeth over ({tx:0.00} {tz:0.00})");
         var last = plan.Path[^1];
-        foreach (var s in Stand(new RoadStation(0, pad.X1, pad.Z1, last.YawDeg, tx, tz, [], last.Level, 0, 0, RoadSpoil.Left(tx, tz)))) yield return s;
+        var padStation = new RoadStation(0, pad.X1, pad.Z1, last.YawDeg, tx, tz, [], last.Level, 0, 0, RoadSpoil.Left(tx, tz));
+        foreach (var s in Stand(padStation)) yield return s;
         CheckRoad(rover, start, rescues);
         var p = rover.Chassis.GlobalPosition;
         _road["done"] = 1;
@@ -250,11 +268,11 @@ public partial class Main
     /// the run ends: the dig's swing takes up a lateral miss (±35 degrees, ±0.8 m), and the cut is planned again from where it is.
     /// A station off its heading (a landing's turn) is turned to first, in place.
     /// </summary>
-    private IEnumerable<int> Stand(RoadStation station)
+    private IEnumerable<int> Stand(RoadStation station, double turnBeyond = 45)
     {
         var rover = _rover!;
         var line = new RoadLine(station.TeethX, station.TeethZ, station.HeadingDeg);
-        if (Math.Abs(Mathf.RadToDeg(Mathf.AngleDifference(RoverHeading(), Mathf.DegToRad((float)station.HeadingDeg)))) > 45 && rover.TiltDeg < 10)
+        if (Math.Abs(Mathf.RadToDeg(Mathf.AngleDifference(RoverHeading(), Mathf.DegToRad((float)station.HeadingDeg)))) > turnBeyond && rover.TiltDeg < 10)
             foreach (var s in Until(TurnGoal(station.HeadingDeg))) yield return s;   // a landing's turn (on a slope it would slide)
         for (int round = 0; round < 3; round++)
         {
