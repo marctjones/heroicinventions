@@ -106,7 +106,8 @@ public partial class Main
             int stationCycles = 0, stationHauled = 0;
             double stationDug = rover.Dug;
             bool floor = false;
-            GD.Print($"[road] station {stationsDone}: to ({station.X:0.00} {station.Z:0.00}) for teeth at ({station.TeethX:0.00} {station.TeethZ:0.00}), cut to {station.CutTo:0.00}, {station.Volume:0.00} m3 left ({station.Spoil})");
+            var high = station.Columns[0];
+            GD.Print($"[road] station {stationsDone}: the ground at ({high.X:0.00} {high.Z:0.00}) stands {_groundSim!.Ground.HeightAt(high.X, high.Z) - station.CutTo:0.00} m above the road's level ({station.CutTo:0.00}): teeth there, the rover at about ({station.X:0.00} {station.Z:0.00}); spoil: {station.Spoil}");
             foreach (var s in Stand(station)) yield return s;
 
             foreach (var (cx, cz) in station.Columns)
