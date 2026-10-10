@@ -1529,12 +1529,14 @@ public partial class Main : Node3D
     /// by −5 °C); warmer, it yellows. A scene that sets its sun, or has
     /// mirrors, is lit from where the sun really stands: full daylight above
     /// 10°, warming to orange near the horizon, and dark at night. Only the
-    /// scene's look — nothing here touches the sim.
+    /// scene's look — nothing here touches the sim. A world with a scenario shows its sun too (#250).
     /// </summary>
     private void ShowSky(MachineRuntime? run)
     {
         double ambient = run?.Ambient ?? 20;
-        bool sunShown = run?.SunShown ?? false;
+        // A scenario world (the Lonely Rover's) is lit by the sun and the scene's clock even where no machine sets a sun clause (#250): the
+        // runtime's own default sun (the found bank's: noon at the start, latitude 31.2, day 172, the planet's) is drawn, never changed.
+        bool sunShown = (run?.SunShown ?? false) || (run is not null && _world?.Scenario is not null);
         var sun = run?.Sun;
         var planet = run?.Planet ?? HeroicInventions.Sim.Planet.Earth;
         double storm = sun?.ExtraDust ?? 0;

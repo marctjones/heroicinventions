@@ -593,3 +593,46 @@ Not candidates in the opening and easy worlds: night, dusk, real shadows' direct
 - B is the same ground and light as A but not the same frame in the rubble; its slide rows are marked invalid.
 - Hidden shots drifted nothing here (the camera printed each time), but the images are 1280x800 and the HUD panels cover the left 240 pixels; every region is inside x 300-1250.
 - The easy world has the same ground; it was not shot separately.
+
+### 12.18 A sun in the rover worlds (#250, 2026-10-09)
+
+Owner, 2026-10-09: "Yes, night clearly dim." The Lonely Rover worlds (opening, easy, e2e) now show the sun and the scene's clock: sunrise, noon, sunset and a night that is clearly dimmer but still readable. Look only; no sim number moved.
+
+**The cause (12.16, verified).** `ShowSky` lit from the real sun only when the focused machine had a `(sun ...)` clause or mirrors (`MachineRuntime.SunShown`); the found bank has neither, and a machine the player builds takes the scene's sun, which is none (`Main.Build.cs`), so the studio light stood 50 degrees up at every hour.
+
+**The fix (`Main.cs`, `ShowSky`).** A world with a scenario draws the focused runtime's own sun even when `SunShown` is false. Every runtime already owns one: with no sun clause it is `Sun(31.2, 172, 12)` on the machine's planet (`MachineRuntime.cs:333`), the one the found bank, the heliostat and the 03:00 call already use, and it advances with the scene clock. So the scene's sky, light and shadow come from the same model as the sim, and nothing is given to any machine: `SunShown` stays false for the found bank, no sim object is touched, and a machine the player builds has the same default sun without any change in `Main.Build.cs`. The three worlds are covered by their `(scenario ...)`; no world file was edited. (The only other scenario world, `rover-sleep-hint-check`, already had a sun on its first machine.)
+
+**Night floor (`SkyLook.cs`).** With the sun below the horizon the ground gets only its 16% emission and the ambient fill. At the old fill (0.45, colour (0.16, 0.2, 0.3)) the opening's flat ground read 20 and the rover was a black shape on black. The night fill is now three times the energy and twice the colour (`AmbientEnergy x (1 + 2 night)`, `(0.32, 0.40, 0.58)`); daytime is unchanged (night = 0), and so are the six reference machines (they have no night).
+
+**Predicted (planet model, Mars: obliquity 25.19, year 669, latitude 31.2, day 172, declination -22.90).**
+
+| Hour | Sun elevation | Azimuth | Predicted scene |
+|---|---|---|---|
+| 07:00 | 0.1 | 117 (ESE) | sunrise, long shadows to the WNW |
+| 12:00 | 35.9 | 180 (south) | full day; shadows fall to the north |
+| 16:30 | 5.7 | 239 (WSW) | low, orange, long shadows to the ENE |
+| 17:12 (sunset 17:01) | -2.2 | 244 | dusk, light almost gone |
+| 18:00 | -11.6 | 250 | night |
+| 00:00 | -81.7 | - | night |
+| 03:00 | -49.4 | 90 | night |
+
+Ground luminance, the lit part scales with sin(elevation): noon 0.59 of the studio's 0.77 on level ground, so noon about 0.75 to 1.0 of before (the 16% emission and the ambient are unchanged); night about 0.3 to 0.55 of noon.
+
+**Observed** (mean luminance 0-255 of the same rectangle, 1280x800 hidden shots, `opening` at `rover place 180 140 270`, `HEROIC_SET="scene time H; scene clock-rate 0"`; the same camera `pivot=(180.003 -61.433 140.481) distance=14 yaw=-1.571 pitch=0.611`, the horizon shot `distance=30 pitch=0.14`, rim base `pivot=(-0.627 -53.493 271.992) yaw=3.143`, ice `pivot=(0.617 -52.524 -275.989) yaw=-0.002`). Before: 12 / 16.5 / 17.2 / 0 / 3 h; after likewise.
+
+| Region | Before (all hours) | After 12 | 16.5 | 17.2 | 0 | 3 | night / noon |
+|---|---|---|---|---|---|---|---|
+| flat floor | 57.9 (60.2 at 0 and 3) | 55.9 | 35.0 | 25.0 | 27.4 | 27.4 | 0.49 |
+| far ground (flat shot) | 102 | 99.7 | 71.7 | 56.7 | 58.6 | 58.9 | 0.59 |
+| horizon shot, ground | 111.8 | 109.3 | 78.8 | 64.2 | 66.3 | 66.5 | 0.61 |
+| horizon shot, sky | 105.9 | 106.3 | 92.5 | 52.3 | 49.7 | 49.7 | 0.47 |
+| rim base | 118.4 | 114.6 | 82.4 | 69.7 | 71.9 | 71.9 | 0.63 |
+| ice wall | 129.7 | 128.1 | 91.5 | 73.8 | 76.0 | 76.1 | 0.59 |
+
+Noon is within 4% of before (the studio light is a flat 50 degrees; the real noon sun is 36), so the day look does not move. The night ratio chosen is about 0.5 on the darkest soil (basalt sand) and 0.6 on paler ground: halved, plainly dimmer in the shots, with the rover and the grid still seen.
+
+**Readability** (`tools/legibility.py`, this framing; sd and sep): noon sd 26, sep +59; 16:30 sd 23, sep +51; 17:12 sd 19, sep +46; midnight sd 22, sep +50; 03:00 sd 21, sep +49. The framing is mostly bare ground, so sd is under 40 at every hour including noon; night is within 10 of noon on sep (the guard against the day) and sits at the 50 threshold, dusk just under it. A brighter night would pass but would not read as night; the owner asked for clearly dim.
+
+**Physics unchanged.** `HEROIC_TRACE` before and after, byte for byte: `lonely-rover-opening` 300 s at 1 s (6 machines and links), `lonely-rover-e2e` 300 s at 1 s (7 machines, links, vault), the e2e world's `HEROIC_SLEEP=pre-dawn` to the wake at 54,800 s (10 s frames, all machines and links), `newtons-cradle` and `mars-stirling` 20 s. All identical. The six reference machines' `legibility.py` lines are unchanged (antikythera sep -87 to -88, the rest identical).
+
+**Not done / open.** The haze, the far wall and the grid keep their own looks at night (the far rim reads brown and brighter than the floor at midnight: it is ground, with its 16% emission, not sky). The e2e route's 55,000 s was not shot. Sleeping skips the drawing, so the sky is shown once on waking.
