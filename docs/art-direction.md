@@ -312,6 +312,7 @@ The design promises "the state is shown in the scene: a cold bank frosts, a stal
 
 | Battery bank charging | A fill column in the armoured case rises with the charge; green while it takes charge | `docs/art/skins/found-electrics-charging.png` |
 | Bank cold or hot | Column blue-grey below 0 °C, red above 45 °C; amber when full but out of range | `docs/art/skins/bank-bench.png` |
+| Found bank (in its crate), any charge | An empty gauge track with quarter notches behind the column, a lamp on the lid in the column's state colour, frost on the boards below 0 °C and a red wash above 45 °C (12.19) | `docs/art/cargo/bank-states-after.png` |
 | Bank full and warm, called | Cyan with a faint glow (a state cue), a column of light stands over it once the call has gone out | `docs/art/skins/found-electrics-called.png` |
 | Generator | A motor can on the axle with a dial (a needle over the rated current) and a stripe that turns with the rotor; a copper line to the bank | `docs/art/skins/found-electrics-charging.png` |
 
@@ -676,3 +677,44 @@ Noon is within 4% of before (the studio light is a flat 50 degrees; the real noo
 **Physics unchanged.** `HEROIC_TRACE` before and after, byte for byte: `lonely-rover-opening` 300 s at 1 s (6 machines and links), `lonely-rover-e2e` 300 s at 1 s (7 machines, links, vault), the e2e world's `HEROIC_SLEEP=pre-dawn` to the wake at 54,800 s (10 s frames, all machines and links), `newtons-cradle` and `mars-stirling` 20 s. All identical. The six reference machines' `legibility.py` lines are unchanged (antikythera sep -87 to -88, the rest identical).
 
 **Not done / open.** The haze, the far wall and the grid keep their own looks at night (the far rim reads brown and brighter than the floor at midnight: it is ground, with its 16% emission, not sky). The e2e route's 55,000 s was not shot. Sleeping skips the drawing, so the sky is shown once on waking.
+
+### 12.19 Cargo, resources, digging and the scale figure (2026-10-10, owner: "improve the visual design of resources, crates, the power banks and digging out the ground soil"; then "resource blocks drawn as placeholders" and "a friendly scale figure")
+
+Look only: no part, body, mass, collision or sim number moved (A/B below). Every new piece rides on its body as scenery (`MachineView.MarkScenery`: never picked, never in a reach box), and replaced meshes keep the block's bounding box exactly, so framing, picking and the rover's reach to a crate or boulder are the same.
+
+**Cargo crates** (`game/scripts/MachineView.Cargo.cs`, the pass `BuildCargoMarkings` after `BuildElectrics` in `MachineView.cs:143`). A crate of the rover's cargo (cargo-crate, found-bank, found-motor) was an oak cube labelled "Oak 90 kg", the same as a material sample. It is now dressed as a shipping crate: dark battens on its twelve edges, a band round the top of its sides in the colour of what it holds, and a sign on its lid. The table `CargoLooks` (`:23`) is keyed by the world's placement label: battery bank violet with red and black terminals, solar panels blue with a ruled panel, gas cylinders white with three grey cylinders, hand tools green with a crossed hammer and spanner, motors yellow (its motor already stands on the lid). The colours avoid the slope tint's warm, amber and red, the markers' cyan and the bank's own state colours. The band sits at the top, so a lid the backhoe uncovers shows its colour first. Its label reads "crate / 90 kg" (`MachineView.cs:762`). A buried crate draws nothing new: #240 (the rover knows roughly where a crate is, never how deep) holds, and the existing burial tag is unchanged.
+
+**The found bank** (`MachineView.Electrics.cs:171-205`, drawn in `DrawElectrics` at `:237`). At 0 Wh the charge column has no height, so the state colour could not be seen for most of the game. Now:
+- an empty gauge track (near-black) stands behind the column on both faces, with white notches at each quarter and a white line at full;
+- a lamp on the lid shows the column's state colour (green charging, blue-grey too cold, red too hot, amber full but out of range, cyan full and ready) at any charge;
+- the boards frost white while the cells are below 0 °C. Opacity is 0.25 + 0.4 x `BankSkin` (`:205`): 0.3 just past the limit, full 7 °C beyond it. Above 45 °C they get a red wash instead. The frost skin is a hair over the boards and under the gauge, so the gauge, battens and lamp stay readable on it.
+Frames: `docs/art/cargo/bank-states-before.png` and `bank-states-after.png` (found-bank alone; left to right -63 °C empty, 20 °C half, full and ready, 60 °C full, 20 °C empty; set with `HEROIC_SET`), and `bank-dug-out.png` (the bank in its pit in the opening after six buckets: oak box before, frosted crate with its lamp and terminals after).
+
+**Resources** (`game/scripts/BlockLooks.cs`; `MachineView.BuildBlock` at `MachineView.cs:736`; boulders at `TerrainView.cs:591-598`). A plain block (a cube with no `dim-x`) is drawn as its material:
+- stone is rough faceted rock: a truncated cube (`Truncated`, `:96`), each corner cut 10 to 24% of a side, fixed by the part's name;
+- wood is cut timber: a paler sawn end with dark growth rings and pith on the two ends (the grain runs along X), and bark on the four long edges. Plank seams are as before;
+- metal is a cast ingot (`Ingot`, `:127`): the sides slope in to a top 72% of the base.
+The slide's boulders were the only resource in the opening beside the crates. They were plain `Shapes.Mat` cubes (no finish, as flat a brown as a crate). They now get granite's own skin (`Skins.For`: crystalline finish, outline), a ±6% shade each (`Skins.Vary`) and the faceted rock mesh. There are no loose rocks as things in the game: the ground's rubble is soil, and the only rock bodies are the boulders. The salvaged motor (`found-motor`) keeps its can, dial and stripe (12.5) and gains the yellow crate.
+
+**Digging** (`TerrainView.cs:420-455`, the patch branch of the ground shader). The worked patch's dug and heaped tints were applied before the slope tint, and on the rubble's steep sides (over 30 degrees) 60% red covered them (12.16: "the scour never shows as dark"). Three changes:
+- the tint is now applied after the slope tint, so a pit stays darker than the rubble round it and a heap paler;
+- dug and heaped ground has 8 cm clods (a ±11% speckle). Undisturbed ground has none, and the clods fade out where a clod is under about two pixels;
+- a dark lip line follows the cut where the ground has been lowered about 2.4 cm (worked = -0.12), at a fixed width on screen.
+Paler for loose or tipped soil and darker for dug soil, as the map key says (12.17). The soil colours, `SoilLook` and the cell texture the key test reads are not touched. Measured on `dig-two-buckets.png` (the same director `dig 2` from `rover place 252.5 137.9 270`; luminance 0-255, 24 px squares): pit floor against the rubble beside it **-46 -> -52**; heap against rubble **+23 -> +49**. The lip is visible in both dig frames.
+
+**Scale figure** (`Main.Composition.cs:106`). The grey capsule is now a friendly person in bold shapes, all outlined: legs and shoes, a slate-blue tunic with a belt, arms with hands, a head with dot eyes, and a straw sun hat. The figure stays 1.7 m to the top of the head (the hat's crown adds 2 cm) and about 0.4 m across the shoulders, so it reads as the same ruler. It turns to face the camera where it is placed (`:75`). Frame: `docs/art/cargo/scale-figure.png` (roman-crane).
+
+**Legibility** (`tools/legibility.py`, 1280 x 800 hidden, 600 frames, fresh settings file each; sd / sep, before -> after): antikythera 71 / -126 -> 71 / -126, roman-crane 47 / -72 -> 47 / -72 (fg 47% -> 48%: the figure), newtons-cradle 44 / -86 -> 44 / -86, water-wheels 36 / -63 -> 36 / -63, mars-stirling 29 / +55 -> 29 / +55, herons-fountain 49 / -91 -> 49 / -91. None is worse. material-samples 35 / -85 -> 37 / -91. Crate and bank frames: hand-tools crate 18 / -42 -> 21 / -46, motors crate 20 / -28 -> 21 / -31, boulders 33 / -55 -> 38 / -63, found bank cold 33 / -20 -> 39 / -19, half 33 / -20 -> 36 / -27.
+
+**A trap found on the way.** Floats' buoyancy box (`MachineView.Floats.BoxSize`) merged every mesh on a body. The first run of the timber look's bark made the float bath's oak block read 0.433 under water against 0.424, and machine-behavior-test caught it. `BoxSize` now skips scenery, so it measures the body's own box again (159/159 pass). Any later look that rides on a body must be marked scenery for the same reason.
+
+**Physics unchanged.** `lonely-rover-opening` 300 s headless at 30 fps (`HEROIC_TRACE`, every machine and the links): all six files are byte-identical before (def2faa) and after (`cmp`). The director's solve (`routes/lonely-rover-opening/solve.steps`) is **not reproducible run to run on the same code**. Its paused sleeps advance by a CPU budget a frame (`sleep-budget 60`), so the wake lands on a different frame each run: two runs of identical code differed from the first wake at 29,149 s. A copy of the steps with `sleep-budget 100000` is reproducible: two runs of the same code were identical. On that copy, before and after are byte-identical in all eight trace files, and the call goes out on sol 2 in both. Before the first wake, the unmodified solve also matches byte for byte.
+
+**Frames** (`docs/art/cargo/`, before left and after right, markers off): `crate-hand-tools.png`, `crate-motors.png`, `boulder.png`, `dig-two-buckets.png`, `dig-six-buckets.png`, `bank-dug-out.png`, `bank-states-before.png` / `bank-states-after.png`, `material-samples.png`, `scale-figure.png`.
+
+**For the owner.**
+- The burial tag over a buried crate still gives its depth and pull ("crate buried 1.04 m · 6.7 kN"), which #240 says the rover should not know. It is unchanged here.
+- The crate colours are a proposal: violet bank, blue panels, white gas, green tools, yellow motors.
+- Granite, bronze and oak keep their table colours. On Mars all three read warm. Making the boulders greyer would mean changing `materials.rktd`, which every granite part shares.
+- The frost hides the bank's violet band while it is cold. The lamp, the terminals and the gauge still mark it as the bank.
+

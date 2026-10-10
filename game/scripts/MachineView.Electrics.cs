@@ -21,8 +21,10 @@ namespace HeroicInventions;
 /// </summary>
 public partial class MachineView
 {
-    private sealed record BankView(BatteryBank Bank, MeshInstance3D Fill, StandardMaterial3D FillMat, float Height, Label3D Label, MeshInstance3D Beacon, StandardMaterial3D BeaconMat, RigidBody3D? Body = null, float Size = 0);
-    // (Body: a bank built into a body, #:on, such as the found bank's crate; its column and label then travel with the body)
+    private sealed record BankView(BatteryBank Bank, MeshInstance3D Fill, StandardMaterial3D FillMat, float Height, Label3D Label, MeshInstance3D Beacon, StandardMaterial3D BeaconMat, RigidBody3D? Body = null, float Size = 0,
+                                   MeshInstance3D? Frost = null, StandardMaterial3D? FrostMat = null, StandardMaterial3D? LampMat = null);
+    // (Body: a bank built into a body, #:on, such as the found bank's crate; its column and label then travel with the body.
+    //  Frost, Lamp: the found bank's cold or heat and its state at any charge, 12.19)
     private sealed record GeneratorView(Generator Gen, Node3D Needle, MeshInstance3D Cap, Label3D Label, Vector3 Axis, double RatedAmps) { public float CapAngle; public string LastWhy = ""; }
     private sealed class GeneratorLoad { public required Generator Gen; public required RigidBody3D Body; public required Vector3 Axis; }
 
@@ -166,8 +168,42 @@ public partial class MachineView
             FontSize = 26, OutlineSize = 6, PixelSize = 0.0024f, Width = 900, NoDepthTest = true, Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
         };
         AddChild(label);
-        _bankViews.Add(new BankView(bank, fill, fillMat, fh, label, beacon, beaconMat, host, s));
+        // (12.19) the gauge's empty track behind the column on both faces, so an empty bank reads as an empty gauge, with notches
+        // at each quarter either side of it and a white line at full; all scenery riding on the crate
+        float h = s / 2, bottom = -h + (s - fh) / 2, half = s * 0.2f;
+        var track = new List<(Vector3, Vector3)>();
+        var marks = new List<(Vector3, Vector3)>();
+        foreach (float z in new[] { -1f, 1f })
+        {
+            track.Add((new Vector3(0, bottom + fh / 2, z * (h + 0.0055f)), new Vector3(half * 2.3f, fh + s * 0.03f, 0.004f)));
+            for (int q = 1; q <= 3; q++)
+                foreach (float x in new[] { -1f, 1f })
+                    marks.Add((new Vector3(x * half * 1.075f, bottom + fh * q / 4, z * (h + 0.008f)), new Vector3(half * 0.15f, 0.008f, 0.004f)));
+            marks.Add((new Vector3(0, bottom + fh, z * (h + s * 0.025f)), new Vector3(half * 2.3f, 0.01f, 0.004f)));   // full, over the column
+        }
+        Decorate(host, Merged(track, Shapes.Mat(new Color(0.07f, 0.07f, 0.08f), roughness: 0.9f, outline: false)));
+        Decorate(host, Merged(marks, Shapes.Mat(new Color(0.95f, 0.95f, 0.92f), outline: false)));
+        // the lamp on the lid: the column's state colour, lit, at any charge (at 0 Wh the column has no height to show it)
+        var lampMat = Shapes.Mat(BankGreen, roughness: 0.3f);
+        lampMat.EmissionEnabled = true;
+        lampMat.EmissionEnergyMultiplier = 0.8f;
+        var lamp = Shapes.Sphere(s * 0.08f, lampMat);
+        lamp.Position = new Vector3(0, h + s * 0.04f, -s * 0.1f);
+        Decorate(host, lamp);
+        // frost on the crate's boards while the cells are below the charging range, a red wash while above it: a skin a hair
+        // over the boards and under the gauge, so the gauge, the battens and the lamp stand on it and stay readable
+        var frostMat = Shapes.Mat(new Color(0.94f, 0.97f, 1f), roughness: 0.6f, alpha: 0.5f);
+        var frost = Shapes.Box(Vector3.One * s * 1.016f, frostMat);
+        Decorate(host, frost);
+        _bankViews.Add(new BankView(bank, fill, fillMat, fh, label, beacon, beaconMat, host, s, frost, frostMat, lampMat));
     }
+
+    /// <summary>
+    /// How much the found bank's crate is frosted (below the charging range) or washed red (above it), 0 to 1, by the cells'
+    /// temperature: none inside the range, 0.3 just outside it (a step you can see at the line), full 7 °C beyond (12.19).
+    /// </summary>
+    public static (float Frost, float Heat) BankSkin(double celsius, double minC, double maxC) =>
+        (celsius < minC ? (float)Math.Min(1, 0.3 + 0.1 * (minC - celsius)) : 0, celsius > maxC ? (float)Math.Min(1, 0.3 + 0.1 * (celsius - maxC)) : 0);
 
     private static string BankState(BatteryBank b) =>
         b.Won ? "CALLED EARTH" : b.Ready ? "full: ready to call"
@@ -198,6 +234,13 @@ public partial class MachineView
             v.FillMat.AlbedoColor = c;
             v.FillMat.EmissionEnabled = b.Ready;
             v.FillMat.Emission = c; v.FillMat.EmissionEnergyMultiplier = 0.6f;
+            if (v.LampMat is { } lamp) { lamp.AlbedoColor = c; lamp.Emission = c; }
+            if (v.Frost is { } frost && v.FrostMat is { } fm)
+            {
+                var (cold, heat) = BankSkin(b.Temperature, b.MinChargeC, b.MaxChargeC);
+                frost.Visible = cold > 0 || heat > 0;
+                fm.AlbedoColor = cold > 0 ? new Color(0.94f, 0.97f, 1f, 0.25f + 0.4f * cold) : new Color(0.95f, 0.25f, 0.15f, 0.12f + 0.2f * heat);
+            }
             v.Beacon.Visible = b.Won;
             v.Label.Text = $"{b.Name} {b.ChargeWh:0.0}/{b.CapacityWh:0.0} Wh · {b.Temperature:0.0} °C\n{BankState(b)}"
                          + (b.Won ? $" (sol {b.WonAtSol}, {HoursText(b.WonAtHour)})" : b.CallAnyTime ? " · call at any hour"
