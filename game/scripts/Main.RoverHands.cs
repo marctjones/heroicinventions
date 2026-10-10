@@ -269,6 +269,9 @@ public partial class Main
                 var inward = target.GetCenter() - aim;
                 if (inward.LengthSquared() > 1e-6f) aim += inward.Normalized() * Mathf.Min(0.05f, inward.Length());   // (a ray along a face's edge can miss)
                 aim.Y = target.End.Y - 0.02f;
+                // a body turned about the vertical (a pushed cube that came to rest at 30 deg) leaves that corner of its box empty: then a cursor over its middle
+                var (onPart, onBoulder) = GrabTargetAt(aim + Vector3.Up * 3, Vector3.Down);
+                if (onPart is null && onBoulder is null) aim = new Vector3(target.GetCenter().X, aim.Y, target.GetCenter().Z);
                 var origin = aim + Vector3.Up * 3;
                 bool used = TryPress(origin, Vector3.Down, Vector2.Zero, false);
                 GD.Print($"[rover] press {w[2]}: {(used ? "used" : "not used")}, hand {(_hand is null ? "has nothing" : $"holds {_hand.Record.PartId} at {_hand.Spring.GrabWorld.Y:F3} m high")}");

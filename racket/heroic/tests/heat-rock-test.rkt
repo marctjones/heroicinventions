@@ -22,10 +22,19 @@
 (define (at frame key) (cadr (assq key (cdr frame))))
 (define (frame-near run t) (argmin (λ (f) (abs (- (car f) t))) run))
 
-;; the push: two arm-lengths, the rover driven up to the rock between (the arm reaches 1.8 m from its pivot, the bin's floor is 1.2 m past the rock)
+;; the push: two arm-lengths, the rover driven up to the rock between (the arm reaches 1.8 m from its pivot, the bin's floor is 1.2 m past the rock;
+;; the rock slides about 0.2 m behind the hand, the spring's stretch at the 74 N it takes, so the second stand is 0.8 m off and pushes 0.8 m).
+;; The hand moves as a dragged cursor does, 5 cm at a time (every 16 ticks on the first push, 0.38 m/s; every 15 on the second): stepped 0.75 m
+;; in one tick, the spring pulled the top edge with all 396 N and the cube tumbled end over end (base up 0.2 m), and where it came down
+;; turned on millimetres (an arm pivot 8 mm to one side left it 15 cm off the bin's line and turned 32 degrees, too wide for the
+;; 0.32 m mouth). Moved steadily it slides square to the bin, its base rocking up 4.5 cm at most (traced, 2.35 s), and is in at 7.5 s.
+(define (steady-push dz steps ticks)
+  (apply string-append
+         (for/list ([k (in-range 1 (add1 steps))])
+           (format " rover hand 0 0 ~a; wait ~a;" (/ (round (* -1000 dz k (/ 1 steps))) 1000.0) ticks))))
 (define push-script
-  (string-append "wait 120; rover near rock 1.0; wait 60; rover press rock; rover hand 0 0 -0.75; wait 240; rover release; wait 60;"
-                 " rover near rock 1.0; wait 60; rover press rock; rover hand 0 0 -0.8; wait 240; rover release; wait 120"))
+  (string-append "wait 120; rover near rock 1.0; wait 60; rover press rock;" (steady-push 0.75 15 16) " rover release; wait 60;"
+                 " rover near rock 0.8; wait 60; rover press rock;" (steady-push 0.8 16 15) " rover release; wait 120"))
 
 (when (godot-available?)
   (define lines
@@ -54,7 +63,7 @@
     (check-= (at last-frame 'bin.temperature) (at last-frame 'rock.temperature) 1e-9 "and its temperature is the rock's")
     (check-= (at last-frame 'rock.x) 0.12 0.16 "inside the cavity (middle within 0.16 m of the bin's middle at x 0.12)")
     (check-= (at last-frame 'rock.z) 0.0 0.16 "and z 0")
-    ;; a rover never lifts a load: the hand stops 5 cm above where it took hold (traced: the rock's base rises up to 0.16 m at 2 s of the first push, the hand pulling at its top face, and 0.04 m as it enters the bin, then settles; the hand's own target never rises past the slack, so this is the cube tipping, not a lift),
+    ;; a rover never lifts a load: the hand stops 5 cm above where it took hold (traced: the rock's base rocks up 0.045 m at 2.35 s of the first push, the hand pulling at its top face, then settles; the hand's own target never rises past the slack, so this is the cube tipping, not a lift),
     ;; so it ends resting on the ground of the bin, as low as it began
     (check-= (at last-frame 'rock.y) (at (first run) 'rock.y) 0.02 "resting on the floor again, not carried up and over the wall"))
 

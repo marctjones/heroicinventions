@@ -6,8 +6,8 @@
 ;; original heights, loose flags, rock and soil. The first cycle digs 0.2 m3 and tips it (dug 0.2, dumped 0.2); the second digs 0.2
 ;; more and tips it 0.12 m above where it was dug, which #63's carry ceiling refused and #72's rule of 2026-10-08 allows (soil goes
 ;; wherever the arm reaches): dug 0.4, dumped 0.4. After the load the rover, put
-;; on the dug ground, stands tilted otherwise than on the undug ground (pitch 9.4 undisturbed, -2.8 on the hole): the view rebuilt
-;; the patch's body.
+;; on the dug ground, stands tilted otherwise than on the undug ground and as it does on the dug ground of the run that never saved
+;; (pitch 9.7 undisturbed, 12.7 on the worked ground): the view rebuilt the patch's body.
 ;;
 ;; Issue #201: the save also holds the rover. A save made mid-carry (the arm Swinging with 0.2 m3 in the bucket, the soil already
 ;; scraped from the ground) and loaded must finish the dump as the run that kept going: the same worked ground node for node (0),
@@ -69,11 +69,14 @@
 
   (test-case "the loaded rover stands in the hole, which is not the ground that was there"
     (define dug (pitch (first (rover-lines loaded)))) (define undug (pitch (first (rover-lines first-half))))
-    ;; the patch's collision came back with the load: set at the same place, the rover leans 3.4 degrees less on the dug
-    ;; ground than on the ground that was there (5.5 against 8.9 since its wheels are sprung, #198; -2.8 against 9.4
-    ;; on rigid wheels, which rested on two corners of the hole)
+    (define kept-dug (pitch (first (rover-lines kept))))   ; set on the same spot after the same cycle, in the run that never saved
+    ;; the patch's collision came back with the load: set at the same place, the rover stands as it does on that dug ground in
+    ;; the run that kept going (traced 12.7 and 12.7), not as on the ground that was there
+    ;; (9.7). Since Rover.Place stands it on the ground under its six wheels; stood level and dropped (5cbab25) it
+    ;; read 5.5 against 8.9 (-2.8 against 9.4 on rigid wheels, which rested on two corners of the hole)
     (check-true (> undug 8) (format "pitch on the undug slope ~a" undug))
-    (check-true (< dug (- undug 2)) (format "pitch on the dug ground ~a, against ~a undug" dug undug)))
+    (check-= dug kept-dug 0.5 (format "pitch on the loaded dug ground ~a, on the kept run's ~a" dug kept-dug))
+    (check-true (> (abs (- dug undug)) 2) (format "pitch on the dug ground ~a, against ~a undug" dug undug)))
 
   (test-case "after a second cycle the loaded run's worked ground is the kept run's, node for node"
     (define a (worked-of (p "kept.save")))
@@ -113,7 +116,8 @@
     (check-equal? (rnum r "step") 4.0 "Swinging is the fifth step of the cycle")
     (check-true (> (rnum r "time") 0.2) "and the arm is a quarter second into it")
     (check-equal? (length (regexp-match* #rx"\\(wheel " r)) 6 "six wheels")
-    (check-= (list-ref (xf-of r "chassis") 9) 189.977 1e-2 "the chassis is where it was placed")
+    ;; placed at x 190 (rover place 190 140 270): stood on its wheels it holds there (traced 189.9995); stood level and dropped it crept 2.3 cm (189.977)
+    (check-= (list-ref (xf-of r "chassis") 9) 190.0 1e-2 "the chassis is where it was placed")
     (define w (worked-of (p "mid.save")))
     (check-= (- (car (numbers-after w "dug")) (car (numbers-after w "dumped"))) (rnum r "carried") 1e-9 "ground lost = bucket held"))
 

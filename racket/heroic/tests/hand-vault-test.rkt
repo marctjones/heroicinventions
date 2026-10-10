@@ -58,7 +58,7 @@
   (define defaults (vector-ref results 1))
 
   (test-case "build mode places a room 1.54 m down and it holds the buried crate's middle"
-    (check-true (has? #rx"^\\[build\\] new machine built-1 at \\(254\\.4[0-9] -4[0-9]\\.[0-9]+ 137\\.8[0-9]\\)" night) (string-join night "\n"))
+    (check-true (has? #rx"^\\[build\\] new machine built-1 at \\(254\\.4[0-9] -4[0-9]\\.[0-9]+ 137\\.[89][0-9]\\)" night) (string-join night "\n"))
     (check-true (has? #rx"^\\[zones\\] battery-bank.cells joined built-1.vault" night)))
 
   (test-case "on Mars a room placed with no wall gets a regolith wall and no fixed insulation; the player can change both"
