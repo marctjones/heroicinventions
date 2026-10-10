@@ -66,7 +66,6 @@ public partial class Main
     // ----------------------------------------------------------------- the Routes block of the goals panel (#230)
 
     private RoutesPanelLevel _routesLevel = RoutesPanelLevel.NextSteps;
-    private bool _routesLevelChosen;                    // the player picked a level in this game: re-asserted in the settings file (see RoutesPanelTick)
     private string _routesShape = "", _routesText = ""; // the last block drawn: its shape (levels, routes, steps and statuses) and its text (reasons carry live numbers)
     private double _routesDumpAt = double.NegativeInfinity;
     private int _routesFrames;
@@ -92,7 +91,6 @@ public partial class Main
     public void SetRoutesLevel(RoutesPanelLevel level)
     {
         _routesLevel = level;
-        _routesLevelChosen = true;
         RoutesPanelSetting.Write(RoutesSettingsPath(), level);
         RoutesPanelRefresh(true);
     }
@@ -137,7 +135,7 @@ public partial class Main
     /// <summary>Each frame (and each half second of a sleep) the block is looked at twice a second while the panel is up or the dump is on, and at once when a step or route was newly met.</summary>
     private void RoutesPanelTick(bool newlyMet)
     {
-        if (++_routesFrames % 30 == 0 && _routesLevelChosen) RoutesPanelSetting.Reassert(RoutesSettingsPath(), _routesLevel);
+        _routesFrames++;
         if (newlyMet || (_routesFrames % 30 == 1 && (_routesDump || _goalsPanel is { Visible: true }))) RoutesPanelRefresh();
     }
 
@@ -206,7 +204,7 @@ public static class RoutesPanelText
     }
 }
 
-/// <summary>The level in the settings file, in its own section ("routes-panel", key "level"), so Hints.cs's section is never edited by it.</summary>
+/// <summary>The level in the settings file, in its own section ("routes-panel", key "level"). Every writer of the file (this, Hints, MarkerSettings) loads it, sets its own keys and saves (#248).</summary>
 public static class RoutesPanelSetting
 {
     private const string Section = "routes-panel", Key = "level";
@@ -231,7 +229,4 @@ public static class RoutesPanelSetting
         cfg.SetValue(Section, Key, Name(level));
         cfg.Save(path);
     }
-
-    /// <summary>Hints.cs saves the whole file from the copy it read at start, which drops this section; so a chosen level is written back if the file no longer has it.</summary>
-    public static void Reassert(string path, RoutesPanelLevel level) { if (Read(path) != level) Write(path, level); }
 }
