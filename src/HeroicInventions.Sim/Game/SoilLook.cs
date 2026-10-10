@@ -57,6 +57,63 @@ public static class SoilLook
         ["silica-sand"] = new("silica sand", "palest", "the palest ground, a bay of clean sand"),
     };
 
+    /// <summary>
+    /// The mark a soil is drawn with on the ground, on the navigation map and in its key, as a geologic map draws a unit in a colour and a
+    /// lithologic pattern (FGDC-STD-013-2006, section 37; docs/art-direction.md 12.22), so two soils of near the same colour still tell
+    /// apart. The number is the pattern's slot in the shaders (game/scripts/SoilPatterns.cs): keep the two in step.
+    /// </summary>
+    public enum Pattern
+    {
+        None = 0,
+        /// <summary>Stipple, dots: sand (FGDC 607, massive sand or sandstone).</summary>
+        Sand = 1,
+        /// <summary>Short dashes and dots: fine soil, silt or loam (FGDC 616, silt or siltstone).</summary>
+        Silt = 2,
+        /// <summary>Rows of long thin dashes: clay (FGDC 620, clay or clay shale).</summary>
+        Clay = 3,
+        /// <summary>Angular triangles: rubble, talus, breccia (FGDC 605, breccia).</summary>
+        Rubble = 4,
+        /// <summary>Jointed blocks with a cross in some: bedrock, massive rock (FGDC 627's blocks and 721-728's crosses).</summary>
+        Rock = 5,
+        /// <summary>Pale bluish flecks: soil held by ice (no FGDC lithology; a glacier's blue and the silt's dashes).</summary>
+        Ice = 6,
+        /// <summary>Open rings and dots: loose spoil the rover has dug or tipped (FGDC 681, till or diamicton: unsorted).</summary>
+        Spoil = 7,
+    }
+
+    /// <summary>The number of pattern slots (two RGBA textures' channels in the shaders).</summary>
+    public const int PatternSlots = 8;
+
+    private static readonly Dictionary<string, Pattern> Patterns = new()
+    {
+        ["sand"] = Pattern.Sand,
+        ["basalt-sand"] = Pattern.Sand,
+        ["silica-sand"] = Pattern.Sand,
+        ["regolith"] = Pattern.Silt,
+        ["loam"] = Pattern.Silt,
+        ["clay"] = Pattern.Clay,
+        ["sublimed-regolith"] = Pattern.Rubble,
+        ["bedrock"] = Pattern.Rock,
+        ["ice-cemented-regolith"] = Pattern.Ice,
+    };
+
+    /// <summary>
+    /// A soil's pattern, by its material. Ground that lies loose keeps its soil's pattern (the slide's rubble is the sublimed regolith, drawn as
+    /// rubble wherever it lies); only the ground the rover has dug or heaped (a worked patch) is drawn as <see cref="Pattern.Spoil"/>.
+    /// </summary>
+    public static Pattern PatternFor(string material) => Patterns.GetValueOrDefault(material, Pattern.None);
+
+    /// <summary>
+    /// The pattern a cell of a map is drawn with: its soil's, or, where a slide's rubble lies on rock (<see cref="Terrain.Covering"/>: the
+    /// crater's collapse runs out over the bedrock apron), the rubble's, since what lies on top is what the mark shows. (The cell's colour is
+    /// still its own soil's, lightened as loose: TerrainView.)
+    /// </summary>
+    public static Pattern PatternOf(Terrain t, int cell) =>
+        t.Covering(cell) is { } c && t.Heights[cell] > c.RockTop + 0.01 ? PatternFor(t.Soils[c.Soil].Material) : PatternFor(t.SoilOf(cell).Material);
+
+    /// <summary>A pattern's name in lowercase words, for the key's print line and the test.</summary>
+    public static string PatternName(Pattern p) => p.ToString().ToLowerInvariant();
+
     /// <summary>A soil's words; a soil with none written is named from its material id, spaced out.</summary>
     public static Words WordsFor(string material) =>
         Plain.TryGetValue(material, out var w) ? w : new(material.Replace('-', ' '), "", "");

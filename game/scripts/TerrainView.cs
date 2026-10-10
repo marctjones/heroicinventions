@@ -77,6 +77,10 @@ public partial class TerrainView : Node3D
     private double[][] _colours = [[], [], [], []], _smoothed = [[], [], [], []];
     private byte[] _colourBytes = [];
     private (Color Colour, float Roughness)[] _soilLook = [];
+    // each cell's soil pattern (12.22) as weights, one byte a slot in two RGBA8 textures (SoilPatterns.Put), not smoothed: the shader's linear
+    // sampling hands one pattern over to the next across a cell
+    private byte[] _patternA = [], _patternB = [];
+    private ImageTexture? _patternATexture, _patternBTexture;
 
     /// <summary>
     /// The colour a soil is drawn in on the ground (<see cref="SoilLook.Drawn"/> of its table colour): the one place, read by the
@@ -138,6 +142,9 @@ public partial class TerrainView : Node3D
     /// <summary>The colour the ground's own cell texture holds at a cell, "#RRGGBB" (what the shader reads as the soil's colour).</summary>
     public string CellColourHex(int cell) => $"#{_colourBytes[cell * 4]:X2}{_colourBytes[cell * 4 + 1]:X2}{_colourBytes[cell * 4 + 2]:X2}";
 
+    /// <summary>The pattern the ground's own pattern textures hold at a cell (the slot of largest weight: what the shader draws there).</summary>
+    public SoilLook.Pattern CellPattern(int cell) => SoilPatterns.At(_patternA, _patternB, cell);
+
     private ArrayMesh GroundMesh()
     {
         int nx = _ground.Nx, nz = _ground.Nz, n = nx * nz;
@@ -147,6 +154,7 @@ public partial class TerrainView : Node3D
         _soilLook = _ground.Soils.Select(s => (Colour: SoilColour(s.Material), Roughness: s.Material.Contains("ice") ? 0.3f : 0.95f)).ToArray();
         _vertices = new Vector3[n]; _normals = new Vector3[n]; _shades = new Color[n];
         _soft = new double[n]; _scratch = new double[n]; _colourBytes = new byte[n * 4];
+        _patternA = new byte[n * 4]; _patternB = new byte[n * 4];
         for (int ch = 0; ch < 4; ch++) { _colours[ch] = new double[n]; _smoothed[ch] = new double[n]; }
         _shownHeights = (double[])_ground.Heights.Clone();
         _shownSoil = (int[])_ground.Soil.Clone();
@@ -157,6 +165,10 @@ public partial class TerrainView : Node3D
         _groundMaterial ??= GroundMaterial();
         _cellsTexture = ImageTexture.CreateFromImage(Image.CreateFromData(nx, nz, false, Image.Format.Rgba8, _colourBytes));
         _groundMaterial.SetShaderParameter("cells", _cellsTexture);
+        _patternATexture = ImageTexture.CreateFromImage(Image.CreateFromData(nx, nz, false, Image.Format.Rgba8, _patternA));
+        _patternBTexture = ImageTexture.CreateFromImage(Image.CreateFromData(nx, nz, false, Image.Format.Rgba8, _patternB));
+        _groundMaterial.SetShaderParameter("pattern_a", _patternATexture);
+        _groundMaterial.SetShaderParameter("pattern_b", _patternBTexture);
         _mesh.SurfaceSetMaterial(0, _groundMaterial);
         return _mesh;
     }
@@ -173,6 +185,8 @@ public partial class TerrainView : Node3D
         PutMesh();
         _mesh.SurfaceSetMaterial(0, _groundMaterial);
         _cellsTexture!.Update(Image.CreateFromData(nx, nz, false, Image.Format.Rgba8, _colourBytes));
+        _patternATexture!.Update(Image.CreateFromData(nx, nz, false, Image.Format.Rgba8, _patternA));
+        _patternBTexture!.Update(Image.CreateFromData(nx, nz, false, Image.Format.Rgba8, _patternB));
         TickProfile.Stop("reshape-upload", t);
         var h = _ground.Heights; var soil = _ground.Soil; var loose = _ground.Loose;
         for (int j = box.J0; j <= box.J1; j++)
@@ -234,6 +248,7 @@ public partial class TerrainView : Node3D
                 if (Math.Abs(m) > 0.002)
                     c = m < 0 ? c.Darkened(Mathf.Clamp((float)(-m / 0.05), 0, 0.45f)) : c.Lerp(new Color(0.98f, 0.95f, 0.85f), Mathf.Clamp((float)(m / 0.05), 0, 0.6f));
                 _colours[0][k] = c.R; _colours[1][k] = c.G; _colours[2][k] = c.B; _colours[3][k] = roughness;
+                SoilPatterns.Put(SoilLook.PatternOf(_ground, k), _patternA, _patternB, k);
                 _vertices[k] = Centre(i, j);
             }
         for (int j = near3.J0; j <= near3.J1; j++)
@@ -377,6 +392,9 @@ public partial class TerrainView : Node3D
                 uniform float interval = 1.0;
                 uniform sampler2D cells : source_color, filter_linear, repeat_disable;   // a cell's colour, roughness in alpha
                 uniform sampler2D wet : filter_linear, repeat_disable;                   // 1 where water stands
+                // a cell's soil pattern (12.22, SoilPatterns): weights of slots 0-3 and 4-7, raw bytes (not colour), one-hot per cell
+                uniform sampler2D pattern_a : filter_linear, repeat_disable;
+                uniform sampler2D pattern_b : filter_linear, repeat_disable;
                 uniform vec2 origin;   // the map's corner (X0, Z0)
                 uniform vec2 size;     // and its width and depth
                 uniform float patch = 0.0;   // 1 on a patch of worked ground (#63): COLOR.g is how far it has been dug (dark) or heaped (pale)
@@ -403,6 +421,7 @@ public partial class TerrainView : Node3D
                     float w = fwidth(h);
                     return 1.0 - smoothstep(0.0, w * px, abs(fract(h - 0.5) - 0.5));
                 }
+                SOIL_PATTERNS
                 // 1 where lines this far apart (in the units of h) are still more than about 7 pixels apart, 0 where they crowd
                 float room(float h) { return clamp(1.0 - (fwidth(h) - 0.14) / 0.1, 0.0, 1.0); }
                 void fragment() {
@@ -437,7 +456,7 @@ public partial class TerrainView : Node3D
                     float grid_near = (1.0 - smoothstep(8.0, 26.0, away)) * (1.0 - smoothstep(40.0, 110.0, eye));
                     float grid = max(line(spot.x, 0.9) * room(spot.x), line(spot.y, 0.9) * room(spot.y)) * grid_near;
                     // pale on dark soil, dark on pale soil (the Mars crater is dark, ice-cemented ground and rubble are not)
-                    float dark_soil = smoothstep(0.18, 0.36, dot(lit, vec3(0.2126, 0.7152, 0.0722)));
+                    float dark_soil = smoothstep(0.18, 0.36, dot(soil, vec3(0.2126, 0.7152, 0.0722)));   // the soil's, not its marks'
                     vec3 pale = mix(vec3(0.9, 0.82, 0.7), vec3(0.06, 0.04, 0.03), dark_soil);
                     float marks = max(0.45 * fine_h, 0.18 * grid);
                     lit = mix(lit, band, grip);
@@ -453,12 +472,29 @@ public partial class TerrainView : Node3D
                         float lip = 1.0 - smoothstep(0.0, fwidth(worked) * 1.5 + 1e-4, abs(worked + 0.12));
                         lit = mix(lit, vec3(0.05, 0.04, 0.03), 0.85 * lip);
                     }
+                    // the soil's pattern, as on a geologic map (12.22): marks fixed to the ground, a motif every 0.6 m, and every 2.4 m once
+                    // those get under about ten pixels; each faded out before it is small enough to shimmer. Dug or heaped ground (a worked
+                    // patch, past the clods' threshold) takes the spoil's rings and dots instead of its soil's mark.
+                    vec4 wa = texture(pattern_a, at), wb = texture(pattern_b, at);
+                    float spoil = smoothstep(0.04, 0.25, abs(worked));
+                    wa *= 1.0 - spoil; wb *= 1.0 - spoil; wb.w += spoil;
+                    vec2 q1 = spot / 0.6;
+                    float px1 = max(max(fwidth(q1.x), fwidth(q1.y)), 1e-5), px2 = px1 * 0.25;
+                    float r1 = 1.0 - smoothstep(0.07, 0.15, px1), r2 = (1.0 - r1) * (1.0 - smoothstep(0.07, 0.15, px2));
+                    vec2 pm = vec2(0.0);
+                    if (r1 > 0.0) pm += r1 * soil_marks(wa, wb, q1, px1);
+                    if (r2 > 0.0) pm += r2 * soil_marks(wa, wb, spot / 2.4 + vec2(0.37, 0.71), px2);
+                    // drawn last, over the slope tint and a worked patch's tint, so the marks still show on a tinted slope and a pale heap: a darker tone of the ground's colour there, a
+                    // lighter one where it is dark (the basalt floor); the ice's flecks pale and bluish
+                    float ground_l = dot(lit, vec3(0.2126, 0.7152, 0.0722));
+                    lit *= mix(1.0, mix(1.75, 0.6, smoothstep(0.07, 0.11, ground_l)), 0.85 * pm.x);
+                    lit = mix(lit, lit * vec3(1.35, 1.5, 1.85) + vec3(0.0, 0.01, 0.03), 0.9 * pm.y);
                     ALBEDO = lit * shade * (1.0 - 0.16 * fine - 0.32 * heavy);
                     EMISSION = lit * shade * 0.16 * (1.0 - 0.16 * fine - 0.32 * heavy) + band * grip * 0.12 + pale * marks * 0.12 * (1.0 - dark_soil);
                     ROUGHNESS = mix(cell.a, 0.25, damp);
                     SPECULAR = 0.5 * (1.0 - ROUGHNESS);
                 }
-                """,
+                """.Replace("SOIL_PATTERNS", SoilPatterns.Glsl),
         };
         var mat = new ShaderMaterial { Shader = _groundShader };
         mat.SetShaderParameter("interval", ContourInterval());

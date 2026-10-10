@@ -131,6 +131,53 @@ public class SoilLookTests
     }
 
     [Fact]
+    public void EachSoilHasItsGeologicMapPattern()
+    {
+        // the table of docs/art-direction.md 12.22, written out again by hand (FGDC-STD-013-2006 section 37 numbers in the comments)
+        var want = new Dictionary<string, SoilLook.Pattern>
+        {
+            ["basalt-sand"] = SoilLook.Pattern.Sand,            // 607 massive sand: stipple
+            ["silica-sand"] = SoilLook.Pattern.Sand,            // 607: the same lithology, told apart by colour
+            ["sand"] = SoilLook.Pattern.Sand,
+            ["regolith"] = SoilLook.Pattern.Silt,               // 616 silt: dashes and dots
+            ["loam"] = SoilLook.Pattern.Silt,
+            ["clay"] = SoilLook.Pattern.Clay,                   // 620 clay: rows of dashes
+            ["sublimed-regolith"] = SoilLook.Pattern.Rubble,    // 605 breccia: the slide's rubble, triangles
+            ["bedrock"] = SoilLook.Pattern.Rock,                // massive rock: jointed blocks and crosses
+            ["ice-cemented-regolith"] = SoilLook.Pattern.Ice,   // pale flecks
+        };
+        foreach (var (m, p) in want) Assert.Equal(p, SoilLook.PatternFor(m));
+        Assert.Equal(SoilLook.Pattern.None, SoilLook.PatternFor("granite"));
+        Assert.True((int)SoilLook.Pattern.Spoil < SoilLook.PatternSlots);
+        // every pair of soils that touch on the victoria map and are under 30 apart in luminance has two different patterns: the pattern is what
+        // tells bedrock from regolith (5 apart) and from the rubble
+        var t = Victoria();
+        for (int k = 0; k < t.Soil.Length; k++)
+        {
+            int i = k % t.Nx;
+            foreach (int n in new[] { i + 1 < t.Nx ? k + 1 : -1, k + t.Nx < t.Soil.Length ? k + t.Nx : -1 })
+            {
+                if (n < 0 || t.Soil[n] == t.Soil[k]) continue;
+                string a = t.Soils[t.Soil[k]].Material, b = t.Soils[t.Soil[n]].Material;
+                if (Math.Abs(DrawnLuminance(a) - DrawnLuminance(b)) < 30) Assert.NotEqual(SoilLook.PatternFor(a), SoilLook.PatternFor(b));
+            }
+        }
+    }
+
+    /// <summary>The slide's rubble on the bedrock apron is drawn as rubble (12.22): the battery bank's cell at (264, 143), bedrock under 4.74 m of it.</summary>
+    [Fact]
+    public void RubbleOnBedrockTakesTheRubblesPattern()
+    {
+        var t = Victoria();
+        int cell = t.CellAt(264, 143)!.Value, rock = t.CellAt(0, 345)!.Value;   // the second: the wall's foot, bedrock no slide reaches
+        Assert.Equal(SoilLook.Pattern.Rock, SoilLook.PatternOf(t, cell));
+        t.Settle(3.71);
+        Assert.Equal("bedrock", t.SoilOf(cell).Material);
+        Assert.Equal(SoilLook.Pattern.Rubble, SoilLook.PatternOf(t, cell));
+        Assert.Equal(SoilLook.Pattern.Rock, SoilLook.PatternOf(t, rock));
+    }
+
+    [Fact]
     public void TheKeyListsOnlyTheSoilsTheMapHasUnderACell()
     {
         var t = Victoria();

@@ -36,9 +36,13 @@ public partial class NavMap : Control
     private ColorRect _quad = null!;
     private Control _marks = null!;
     private ShaderMaterial _material = null!;
-    private ImageTexture? _heights, _soils;
+    private ImageTexture? _heights, _soils, _patternA, _patternB;
     private readonly List<KeyEntry> _key = [];
-    private byte[] _soilBytes = [];
+    private byte[] _soilBytes = [], _patternABytes = [], _patternBBytes = [];
+    private readonly List<ColorRect> _swatches = [];   // the key's swatches: the soil's colour and its pattern, by SoilPatterns' own shader
+    private Shader? _swatchShader;
+    /// <summary>The map's patterns: a motif every this many pixels, whatever the zoom (a printed map's pattern has a size on the paper).</summary>
+    public const float MotifPx = 16f;
     private int _shownVersion = -1;
     private double _sinceUpload;
     private Vector2 _pressAt;
@@ -69,7 +73,7 @@ public partial class NavMap : Control
         MouseFilter = MouseFilterEnum.Stop;
         FocusMode = FocusModeEnum.None;
         ClipContents = true;
-        var shader = new Shader { Code = ShaderCode };
+        var shader = new Shader { Code = ShaderCode.Replace("SOIL_PATTERNS", SoilPatterns.Glsl) };
         _material = new ShaderMaterial { Shader = shader };
         _quad = new ColorRect { MouseFilter = MouseFilterEnum.Ignore, Material = _material, Color = Colors.White };
         _quad.SetAnchorsPreset(LayoutPreset.FullRect);
@@ -143,7 +147,7 @@ public partial class NavMap : Control
     }
 
     /// <summary>One entry of the ground key: a soil, the colour it is drawn in (TerrainView's, the ground's own), and its words.</summary>
-    public readonly record struct KeyEntry(int Soil, string Material, Color Colour, string Name, string Note);
+    public readonly record struct KeyEntry(int Soil, string Material, Color Colour, SoilLook.Pattern Pattern, string Name, string Note);
 
     /// <summary>The soils the key lists now, those the map has under at least one cell, each in the colour TerrainView draws it in.</summary>
     public IReadOnlyList<KeyEntry> Key => _key;
@@ -156,12 +160,20 @@ public partial class NavMap : Control
     {
         var terrain = _terrain!;
         var colours = terrain.Soils.Select(s => TerrainView.SoilColour(s.Material)).ToArray();
+        var patterns = terrain.Soils.Select(s => SoilLook.PatternFor(s.Material)).ToArray();
         var bytes = _soilBytes = new byte[terrain.Soil.Length * 3];
+        _patternABytes = new byte[terrain.Soil.Length * 4]; _patternBBytes = new byte[terrain.Soil.Length * 4];
         for (int k = 0; k < terrain.Soil.Length; k++)
         {
             var c = colours[terrain.Soil[k]];
             bytes[k * 3] = SoilLook.Byte(c.R); bytes[k * 3 + 1] = SoilLook.Byte(c.G); bytes[k * 3 + 2] = SoilLook.Byte(c.B);
+            SoilPatterns.Put(SoilLook.PatternOf(terrain, k), _patternABytes, _patternBBytes, k);
         }
+        _patternA = Upload(_patternA, Image.CreateFromData(terrain.Nx, terrain.Nz, false, Image.Format.Rgba8, _patternABytes));
+        _patternB = Upload(_patternB, Image.CreateFromData(terrain.Nx, terrain.Nz, false, Image.Format.Rgba8, _patternBBytes));
+        _material.SetShaderParameter("pattern_a", _patternA);
+        _material.SetShaderParameter("pattern_b", _patternB);
+        _material.SetShaderParameter("motif_px", MotifPx);
         var image = Image.CreateFromData(terrain.Nx, terrain.Nz, false, Image.Format.Rgb8, bytes);
         if (_soils is null || _soils.GetWidth() != terrain.Nx || _soils.GetHeight() != terrain.Nz) _soils = ImageTexture.CreateFromImage(image);
         else _soils.Update(image);
@@ -170,8 +182,39 @@ public partial class NavMap : Control
         foreach (int i in SoilLook.SoilsPresent(terrain))
         {
             var w = SoilLook.WordsFor(terrain.Soils[i].Material);
-            _key.Add(new KeyEntry(i, terrain.Soils[i].Material, colours[i], w.Name, w.Note));
+            _key.Add(new KeyEntry(i, terrain.Soils[i].Material, colours[i], patterns[i], w.Name, w.Note));
         }
+    }
+
+    private static ImageTexture Upload(ImageTexture? texture, Image image)
+    {
+        if (texture is null || texture.GetWidth() != image.GetWidth() || texture.GetHeight() != image.GetHeight()) return ImageTexture.CreateFromImage(image);
+        texture.Update(image);
+        return texture;
+    }
+
+    /// <summary>The pattern the map's pattern textures hold at a cell (for the scripted check that the key, the map and the ground agree).</summary>
+    public SoilLook.Pattern PatternTexel(int cell) => SoilPatterns.At(_patternABytes, _patternBBytes, cell);
+
+    /// <summary>The key's swatch for a row: a rectangle drawn by SoilPatterns' swatch shader in the soil's colour with its pattern.</summary>
+    private void PlaceSwatch(int row, Rect2 rect, KeyEntry e)
+    {
+        _swatchShader ??= new Shader { Code = SoilPatterns.SwatchShader };
+        while (_swatches.Count <= row)
+        {
+            var r = new ColorRect { MouseFilter = MouseFilterEnum.Ignore, Material = new ShaderMaterial { Shader = _swatchShader } };
+            _marks.AddChild(r);
+            _swatches.Add(r);
+        }
+        var swatch = _swatches[row];
+        swatch.Visible = true;
+        swatch.Position = rect.Position; swatch.Size = rect.Size;
+        var m = (ShaderMaterial)swatch.Material;
+        var (wa, wb) = SoilPatterns.Weights(e.Pattern);
+        m.SetShaderParameter("base", new Vector3(e.Colour.R, e.Colour.G, e.Colour.B));
+        m.SetShaderParameter("sw_a", wa); m.SetShaderParameter("sw_b", wb);
+        m.SetShaderParameter("size_px", rect.Size);
+        m.SetShaderParameter("motif_px", MotifPx);
     }
 
     /// <summary>The colour the map's ground texture holds at a cell, "#RRGGBB" (for the scripted check that the key, the map and the ground agree).</summary>
@@ -359,12 +402,13 @@ public partial class NavMap : Control
     /// </summary>
     private void DrawKey(Font font)
     {
+        for (int i = _key.Count; i < _swatches.Count; i++) _swatches[i].Visible = false;
         if (_key.Count == 0) return;
-        const int fontSize = 15; const float rowH = 24, swatch = 18, pad = 10;
-        string head = "Ground (flat, in the light; a slope turned away looks darker)";
+        const int fontSize = 15; const float rowH = 36, swatch = 48, swatchH = 30, pad = 10;
+        string head = "Ground, as on a geologic map: colour and marks (flat, in the light)";
         string Row(KeyEntry e) => $"{char.ToUpper(e.Name[0])}{e.Name[1..]}: {e.Note}";
         float width = Math.Max((float)Shaped(font, head, fontSize).GetSize().X, _key.Max(e => (float)Shaped(font, Row(e), fontSize).GetSize().X + swatch + 10)) + 2 * pad;
-        const string foot = "Paler patches: loose or freshly tipped soil · darker: dug away or in shadow";
+        const string foot = "Paler: loose or tipped soil · darker: dug, in shadow or facing away · rings and dots: dug by the rover";
         width = Math.Max(width, (float)Shaped(font, foot, fontSize).GetSize().X + 2 * pad);
         var box = new Rect2(14, 38, width, pad * 2 + rowH * (_key.Count + 2) - 4);
         _marks.DrawRect(box, new Color(Ink, 0.72f));
@@ -373,10 +417,11 @@ public partial class NavMap : Control
         for (int i = 0; i < _key.Count; i++)
         {
             float y = box.Position.Y + pad + rowH * (i + 1);
-            var chip = new Rect2(box.Position.X + pad, y + 1, swatch, swatch);
+            var chip = new Rect2(box.Position.X + pad, y + 1, swatch, swatchH);
             _marks.DrawRect(chip.Grow(1.5f), Paper);
             _marks.DrawRect(chip, _key[i].Colour);
-            Text(font, Row(_key[i]), new Vector2(chip.End.X + 10, y + 15), fontSize, Paper);
+            PlaceSwatch(i, chip, _key[i]);
+            Text(font, Row(_key[i]), new Vector2(chip.End.X + 10, y + 21), fontSize, Paper);
         }
         Text(font, foot, new Vector2(box.Position.X + pad, box.Position.Y + pad + rowH * (_key.Count + 1) + 15), fontSize, new Color(Paper, 0.85f));
     }
@@ -412,6 +457,9 @@ public partial class NavMap : Control
         shader_type canvas_item;
         uniform sampler2D heights : filter_nearest, repeat_disable;   // one height per cell (R32F), the ground's own array
         uniform sampler2D soils : filter_linear, repeat_disable;   // each cell's soil colour (RGB8), the colour the ground itself is drawn in
+        uniform sampler2D pattern_a : filter_linear, repeat_disable;   // each cell's soil pattern, weights of slots 0-3 and 4-7 (SoilPatterns), as on the ground
+        uniform sampler2D pattern_b : filter_linear, repeat_disable;
+        uniform float motif_px = 12.0;
         uniform vec2 origin;      // the map's corner (X0, Z0)
         uniform float cell;       // m
         uniform vec2 dims;        // cells
@@ -430,6 +478,7 @@ public partial class NavMap : Control
         uniform vec4 wind_line;   // through x, through z, notch azimuth (radians), width
         uniform float wind_base = 0.3;
 
+        SOIL_PATTERNS
         float cell_height(ivec2 c) {
             c = clamp(c, ivec2(0), ivec2(dims) - ivec2(1));
             return texelFetch(heights, c, 0).r;
@@ -455,13 +504,16 @@ public partial class NavMap : Control
             vec3 n = normalize(vec3(-hx, 1.0, -hz));
             float lit = 0.45 + 0.55 * max(0.0, dot(n, normalize(light)));
             float shade = mix(0.5, 1.2, clamp((lit - 0.45) / 0.55, 0.0, 1.0));
-            vec3 base = texture(soils, (w - origin) / (dims * cell)).rgb;   // the soil's own colour, as on the ground (the key's swatches are these)
+            vec2 uv = (w - origin) / (dims * cell);
+            vec3 base = texture(soils, uv).rgb;   // the soil's own colour, as on the ground (the key's swatches are these)
             float slope = degrees(atan(length(vec2(hx, hz))));
             float s_on = smoothstep(grade_deg - 16.5, grade_deg - 13.5, slope);
             float s_amber = smoothstep(grade_deg - 6.5, grade_deg - 3.5, slope);
             float s_red = smoothstep(grade_deg - 1.5, grade_deg + 1.5, slope);
             vec3 band = mix(mix(tint_warm, tint_amber, s_amber), tint_red, s_red);
             vec3 col = mix(base * shade, band, s_on * mix(mix(0.55, 0.7, s_amber), 0.85, s_red));
+            // its pattern (12.22): the ground's motifs, over the tint as on the ground, fixed to the ground, one every motif_px pixels at any zoom
+            col = soil_marked_srgb(col, soil_marks(texture(pattern_a, uv), texture(pattern_b, uv), w / (mpp * motif_px), 1.0 / motif_px));
             // the wind's corridor, shaded by how much stronger the wind is there than away from it
             if (wind_on > 0.5) {
                 float across = -(w.x - wind_line.x) * sin(wind_line.z) + (w.y - wind_line.y) * cos(wind_line.z);
