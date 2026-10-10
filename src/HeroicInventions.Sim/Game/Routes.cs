@@ -19,9 +19,26 @@ public sealed record BankReading(string Id, double Temperature, bool Full, doubl
 /// Everything a route's conditions and reasons look at, in the sim's own field terms. Built from the runtimes by <see cref="Read"/>; a test
 /// builds one directly from the same field names, so the reveal rule can be tested over a sequence of states without a game.
 /// </summary>
-public sealed record RouteReading(int Windmills, IReadOnlyList<GeneratorReading> Generators, IReadOnlyList<BankReading> Banks, bool Called)
+/// <param name="BuiltTrains">the gearing of each prime mover's built train, with or without a generator on it (#251): rotor-side speed over the prime mover's, at the fastest part the train reaches (<see cref="BuiltTrainRatio"/>). Used only while no generator has a ratio of its own.</param>
+public sealed record RouteReading(int Windmills, IReadOnlyList<GeneratorReading> Generators, IReadOnlyList<BankReading> Banks, bool Called, IReadOnlyList<double>? BuiltTrains = null)
 {
     public static readonly RouteReading Empty = new(0, [], [], false);
+
+    /// <summary>
+    /// The train ratios the route looks at: each generator's own (the whole train to its rotor, across a shaft link) while any generator has one;
+    /// otherwise the built trains', so a windmill and a 256:1 train that drive nothing yet already count (#251). Once a generator is joined its
+    /// ratio is the truth, whatever the link adds or takes away.
+    /// </summary>
+    public IEnumerable<double> TrainRatios => Generators.Any(g => g.Ratio is not null)
+        ? Generators.Where(g => g.Ratio is not null).Select(g => g.Ratio!.Value)
+        : BuiltTrains ?? [];
+
+    /// <summary>
+    /// The gearing of the train that starts at part <paramref name="start"/> of a machine (a prime mover): the greatest ω_part / ω_start over the parts
+    /// its arbors, meshes and belts reach, from the teeth (<see cref="MachineRuntime.TrainOf"/>, the same walk a generator's ratio is made with). 1 for
+    /// a mover with no train. The speeds do not enter, so a stopped sail does not hide it.
+    /// </summary>
+    public static double BuiltTrainRatio(MachineRuntime rt, string start) => rt.TrainOf(start).Values.Where(v => v.Ratio > 0).Select(v => v.Ratio).DefaultIfEmpty(1).Max();
 
     /// <summary>The names a reason template may use, each a number read from this state (null when nothing yet gives it).</summary>
     public static IReadOnlyList<string> NumberNames { get; } = ["cut-in-rpm", "rotor-rpm", "ratio", "wind-watts", "bank-wh", "bank-charge-wh", "bank-temp"];
@@ -30,7 +47,7 @@ public sealed record RouteReading(int Windmills, IReadOnlyList<GeneratorReading>
     {
         "cut-in-rpm" => Generators.Count > 0 ? Generators[0].CutInRpm : null,
         "rotor-rpm" => Generators.Count > 0 ? Generators.Max(g => g.Rpm) : null,
-        "ratio" => Generators.Where(g => g.Ratio is not null).Select(g => g.Ratio).DefaultIfEmpty(null).Max(),
+        "ratio" => TrainRatios.Select(x => (double?)x).DefaultIfEmpty(null).Max(),
         "wind-watts" => Generators.Select(g => g.EstimatedWatts?.Invoke() ?? 0).DefaultIfEmpty(0).Max() is var w && w > 0 ? w : null,
         "bank-wh" => Banks.Count > 0 ? Banks[0].CapacityWh : null,
         "bank-charge-wh" => Banks.Count > 0 ? Banks[0].ChargeWh : null,
@@ -44,7 +61,8 @@ public sealed record RouteReading(int Windmills, IReadOnlyList<GeneratorReading>
         runtimes.SelectMany(rt => rt.Generators.Select(kv => (kv.Key, G: kv.Value)))
             .Select(x => new GeneratorReading(x.Key, x.G.Rpm, x.G.CutInRpm, x.G.Bank is not null, x.G.Mover?.Ratio, () => x.G.EstimatePower())).ToList(),
         runtimes.SelectMany(rt => rt.Banks.Select(kv => new BankReading(kv.Key, kv.Value.Temperature, kv.Value.Full, kv.Value.CapacityWh, kv.Value.ChargeWh))).ToList(),
-        runtimes.Any(rt => rt.Won));
+        runtimes.Any(rt => rt.Won),
+        runtimes.SelectMany(rt => rt.Windmills.Keys.Concat(rt.WaterWheels.Keys).Concat(rt.JetWheels.Keys).Concat(rt.Stirlings.Keys).Select(id => BuiltTrainRatio(rt, id))).ToList());
 }
 
 /// <summary>A condition over a <see cref="RouteReading"/>: a closed set of kinds, named in the route file with their numbers.</summary>
@@ -54,7 +72,7 @@ public sealed record RouteCondition(string Kind, IReadOnlyList<double> Args)
     public static IReadOnlyDictionary<string, (int Args, string Reads)> Kinds { get; } = new Dictionary<string, (int, string)>
     {
         ["windmill-exists"] = (0, "a windmill part exists in some machine of the scene (MachineRuntime.Windmills)"),
-        ["train-ratio-at-least"] = (1, "a generator's prime mover is geared to its rotor at N:1 or more (Generator.Mover.Ratio, the teeth, not the present speeds)"),
+        ["train-ratio-at-least"] = (1, "a prime mover is geared up at N:1 or more: a generator's own train (Generator.Mover.Ratio), or, while no generator has one, the built train's fastest part (MachineRuntime.TrainOf; the teeth, not the present speeds)"),
         ["rotor-over-cut-in"] = (0, "a generator's rotor is above its cut-in (<generator>.rpm > <generator>.cut-in-rpm)"),
         ["generator-wired"] = (0, "a generator has a bank, by a wire link or built beside it (Generator.Bank; ChargeStatus's 'unwired')"),
         ["bank-temperature-between"] = (2, "a bank is between LO and HI degrees C (<bank>.temperature)"),
@@ -65,7 +83,7 @@ public sealed record RouteCondition(string Kind, IReadOnlyList<double> Args)
     public bool Holds(RouteReading r) => Kind switch
     {
         "windmill-exists" => r.Windmills > 0,
-        "train-ratio-at-least" => r.Generators.Any(g => g.Ratio is { } x && x >= Args[0]),
+        "train-ratio-at-least" => r.TrainRatios.Any(x => x >= Args[0]),
         "rotor-over-cut-in" => r.Generators.Any(g => g.Rpm > g.CutInRpm),
         "generator-wired" => r.Generators.Any(g => g.Wired),
         "bank-temperature-between" => r.Banks.Any(b => b.Temperature >= Args[0] && b.Temperature <= Args[1]),
@@ -168,11 +186,14 @@ public static class RouteText
         foreach (var h in Holes(template))
         {
             sb.Append(template, at, h.Start - at);
-            sb.Append(r.Number(h.Name) is { } v ? Format(v) : h.Fallback ?? "?");
+            sb.Append(r.Number(h.Name) is { } v ? Format(v) + Unit(h.Name) : h.Fallback ?? "?");
             at = h.End + 1;
         }
         return sb.Append(template, at, template.Length - at).ToString();
     }
+
+    /// <summary>What a number carries after it, inside its own hole so a fallback has none: a ratio is written N:1 (#251), so "{ratio|not there yet}" reads "256:1" or "not there yet", never "not there yet:1".</summary>
+    private static string Unit(string name) => name == "ratio" ? ":1" : "";
 
     public static string Format(double v) => Math.Abs(v) >= 100 ? v.ToString("#,0", CultureInfo.InvariantCulture) : v.ToString("0.#", CultureInfo.InvariantCulture);
 }

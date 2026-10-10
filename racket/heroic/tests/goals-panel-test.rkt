@@ -8,9 +8,11 @@
 ;;  (a) fresh opening, next steps: the header, the final goal "[ ]  Call Earth with a full, warm bank" and its reason ("holds 0 of 25 Wh at -63 C");
 ;;      NO route line and nothing that names a route (the windmiller is not started: the warm bank step is shared and starts nothing).
 ;;  (b) a windmill and a four-stage train built (4 x 4:1 = 256:1), shaft joined to the salvaged motor's rotor, then the wire to the bank:
-;;      after the build "The windmiller: 1 of 6 steps" (the ratio is read at a generator, so the train alone is not yet "gear-up"); after the
-;;      shaft 2 of 6 (windmill, gear-up) with Next "Get the generator over its cut-in" (the rotor's rpm, 1,500) and Then "Wire the generator to
-;;      the bank"; after the wire 3 of 6, "[x] Wire the generator to the bank" (the last met), Next the cut-in, Then "Keep the bank warm"
+;;      #251 CHANGED THIS: the ratio is now read from the BUILT train when no generator is joined. Predicted: the windmill alone is
+;;      "1 of 6 steps" with Next "Turn the slow shaft much faster" and a reason with a real ratio ("yours is 1:1.", never "yet:1"); once the
+;;      256:1 train is built (before any join) "2 of 6" (windmill, gear-up) with "[x]  Turn the slow shaft much faster" (shown before the Next line: route order), Next "Get the
+;;      generator over its cut-in" and Then "Wire the generator to the bank"; the shaft join leaves it at 2 of 6 (the generator's own ratio, 256,
+;;      now counts); after the wire 3 of 6, "[x] Wire the generator to the bank" (the last met), Next the cut-in, Then "Keep the bank warm"
 ;;      (shared, unmet at -63 C, with the temperature in its reason). The 256:1 never shows: gear-up is met as soon as the ratio passes 100.
 ;;  (c) outline: the same route lines ("N of 6 steps") and no step or reason line, not even the final goal's reason; off: no line at all.
 ;; Skipped when Godot is not installed. About a minute per case.
@@ -83,9 +85,14 @@
     (define progress (for/list ([b bs] #:when (pair? (texts b "Route"))) (car (texts b "Route"))))
     (check-equal? (remove-duplicates progress)
                   '("The windmiller: 1 of 6 steps" "The windmiller: 2 of 6 steps" "The windmiller: 3 of 6 steps"))
-    (define after-build (for/first ([b bs] #:when (member "The windmiller: 1 of 6 steps" (texts b "Route"))) b))
-    (check-true (has-text? after-build "Step" #rx"^\\[ \\]  Next: Turn the slow shaft much faster"))
-    (check-true (has-text? after-build "Reason" #rx"yours is not there yet:1"))
+    (define windmill-only (for/first ([b bs] #:when (member "The windmiller: 1 of 6 steps" (texts b "Route"))) b))
+    (check-true (has-text? windmill-only "Step" #rx"^\\[ \\]  Next: Turn the slow shaft much faster"))
+    (check-true (has-text? windmill-only "Reason" #rx"yours is [0-9,]+:1\\.") (format "~a" windmill-only))
+    (check-false (has-text? windmill-only "Reason" #rx"yet:1"))
+    (define after-build (for/first ([b bs] #:when (member "The windmiller: 2 of 6 steps" (texts b "Route"))) b))
+    (check-equal? (texts after-build "Step") '("[x]  Turn the slow shaft much faster" "[ ]  Next: Get the generator over its cut-in") (format "~a" after-build))
+    (check-equal? (texts after-build "StepDim") '("[ ]  Then: Wire the generator to the bank"))
+    (check-false (has-text? after-build "Reason" #rx"not there yet"))
     (define after-wire (last bs))
     (check-equal? (texts after-wire "Route") '("The windmiller: 3 of 6 steps"))
     (check-equal? (texts after-wire "Step") '("[ ]  Next: Get the generator over its cut-in" "[x]  Wire the generator to the bank"))

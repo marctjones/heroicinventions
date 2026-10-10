@@ -5,7 +5,7 @@
 ;; and steps in order. A step is (step ID (title "...") (reason "...") (met CONDITION ...)): a condition is a fact read from the state of
 ;; the sim (never "the player pressed this"), and any ONE of several conditions meets the step. The reason says what the route is waiting
 ;; for and why, in the voice of the 'why isn't it charging' label (#212); it never names the exact build, and may carry numbers:
-;; {NAME} or {NAME|fallback} from cut-in-rpm, rotor-rpm, ratio, wind-watts, bank-wh, bank-charge-wh, bank-temp.
+;; {NAME} or {NAME|fallback} from cut-in-rpm, rotor-rpm, ratio, wind-watts, bank-wh, bank-charge-wh, bank-temp (a ratio is written N:1 by the number itself, so its fallback has no ":1").
 ;; (shared #t) marks a step any route needs whatever its power source (the bank warm, the bank full): it counts as met and shows once the
 ;; route is started, but it never starts the route or names it (an unstarted route is hidden and unnamed, owner on #234).
 ;; The final goal (the call) is not a step: it is always shown. A step once met stays met; the panel hides this whole route until one of
@@ -13,7 +13,8 @@
 ;;
 ;; Mapped to the fields the sim already has (racket/heroic/tests/e2e-route-test.rkt wins by exactly these):
 ;;   windmill   a windmill part exists                          MachineRuntime.Windmills
-;;   gear-up    prime mover : rotor teeth ratio >= 100          Generator.Mover.Ratio (the e2e train is 256:1; the salvaged motor cuts in at
+;;   gear-up    prime mover : rotor teeth ratio >= 100          Generator.Mover.Ratio, or while no generator has one the built train's fastest part
+;;                                                              (MachineRuntime.TrainOf, #251) (the e2e train is 256:1; the salvaged motor cuts in at
 ;;                                                              1,500 rpm and a windmill turns at a dozen, so about 100:1 is the least)
 ;;   cut-in     a rotor over its cut-in                         <generator>.rpm > <generator>.cut-in-rpm
 ;;   wired      a generator has a bank (a wire link, #208)      Generator.Bank (ChargeStatus: 'unwired')
@@ -31,7 +32,7 @@
 
   (step gear-up
     (title "Turn the slow shaft much faster")
-    (reason "A windmill turns at a dozen rpm; a generator charges only above {cut-in-rpm|1,500} rpm. The train between them needs roughly 100:1 or more; yours is {ratio|not there yet}:1.")
+    (reason "A windmill turns at a dozen rpm; a generator charges only above {cut-in-rpm|1,500} rpm. The train between them needs roughly 100:1 or more; yours is {ratio|not there yet}.")
     (met (train-ratio-at-least 100)))
 
   (step cut-in
