@@ -153,7 +153,7 @@ public partial class Main
             if (Math.Abs(e) > 70) turning = true;   // far off: turn on the spot (on a slope that slides, so only when it must)
             else if (Math.Abs(e) < 30) turning = false;   // else steer while driving, an arc
             double turn = Math.Abs(e) > 3 ? (e > 0 ? -1 : 1) : 0;   // the rover's turn command: +1 is Right
-            if (!turning && rover.Speed < 0.5) turn = 0;   // get going straight first: forward and turn together cannot climb a slope from rest (it rolls back)
+            if (!turning && rover.Speed < 0.5) turn = 0;   // get going straight first: on a steep slope the climb takes the tyres' grip and a turn barely bites (above ~24 deg)
             double forward = turning ? 0 : dist < tol + 0.9 ? 0 : 1;   // coast the last 0.9 m (2 m/s stops in 0.8 m)
             if (!turning && dist < tol + 0.9 && Math.Abs(rover.Speed) < 0.05) forward = 1;   // stopped short: creep on
             _directorCommand = (forward, turn);
