@@ -272,13 +272,15 @@ public partial class Main
                     GD.Print($"[map] {m.Id}: world ({m.X:F3} {m.Z:F3}) map ({sx:F1} {sy:F1}) back ({bx:F3} {bz:F3})");
                 }
                 // the ground key (#243): each soil's swatch, the colour the ground's own cell texture holds in the middle of a patch of that soil, and the
-                // map's texel there: the three are the one colour
+                // map's texel there: the three are the one colour; and the same for the soil's pattern (12.22): the key's, the ground's pattern texture's
+                // and the map's, the one pattern
                 foreach (var e in map.Key)
                 {
                     int cell = _terrainView?.InteriorCell(e.Soil) ?? -1;
                     string swatch = SoilLook.Hex(e.Colour.R, e.Colour.G, e.Colour.B);
                     GD.Print(cell < 0 ? $"[map] key {e.Material}: swatch {swatch} name \"{e.Name}\" note \"{e.Note}\" (no interior cell)"
-                        : $"[map] key {e.Material}: swatch {swatch} ground {_terrainView!.CellColourHex(cell)} map {map.SoilTexelHex(cell)} name \"{e.Name}\" note \"{e.Note}\"");
+                        : $"[map] key {e.Material}: swatch {swatch} ground {_terrainView!.CellColourHex(cell)} map {map.SoilTexelHex(cell)} name \"{e.Name}\" note \"{e.Note}\""
+                          + $" pattern {SoilLook.PatternName(e.Pattern)} ground {SoilLook.PatternName(_terrainView.CellPattern(cell))} map {SoilLook.PatternName(map.PatternTexel(cell))}");
                 }
                 if (RoverIsPlayer)
                 {

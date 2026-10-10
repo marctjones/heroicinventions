@@ -91,7 +91,7 @@ public partial class TerrainView
                 p.Indices[t++] = b; p.Indices[t++] = d; p.Indices[t++] = c;
             }
         var material = new ShaderMaterial { Shader = _groundMaterial!.Shader };
-        foreach (var name in new[] { "interval", "origin", "size", "cells", "wet", "grade_deg", "tint_warm", "tint_amber", "tint_red" })
+        foreach (var name in new[] { "interval", "origin", "size", "cells", "wet", "pattern_a", "pattern_b", "grade_deg", "tint_warm", "tint_amber", "tint_red" })
             material.SetShaderParameter(name, _groundMaterial.GetShaderParameter(name));
         material.SetShaderParameter("patch", 1f);
         p.Mesh = new ArrayMesh();

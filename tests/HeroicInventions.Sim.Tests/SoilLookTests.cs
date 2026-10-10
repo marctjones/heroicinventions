@@ -164,6 +164,19 @@ public class SoilLookTests
         }
     }
 
+    /// <summary>The slide's rubble on the bedrock apron is drawn as rubble (12.22): the battery bank's cell at (264, 143), bedrock under 4.74 m of it.</summary>
+    [Fact]
+    public void RubbleOnBedrockTakesTheRubblesPattern()
+    {
+        var t = Victoria();
+        int cell = t.CellAt(264, 143)!.Value, rock = t.CellAt(0, 345)!.Value;   // the second: the wall's foot, bedrock no slide reaches
+        Assert.Equal(SoilLook.Pattern.Rock, SoilLook.PatternOf(t, cell));
+        t.Settle(3.71);
+        Assert.Equal("bedrock", t.SoilOf(cell).Material);
+        Assert.Equal(SoilLook.Pattern.Rubble, SoilLook.PatternOf(t, cell));
+        Assert.Equal(SoilLook.Pattern.Rock, SoilLook.PatternOf(t, rock));
+    }
+
     [Fact]
     public void TheKeyListsOnlyTheSoilsTheMapHasUnderACell()
     {

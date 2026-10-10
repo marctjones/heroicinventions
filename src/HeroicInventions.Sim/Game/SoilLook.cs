@@ -103,6 +103,14 @@ public static class SoilLook
     /// </summary>
     public static Pattern PatternFor(string material) => Patterns.GetValueOrDefault(material, Pattern.None);
 
+    /// <summary>
+    /// The pattern a cell of a map is drawn with: its soil's, or, where a slide's rubble lies on rock (<see cref="Terrain.Covering"/>: the
+    /// crater's collapse runs out over the bedrock apron), the rubble's, since what lies on top is what the mark shows. (The cell's colour is
+    /// still its own soil's, lightened as loose: TerrainView.)
+    /// </summary>
+    public static Pattern PatternOf(Terrain t, int cell) =>
+        t.Covering(cell) is { } c && t.Heights[cell] > c.RockTop + 0.01 ? PatternFor(t.Soils[c.Soil].Material) : PatternFor(t.SoilOf(cell).Material);
+
     /// <summary>A pattern's name in lowercase words, for the key's print line and the test.</summary>
     public static string PatternName(Pattern p) => p.ToString().ToLowerInvariant();
 
