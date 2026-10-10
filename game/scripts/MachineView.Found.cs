@@ -34,6 +34,15 @@ public partial class MachineView
     /// The found rule for each buried block not yet found: the least cover over its top, freed by the ground, struck by the teeth of a dig
     /// at <paramref name="digAt"/> (a dig new since the last call, else null), touched by a body of the rover (<paramref name="isRover"/>).
     /// </summary>
+    /// <summary>A block's own labels (its name and mass) stand over the true spot: shown only once found (#240). Every frame, settled or not.</summary>
+    public void ShowFoundLabels()
+    {
+        if (!RoughUntilFound) return;
+        foreach (var (id, b) in _buried)
+            if (IsInstanceValid(b.Body))
+                foreach (var label in b.Body.GetChildren().OfType<Label3D>()) label.Visible = BlockFound(id);
+    }
+
     public void CheckFound(Vector3? digAt, Func<GodotObject, bool>? isRover)
     {
         if (!RoughUntilFound || Ground is not { } g) return;

@@ -31,6 +31,7 @@ public partial class Main
         foreach (var view in CargoViews())
         {
             view.RoughUntilFound = rover;
+            view.ShowFoundLabels();
             if (rover && settled) view.CheckFound(dig, o => o is Node n && IsInstanceValid(_rover) && (n == _rover || _rover!.IsAncestorOf(n)));
         }
     }
