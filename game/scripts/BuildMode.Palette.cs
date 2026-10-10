@@ -36,6 +36,7 @@ public partial class BuildMode
     private string? _placeMaterial;   // what it will be made of: its own usual material, or the swatch picked
     private CheckButton _showAllToggle = null!;
     private Control _joinBox = null!;
+    private Button _moreCue = null!;
 
     /// <summary>The parts build mode opens with, in order.</summary>
     public static readonly string[] StarterKeys = ["lever", "block", "ball", "ramp", "post", "cart-wheel", "rope", "tank"];
@@ -99,7 +100,16 @@ public partial class BuildMode
         ["catapult-frame"] = ("Catapult frame", "Weights and levers", "The frame of a bolt-throwing catapult, sized by Vitruvius's rules.", "Holds a sprung arm."),
     };
 
-    private static readonly string[] FullGroupOrder = ["Weights and levers", "Water", "Heat and steam", "Wheels and power", "Rooms, walls and ground", "Joining parts"];
+    private static readonly string[] FullGroupOrder = [KeepWarm, MakePower, "Weights and levers", "Water", "Heat and steam", "Wheels and power", "Rooms, walls and ground", "Joining parts"];
+
+    /// <summary>Groups named for their purpose (#222): a player who wants the bank kept warm at night does not know the words "heat store"
+    /// or "bimetal", but finds "Keep things warm". The parts stay what they are; only their heading in the full list changes.</summary>
+    private const string KeepWarm = "Keep things warm", MakePower = "Make power (windmill, gears)";
+    private static readonly Dictionary<string, string> PurposeOf = new()
+    {
+        ["enclosure"] = KeepWarm, ["heat-store"] = KeepWarm, ["heat-bin"] = KeepWarm, ["mirror"] = KeepWarm, ["bimetal"] = KeepWarm,
+        ["windmill"] = MakePower, ["gear"] = MakePower, ["waterwheel"] = MakePower, ["stirling"] = MakePower,
+    };
 
     /// <summary>The full list's groups, by what you are making rather than by engine category.</summary>
     private static string GroupFor(string kind, string partInfoGroup) => kind == "post" ? "Weights and levers" : partInfoGroup switch
@@ -139,6 +149,7 @@ public partial class BuildMode
 
     private void AddEntry(Entry e)
     {
+        if (PurposeOf.TryGetValue(e.Key, out var purpose)) e = e with { Group = purpose };
         _entries.Add(e);
         _entryByKey[e.Key] = e;
         foreach (var v in e.Variants) _entryOfVariant[v] = e.Key;
@@ -216,6 +227,14 @@ public partial class BuildMode
         };
         _paletteList.MouseExited += () => ShowCard(_placingKey);
         leftCol.AddChild(_paletteList);
+        // the short list says there is more, by what it is for (#222): found by purpose, not by a name the player has not met
+        _moreCue = new Button
+        {
+            Text = "More parts: keep things warm, make power, water, steam…", AutowrapMode = TextServer.AutowrapMode.WordSmart, FocusMode = Control.FocusModeEnum.None,
+            TooltipText = "Show every part, grouped by what you are making", Alignment = HorizontalAlignment.Left,
+        };
+        _moreCue.Pressed += () => SetShowAll(true);
+        leftCol.AddChild(_moreCue);
         BuildCard(leftCol);
         FillPalette();
     }
@@ -225,6 +244,8 @@ public partial class BuildMode
         _showAll = on;
         if (_showAllToggle.ButtonPressed != on) _showAllToggle.SetPressedNoSignal(on);
         _joinBox.Visible = on;
+        _moreCue.Visible = !on;
+        GD.Print($"[BuildMode] palette: {(on ? "all parts, grouped by purpose" : "the short starter list")}");
         FillPalette();
     }
 
@@ -252,7 +273,7 @@ public partial class BuildMode
                 int header = _paletteList.AddItem(group.Key);
                 _paletteList.SetItemSelectable(header, false);
                 _paletteList.SetItemCustomFgColor(header, new Color(1f, 0.8f, 0.45f));
-                foreach (var e in group.OrderBy(e => Array.IndexOf(StarterKeys, e.Key) is var i and >= 0 ? i : 99).ThenBy(e => e.Label))
+                foreach (var e in group.OrderBy(e => Array.IndexOf(StarterKeys, e.Key) is var i and >= 0 ? i : 99).ThenBy(e => PurposeOf.Keys.ToList().IndexOf(e.Key)).ThenBy(e => e.Label))
                     AddListItem(e, "   " + e.Label + (e.Variants.Count > 1 ? $" ({e.Variants.Count} sizes)" : ""));
             }
         }

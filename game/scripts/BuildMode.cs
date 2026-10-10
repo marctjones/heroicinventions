@@ -335,6 +335,12 @@ public partial class BuildMode : Node3D
                 SetShowAll(true);
                 GD.Print($"[BuildMode] palette-has {w[1]} {(ListIndexOf(EntryKeyOf(w[1])) >= 0 ? "yes" : "no")} (InGame {InGame})");
                 return ScriptedInput.Step.Next;
+            case "palette-list":   // what the parts list shows now, group by group (a header is "== name"), and whether the "more parts" cue is up
+            {
+                var rows = Enumerable.Range(0, _paletteList.ItemCount).Select(i => _paletteList.IsItemSelectable(i) ? _paletteList.GetItemMetadata(i).AsString() : "== " + _paletteList.GetItemText(i));
+                GD.Print($"[BuildMode] palette-list: cue={(_moreCue.Visible ? "shown" : "hidden")} showAll={_showAll} :: {string.Join(" | ", rows)}");
+                return ScriptedInput.Step.Continue;
+            }
             case "palette":   // "palette NAME": an entry (block, lever, gear…) or one catalogue size (pulley-10cm), as a click in the list would
             {
                 string key = EntryKeyOf(w[1]);
