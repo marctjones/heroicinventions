@@ -30,6 +30,8 @@ public partial class MachineView
         public bool Held;
         /// <summary>Ticks since the ground was bared round it, while it waits, still frozen, for the ground's new body to be there; -1 when not waiting.</summary>
         public int Freeing = -1;
+        /// <summary>The cover at which the ground last could not be bared round it (it stays held), so it is not tried every tick: NaN if none.</summary>
+        public double Refused = double.NaN;
         public Label3D? Tag;
     }
     private readonly Dictionary<string, Buried> _buried = [];
@@ -54,14 +56,18 @@ public partial class MachineView
             bool loose = cell is { } lc && g.Loose[lc];
             b.Pull = b.Cover > 0 ? Burial.PullOut(b.Cover, b.Size, b.Body.Mass, soil, gravity, loose) : b.Body.Mass * gravity;
             bool held = Burial.Held(b.Cover, b.Size);
+            if (!held && b.Held && !(Math.Abs(b.Cover - b.Refused) < 0.01) && !FreeInPlace(id, b, g))
+            {
+                b.Refused = b.Cover;
+                held = true;   // the ground could not be bared round it: it stays held where it is (never let go inside the ground)
+            }
+            else if (!held && b.Held && Math.Abs(b.Cover - b.Refused) < 0.01) held = true;
             if (held)
             {
                 b.Body.Freeze = true;   // held by the ground over it (again, if a pause and run unfroze it)
                 b.Tag ??= NewBurialTag();
                 b.Freeing = -1;
             }
-            else if (b.Held)
-                FreeInPlace(id, b, g);   // dug out, or its cover slid away: let go where it lies
             else if (b.Freeing >= 0)
                 LetGo(id, b);
             b.Held = held;
@@ -81,12 +87,13 @@ public partial class MachineView
 
     /// <summary>
     /// A block whose cover has fallen under the hold (Burial.Held) is freed where it lies (#54, owner question 2026-10-10: it used to be
-    /// lifted to stand on the ground over it, a 0.6 m jump out of its pit). The worked ground round it is bared
-    /// (WorkedGround.FreeBlock: the crust over it and the soil beside it within a fine cell fall round it as loose spoil, volume kept,
-    /// and the ground under it is its base), and it stays frozen until the ground's new body is there under it and clear of it
-    /// (LetGo), the next tick or so: the terrain view rebuilds a patch's body after the patch changes.
+    /// lifted to stand on the ground over it, a 0.6 m jump out of its pit). The ground round it is bared (Terrain.FreeBlock: the crust
+    /// over it crumbles off round it as loose spoil, the soil beside it that only the grid takes is spread as a thin skin over the
+    /// ground above, volume kept, and the ground under it is its base), and it stays frozen until the ground's new body is there
+    /// under it and clear of it (LetGo), the next tick or so: the terrain view rebuilds a patch's body after the patch changes.
+    /// False if the ground could not be bared: it then stays held.
     /// </summary>
-    private void FreeInPlace(string id, Buried b, Terrain g)
+    private bool FreeInPlace(string id, Buried b, Terrain g)
     {
         var state = PhysicsServer3D.BodyGetDirectState(b.Body.GetRid()).Transform;
         var at = state.Origin;
@@ -100,30 +107,37 @@ public partial class MachineView
         double before = g.HeightAt(at.X, at.Z);
         string where = $"{Name}.{id}";
         b.Body.Freeze = true;
-        b.Freeing = 0;
         // the ground it lies in: a worked patch over it, else the map's own cells if they are fine enough, else a patch made for it
         string? inTheWay = null;
         bool InTheWay(WorkedGround.Raised r) => GroundRisesInto(r, b.Body) is { } name && (inTheWay = name) is not null;
         double gravity = Runtime.Outside.Gravity, bottom = at.Y - half.Y, top = at.Y + half.Y;
         FreedBlock? freed;
+        double cellSize = WorkedGround.FineCell;
         var patch = g.Worked.FirstOrDefault(w => w.Inside(at.X, at.Z, Math.Max(half.X, half.Z) + 1));
         if (patch is null && g.FreesOnMap)
-            freed = g.FreeBlockOnMap(at.X, at.Z, half.X, half.Z, bottom, top, gravity, InTheWay);
+        {
+            cellSize = g.Cell;
+            freed = g.FreeBlockOnMap(at.X, at.Z, half.X, half.Z, bottom, top, gravity, InTheWay, (x, z) => ClearOfBodies(g, x, z, b.Body));
+        }
         else if ((patch ?? g.WorkAt(at.X, at.Z)) is { } work)
-            freed = work.FreeBlock(at.X, at.Z, half.X, half.Z, bottom, top, gravity, InTheWay);
+            freed = work.FreeBlock(at.X, at.Z, half.X, half.Z, bottom, top, gravity, InTheWay, (x, z) => ClearOfBodies(g, x, z, b.Body));
         else
         {
-            GD.Print($"[burial] {where} freed in place at y {at.Y:0.000}: no workable ground round it (the map's edge), so its crust stays; it is let go as it lies");
-            return;
+            GD.Print($"[burial] {where} under {b.Cover:0.000} m stays held: no workable ground round it (the map's edge) to bare it in");
+            return false;
         }
         if (freed is not { } f)
         {
-            GD.Print($"[burial] {where} freed in place at y {at.Y:0.000}: its crust found no way to fall round {inTheWay ?? "it"}, so it stays; it is let go as it lies");
-            return;
+            GD.Print($"[burial] {where} under {b.Cover:0.000} m stays held: the soil over and beside it found no way to fall clear of {inTheWay ?? "what stands by"}");
+            return false;
         }
-        GD.Print($"[burial] {where} freed in place: crust {f.Soil:0.000} m³ to its sides (spoil landed {f.Spoil:0.000} m³, {(Math.Abs(f.Spoil - f.Soil) < 1e-9 ? "all of it" : "SHORT")}); "
-               + $"the ground over it {before:0.000} -> {g.HeightAt(at.X, at.Z):0.000}, its base {at.Y - half.Y:0.000}, its centre stays at y {at.Y:0.000}; "
-               + $"{f.Nodes} nodes laid at its base, {f.Block:0.000} m³ of the surface was the block itself");
+        GD.Print($"[burial] {where} freed in place: crust {f.Crust:0.000} m³ {(f.Skin > f.Soil - f.Crust + 1e-9 ? "(nowhere to fall clear of a body: in the skin)" : "to its sides")}; "
+               + $"{f.Soil - f.Crust:0.000} m³ beside it (the grid's: a height map's wall slopes over a whole {cellSize} m cell, so the pit is that much wider than its {2 * half.X:0.00} x {2 * half.Z:0.00} m footprint) "
+               + $"spread {f.SkinRise * 100:0.0} cm thick over the ground above it; soil kept: {f.Spoil:0.000} of {f.Soil:0.000} m³{(Math.Abs(f.Spoil - f.Soil) < 1e-9 ? "" : " SHORT")}. "
+               + $"The ground over it {before:0.000} -> {g.HeightAt(at.X, at.Z):0.000}, its base {bottom:0.000}; its centre stays at y {at.Y:0.000}; {f.Nodes} nodes laid at its base, {f.Block:0.000} m³ of the surface was the block itself");
+        b.Freeing = 0;
+        b.Refused = double.NaN;
+        return true;
     }
 
     /// <summary>
@@ -159,19 +173,63 @@ public partial class MachineView
         return false;
     }
 
-    /// <summary>The name of a body (other than the block being freed) that ground risen at this node would reach, as the backhoe's check (Rover.BodyAt).</summary>
+    /// <summary>m round a node within which a body counts as reached by the crumbled crust rising there.</summary>
+    private const float CrustClearance = 0.25f;
+
+    /// <summary>
+    /// The name of a body, not this machine's own, that ground risen at this node would reach or come within CrustClearance of, or
+    /// null (Terrain.FreeBlock then tips its spoil well away from it). Spoil tipped in one go beside the rover that dug the block out
+    /// once settled into the gap between two of its wheels, where a cell's own column misses both, and wedged them.
+    /// </summary>
+    /// <summary>m: a freed block's crumbled crust is tipped no nearer than this to any other body (a rover standing by, the backhoe that
+    /// dug it out): on rubble at its repose loose soil runs on downhill, and soil that comes to rest against a body's wheels is soil
+    /// the next settling (the backhoe's, which looks only at each node's own column) runs under or between them.</summary>
+    private const float SpoilKeepClear = 2.0f;
+
+    /// <summary>Whether no rigid body but this machine's own stands within SpoilKeepClear of (x, z) at the ground there.</summary>
+    private bool ClearOfBodies(Terrain g, double x, double z, RigidBody3D self)
+    {
+        float y = (float)g.HeightAt(x, z);
+        var query = new PhysicsShapeQueryParameters3D
+        {
+            Shape = new BoxShape3D { Size = new Vector3(2 * SpoilKeepClear, 4, 2 * SpoilKeepClear) }, CollideWithAreas = false, CollideWithBodies = true,
+            Transform = new Transform3D(Basis.Identity, new Vector3((float)x, y + 1, (float)z)),
+        };
+        return FirstBodyHit(query, self) is null;
+    }
+
+    /// <summary>The first rigid body, not this machine's own, a query meets; the ground's answers (a height map answers once a
+    /// triangle, so it alone can fill a page of results) are left out and the query asked again until a page holds no ground.</summary>
+    private RigidBody3D? FirstBodyHit(PhysicsShapeQueryParameters3D query, RigidBody3D self)
+    {
+        var exclude = new Godot.Collections.Array<Rid> { self.GetRid() };
+        var space = GetWorld3D().DirectSpaceState;
+        for (int round = 0; round < 8; round++)
+        {
+            query.Exclude = exclude;
+            var hits = space.IntersectShape(query, 32);
+            bool more = false;
+            foreach (var hit in hits)
+            {
+                var other = hit["collider"].AsGodotObject();
+                if (other is RigidBody3D body && !IsAncestorOf(body)) return body;
+                if (other is CollisionObject3D o && !exclude.Contains(o.GetRid())) { exclude.Add(o.GetRid()); more = true; }
+            }
+            if (hits.Count < 32 || !more) return null;
+        }
+        return null;
+    }
+
     private string? GroundRisesInto(WorkedGround.Raised r, RigidBody3D self)
     {
         float cell = (float)WorkedGround.FineCell;
-        float lo = (float)r.Before - 0.03f, hi = (float)r.After + 0.05f;
+        float lo = (float)r.Before - 0.03f, hi = (float)r.After + CrustClearance;
         var query = new PhysicsShapeQueryParameters3D
         {
-            Shape = new BoxShape3D { Size = new Vector3(cell, hi - lo, cell) }, CollideWithAreas = false, CollideWithBodies = true, Exclude = new Godot.Collections.Array<Rid> { self.GetRid() },
+            Shape = new BoxShape3D { Size = new Vector3(cell + 2 * CrustClearance, hi - lo, cell + 2 * CrustClearance) }, CollideWithAreas = false, CollideWithBodies = true,
             Transform = new Transform3D(Basis.Identity, new Vector3((float)r.X, (lo + hi) / 2, (float)r.Z)),
         };
-        foreach (var hit in GetWorld3D().DirectSpaceState.IntersectShape(query, 32))
-            if (hit["collider"].AsGodotObject() is RigidBody3D body) return body.Name;
-        return null;
+        return FirstBodyHit(query, self)?.Name;
     }
 
     private Label3D NewBurialTag()

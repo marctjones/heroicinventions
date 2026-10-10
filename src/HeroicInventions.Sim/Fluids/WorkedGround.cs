@@ -347,12 +347,14 @@ public sealed class WorkedGround
     /// A buried block (#54) let go where it lies on the patch (<see cref="Terrain.FreeBlock"/> on its fine cells): the crust over it
     /// and the soil beside it within a fine cell crumble off round it as loose spoil, and the ground under it is its base. Rock is
     /// never cut (<see cref="Floor"/>). <paramref name="inTheWay"/> says whether a node the spoil raised would reach a body (as for
-    /// the backhoe, #72): the spoil goes round it. The patch's <see cref="Dug"/> counts all the nodes gave (the block's own volume,
+    /// the backhoe, #72): the spoil is then tipped elsewhere; <paramref name="spoilAt"/> (x, z) says where it may be tipped at all. The patch's <see cref="Dug"/> counts all the nodes gave (the block's own volume,
     /// which the surface stood for, included) and its <see cref="Dumped"/> the spoil, so <see cref="Net"/> = Dumped − Dug still.
     /// </summary>
-    public FreedBlock? FreeBlock(double x, double z, double halfX, double halfZ, double bottom, double top, double gravity, Func<Raised, bool> inTheWay)
+    public FreedBlock? FreeBlock(double x, double z, double halfX, double halfZ, double bottom, double top, double gravity, Func<Raised, bool> inTheWay,
+                                 Func<double, double, bool>? spoilAt = null)
     {
-        if (Fine.FreeBlock(x, z, halfX, halfZ, bottom, top, gravity, k => Floor[k], _ => true, inTheWay, edge: 1) is not { } freed) return null;
+        if (Fine.FreeBlock(x, z, halfX, halfZ, bottom, top, gravity, k => Floor[k], k => spoilAt?.Invoke(NodeX(k % Nx), NodeZ(k / Nx)) ?? true, inTheWay, edge: 1) is not { } freed)
+            return null;
         Dug += freed.Given;
         Dumped += freed.Spoil;
         return freed;

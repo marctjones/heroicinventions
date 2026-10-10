@@ -2456,7 +2456,10 @@
     (define third-spit (for/first ([f site] #:when (>= (cadr (assq 'gang.depth (cdr f))) 0.75)) (car f)))
     (check-true (and freed third-spit (> freed third-spit) (< freed 21))
                 (format "freed at ~a s, during the fourth spit (the third was done at ~a s; the fourth, at 1 m, by 20.9 s)" freed third-spit))
-    (check-= (final-of site '(crate y)) -0.75 0.01 "out, resting on the trench's floor")))
+    ;; freed where it lies (owner question 2026-10-10: it used to be lifted 0.5 m to stand on the trench floor): its lid flush with
+    ;; the 1 m trench's floor, its base on the floor of the pit its crust and the soil beside it crumbled off from (MachineView.Burial)
+    (check-= (final-of site '(crate y)) -1.25 0.01 "free where it lay, its centre still 1.25 m down, on its pit's floor")
+    (check-= (final-of site '(crate buried)) 0 0 "and still free when the gang has finished: the crumbled crust lies clear of the pit's lip")))
 
 
 ;; ---------------------------------------------------------------------------

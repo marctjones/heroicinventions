@@ -432,7 +432,8 @@ public class WorkedGroundTests
     /// #54, owner question 2026-10-10: a buried block is freed where it lies, not lifted. A 0.5 m block at (0.1, 0.07) under 0.1 m of
     /// flat regolith (lid at -0.1, base at -0.6): every node of every fine cell its footprint touches (x from -0.25 to 0.5, z from
     /// -0.25 to 0.5: 4 x 4 nodes, 1 m2 of node squares) goes to its base. They give 0.6 m over 1 m2, 0.6 m3: the block's own
-    /// 0.125 m3 (the surface stood for it) and 0.475 m3 of soil, which lands round the pit's lip, every bit of it.
+    /// 0.125 m3 (the surface stood for it) and 0.475 m3 of soil: 0.025 m3 the crust on its lid, tipped loose round the pit's lip,
+    /// and 0.45 m3 beside it that only the grid takes, spread as a skin under 3 cm deep; every bit of it put back.
     /// </summary>
     [Fact]
     public void ABlockFreedInPlaceStandsOnItsBaseAndItsCrustIsTippedRoundItVolumeKept()
@@ -445,6 +446,9 @@ public class WorkedGroundTests
         Assert.Equal(0.6, freed.Given, 9);
         Assert.Equal(0.125, freed.Block, 9);
         Assert.Equal(0.475, freed.Soil, 9);
+        Assert.Equal(0.025, freed.Crust, 9);   // 0.1 m over the 0.25 m2 lid; the other 0.45 m3 stood beside it, within a fine cell
+        Assert.Equal(0.45, freed.Skin, 9);      // the grid's share: not loosened, an even skin no deeper than SkinDepth
+        Assert.True(freed.SkinRise > 0 && freed.SkinRise <= Terrain.SkinDepth + 1e-12, $"skin {freed.SkinRise} m");
         Assert.Equal(freed.Soil, freed.Spoil, 12);
         Assert.Equal(before - freed.Block, w.Net(), 9);   // the ground lost the block's volume and no soil
         Assert.Equal(w.Dumped - w.Dug, w.Net(), 9);
