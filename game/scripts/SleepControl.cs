@@ -57,6 +57,8 @@ public partial class SleepControl : VBoxContainer
     public Action<double> SetSpeed { get; set; } = _ => { };
     /// <summary>True while the sleep is letting the physics engine run (the game steps the scene as ever and calls <see cref="Observe"/> after each step).</summary>
     public bool Live => _live && Active;
+    /// <summary>The sleep now ending keeps the engine running (read in <see cref="Woke"/>, before it is cleared).</summary>
+    public bool EndingLive => _live;
 
     public SleepControl(Func<IReadOnlyList<MachineView>> views, Func<MachineView?> focus, Action<bool> setRunning, Action<string> say)
     {

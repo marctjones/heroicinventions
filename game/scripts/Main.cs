@@ -1205,7 +1205,7 @@ public partial class Main : Node3D
     private void OnSleepWoke()
     {
         _inputScript?.Nudge();   // the script's next step starts the frame after the wake, whatever the CPU (Main.Director.cs's solve is repeatable)
-        _wokeThisFrame = true;   // and real time resumes at the next frame's first tick, not at whichever tick the CPU budget woke on
+        _wokeThisFrame = !_sleep.EndingLive;   // a paused sleep: real time resumes at the next frame's first tick, not whichever tick the CPU budget woke on (a live sleep's ticks are real time already)
         bool scripted = OS.GetEnvironment("HEROIC_QUIT_AFTER_SIM_SECONDS") is { Length: > 0 };
         if (!scripted || OS.GetEnvironment("HEROIC_SAVES_DIR") is { Length: > 0 }) SaveWorld(auto: true);
     }
