@@ -1,0 +1,46 @@
+# The rover builds a road to the buried bank (plan, 2026-10-10)
+
+Planned by Fable from the code (line numbers at branch fix/rover-climb); decisions by the merger for the sleeping owner.
+
+## Decisions (merger, for the sleeping owner, 2026-10-10)
+1. Keep the patch's rubble intact (settled, interlocking, c = 16 kPa): cut faces stand; only tipped spoil (Loose) slides.
+2. Carry/haul mode: yes (dig-only cycle keeps the load; reverse down the road; dump-only cycle at a heap).
+3. Dig swing ±16°, two columns per station: yes.
+4. Dig the bank FREE (cover below 0.125 m: the crate unfreezes and stands on the shaft floor) and build the vault round it there.
+5. Road = the level rock shelf plus the natural approach the rover already climbs (no switchback needed at this site; the general planner keeps switchbacks and landings for longer climbs).
+
+## 0. Facts from the code
+**A. "Bedrock under the teeth" is per 5 m map cell.** A patch node's floor is `Covering(cell).RockTop` only where its surface is above it, else the node is rock (WorkedGround.cs:96-97,108). RockTop is the coarse cell's pre-settle centre height, one constant per 5 m cell (Earthworks.cs:58-70). victoria.map: cell 5 m, origin -425; x 245-250 → RockTop -46.51, x 250-255 → -44.98, x 255-260 → -43.81. Along z = 137.9 (surface → diggable): x246 -47.05 → 0 (rock); 248 -46.23 → 0.28; 249 ≈-45.75 → ≈0.76; 250 -45.28 → 0 (rock); 251 -44.80 → 0.18; 252 -44.33 → 0.65; 253 -43.81 → 1.17; 254 -43.24 → 1.74; 256 -41.95 → 1.86. This matches today's run (0.20 + 0.15 m³ at teeth ≈251.8, then "too hard" at ≈250.5). So **x 250-255 has a level rock floor at -44.98 ending under the crate** (crate base ≈ -44.5): that shelf is the road. Cuts cannot pass x ∈ [250,251] or [245,246.5] (floor = surface): drive over them as they are (25-26.5°, climbed straight).
+**B. Rubble is intact.** WorkedGround's constructor copies heights and soils, never Loose (WorkedGround.cs:99-105); covered nodes get sublimed-regolith (c 16 kPa, φ 0.7), critical height ≈ 8.4 m (Terrain.cs:23-24): cut faces stand vertical; only tipped spoil (Pour sets Loose, WorkedGround.cs:276) slides.
+**C. Today's dump is uphill.** Heading 270: forward +x, right = +z (Rover.cs:137); the ground rises in +z (0.247/m, 14°); Dumping.Swing = -75 is right (Rover.Backhoe.cs:35,42): every bucket so far was side-cast UPHILL 1.07 m from the right-front wheel; the slumping cone reaches the wheel in 2-3 buckets; BodyAt excludes wheels and chassis (Rover.Backhoe.cs:287-288). Left dump is a prerequisite.
+
+## 1. Method
+Limits: G_run 20° (turns still bite: 90°/6 s); G_straight 24° (29.5° measured); bench cross-slope ≤ 8°; landings ≤ 5°; tilt guard 33° (Main.Director.cs:165).
+Per station (rover faces uphill; teeth ≈2.1 m ahead of the chassis centre at DigStart, 1.42 m from the turntable, radius 0.45):
+1. drive-to the station (tol 0.3), heading along the road;
+2. dig two columns at swing -16° and +16° (±0.39 m; 1.7 m wide in all); each column: cycle until "too hard" (floor reached, Rover.Backhoe.cs:238) or surface ≤ design + 0.05;
+3. spoil: side-cast LEFT (downhill here) only where the landing is ≥ 0.3 m below the design floor and its fall line is clear; else carry (dig-only cycle), reverse to the nearest haul spot, dump left, return. Never right (uphill), never above a crate or a lower road stretch;
+4. advance 0.9 m; re-plan from real heights.
+Re-entry: on the shelf a left heap lands 1.55 m off the centreline only 0.38 m lower than the centreline ground, above the cut floor: it would spill back. So shelf spoil past x ≈ 251.5 is HAULED to the shoulder at x 249.5, 248.5, 247.5, 246.5, z ≈ 136.3 (≤ 5 buckets per heap, r ≈ 1.0 m). Fall line from there runs -x -z: gas-cylinders (249.4,144), hand-tools (242.5,140) and motors (233.8,135) are clear.
+Corners (general case): a 2.4 × 2.4 m level landing dug first, turn in place on it. Fill: dump across from 1.55 m off the leg's centreline (RoverDigEval.Ramp, RoverDigEval.cs:286-312).
+**Site:** natural 24-26.5° from x 247 to 251, then the shelf at -44.98 from x 251 to 253.6, 1.7 m wide. Stations, heading 270, z 137.9: S1 x 249.8 (teeth 251.4-252.3, 0.2-0.7 deep, ~4 cycles); S2 x 250.9 (252.3-253.2, 0.7-1.3 deep, ~8); S3 x 251.5 (253.0-253.9, 1.2-1.8 deep, ~10); all hauled. Shelf ≈ 2.5 m³ ≈ 13 buckets; budget 15-22 cycles.
+**Bank:** pad S4 x 252.2 (all wheels on the shelf). Teeth 253.85-254.75 over the crate centre 254.5: a 0.9 m shaft from -42.95 to the crate top -44.0, ~0.6 m³, 4-5 cycles: `dig until battery-bank:crate.cover below 0.12`. At cover < 0.125 (Burial.cs:20,33) the crate is unfrozen and moved to surface + 0.25 at its own x,z (MachineView.Burial.cs:58-64): it stands on the shaft floor. The vault goes round it there: `build new 254.5 137.9` keeps its origin at HeightAt (Main.Build.cs:206), now the shaft floor ≈ -43.9, so the enclosure's #:at y ≈ +0.26 (crate centre minus ground; verify from the printed crate centre), and rock, bin, strip and mirror shift by the same ≈ +1.8 m.
+**Time:** 20-27 cycles × 11.6 s + ~20 hauls × ~15 s ≈ 10 min of game time.
+
+## 2. Probe before coding (headless)
+`rover place 249 137.9 270` + `dig 3`: bucket 1 full, "too hard" by 2-3. `rover place 252 137.9 270` + `dig 6`: ~4 full then "too hard". If not, fix the floor model first.
+
+## 3. Code changes
+- **Rover.Backhoe.cs:** `enum ArmSide { Right = -1, Left = 1 }`; `StartCycle(ArmSide dump = Right, double digSwingDeg = 0, bool keep = false)` (:112). Target (:164-175): Swinging/Placing/Dumping/SwingingBack use `Dumping.Swing * (int)side`; Lowering/Digging use the dig poses with `Swing = digSwingDeg` (set in BeginOf(Lowering), :182). Carry: skip DumpHere() in EndOf(Dumping) (:197) when keep; a later cycle with a full bucket is the dump-only cycle and must not count as a refusal (a flag or status "Carried on"). `DumpPoint(ArmSide)` (apply Tipped virtually, read the tip, restore). Wheel burial: drop wheels and chassis from Exclude in BodyAt (:287-288) so a heap stops at a wheel.
+- **Rover.cs:** KeepOnGround (:281-289): any wheel gap < -(SpringTravel + 0.05) for 10 ticks → Place with no pitch (tilt-to-ground), Rescues++, print `[rover] wheel k under the ground by N cm: stood up`.
+- **Main.Rover.cs:** Key.B → `StartCycle(key.ShiftPressed ? Left : Right)` (:109-111); HUD "B dumps right, Shift+B left" (:52, :247); RoverStep `rover dig [left|right] [swing DEG] [keep]` (:306).
+- **Terrain.cs:** `FloorAt(x, z)`: the patch's floor by nearest node if covered (add WorkedGround.FloorAt), else the patch constructor's rule (RockTop where the coarse surface is above it; rock → surface; else -∞).
+- **RoadPlan.cs (new, pure, src/HeroicInventions.Sim/Fluids):** `RoadLimits`, `RoadPlanner.Plan(heightAt, floorAt, crates, start, target, limits)` → segments, stations (two columns each, cutTo, spoil Left or Haul(spot)), buckets, seconds, why. A* on a 0.5 m lattice × 8 headings; design level = min(surface, previous + tan G × 0.5), clamped ≥ floor (humps allowed ≤ G_straight); bench cross 0 if the cut fits above the floor; heading changes only on landings; cost = length + 3 cut + 6 fill + 2 per landing.
+- **Main.Road.cs (new partial, the executor):** step `build-road-to X Z [G]`: plan, then a goal like DriveGoal: drive-to each station; per column StartCycle(side, swing, keep); "too hard" → column done (not DigGoal, which throws on it); "the teeth didn't reach" → re-drive; haul: `_directorCommand = (-1, 0)` straight back to the spot (own stall check), dump-only cycle Left, drive back. After each station re-plan; check GroundGrade.Ahead between stations ≤ G, Rescues unchanged, tilt ≤ 33, no wheel gap < -0.1; print `[road] station k at (x z): n cycles, floor reached, dug D m3, hauled H`. Fields road.station / road.cycles / road.done for captions. Also `dig N left|right`, `speed N`, `expect road done`, `expect rover grade-along X Z below G`, `expect rover wheels-clear` in the director.
+- **solve.steps:** drive to 249.8; new step: caption (cuts a bench down to the rock shelf, hauling spoil to its shoulder), `speed 4`, `build-road-to 254.5 137.9 20`, `speed 1`, expects; then `dig until battery-bank:crate.cover below 0.12 max 8 left`, `expect field battery-bank:crate.buried below 0.5`, caption "the bank stands free"; then the vault at the freed crate (y offsets re-derived); re-measure the win (sol 2 or 3).
+
+## 4. Verification
+Unit tests RoadPlanTests.cs (25° plane → one segment at 20°; 14° cross → bench; floor humps; crate down the fall line → Haul; 32° long plane → two legs and a landing ≤ 5°; the Victoria fixture → one straight segment, 4 stations, 13-22 buckets, Haul past x 251.5) and a Terrain.FloorAt test. Headless director run: road done, rover near the pad, grade-along ok, "floor reached" at every station, rescues 0, crate.buried 0, the call on sol 2 or sol 3. Numbers: shelf floor -44.98 ± 0.02 over x 251-253.6, z 137.0-138.8; 20-27 cycles; tilt ≤ 8° at S2, ≤ 3° at S3/S4; heaps ≤ 1 m; Rover.Dug ≈ 3.1-3.5 m³.
+
+## 5. Risks
+The staircase floor is a model artifact (a sloped rock surface later adds ~0.3 m of cut; plan holds). Holding at S1 (tilt 26-29°) for 4 cycles. Reversing with a full bucket on 25°: own stall check. Shift+B must not reach the camera's Shift handling (it does not). BodyAt including the rover's bodies leaves a ridge beside the wheels.
