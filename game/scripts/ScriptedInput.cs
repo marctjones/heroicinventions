@@ -38,7 +38,7 @@ namespace HeroicInventions;
 /// A view adds its own steps through the <c>extra</c> handler, which
 /// returns null for a step it doesn't know.
 /// </summary>
-public sealed class ScriptedInput(string tag, string script, Node owner, Func<OrbitCamera?> camera, Func<string[], ScriptedInput.Step?>? extra = null)
+public sealed class ScriptedInput(string tag, string script, Node owner, Func<OrbitCamera?> camera, Func<string[], ScriptedInput.Step?>? extra = null, char separator = ';')
 {
     /// <summary>Next: wait a few frames before the next step; Continue: run the next at once; Again: this step isn't ready, try it again in a few frames.</summary>
     public enum Step { Next, Continue, Again }
@@ -46,7 +46,7 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
     /// <summary>An owner that can join machines' parts by name, as a click on each would (Main, Main.Links.cs).</summary>
     public interface IJoinStep { Step JoinStep(string[] w); }
 
-    private readonly Queue<string> _steps = new(script.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+    private readonly Queue<string> _steps = new(script.Split(separator, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
     private int _wait;
     private (InputEventKey Key, double Left, double Held)? _holding;
     private Vector2 _lastMouse;

@@ -567,8 +567,11 @@ public partial class Main : Node3D
         // HEROIC_INPUT="wait 30; hold right 1; camera; shot /tmp/a.png; quit": scripted
         // mouse and keys for run view (ScriptedInput.cs), plus "select NAME",
         // "run" and "pause"; build mode has its own (HEROIC_EDITOR_INPUT)
+        // HEROIC_INPUT_FILE=<steps file>: the same steps one a line ('#' lines are comments), in place of HEROIC_INPUT (the director's solve, Main.Director.cs)
         string inputScript = OS.GetEnvironment("HEROIC_INPUT");
-        if (!string.IsNullOrEmpty(inputScript)) _inputScript = new ScriptedInput("Main", inputScript, this, () => _buildMode?.Orbit ?? _orbit, RunViewStep);   // build mode's camera while it is open
+        char separator = ';';
+        if (OS.GetEnvironment("HEROIC_INPUT_FILE") is { Length: > 0 } stepFile) { inputScript = DirectorLoad(stepFile); separator = '\n'; }
+        if (!string.IsNullOrEmpty(inputScript)) _inputScript = new ScriptedInput("Main", inputScript, this, () => _buildMode?.Orbit ?? _orbit, RunViewStep, separator);   // build mode's camera while it is open
 
         if (double.TryParse(OS.GetEnvironment("HEROIC_SPEED"), System.Globalization.CultureInfo.InvariantCulture, out double speed))
             SetSpeed(speed);
@@ -1743,11 +1746,12 @@ public partial class Main : Node3D
             case "pick": PrintPick(new Vector2(float.Parse(w[1]), float.Parse(w[2]))); return ScriptedInput.Step.Next;   // which part is drawn at that pixel (#151)
             case "pickworld": PrintPick(_camera.UnprojectPosition(new Vector3(float.Parse(w[1]), float.Parse(w[2]), float.Parse(w[3])))); return ScriptedInput.Step.Next;   // ... or where that point of the world is drawn
         }
-        return OperatorStep(w) ?? ClickStep(w) ?? AimStep(w) ?? RoverStep(w) ?? MarkerStep(w) ?? FrontEndStep(w) ?? BuildStep(w);   // aim spots and the digger (Main.Aim.cs); operate / waitsim (Main.Operator.cs), hovered (Main.Operate.cs)
+        return DirectorStep(w) ?? OperatorStep(w) ?? ClickStep(w) ?? AimStep(w) ?? RoverStep(w) ?? MarkerStep(w) ?? FrontEndStep(w) ?? BuildStep(w);   // aim spots and the digger (Main.Aim.cs); operate / waitsim (Main.Operator.cs), hovered (Main.Operate.cs)
     }
 
     public override void _Process(double delta)
     {
+        DirectorTick(delta);   // the director's drive, turn or dig, before the rover reads its keys (Main.Director.cs)
         bool roverDrives = FrontEndTick(delta) || RoverProcess(delta);   // a front-end page holds the rover and the camera (Main.FrontEnd.cs); else   // the game: held keys drive the rover, the camera follows it (Main.Rover.cs)
         if (_buildMode is null && !roverDrives) _orbit.ProcessKeys(delta, GetViewport());
         // the haze stays behind whatever the camera is looking at, at any scale
@@ -1775,7 +1779,7 @@ public partial class Main : Node3D
         if (_views.Count > 0 && (_running || _sleep.Active)) UpdateZones();   // who holds whose heat store, from where they are now (Main.Zones.cs, #211)
         MachineView.SleepingPaused = _sleep.Active && !_sleep.Live;   // the label on a generator says why it is not charging (#212)
         if (_sleep.Active && !_sleep.Live)
-            _sleep.Advance(SleepBudgetMs);    // sleeping: run ahead as fast as it can, in place of stepping in real time
+            _sleep.Advance(_sleepBudgetOverride ?? SleepBudgetMs);    // sleeping: run ahead as fast as it can, in place of stepping in real time
         else if (_running && _views.Count > 0)
             StepWorld(delta); // a world: every machine, stepped together, and the links between them
         else if (_running && _current is not null)

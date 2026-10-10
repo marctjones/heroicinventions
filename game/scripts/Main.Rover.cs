@@ -150,7 +150,9 @@ public partial class Main
                        + (RoverKey(Key.Minus) || RoverKey(Key.KpSubtract) || RoverKey(Key.Pagedown) ? 1 : 0);
             if (zoom != 0) _orbit.Distance = Mathf.Clamp(_orbit.Distance * Mathf.Exp(zoom * 2.5f * dt), 3f, 80f);
         }
+        if (_directorCommand is { } directed) (forward, turn) = directed;   // the director holds the rover's keys (Main.Director.cs)
         rover.Command = (forward, turn);
+        if (_directorCamera) { UpdateRoverHud(); return true; }   // the director holds the camera: no follow
 
         // the camera follows the rover and turns with it, whatever the player has swung it to; the rover is kept in the
         // clear area between the panels (FitBox shifts the pivot sideways, never backing off: mostPullBack 1)

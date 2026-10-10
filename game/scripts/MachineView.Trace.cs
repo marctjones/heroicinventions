@@ -19,6 +19,17 @@ namespace HeroicInventions;
 /// </summary>
 public partial class MachineView
 {
+    /// <summary>A field by target and name: the runtime's, or a reading only the view makes (a crate's cover, a spin limit, a gear train's).</summary>
+    public bool TryReadField(string target, string field, out double value)
+    {
+        string key = $"{target}.{field}";
+        if (Runtime.FieldGetters.TryGetValue(key, out var get)) { value = get(); return true; }
+        foreach (var (k, v) in BurialFields().Concat(SpinLimitFields()).Concat(GearTraceFields()))
+            if (k == key) { value = v; return true; }
+        value = double.NaN;
+        return false;
+    }
+
     private StreamWriter? _trace;
     private double _traceDt;
     private long _traceFrames;

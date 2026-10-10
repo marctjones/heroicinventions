@@ -1,0 +1,121 @@
+# The Lonely Rover, solved by the rover: the windmill route in lonely-rover-opening, step by step, to watch and record.
+# Run by HEROIC_INPUT_FILE (Main.Director.cs); recorded by tools/record-solve.sh. One step a line; '#' lines are comments.
+# The clock: noon on sol 1 at 0 s; the relay passes at 03:00 each sol (55,484 s, then 144,259 s).
+# Honest about the game today: building is free (parts appear from nothing: CONJURED), the generator and the bank are FOUND in the cargo,
+# and the rover digs with its backhoe where it can reach (the rubble round the bank is as steep as it can grip: 25-30 deg). Predicted from the headless runs of 2026-10-10: the bank's cells pass 0 C at about
+# 29,000 s (about 20:00 on sol 1); the first night's wind is too weak to fill 500 Wh by the 03:00 pass on sol 2; the bank is full on sol 2's
+# morning; the call goes out at the 03:00 pass on sol 2 or sol 3, whichever the bank is full for (one headless run at 30 fps: sol 2, 03:07).
+clock on
+wait 60
+caption Step 1/14: The crater rim came down on the cargo. The battery bank lies under {battery-bank:crate.cover:0.00} m of rubble at (254.5, 137.9). The rover is at (190, 140).
+expect field battery-bank:crate.cover between 0.9 1.2
+look 240 18 16 205 -60 140
+wait 120
+
+caption Step 2/14: Drive east up the slide toward the bank, between the hand-tools crate and the motors crate.
+follow
+drive-to 240 137.5 0.8
+drive-to 250.3 137.9 0.4
+turn-to 270
+look 200 22 9 252.5 -44 137.9
+
+caption Step 3/14: The rubble round the bank lies at 25 to 30°, as steep as the rover can grip: it can climb no higher. It digs what its backhoe reaches, 0.20 m³ a bucket.
+dig 3
+expect field battery-bank:crate.buried above 0.5
+caption Step 4/14: The backhoe cannot reach the crate from here: it is still under {battery-bank:crate.cover:0.00} m of rubble. Today's game lets a vault be built round it where it lies.
+wait 90
+
+caption Step 5/14: CONJURED: a regolith vault 1.54 m down round the buried crate where it lies (building is free and reaches through the soil in the game today).
+build new 254.5 137.9
+look 200 25 8 254.5 -42.4 137.9
+build (enclosure vault #:at (0 -1.54 0) #:size-x 0.5 #:size-y 0.5 #:size-z 0.5 #:pressure 610 #:temperature -55 #:ground -55)
+wait 60
+caption Step 6/14: CONJURED: 40 kg of basalt in a lidded bin on the vault floor, and a brass-steel strip that opens the lid while the vault is cold.
+build (heat-store rock #:at (0.12 -1.29 0) #:mass 40 #:contents basalt #:temperature -55)
+wait 30
+build (heat-bin bin #:at (0.12 -1.29 0) #:holds rock #:leak 0.1)
+wait 30
+build (bimetal strip #:at (-0.19 -1.08 0) #:senses vault #:drives bin #:layers (brass steel))
+wait 45
+caption Step 7/14: CONJURED: a 4 m² mirror aimed at the rock. The afternoon sun heats the rock; the rock keeps the bank warm through the night.
+build (mirror heliostat #:at (0 1.5 -3) #:area 4 #:onto rock)
+look 200 20 10 254.5 -41 136
+wait 75
+build done
+wait 30
+expect built built-1 5
+expect zone battery-bank.cells built-1.vault
+
+caption Step 8/14: The vault holds the found bank's cells ({battery-bank:cells.temperature:0.0} °C). Now to the wind corridor at (180, 105), 80 m west and north.
+follow
+drive-to 244 137.5 0.8
+drive-to 195 136 0.8
+drive-to 180 113 0.5
+expect rover near 180 113 0.8
+turn-to 0
+
+caption Step 9/14: CONJURED: a 10.6 m post and 10 m sails in the corridor's wind.
+build new 180 105
+look 0 15 24 180.4 -57.5 104.5
+build (post tower #:at (0.45 0 -1.45) #:size-y 10.6 #:size-x 0.6 #:size-z 0.6)
+wait 45
+build (windmill sails #:at (0 11 0))
+wait 75
+caption Step 10/14: CONJURED: four 72:18 gear stages, 4:1 each, 256:1 in all, so the slow sails turn the salvaged motor past its 1,500 rpm cut-in.
+look 180 12 3 180.45 -52.45 103.6
+build (wheel wheel-a #:catalogue involute-gear-m5-72 #:at (0 11 -1.3))
+build (arbor sails wheel-a)
+wait 20
+build (wheel pinion-b #:catalogue involute-gear-m5-18 #:at (0.225 11 -1.3))
+build (mesh wheel-a pinion-b)
+wait 30
+build (wheel wheel-b #:catalogue involute-gear-m5-72 #:at (0.225 11 -1.4))
+build (arbor pinion-b wheel-b)
+wait 20
+build (wheel pinion-c #:catalogue involute-gear-m5-18 #:at (0.45 11 -1.4))
+build (mesh wheel-b pinion-c)
+wait 30
+build (wheel wheel-c #:catalogue involute-gear-m5-72 #:at (0.45 11 -1.5))
+build (arbor pinion-c wheel-c)
+wait 20
+build (wheel pinion-d #:catalogue involute-gear-m5-18 #:at (0.675 11 -1.5))
+build (mesh wheel-c pinion-d)
+wait 30
+build (wheel wheel-d #:catalogue involute-gear-m5-72 #:at (0.675 11 -1.6))
+build (arbor pinion-d wheel-d)
+wait 20
+build (wheel pinion-e #:catalogue involute-gear-m5-18 #:at (0.9 11 -1.6))
+build (mesh wheel-d pinion-e)
+wait 60
+build done
+wait 30
+expect built built-2 10
+look 20 12 26 180.4 -57.5 104.5
+wait 120
+
+caption Step 11/14: FOUND: the motors crate holds a salvaged generator. A shaft from the last pinion to its rotor, then a wire from the generator to the bank.
+join-gesture built-2.pinion-e motors.rotor
+expect link shaft built-2.pinion-e motors.rotor
+join-gesture motors.motor battery-bank.bank
+expect link wire motors.motor battery-bank.bank
+follow
+wait 60
+
+caption Step 12/14: Sleep until the bank is above 0 °C (it charges only between 0 and 45 °C). Predicted about 20:00 on sol 1.
+look 200 22 9 254.5 -41.9 137.9
+sleep-budget 60
+sleep until cells.temperature above 0 limit 40000 paused
+expect field battery-bank:cells.temperature above 0
+expect field battery-bank:scene.elapsed between 25000 34000
+caption Step 13/14: Sleep until the bank is full ({battery-bank:bank.charge:0} Wh now). While the machines are paused the generator charges at its last steady rate or, with none yet, an estimate from the wind and the gears: an approximation the sleep panel names.
+wait 60
+sleep until bank.full above 0.5 limit 150000 paused
+expect field battery-bank:bank.charge above 499.9
+caption Step 14/14: Full ({battery-bank:bank.charge:0} Wh) and warm ({battery-bank:cells.temperature:0.0} °C). Sleep until the call goes out: the relay passes for ten minutes from 03:00 each sol.
+look 20 12 26 180.4 -57.5 104.5
+wait 60
+sleep until bank.won above 0.5 limit 150000 paused
+expect field battery-bank:bank.won above 0.5
+caption THE CALL WENT OUT on sol {battery-bank:scene.sol:0}, in the 03:00 relay pass. The rover drove and dug what it could reach; the vault, mill, gears and mirror were conjured; the generator and the bank were found.
+wait 240
+quit
