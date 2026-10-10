@@ -54,7 +54,9 @@
     (check-true (> (v "trench.deepest") (* 30 (v "trench.coarse-bucket-depth"))))
     ;; a heap of 0.2 m3 at repose 0.7 is a cone 0.455 m high, lower on a square grid whose diagonals hold it round
     (check-true (< 0.3 (v "trench.heap-height") 0.46))
-    (check-= (v "trench.steepest-step-grade") 0.7 1e-6 "no step steeper than the soil's repose")
+    ;; away from the rover's wheels; against a wheel a heap may stand steeper, held by the tyre as by a crate (road plan
+    ;; 2026-10-10: BodyAt counts the rover's own wheels, so spoil never rises through one and buries it)
+    (check-= (v "trench.steepest-step-grade") 0.7 1e-6 "no step steeper than the soil's repose away from the wheels")
     (check-= (v "trench.dug") 1.2 1e-9)
     (check-= (v "trench.dumped") 1.2 1e-9)
     (check-= (v "trench.net-volume") 0 1e-9)
