@@ -53,6 +53,7 @@ public partial class MachineView
         AddChild(Shapes.Rod(pulley, new Vector3(at.X + w, h + 0.3f, at.Z), 0.008f, Shapes.Mat(new Color(0.55f, 0.45f, 0.3f))));
         float side3 = Mathf.Pow((float)cp.Counterweight / 2500f, 1 / 3f);
         var weight = Shapes.Box(Vector3.One * side3, stone);
+        BlockLooks.DressHungStone(weight, weight, Vector3.One * side3, part.Id + "-weight");   // a squared stone in a rope sling (12.20)
         var weightAt = new Vector3(at.X - w, 0.4f + side3 / 2, at.Z - 0.4f);
         AddChild(weight);
         _counterpoises.Add((cp, left, right, weight, weightAt, rope, pulley));
