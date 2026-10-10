@@ -46,13 +46,14 @@
   (define (p f) (path->string (build-path dir f)))
   (define cycle "key b; wait 60; rover until Stowed; wait 60")
   (define put "rover place 190 140 270")
+  (define over "rover place 191.5 140 270")   ; over the first cycle's hole (the teeth dig ~1.8 m ahead): read the pose there, then back to dig
 
-  (define kept (run-game (string-append "wait 120; " put "; wait 120; " cycle "; wait 2400; " put "; wait 120; rover; " cycle "; wait 3000; rover; quit")
+  (define kept (run-game (string-append "wait 120; " put "; wait 120; " cycle "; wait 2400; " over "; wait 120; rover; " put "; wait 30; " cycle "; wait 3000; rover; quit")
                          ;; saved at 50 s: the second cycle starts at about 35 s and tips at about 45 (the arm's cycle is 11.6 s)
                          #:env `(("HEROIC_SAVE" . ,(p "kept.save")) ("HEROIC_SAVE_AT" . "50"))))
-  (define first-half (run-game (string-append "wait 120; rover; " put "; wait 120; " cycle "; wait 3000; quit")
+  (define first-half (run-game (string-append "wait 120; " over "; wait 120; rover; " put "; wait 120; " cycle "; wait 3000; quit")
                                #:env `(("HEROIC_SAVE" . ,(p "s1.save")) ("HEROIC_SAVE_AT" . "20"))))
-  (define loaded (run-game (string-append "wait 120; " put "; wait 120; rover; " cycle "; wait 4000; rover; quit")
+  (define loaded (run-game (string-append "wait 120; " over "; wait 120; rover; " put "; wait 30; " cycle "; wait 4000; rover; quit")
                            #:env `(("HEROIC_LOAD" . ,(p "s1.save")) ("HEROIC_SAVE" . ,(p "s2.save")) ("HEROIC_SAVE_AT" . "35"))))
 
   (test-case "a save made after one cycle carries the worked patch, and loading draws it again"
@@ -71,9 +72,10 @@
     (define dug (pitch (first (rover-lines loaded)))) (define undug (pitch (first (rover-lines first-half))))
     (define kept-dug (pitch (first (rover-lines kept))))   ; set on the same spot after the same cycle, in the run that never saved
     ;; the patch's collision came back with the load: set at the same place, the rover stands as it does on that dug ground in
-    ;; the run that kept going (traced 12.7 and 12.7), not as on the ground that was there
-    ;; (9.7). Since Rover.Place stands it on the ground under its six wheels; stood level and dropped (5cbab25) it
-    ;; read 5.5 against 8.9 (-2.8 against 9.4 on rigid wheels, which rested on two corners of the hole)
+    ;; the run that kept going, not as on the ground that was there: over the hole at x 191.5 its front wheels drop in (6.0
+    ;; degrees against 9.8 undug, measured 2026-10-10). Read at x 190 (where it digs from) it once leaned 12.7 against 9.7: that was
+    ;; the spoil heaped under its right-front wheel (the backhoe buried its own wheel), not the hole; since the heap stops at the wheel
+    ;; the pose there is the undug one
     (check-true (> undug 8) (format "pitch on the undug slope ~a" undug))
     (check-= dug kept-dug 0.5 (format "pitch on the loaded dug ground ~a, on the kept run's ~a" dug kept-dug))
     (check-true (> (abs (- dug undug)) 2) (format "pitch on the dug ground ~a, against ~a undug" dug undug)))
