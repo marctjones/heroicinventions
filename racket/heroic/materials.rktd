@@ -46,11 +46,13 @@
 ;; are the same numbers here. Basalt sand is dark, the sand of the dunes on the floor (glass for the dark kind);
 ;; silica sand is the pale layer in one bay of the wall (clear glass); bedrock is the wall itself, which the
 ;; rover can neither climb nor cut; ice-cemented regolith is soil held by ice on the cold wall; sublimed regolith
-;; is the same soil after the ice has gone.
-(basalt-sand (name "Basalt sand") (category soil) (density 1600) (youngs-modulus 0.05)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.62) (restitution 0.10) (color "#3D3838") (specific-heat 840) (conductivity 0.2))
-(silica-sand (name "Silica sand") (category soil) (density 1600) (youngs-modulus 0.05)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.62) (restitution 0.10) (color "#EBE0C7") (specific-heat 830) (conductivity 0.25))
+;; is the same soil after the ice has gone. The three that were extremes were narrowed in #244 (look only, no number of physics): basalt
+;; sand lifted from #3D3838, silica sand and ice-cemented regolith calmed from #EBE0C7 and #998582 (docs/art-direction.md 12.17); the ground
+;; is drawn at 85% of a table colour's saturation (SoilLook.Drawn), and the navigation map's key shows that colour.
+(basalt-sand (name "Basalt sand") (category soil) (density 1600) (youngs-modulus 0.05)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.62) (restitution 0.10) (color "#474141") (specific-heat 840) (conductivity 0.2))
+(silica-sand (name "Silica sand") (category soil) (density 1600) (youngs-modulus 0.05)  (tension 0)   (across-grain 0)   (compression 0.1) (friction 0.62) (restitution 0.10) (color "#B6AC93") (specific-heat 830) (conductivity 0.25))
 (bedrock   (name "Bedrock")      (category stone) (density 2700) (youngs-modulus 60.0)  (tension 10)  (across-grain 10)  (compression 180) (friction 0.60) (restitution 0.60) (color "#755C4D") (specific-heat 840) (conductivity 1.7))
-(ice-cemented-regolith (name "Ice-cemented regolith") (category soil) (density 1500) (youngs-modulus 0.05) (tension 0) (across-grain 0) (compression 0.1) (friction 0.70) (restitution 0.10) (color "#998582") (specific-heat 1000) (conductivity 1.5))
+(ice-cemented-regolith (name "Ice-cemented regolith") (category soil) (density 1500) (youngs-modulus 0.05) (tension 0) (across-grain 0) (compression 0.1) (friction 0.70) (restitution 0.10) (color "#83726F") (specific-heat 1000) (conductivity 1.5))
 (sublimed-regolith (name "Sublimed regolith") (category soil) (density 1500) (youngs-modulus 0.05) (tension 0) (across-grain 0) (compression 0.1) (friction 0.70) (restitution 0.10) (color "#BD7347") (specific-heat 800) (conductivity 0.039))
 ;; Glass (issue #57): soda-lime or fused silica, brittle. Tensile strength of a sound pane ~40 MPa (handbook); a pane is designed to ~7 MPa (see Pane.Strength).
 (glass     (name "Glass")        (category stone) (density 2500) (youngs-modulus 70.0)  (tension 40)  (across-grain 40)  (compression 1000) (friction 0.40) (restitution 0.60) (color "#D1EBF2") (finish clear) (specific-heat 840) (conductivity 1.0))
