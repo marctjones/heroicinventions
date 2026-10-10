@@ -33,18 +33,13 @@ public partial class MachineView
             site.AddChild(Shapes.Rod(new Vector3(x0, y + 0.5f, z0 + sz * w / 2), new Vector3(x0 + len, y + 0.5f, z0 + sz * w / 2), 0.008f, line));
         int count = Math.Clamp((int)Math.Round(d.Power / 150), 1, 6);   // a labourer keeps up about 150 W
         var men = new List<Node3D>();
-        var cloth = Shapes.Mat(new Color(0.55f, 0.45f, 0.35f));
         for (int k = 0; k < count; k++)
         {
             var man = new Node3D { Position = new Vector3(x0 + len * (k + 0.5f) / count, y, z0) };
-            var body = Shapes.Cylinder(0.18f, 1.2f, cloth);
-            body.Position = new Vector3(0, 0.6f, 0);
-            man.AddChild(body);
-            var head = Shapes.Sphere(0.12f, Shapes.Mat(new Color(0.8f, 0.62f, 0.48f)));
-            head.Position = new Vector3(0, 1.35f, 0);
-            man.AddChild(head);
-            var spade = Shapes.Rod(new Vector3(0.2f, 0.2f, 0), new Vector3(0.35f, 1.0f, 0), 0.02f, Surface("oak"));
-            man.AddChild(spade);
+            // a labourer with a spade (Figures, 12.20), side on to the trench so the swing reads
+            var person = Figures.Person("#8C6E4E", Figures.Pose.Digging, 0.9f);
+            person.Basis = person.Basis * new Basis(Vector3.Up, Mathf.Pi / 2);
+            man.AddChild(person);
             AddChild(man);
             men.Add(man);
         }

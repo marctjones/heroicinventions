@@ -98,48 +98,15 @@ public partial class Main
     }
 
     /// <summary>
-    /// A friendly person in a few bold shapes (art direction 12.19, owner 2026-10-10): legs, a tunic with a belt, arms hanging
-    /// at the sides, a head with two dot eyes and a broad-brimmed sun hat, all with the outline. Still a ruler: 1.7 m from the
-    /// soles to the top of the head (the hat's low crown adds 2 cm), 0.4 m across the shoulders, as the capsule was; muted
-    /// colours that don't compete with the machine. It faces +Z; <see cref="PlaceFigure"/> turns it to the camera.
+    /// A friendly person in a few bold shapes (art direction 12.19, owner 2026-10-10; the shapes are <see cref="Figures.Person"/>, which
+    /// the capstans' haulers and the digging gangs share, 12.20). Still a ruler: 1.7 m from the soles to the top of the head, 0.4 m
+    /// across the shoulders, as the capsule was; muted colours that don't compete with the machine. It faces +Z;
+    /// <see cref="PlaceFigure"/> turns it to the camera.
     /// </summary>
     private static Node3D Figure()
     {
-        var figure = new Node3D { Name = "ScaleFigure" };
-        var tunic = Shapes.Mat(Color.FromHtml("#62808F"), roughness: 0.9f);
-        var legs = Shapes.Mat(Color.FromHtml("#47505A"), roughness: 0.9f);
-        var leather = Shapes.Mat(Color.FromHtml("#3E3029"), roughness: 0.9f);
-        var skin = Shapes.Mat(Color.FromHtml("#D6A27C"), roughness: 0.8f);
-        var straw = Shapes.Mat(Color.FromHtml("#B48A52"), roughness: 0.9f);
-        const float head = 0.115f;
-        void Add(MeshInstance3D m, Vector3 at, Basis? turn = null)
-        {
-            m.Position = at;
-            if (turn is { } b) m.Basis = b;
-            m.CastShadow = GeometryInstance3D.ShadowCastingSetting.On;
-            figure.AddChild(m);
-        }
-        MeshInstance3D Capsule(float r, float h, StandardMaterial3D mat) => new() { Mesh = new CapsuleMesh { Radius = r, Height = h }, MaterialOverride = mat };
-        foreach (float x in new[] { -0.085f, 0.085f })
-        {
-            Add(Capsule(0.07f, 0.86f, legs), new Vector3(x, 0.45f, 0));                            // legs, 0.02 to 0.88 m
-            Add(Shapes.Box(new Vector3(0.11f, 0.06f, 0.2f), leather), new Vector3(x, 0.03f, 0.03f));   // shoes, toes forward
-        }
-        Add(Capsule(0.17f, 0.72f, tunic), new Vector3(0, 1.15f, 0));                                // tunic, 0.79 to 1.51 m
-        Add(Shapes.Cylinder(0.172f, 0.05f, leather), new Vector3(0, 1.02f, 0));                      // belt
-        foreach (float x in new[] { -1f, 1f })
-        {
-            var tilt = new Basis(Vector3.Back, x * 0.12f);
-            Add(Capsule(0.05f, 0.6f, tunic), new Vector3(x * 0.215f, 1.17f, 0), tilt);                 // arms, hanging a little out
-            Add(Shapes.Sphere(0.05f, skin), new Vector3(x * 0.25f, 0.86f, 0));                         // hands
-        }
-        Add(Shapes.Cylinder(0.045f, 0.08f, skin), new Vector3(0, 1.5f, 0));                           // neck
-        Add(Shapes.Sphere(head, skin), new Vector3(0, FigureHeight - head, 0));                       // head, its top at 1.7 m
-        var dark = Shapes.Mat(Color.FromHtml("#1E1A18"), roughness: 0.6f, outline: false);
-        foreach (float x in new[] { -0.04f, 0.04f })
-            Add(Shapes.Sphere(0.016f, dark), new Vector3(x, FigureHeight - head + 0.015f, head * 0.93f));   // eyes
-        Add(Shapes.Cylinder(0.21f, 0.015f, straw), new Vector3(0, FigureHeight - 0.075f, 0));          // the hat's brim
-        Add(Shapes.Cylinder(0.11f, 0.09f, straw), new Vector3(0, FigureHeight - 0.025f, 0));           // and its low crown
+        var figure = Figures.Person();
+        figure.Name = "ScaleFigure";
         return figure;
     }
 

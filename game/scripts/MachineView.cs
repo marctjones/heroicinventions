@@ -543,8 +543,25 @@ public partial class MachineView : Node3D
             Emission = new Color(1f, 0.4f, 0.05f),
             EmissionEnergyMultiplier = 2.5f,
         };
-        var fire = Shapes.Box(new Vector3(radius * 1.8f, 0.05f, radius * 1.8f), emberMat);
+        // the fire under it: a round bed of embers just wider than the boiler, and flames licking up round its foot (12.20; it was a
+        // square orange slab), all shown and hidden together while the boiler is lit
+        var fire = Shapes.Cylinder(radius * 1.08f, 0.05f, emberMat);
         fire.Position = firePos;
+        var flameOuter = new StandardMaterial3D { AlbedoColor = new Color(1f, 0.45f, 0.08f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
+        var flameInner = new StandardMaterial3D { AlbedoColor = new Color(1f, 0.85f, 0.3f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
+        float tongue = Mathf.Clamp(radius * 0.45f, 0.05f, 0.25f);
+        for (int i = 0; i < 8; i++)
+        {
+            float a = Mathf.Tau * (i + 0.5f) / 8;
+            float k = i % 2 == 0 ? 1f : 0.7f;
+            var at = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * radius * 0.98f;
+            foreach (var (mat, w, hk) in new[] { (flameOuter, 0.22f, 1f), (flameInner, 0.12f, 0.6f) })
+            {
+                var lick = new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = 0, BottomRadius = tongue * w, Height = tongue * k * hk, RadialSegments = 6 }, MaterialOverride = mat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+                lick.Position = at + new Vector3(0, 0.025f + tongue * k * hk / 2, 0);
+                fire.AddChild(lick);
+            }
+        }
         AddChild(fire);
         var flame = BuildFlameParticles(firePos, radius);
         AddChild(flame);
@@ -733,7 +750,12 @@ public partial class MachineView : Node3D
         {
             visual.MaterialOverride = PartSurface(part, size);
             // a plain block reads as its material: faceted rock, cut timber, bar stock (BlockLooks, 12.19); look only
-            if (!part.Props.ContainsKey("dim-x") && !cargo) BlockLooks.Dress(block, visual, _materials[part.Material], dims, part.Id);
+            if (part.Props.ContainsKey("dim-x") || cargo) continue;
+            // a block hung by a rope tied at its top is a load (12.20): a bucket when it is named one, a squared stone in a sling
+            bool hung = Runtime.Def.Ropes.Any(r => (r.To.Part == part.Id && r.To.Local.Y >= 0.3 * dims.Y) || (r.From.Part == part.Id && r.From.Local.Y >= 0.3 * dims.Y));
+            if (hung && part.Id.Contains("bucket")) BlockLooks.DressBucket(block, visual, dims, !part.Id.Contains("empty"));
+            else if (hung && _materials[part.Material].Category == MaterialCategory.Stone) BlockLooks.DressHungStone(block, visual, dims, part.Id);
+            else BlockLooks.Dress(block, visual, _materials[part.Material], dims, part.Id);
         }
         AddChild(block);
         // Parented to the block, so the label follows it — otherwise a
@@ -758,6 +780,8 @@ public partial class MachineView : Node3D
             AddLabel(part.Id, new Vector3(0, dims.Y / 2 + 0.05f, 0), block);
         else if (Runtime.Def.Parts.Any(p => p.Kind == "ramp"))
             AddLabel($"{materialName}\nμ{_materials[part.Material].Friction:F2}", new Vector3(0, size / 2 + 0.05f, 0), block);
+        else if (part.Id.Contains("bucket") && Runtime.Def.Ropes.Any(r => r.To.Part == part.Id || r.From.Part == part.Id))   // drawn as a bucket (12.20)
+            AddLabel($"bucket\n{block.Mass:0.##} kg", new Vector3(0, size / 2 + 0.05f, 0), block);
         else if (cargo)   // a crate of the rover's cargo is a crate, not a sample of oak (12.19)
             AddLabel($"crate\n{block.Mass:0.##} kg", new Vector3(0, size / 2 + 0.05f, 0), block);
         else

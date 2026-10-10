@@ -35,17 +35,18 @@ public partial class MachineView
 
         // the hauler's end runs back and to the left, to a figure standing on the ground holding it
         var feet = new Vector3(top.X - 0.8f, 0, top.Z - 0.7f);
-        var hand = feet + new Vector3(0.2f, 1.1f, 0);
+        // a person (Figures, 12.20) leaning on the rope with both hands, facing the post
+        var hauler = Figures.Person("#6B5B8A", Figures.Pose.Hauling);
+        var facing = (top - feet) with { Y = 0 };
+        hauler.Transform = new Transform3D(Basis.LookingAt(facing.Normalized(), Vector3.Up, true), feet);
+        AddChild(hauler);
+        var hand = hauler.Transform * new Vector3(0, 1.08f, 0.42f);
         AddChild(Shapes.Rod(top + new Vector3(-r, 0, 0), hand, 0.015f, rope));
-        var body = Shapes.Mat(new Color(0.35f, 0.3f, 0.45f), roughness: 0.9f);
-        AddChild(Shapes.Rod(feet, feet + new Vector3(0, 1.45f, 0), 0.13f, body));
-        var head = Shapes.Sphere(0.12f, body);
-        head.Position = feet + new Vector3(0, 1.62f, 0);
-        AddChild(head);
 
         // the load's end drops from the post's +X side
         float side = (float)Math.Cbrt(capstan.LoadMass / 2700.0);
         var load = Shapes.Box(new Vector3(side, side, side), Surface("granite"));
+        BlockLooks.DressHungStone(load, load, Vector3.One * side, part.Id + "-load");   // a squared stone in a rope sling (12.20)
         AddChild(load);
         var fall = Shapes.Rod(Vector3.Zero, Vector3.Up, 0.015f, rope);
         AddChild(fall);
