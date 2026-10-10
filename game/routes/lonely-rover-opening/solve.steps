@@ -40,9 +40,10 @@ where battery-bank.crate
 caption Step 5/15: The bank stands free on the floor of its pit, dug out by the rover's own backhoe.
 wait 120
 
-# The vault round the freed crate. The crate stood up on the pit floor at (254.46, -43.532, 137.922), the ground at the build's
-# origin (254.5, 137.9) -43.872 (printed by the where steps above): the enclosure's floor at the crate's base, 0.09 above the origin,
-# 0.5 m high, so the crate's centre (the cells' point, WorldZones.Inside) is at its middle. The rock and bin, the strip and the
+# The vault round the freed crate. Freed, the crate is stood on the pit floor (MachineView.Burial): the where steps above printed its
+# centre at (254.46, -43.532, 137.922) over ground at -43.872, and in another run (254.42, -43.600, 137.919) over -44.072 (the road's
+# cut differs a little run to run): 0.34 to 0.47 above the ground. The enclosure's floor 0.09 above the build's origin, 0.5 m high,
+# holds the crate's centre (the cells' point, WorldZones.Inside) anywhere from 0.09 to 0.59 above it, the crate's base at its floor. The rock and bin, the strip and the
 # mirror keep their places relative to it as before (the rock 0.25 above the floor, the strip 0.46; the mirror at the same height
 # in the world as before, -41.40: 2.47 above the new origin).
 caption Step 6/15: CONJURED: a regolith vault round the freed bank on the pit floor (building is free in the game today).
