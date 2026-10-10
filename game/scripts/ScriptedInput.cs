@@ -54,6 +54,10 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
 
     public bool Done => _steps.Count == 0 && _holding is null && _retry is null;
 
+    /// <summary>Run the waiting step on the next frame (a paused sleep ends on a frame that depends on the CPU: without this the step
+    /// after it would start 0 to 2 frames later from one run to the next, and so would everything after it).</summary>
+    public void Nudge() => _wait = 0;
+
     /// <summary>Call once a frame from the owner's _Process, after anything the held keys drive.</summary>
     public void Process(double delta)
     {

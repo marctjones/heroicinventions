@@ -1204,6 +1204,8 @@ public partial class Main : Node3D
     /// <summary>A sleep woke: a long sleep is worth keeping, except in a scripted run, which has no saves folder of the player's to write to (#207; HEROIC_SAVES_DIR gives it one).</summary>
     private void OnSleepWoke()
     {
+        _inputScript?.Nudge();   // the script's next step starts the frame after the wake, whatever the CPU (Main.Director.cs's solve is repeatable)
+        _wokeThisFrame = true;   // and real time resumes at the next frame's first tick, not at whichever tick the CPU budget woke on
         bool scripted = OS.GetEnvironment("HEROIC_QUIT_AFTER_SIM_SECONDS") is { Length: > 0 };
         if (!scripted || OS.GetEnvironment("HEROIC_SAVES_DIR") is { Length: > 0 }) SaveWorld(auto: true);
     }
@@ -1749,6 +1751,8 @@ public partial class Main : Node3D
         return DirectorStep(w) ?? OperatorStep(w) ?? ClickStep(w) ?? AimStep(w) ?? RoverStep(w) ?? MarkerStep(w) ?? FrontEndStep(w) ?? BuildStep(w);   // aim spots and the digger (Main.Aim.cs); operate / waitsim (Main.Operator.cs), hovered (Main.Operate.cs)
     }
 
+    private bool _wokeThisFrame;   // a paused sleep ended during this frame's physics ticks (OnSleepWoke)
+
     public override void _Process(double delta)
     {
         DirectorTick(delta);   // the director's drive, turn or dig, before the rover reads its keys (Main.Director.cs)
@@ -1759,6 +1763,7 @@ public partial class Main : Node3D
         _environment.FogDepthBegin = d * _hazeReach;
         _environment.FogDepthEnd = d * _hazeReach * 6;
         _inputScript?.Process(delta);
+        _wokeThisFrame = false;
         MarkersProcess();   // the cargo areas, the bearing line, the map (Main.Markers.cs)
         OperateHoverTick(delta); OperatePanelTick();   // (in the game the tooltip says why the rover can't)
         if (!_fpsReport || (_fpsTimer += delta) < 2) return;
@@ -1780,7 +1785,7 @@ public partial class Main : Node3D
         MachineView.SleepingPaused = _sleep.Active && !_sleep.Live;   // the label on a generator says why it is not charging (#212)
         if (_sleep.Active && !_sleep.Live)
             _sleep.Advance(_sleepBudgetOverride ?? SleepBudgetMs);    // sleeping: run ahead as fast as it can, in place of stepping in real time
-        else if (_running && _views.Count > 0)
+        else if (_running && _views.Count > 0 && !_wokeThisFrame)
             StepWorld(delta); // a world: every machine, stepped together, and the links between them
         else if (_running && _current is not null)
             _current.Simulate(delta); // already scaled: see SetSpeed
