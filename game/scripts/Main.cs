@@ -568,7 +568,7 @@ public partial class Main : Node3D
         // mouse and keys for run view (ScriptedInput.cs), plus "select NAME",
         // "run" and "pause"; build mode has its own (HEROIC_EDITOR_INPUT)
         string inputScript = OS.GetEnvironment("HEROIC_INPUT");
-        if (!string.IsNullOrEmpty(inputScript)) _inputScript = new ScriptedInput("Main", inputScript, this, () => _orbit, RunViewStep);
+        if (!string.IsNullOrEmpty(inputScript)) _inputScript = new ScriptedInput("Main", inputScript, this, () => _buildMode?.Orbit ?? _orbit, RunViewStep);   // build mode's camera while it is open
 
         if (double.TryParse(OS.GetEnvironment("HEROIC_SPEED"), System.Globalization.CultureInfo.InvariantCulture, out double speed))
             SetSpeed(speed);
