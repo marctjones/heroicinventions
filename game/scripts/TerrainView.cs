@@ -460,23 +460,6 @@ public partial class TerrainView : Node3D
                     vec3 pale = mix(vec3(0.9, 0.82, 0.7), vec3(0.06, 0.04, 0.03), dark_soil);
                     float marks = max(0.45 * fine_h, 0.18 * grid);
                     lit = mix(lit, band, grip);
-                    // the soil's pattern, as on a geologic map (12.22): marks fixed to the ground, a motif every 0.6 m, and every 2.4 m once
-                    // those get under about ten pixels; each faded out before it is small enough to shimmer. Dug or heaped ground (a worked
-                    // patch, past the clods' threshold) takes the spoil's rings and dots instead of its soil's mark.
-                    vec4 wa = texture(pattern_a, at), wb = texture(pattern_b, at);
-                    float spoil = smoothstep(0.04, 0.25, abs(worked));
-                    wa *= 1.0 - spoil; wb *= 1.0 - spoil; wb.w += spoil;
-                    vec2 q1 = spot / 0.6;
-                    float px1 = max(max(fwidth(q1.x), fwidth(q1.y)), 1e-5), px2 = px1 * 0.25;
-                    float r1 = 1.0 - smoothstep(0.07, 0.15, px1), r2 = (1.0 - r1) * (1.0 - smoothstep(0.07, 0.15, px2));
-                    vec2 pm = vec2(0.0);
-                    if (r1 > 0.0) pm += r1 * soil_marks(wa, wb, q1, px1);
-                    if (r2 > 0.0) pm += r2 * soil_marks(wa, wb, spot / 2.4 + vec2(0.37, 0.71), px2);
-                    // drawn over the slope tint, so the marks still show on a tinted slope: a darker tone of the ground's colour there, a
-                    // lighter one where it is dark (the basalt floor); the ice's flecks pale and bluish
-                    float ground_l = dot(lit, vec3(0.2126, 0.7152, 0.0722));
-                    lit *= mix(1.0, mix(1.75, 0.6, smoothstep(0.07, 0.11, ground_l)), 0.85 * pm.x);
-                    lit = mix(lit, lit * vec3(1.35, 1.5, 1.85) + vec3(0.0, 0.01, 0.03), 0.9 * pm.y);
                     lit = mix(lit, pale, marks);
                     if (patch > 0.5) {
                         lit = worked < 0.0 ? lit * (1.0 + 0.55 * worked) : mix(lit, vec3(0.98, 0.95, 0.85), 0.45 * worked);
@@ -489,6 +472,23 @@ public partial class TerrainView : Node3D
                         float lip = 1.0 - smoothstep(0.0, fwidth(worked) * 1.5 + 1e-4, abs(worked + 0.12));
                         lit = mix(lit, vec3(0.05, 0.04, 0.03), 0.85 * lip);
                     }
+                    // the soil's pattern, as on a geologic map (12.22): marks fixed to the ground, a motif every 0.6 m, and every 2.4 m once
+                    // those get under about ten pixels; each faded out before it is small enough to shimmer. Dug or heaped ground (a worked
+                    // patch, past the clods' threshold) takes the spoil's rings and dots instead of its soil's mark.
+                    vec4 wa = texture(pattern_a, at), wb = texture(pattern_b, at);
+                    float spoil = smoothstep(0.04, 0.25, abs(worked));
+                    wa *= 1.0 - spoil; wb *= 1.0 - spoil; wb.w += spoil;
+                    vec2 q1 = spot / 0.6;
+                    float px1 = max(max(fwidth(q1.x), fwidth(q1.y)), 1e-5), px2 = px1 * 0.25;
+                    float r1 = 1.0 - smoothstep(0.07, 0.15, px1), r2 = (1.0 - r1) * (1.0 - smoothstep(0.07, 0.15, px2));
+                    vec2 pm = vec2(0.0);
+                    if (r1 > 0.0) pm += r1 * soil_marks(wa, wb, q1, px1);
+                    if (r2 > 0.0) pm += r2 * soil_marks(wa, wb, spot / 2.4 + vec2(0.37, 0.71), px2);
+                    // drawn last, over the slope tint and a worked patch's tint, so the marks still show on a tinted slope and a pale heap: a darker tone of the ground's colour there, a
+                    // lighter one where it is dark (the basalt floor); the ice's flecks pale and bluish
+                    float ground_l = dot(lit, vec3(0.2126, 0.7152, 0.0722));
+                    lit *= mix(1.0, mix(1.75, 0.6, smoothstep(0.07, 0.11, ground_l)), 0.85 * pm.x);
+                    lit = mix(lit, lit * vec3(1.35, 1.5, 1.85) + vec3(0.0, 0.01, 0.03), 0.9 * pm.y);
                     ALBEDO = lit * shade * (1.0 - 0.16 * fine - 0.32 * heavy);
                     EMISSION = lit * shade * 0.16 * (1.0 - 0.16 * fine - 0.32 * heavy) + band * grip * 0.12 + pale * marks * 0.12 * (1.0 - dark_soil);
                     ROUGHNESS = mix(cell.a, 0.25, damp);

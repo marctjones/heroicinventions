@@ -95,8 +95,8 @@ public static class SoilPatterns
                 return sp_cov(sp_seg(f, ce - a, ce + a) - 0.03, px);
             }
             if (id == 7) {   // spoil, dug or tipped (FGDC 681, till or diamicton: unsorted): open rings and dots
-                float d = abs(length(f - (0.3 + 0.4 * h)) - 0.13) - 0.035;
-                d = min(d, length(f - fract(0.3 + 0.4 * h + 0.5)) - 0.055);
+                float d = abs(length(f - (0.3 + 0.4 * h)) - 0.14) - 0.048;
+                d = min(d, length(f - fract(0.3 + 0.4 * h + 0.5)) - 0.065);
                 return sp_cov(d, px);
             }
             return 0.0;
