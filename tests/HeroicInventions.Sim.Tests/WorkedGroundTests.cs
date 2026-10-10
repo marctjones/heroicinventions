@@ -427,4 +427,50 @@ public class WorkedGroundTests
         Assert.Equal(plain.HeightAt(-20, 20), worked.HeightAt(-20, 20));
         Assert.NotEqual(plain.HeightAt(0, 0), worked.HeightAt(0, 0));
     }
+
+    /// <summary>
+    /// #54, owner question 2026-10-10: a buried block is freed where it lies, not lifted. A 0.5 m block at (0.1, 0.07) under 0.1 m of
+    /// flat regolith (lid at -0.1, base at -0.6): every node of every fine cell its footprint touches (x from -0.25 to 0.5, z from
+    /// -0.25 to 0.5: 4 x 4 nodes, 1 m2 of node squares) goes to its base. They give 0.6 m over 1 m2, 0.6 m3: the block's own
+    /// 0.125 m3 (the surface stood for it) and 0.475 m3 of soil: 0.025 m3 the crust on its lid, tipped loose round the pit's lip,
+    /// and 0.45 m3 beside it that only the grid takes, spread as a skin under 3 cm deep; every bit of it put back.
+    /// </summary>
+    [Fact]
+    public void ABlockFreedInPlaceStandsOnItsBaseAndItsCrustIsTippedRoundItVolumeKept()
+    {
+        var t = Map();
+        var w = t.WorkAt(0, 0)!;
+        double before = w.Net();
+        var freed = w.FreeBlock(0.1, 0.07, 0.25, 0.25, -0.6, -0.1, G, _ => false)!.Value;
+        Assert.Equal(16, freed.Nodes);
+        Assert.Equal(0.6, freed.Given, 9);
+        Assert.Equal(0.125, freed.Block, 9);
+        Assert.Equal(0.475, freed.Soil, 9);
+        Assert.Equal(0.025, freed.Crust, 9);   // 0.1 m over the 0.25 m2 lid; the other 0.45 m3 stood beside it, within a fine cell
+        Assert.Equal(0.45, freed.Skin, 9);      // the grid's share: not loosened, an even skin no deeper than SkinDepth
+        Assert.True(freed.SkinRise > 0 && freed.SkinRise <= Terrain.SkinDepth + 1e-12, $"skin {freed.SkinRise} m");
+        Assert.Equal(freed.Soil, freed.Spoil, 12);
+        Assert.Equal(before - freed.Block, w.Net(), 9);   // the ground lost the block's volume and no soil
+        Assert.Equal(w.Dumped - w.Dug, w.Net(), 9);
+        // the footprint is flat at the base, so the block stands on it and the surface crosses no part of it
+        for (double x = -0.15; x <= 0.35; x += 0.05)
+            for (double z = -0.18; z <= 0.32; z += 0.05)
+                Assert.Equal(-0.6, w.HeightAt(x, z), 9);
+        // the lip, a fine cell round the pit, is the ground as it was: no spoil on it to slide in
+        Assert.Equal(0, w.HeightAt(-0.5, 0.07), 9);
+        Assert.Equal(0, w.HeightAt(0.75, 0.25), 9);
+        Assert.True(w.Fine.Heights.Max() > 0, "the spoil lies round it, heaped");
+    }
+
+    [Fact]
+    public void SpoilThatWouldReachABodyGoesRoundIt()
+    {
+        var t = Map();
+        var w = t.WorkAt(0, 0)!;
+        // a body stands on the ground to the pit's east (x 0.9 to 1.6): no node under it may rise
+        bool Under(WorkedGround.Raised r) => r.X >= 0.75 && r.X <= 1.75 && Math.Abs(r.Z) <= 0.5;
+        var freed = w.FreeBlock(0, 0, 0.25, 0.25, -0.6, -0.1, G, Under)!.Value;
+        Assert.Equal(freed.Soil, freed.Spoil, 12);
+        Assert.Equal(0, w.HeightAt(1.25, 0), 12);
+    }
 }

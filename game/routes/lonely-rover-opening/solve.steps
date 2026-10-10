@@ -4,15 +4,11 @@
 # Honest about the game today: building is free (parts appear from nothing: CONJURED), the generator and the bank are FOUND in the cargo,
 # and the rover's own work is real: it cuts a road with its backhoe (every bucket dug and hauled by the arm, the drive by its wheels'
 # real grip) down to the level rock shelf under the rubble (-44.98) and digs the bank free from its end (docs/plans/road-plan.md).
-# Predicted from the headless runs of 2026-10-10: the road takes about 49 backhoe cycles and 23 hauls (4.5 m3), the bank is free after
-# 3 buckets from the pad; the bank's cells pass 0 C in the evening of sol 1; the call goes out at the 03:00 pass on sol 2 or sol 3,
-# whichever the bank is full for.
-# Since Jolt runs at Mars's 3.71 m/s2, not Earth's 9.81 (owner, 2026-10-10), measured: the road 52 cycles, 23 hauls, 4.53 m3 (56, 24,
-# 4.78 at 9.81: the lighter rover settles a little differently at each station), the bank free after 4 buckets (3), the drive up the
-# slide 29.2 s + 11.2 s (28.1 + 10.5: its grip, mu g = 2.14 m/s2, is under the 2.5 m/s2 it is commanded to speed up at), cells past
-# 0 C at 33,646 s, the call on sol 3. The rubble is unchanged (its slide always settled at the planet's g): the bank's cover 1.044 m
-# at 280 s, the solar-panels crate's 2.148, boulder 4 still 1.78 m from that crate; the boulders, falling at 3.71 now, lie within
-# 0.35 m of where they lay (boulder 10 moved most; boulder 5 is 7.70 m from the bank, was 7.74).
+# Predicted from the headless runs of 2026-10-10 (Jolt at Mars's 3.71 m/s2 and the bank freed where it lies): the road about 52
+# backhoe cycles, 23 hauls, 4.5 m3; the bank free after 3-4 buckets from the pad, freed in its pit (its crust crumbled off round it);
+# the cells past 0 C in the evening of sol 1; the call at the 03:00 pass on sol 3. Gravity's effect (owner, 2026-10-10): at 9.81 the
+# road was 56 cycles, 24 hauls, 4.78 m3; the rubble is unchanged (its slide always settled at the planet's g: the bank's cover 1.044 m),
+# the boulders lie within 0.35 m of where they lay; the rover's grip, mu g = 2.14 m/s2, is under the 2.5 m/s2 it is commanded to speed up at.
 clock on
 wait 60
 caption Step 1/15: The crater rim came down on the cargo. The battery bank lies under {battery-bank:crate.cover:0.00} m of rubble at (254.5, 137.9). The rover is at (190, 140).
@@ -43,29 +39,30 @@ dig until battery-bank:crate.cover below 0.12 max 8 left
 wait 90
 expect field battery-bank:crate.buried below 0.5
 where battery-bank.crate
-caption Step 5/15: The bank stands free on the floor of its pit, dug out by the rover's own backhoe.
+caption Step 5/15: The bank stands free in its pit, dug out by the rover's own backhoe.
 wait 120
 
-# The vault round the freed crate. Freed, the crate is stood on the pit floor (MachineView.Burial): the where steps above printed its
-# centre at (254.46, -43.532, 137.922) over ground at -43.872, and in another run (254.42, -43.600, 137.919) over -44.072 (the road's
-# cut differs a little run to run): 0.34 to 0.47 above the ground. The enclosure's floor 0.09 above the build's origin, 0.5 m high,
-# holds the crate's centre (the cells' point, WorldZones.Inside) anywhere from 0.09 to 0.59 above it, the crate's base at its floor. The rock and bin, the strip and the
-# mirror keep their places relative to it as before (the rock 0.25 above the floor, the strip 0.46; the mirror at the same height
-# in the world as before, -41.40: 2.47 above the new origin).
-caption Step 6/15: CONJURED: a regolith vault round the freed bank on the pit floor (building is free in the game today).
+# The vault round the freed crate. Freed, the crate stays where it lay, in its pit (MachineView.Burial: the crust over it crumbles off
+# and the ground under it is its base, no lift; owner decision 2026-10-10): the where step above printed its centre at
+# (254.500, -44.261, 137.911) over the pit's floor at -44.511 (it lay tilted about 15 deg under the rubble, its centre at -44.205; let
+# go on the flat floor laid at its lowest corner, it settles onto its face, 0.056 m lower), and `build new` puts the origin on that
+# floor, -44.51. So the enclosure's floor is the origin (0 0 0), the crate's base on it; 0.5 m high, it holds the crate's centre
+# (the cells' point, WorldZones.Inside) at 0.25. The rock and bin keep their 0.25 above the vault's floor, the strip its 0.46; the
+# mirror its height in the world, -41.40: 3.11 above the new origin.
+caption Step 6/15: CONJURED: a regolith vault round the freed bank where it stands in its pit (building is free in the game today).
 build new 254.5 137.9
 look 200 25 8 254.5 -43 137.9
-build (enclosure vault #:at (0 0.09 0) #:size-x 0.5 #:size-y 0.5 #:size-z 0.5 #:pressure 610 #:temperature -55 #:ground -55)
+build (enclosure vault #:at (0 0 0) #:size-x 0.5 #:size-y 0.5 #:size-z 0.5 #:pressure 610 #:temperature -55 #:ground -55)
 wait 60
 caption Step 7/15: CONJURED: 40 kg of basalt in a lidded bin on the vault floor, and a brass-steel strip that opens the lid while the vault is cold.
-build (heat-store rock #:at (0.12 0.34 0) #:mass 40 #:contents basalt #:temperature -55)
+build (heat-store rock #:at (0.12 0.25 0) #:mass 40 #:contents basalt #:temperature -55)
 wait 30
-build (heat-bin bin #:at (0.12 0.34 0) #:holds rock #:leak 0.1)
+build (heat-bin bin #:at (0.12 0.25 0) #:holds rock #:leak 0.1)
 wait 30
-build (bimetal strip #:at (-0.19 0.55 0) #:senses vault #:drives bin #:layers (brass steel))
+build (bimetal strip #:at (-0.19 0.46 0) #:senses vault #:drives bin #:layers (brass steel))
 wait 45
 caption Step 8/15: CONJURED: a 4 m² mirror aimed at the rock. The afternoon sun heats the rock; the rock keeps the bank warm through the night.
-build (mirror heliostat #:at (0 2.47 -3) #:area 4 #:onto rock)
+build (mirror heliostat #:at (0 3.11 -3) #:area 4 #:onto rock)
 look 200 20 10 254.5 -42 136
 wait 75
 build done
@@ -131,7 +128,7 @@ expect link wire motors.motor battery-bank.bank
 follow
 wait 60
 
-caption Step 13/15: Sleep until the bank is above 0 °C (it charges only between 0 and 45 °C). Predicted about 21:30 on sol 1 (the freed crate went into its vault at -63 °C).
+caption Step 13/15: Sleep until the bank is above 0 °C (it charges only between 0 and 45 °C). Predicted about 21:50 on sol 1 (the freed crate went into its vault, in its pit, at -63 °C).
 look 200 22 9 254.5 -41.9 137.9
 sleep-budget 60
 sleep until cells.temperature above 0 limit 40000 paused
