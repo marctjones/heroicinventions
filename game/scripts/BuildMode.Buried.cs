@@ -71,9 +71,9 @@ public partial class BuriedMarker : Node3D
                     _discAt[view] = (area.X, area.Z);
                 }
                 tag.Position = new Vector3((float)area.X, (float)Ground(area.X, area.Z) + 3.4f, (float)area.Z);
-                tag.Text = $"the {RoughArea.Name(label)} lies somewhere in here, under the rubble: dig to find it";
+                tag.Text = $"the {RoughArea.Name(label)} lies somewhere in here,\nunder the rubble: dig to find it";
             }
-            if (_said.GetValueOrDefault(view) != tag.Text) { _said[view] = tag.Text; GD.Print($"[BuildMode] buried marker {view.Name}: {tag.Text}"); }
+            if (_said.GetValueOrDefault(view) != tag.Text) { _said[view] = tag.Text; GD.Print($"[BuildMode] buried marker {view.Name}: {tag.Text.Replace("\n", " ")}"); }
         }
     }
 
