@@ -8,6 +8,9 @@
 ;;             patch of that soil, and the map's texel there are all that colour (to one byte): the key cannot drift from the shader's colour.
 ;;   under the rover   (180, 140) is the crater floor, basalt sand: "ground here: basalt sand (dark)"; (0, 345) is the wall's foot, bedrock:
 ;;             "ground here: bedrock (grey-brown)" (the soil table of racket/maps/victoria.rkt, ground-soil, by azimuth and share of the radius).
+;;   patterns  each soil is drawn with a geologic map's pattern (docs/art-direction.md 12.22, SoilLook.PatternFor; FGDC-STD-013-2006 section
+;;             37): the table below is written out again here, and for every soil the key's pattern, the pattern the ground's own pattern
+;;             textures hold in the middle of a patch of it and the map's pattern texel there must all be that one.
 ;;   only the soils the map has   the 1 m dig-bank map has one soil (ice-cemented regolith): its key has that one.
 ;; Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list racket/file racket/runtime-path racket/math
@@ -57,10 +60,17 @@
 (define (->bytes rgb) (for/list ([v rgb]) (inexact->exact (round (* 255 v)))))
 (define (close? a b) (for/and ([x a] [y b]) (<= (abs (- x y)) 1)))
 
-;; "[map] key basalt-sand: swatch #474242 ground #474242 map #474242 name "basalt sand" note "..."" -> (material swatch ground map name)
+;; "[map] key basalt-sand: swatch #474242 ground #474242 map #474242 name "basalt sand" note "..." pattern sand ground sand map sand"
+;;   -> (material swatch ground map name note (key-pattern ground-pattern map-pattern))
 (define (key-line l)
-  (define m (regexp-match #rx"^\\[map\\] key ([a-z-]+): swatch (#[0-9A-F]+) ground (#[0-9A-F]+) map (#[0-9A-F]+) name \"([^\"]*)\" note \"([^\"]*)\"" l))
-  (and m (list (string->symbol (list-ref m 1)) (list-ref m 2) (list-ref m 3) (list-ref m 4) (list-ref m 5) (list-ref m 6))))
+  (define m (regexp-match #rx"^\\[map\\] key ([a-z-]+): swatch (#[0-9A-F]+) ground (#[0-9A-F]+) map (#[0-9A-F]+) name \"([^\"]*)\" note \"([^\"]*)\" pattern ([a-z]+) ground ([a-z]+) map ([a-z]+)" l))
+  (and m (list (string->symbol (list-ref m 1)) (list-ref m 2) (list-ref m 3) (list-ref m 4) (list-ref m 5) (list-ref m 6)
+               (map string->symbol (list (list-ref m 7) (list-ref m 8) (list-ref m 9))))))
+
+;; the geologic map's pattern of each soil (12.22): sand stipple (FGDC 607), silt dashes (616), rubble triangles (605 breccia), bedrock's
+;; jointed blocks, the ice's flecks
+(define patterns '((basalt-sand . sand) (silica-sand . sand) (regolith . silt) (sublimed-regolith . rubble) (bedrock . rock)
+                   (ice-cemented-regolith . ice)))
 
 (when (godot-available?)
 
@@ -82,10 +92,17 @@
       (check-true (close? (hex->bytes (fourth k)) want) (format "~a: the map's texel ~a" (first k) (fourth k)))
       ;; words for a player: no hyphenated ids, no digits or capitals in what the key says
       (check-false (regexp-match? #rx"[_0-9A-Z]" (string-append (fifth k) (sixth k))) (format "~a: ~a / ~a" (first k) (fifth k) (sixth k)))
-      (check-false (regexp-match? #rx"-sand|-regolith|-cemented-" (sixth k)) (format "~a: ~a" (first k) (sixth k)))))
+      (check-false (regexp-match? #rx"-sand|-regolith|-cemented-" (sixth k)) (format "~a: ~a" (first k) (sixth k)))
+      ;; the pattern: the key's, the ground's texture's and the map's, each the table's
+      (define want-pattern (cdr (assq (first k) patterns)))
+      (check-equal? (seventh k) (list want-pattern want-pattern want-pattern)
+                    (format "~a: key, ground and map patterns ~a, the table's ~a" (first k) (seventh k) want-pattern)))
+    ;; the soils that touch and are under 30 apart in luminance (bedrock and regolith, 4 apart) differ in pattern, which is what the pattern is for
+    (check-not-equal? (cdr (assq 'bedrock patterns)) (cdr (assq 'regolith patterns))))
 
   (test-case "#243: a map with one soil has a key of one"
     (define lines (run-game "rover-dig-bank" "wait 60; rover ground; map open; wait 30; map print; quit"))
     (check-equal? (filter (λ (l) (string-prefix? l "[view] ground here")) lines) '("[view] ground here: ice-cemented soil (pale)"))
     (define keys (filter values (map key-line lines)))
-    (check-equal? (map first keys) '(ice-cemented-regolith))))
+    (check-equal? (map first keys) '(ice-cemented-regolith))
+    (check-equal? (map seventh keys) '((ice ice ice)))))
