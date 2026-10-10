@@ -588,13 +588,14 @@ public partial class TerrainView : Node3D
             foreach (var b in _ground.Boulders.Where(b => !_boulders.ContainsKey(b)))
             {
                 var body = new MaterialBlock(_materials[b.Material], Vector3.One * (float)b.Size, Shapes.ColorFor(b.Material)) { Name = b.Id };
-                // drawn as the rock it is (art direction 12.19): the material's own finish (granite's crystals) and outline, each
-                // boulder its own shade, so a 2 m rock never reads as a crate's flat brown box; look only, the body is unchanged
+                // drawn as the rock it is (art direction 12.19): the material's own finish (granite's crystals), outline and knocked-off
+                // corners, each boulder its own shade, so a 2 m rock never reads as a crate's flat brown box; look only, the body is unchanged
                 foreach (var mesh in body.GetChildren().OfType<MeshInstance3D>())
                 {
                     var skin = Skins.For(_materials[b.Material]);
                     Skins.Vary(skin, b.Id);
                     mesh.MaterialOverride = skin;
+                    BlockLooks.Dress(body, mesh, _materials[b.Material], Vector3.One * (float)b.Size, b.Id);   // rough faceted rock
                 }
                 body.Transform = new Transform3D(new Basis(new Quaternion((float)b.Qx, (float)b.Qy, (float)b.Qz, (float)b.Qw).Normalized()),
                                                  new Vector3((float)b.X, (float)b.Y, (float)b.Z));

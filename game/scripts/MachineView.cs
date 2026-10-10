@@ -728,8 +728,13 @@ public partial class MachineView : Node3D
             Transform = new Transform3D(YawOf(part) * new Basis(Vector3.Right, Mathf.DegToRad((float)part.Number("tilt-deg", 0))), V(part.At)),
             Freeze = true,
         };
-        foreach (var visual in block.GetChildren().OfType<MeshInstance3D>())
+        bool cargo = part.Id == "crate" && CargoMachineNames.Contains(Runtime.Def.Name);   // dressed as a crate instead (MachineView.Cargo.cs)
+        foreach (var visual in block.GetChildren().OfType<MeshInstance3D>().ToList())
+        {
             visual.MaterialOverride = PartSurface(part, size);
+            // a plain block reads as its material: faceted rock, cut timber, bar stock (BlockLooks, 12.19); look only
+            if (!part.Props.ContainsKey("dim-x") && !cargo) BlockLooks.Dress(block, visual, _materials[part.Material], dims, part.Id);
+        }
         AddChild(block);
         // Parented to the block, so the label follows it — otherwise a
         // block that falls (most of them do) leaves its label behind at
@@ -753,6 +758,8 @@ public partial class MachineView : Node3D
             AddLabel(part.Id, new Vector3(0, dims.Y / 2 + 0.05f, 0), block);
         else if (Runtime.Def.Parts.Any(p => p.Kind == "ramp"))
             AddLabel($"{materialName}\nμ{_materials[part.Material].Friction:F2}", new Vector3(0, size / 2 + 0.05f, 0), block);
+        else if (cargo)   // a crate of the rover's cargo is a crate, not a sample of oak (12.19)
+            AddLabel($"crate\n{block.Mass:0.##} kg", new Vector3(0, size / 2 + 0.05f, 0), block);
         else
             AddLabel($"{materialName}\n{block.Mass:0.##} kg", new Vector3(0, size / 2 + 0.05f, 0), block);
         // swept along its path each step unless the machine says #:fast #f (MaterialBlock turns it on)
