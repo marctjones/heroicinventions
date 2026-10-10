@@ -34,10 +34,12 @@ public static class RoverSpec
     public const double GameSpeed = 2.0;                 // m/s top speed driving
     public const double TurnRate = 0.9;                  // rad/s
     public const double Accel = 2.5;                     // m/s² the commanded speed changes by, and rad/s² x1.2 for turning
-    public const double Gravity = 9.81;                  // m/s², what the game's physics runs under (Main sets Jolt's area gravity)
+    /// <summary>m/s², Earth's: the g the rover's numbers were measured under (the evals, #94 #198, run on Earth). In the game it
+    /// falls at its world's planet's g (Main.Gravity.cs sets Jolt's area gravity), <see cref="Rover.GroundGravity"/>.</summary>
+    public const double EarthGravity = HeroicInventions.Sim.Physics.Gravity;
     public const double GradeDeg = 30;                   // degrees: the steepest slope the tyres' grip climbs (Opportunity's rated tilt; see the grade note above)
     public const double WheelTorque = 42;                // N·m each of the six wheels' motors, at most: 1680 N at the ground against 907 N of grip at 30 degrees (see the grade note)
-    /// <summary>N/m of each wheel's spring, along the chassis's up: the chassis's share (95 kg x 9.81 / 6 = 155 N) sets it 1.5 cm.</summary>
+    /// <summary>N/m of each wheel's spring, along the chassis's up: the chassis's share (95 kg x g / 6: 155 N on Earth, 58.7 N on Mars) sets it 1.5 cm on Earth, 0.59 cm on Mars.</summary>
     public const double SpringRate = 10000;
     /// <summary>Of the spring's critical damping, 2 sqrt(k m) with m the chassis's share.</summary>
     public const double SpringDampingRatio = 0.7;
@@ -47,9 +49,10 @@ public static class RoverSpec
     // ---- the rover's hands (#163): what its arm and wheels can do to the world, as numbers ----
     /// <summary>
     /// N the wheels can pull or push with: the weight's share along the steepest slope it climbs, m g sin 30° = 185 x 9.81 x 0.5
-    /// = 907 N, which is what its grip passes to the ground there (measured: it stalls at 29.9 degrees, #198).
+    /// = 907 N, which is what its grip passes to the ground there (measured on Earth: it stalls at 29.9 degrees, #198). Earth's
+    /// number, kept as the cap it was measured as: under a lower g the grip binds first (<see cref="PushForce"/>).
     /// </summary>
-    public static readonly double WheelPull = TotalMass * Gravity * Math.Sin(GradeDeg * Math.PI / 180);
+    public static readonly double WheelPull = TotalMass * EarthGravity * Math.Sin(GradeDeg * Math.PI / 180);
     /// <summary>
     /// Friction of the tyres on the ground, tan <see cref="GradeDeg"/> = 0.577: the design's number, chosen so that Coulomb grip
     /// gives the 30 degrees (see the grade note), not a measured soil property. The tyre material is "rough", so its own friction
@@ -216,7 +219,7 @@ public sealed partial class Rover : Node3D
             axle.SetFlagY(Generic6DofJoint3D.Flag.EnableLinearSpring, true);
             axle.SetParamY(Generic6DofJoint3D.Param.LinearSpringStiffness, (float)RoverSpec.SpringRate);
             axle.SetParamY(Generic6DofJoint3D.Param.LinearSpringDamping, (float)(RoverSpec.SpringDampingRatio * 2 * Math.Sqrt(RoverSpec.SpringRate * share)));
-            axle.SetParamY(Generic6DofJoint3D.Param.LinearSpringEquilibriumPoint, (float)(-share * RoverSpec.Gravity / RoverSpec.SpringRate));
+            axle.SetParamY(Generic6DofJoint3D.Param.LinearSpringEquilibriumPoint, SpringRest());   // under the rover's own g (GroundGravity)
             axle.SetParamY(Generic6DofJoint3D.Param.LinearLowerLimit, -(float)RoverSpec.SpringTravel);
             axle.SetParamY(Generic6DofJoint3D.Param.LinearUpperLimit, (float)RoverSpec.SpringTravel);
             axle.SetFlagX(Generic6DofJoint3D.Flag.EnableAngularLimit, false);
@@ -227,6 +230,16 @@ public sealed partial class Rover : Node3D
         }
         BuildMesh();
         BuildBackhoe();
+    }
+
+    /// <summary>m each wheel's spring rests below where it is drawn: the chassis's share of the weight, m g / 6 over the spring rate,
+    /// at <see cref="GroundGravity"/> (the world's planet's g, the g Jolt runs under), so the chassis rides where it is drawn on any planet.</summary>
+    private float SpringRest() => (float)(-(RoverSpec.TotalMass - 6 * RoverSpec.WheelMass) / 6 * GroundGravity / RoverSpec.SpringRate);
+
+    /// <summary>Sets every spring's rest for the g now (GroundGravity changed: a world's gravity tuned or set live).</summary>
+    private void RestSprings()
+    {
+        foreach (var axle in _axles) axle.SetParamY(Generic6DofJoint3D.Param.LinearSpringEquilibriumPoint, SpringRest());
     }
 
     public override void _PhysicsProcess(double delta)

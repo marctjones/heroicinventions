@@ -62,7 +62,14 @@ public sealed partial class Rover
 
     /// <summary>The ground the arm digs, or null (the arm then only moves). Set by the world; <see cref="Gravity"/> is the ground's.</summary>
     public Terrain? Ground { get; set; }
-    public double GroundGravity { get; set; } = RoverSpec.Gravity;
+    /// <summary>m/s², the g the rover stands under: its world's planet's (Main sets it with Jolt's own, Main.Gravity.cs). The ground
+    /// it digs settles under it, and the wheels' springs rest for it.</summary>
+    public double GroundGravity
+    {
+        get => _groundGravity;
+        set { _groundGravity = value; RestSprings(); }
+    }
+    private double _groundGravity = RoverSpec.EarthGravity;
 
     /// <summary>m³ in the bucket now.</summary>
     public double Carried { get; private set; }

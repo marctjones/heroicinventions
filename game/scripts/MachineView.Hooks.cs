@@ -88,7 +88,7 @@ public partial class MachineView
     {
         var hook = new RigidBody3D
         {
-            Name = $"{ropeId}-hook", Mass = HookMass, CanSleep = false, GravityScale = (float)(_shownGravity / Physics.Gravity),
+            Name = $"{ropeId}-hook", Mass = HookMass, CanSleep = false, GravityScale = _gravityScale,
             PhysicsMaterialOverride = ContactFor("iron"),
         };
         hook.SetMeta("part_id", ropeId);

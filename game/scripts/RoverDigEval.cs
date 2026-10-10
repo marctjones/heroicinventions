@@ -37,7 +37,7 @@ public partial class RoverDigEval : Node3D
 
     public override void _Ready()
     {
-        PhysicsServer3D.AreaSetParam(GetViewport().FindWorld3D().Space, PhysicsServer3D.AreaParameter.Gravity, (float)RoverSpec.Gravity);
+        PhysicsServer3D.AreaSetParam(GetViewport().FindWorld3D().Space, PhysicsServer3D.AreaParameter.Gravity, (float)RoverSpec.EarthGravity);
         if (OS.GetEnvironment("HEROIC_ONLY") != "ramp")
         foreach (int deg in new[] { 30, 31, 35, 41, 43, 45 })
         {
@@ -77,7 +77,7 @@ public partial class RoverDigEval : Node3D
         _view = new TerrainView { Name = "Terrain" };
         _world.AddChild(_view);
         _view.Show(_terrain, new WorldGround(_terrain).Water, MaterialLibrary.LoadDefault());
-        _rover = new Rover { Ground = _terrain, GroundHeight = _terrain.HeightAt, GroundGravity = RoverSpec.Gravity };
+        _rover = new Rover { Ground = _terrain, GroundHeight = _terrain.HeightAt, GroundGravity = RoverSpec.EarthGravity };
         _world.AddChild(_rover);
         _refreshMs.Clear();
         _script = _runs[_run].Script().GetEnumerator();

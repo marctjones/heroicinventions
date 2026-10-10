@@ -538,8 +538,8 @@ public partial class Main : Node3D
         // HEROIC_BACKGROUND=1 (tools/gui-check.sh): a window that never takes
         // the keyboard, for scripted runs while someone works in other apps
         if (OS.GetEnvironment("HEROIC_BACKGROUND") == "1") GetWindow().Unfocusable = true;
-        // One gravity for both layers: Godot's default is 9.8, the sim core's 9.81.
-        PhysicsServer3D.AreaSetParam(GetWorld3D().Space, PhysicsServer3D.AreaParameter.Gravity, (float)HeroicInventions.Sim.Physics.Gravity);
+        // One gravity for both layers, the environment's: Earth's 9.81 until a world or machine is loaded (Main.Gravity.cs)
+        ApplySpaceGravity();
         _materials = MaterialLibrary.LoadDefault();
         BuildEnvironment();
         ScanMachineFiles();
@@ -979,6 +979,7 @@ public partial class Main : Node3D
         _joinButton.Visible = true;
         RebuildLinks();
         SpawnRover(world);   // a world that places a rover is the game: the player drives it (Main.Rover.cs)
+        ApplySpaceGravity();   // the world's planet's g, for the rover, the boulders and every body (Main.Gravity.cs)
         RefreshBuiltList();   // the Build section (Main.Build.cs, #204)
     }
 
@@ -1168,6 +1169,7 @@ public partial class Main : Node3D
         _current = view;
         _currentName = name;
         _byName[name] = view;
+        ApplySpaceGravity();   // the machine's planet's g (Main.Gravity.cs)
 
         ApplyCamera(Profiles.GetValueOrDefault(name, MenuCamera with { Eye = new Vector3(0, 1, 2) }));
         CentreInClearArea(name, view);
@@ -1777,6 +1779,7 @@ public partial class Main : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
+        ApplySpaceGravity();   // before anything steps: a gravity tuned or set live is the one this tick falls under (Main.Gravity.cs)
         if (_scriptedSavePath is { } scripted && _current is not null && _current.Runtime.Time >= _scriptedSaveAt)
         {
             SaveWorld(auto: false, scripted);

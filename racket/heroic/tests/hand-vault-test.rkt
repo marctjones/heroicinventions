@@ -58,7 +58,9 @@
   (define defaults (vector-ref results 1))
 
   (test-case "build mode places a room 1.54 m down and it holds the buried crate's middle"
-    (check-true (has? #rx"^\\[build\\] new machine built-1 at \\(254\\.4[0-9] -4[0-9]\\.[0-9]+ 137\\.[89][0-9]\\)" night) (string-join night "\n"))
+    ;; the build spot is 1.8 m ahead of where the rover settles: 254.49 when it fell at Earth's 9.81, 254.50 at Mars's 3.71 (owner,
+    ;; 2026-10-10: Jolt runs at the planet's g; its springs sit 0.59 cm, not 1.5, under the chassis's share), so 254.50 within 5 cm
+    (check-true (has? #rx"^\\[build\\] new machine built-1 at \\(254\\.(4[5-9]|5[0-4]) -4[0-9]\\.[0-9]+ 137\\.[89][0-9]\\)" night) (string-join night "\n"))
     (check-true (has? #rx"^\\[zones\\] battery-bank.cells joined built-1.vault" night)))
 
   (test-case "on Mars a room placed with no wall gets a regolith wall and no fixed insulation; the player can change both"
