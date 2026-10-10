@@ -51,17 +51,6 @@ public partial class MachineView
             var faceMat = Shapes.Mat(MirrorFace, metallic: 0.5f, roughness: 0.2f);
             var face = Shapes.Box(new Vector3(side, side, 0.03f), faceMat);
             plate.AddChild(face);
-            // a timber frame round the plate (12.21): a framed mirror, not a slab
-            float fb = Mathf.Max(0.03f, side * 0.05f);
-            var frame = new List<(Vector3, Vector3)>();
-            foreach (float k in new[] { -1f, 1f })
-            {
-                frame.Add((new Vector3(0, k * (side / 2 + fb / 2), -0.01f), new Vector3(side + 2 * fb, fb, 0.05f)));
-                frame.Add((new Vector3(k * (side / 2 + fb / 2), 0, -0.01f), new Vector3(fb, side, 0.05f)));
-            }
-            var frameMesh = Merged(frame, Shapes.Mat(Skins.ColorOf("oak").Darkened(0.3f), roughness: 0.9f));
-            MarkScenery(frameMesh);
-            plate.AddChild(frameMesh);
 
             var beamMat = Shapes.Mat(new Color(1f, 0.93f, 0.6f), roughness: 1f, alpha: 0.35f);
             beamMat.EmissionEnabled = true;
@@ -75,7 +64,7 @@ public partial class MachineView
             spotMat.NoDepthTest = true;   // always there to take hold of, even inside its receiver
             // a ring, not a disc (12.21): the receiver it lands on (a rock's glowing cracks) shows through the middle
             float ring = Mathf.Max(0.12f, side * 0.35f);
-            var spot = new MeshInstance3D { Mesh = new TorusMesh { InnerRadius = ring * 0.82f, OuterRadius = ring, Rings = 48, RingSegments = 6 }, MaterialOverride = spotMat };
+            var spot = new MeshInstance3D { Mesh = new TorusMesh { InnerRadius = ring * 0.6f, OuterRadius = ring, Rings = 48, RingSegments = 6 }, MaterialOverride = spotMat };
             spot.Scale = new Vector3(1, 0.2f, 1);
             spot.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
             spot.Position = V(mirror.Target);

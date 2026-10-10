@@ -15,7 +15,7 @@ namespace HeroicInventions;
 /// <item>A store of cells (a battery bank's) is a dark case with ribs for its cells and a red and a black terminal on top.</item>
 /// <item>A bin has dark corner battens, a lid lined with pale wool underneath (so a lid that lifts shows a pale face, more as it opens),
 /// two iron hinge straps and a handle.</item>
-/// <item>A vault's earth shows its layers: a paler crust at the top and a darker, stony bed at the bottom of every face, with stones in the cut. Timber
+/// <item>A vault's earth shows its layers: a greyer, stony bed in the lower part of every face, with stones in the cut. Timber
 /// props stand at the front corners of the dug room under a lintel. A vault under the ground has a hatch on the surface over it: a
 /// timber collar round a shaft whose mouth is washed with the room's air temperature, a ladder's top standing out of it and the
 /// trapdoor thrown back.</item>
@@ -161,25 +161,20 @@ public partial class MachineView
 
     /// <summary>
     /// A vault's earth as dug ground (12.21), over the three earth blocks round the room (<paramref name="blocks"/>, their centres and
-    /// sizes in this view): a paler crust at the top and a darker stony bed below round every block, stones scattered in the cut, and timber props at
+    /// sizes in this view): a greyer stony bed in the lower part of every block, stones scattered in the cut, and timber props at
     /// the room's front corners under a lintel, with a beam across the back.
     /// </summary>
     private void DressVault(Vector3 at, float w, float h, float d, IEnumerable<(Vector3 Centre, Vector3 Size)> blocks, Color earth, string seed)
     {
-        var crust = new List<(Vector3, Vector3)>();
         var beds = new List<(Vector3, Vector3)>();
         foreach (var (c, size) in blocks)
-        {
-            var wrap = new Vector3(size.X + 0.006f, 0, size.Z + 0.006f);
-            crust.Add((c + new Vector3(0, size.Y / 2 - size.Y * 0.06f, 0), wrap with { Y = size.Y * 0.12f + 0.003f }));
-            beds.Add((c + new Vector3(0, -size.Y / 2 + size.Y * 0.19f, 0), wrap with { Y = size.Y * 0.38f }));   // a stony bed below: thick, so it reads as a layer, not a seam
-        }
-        var crustMesh = Merged(crust, Shapes.Mat(earth.Lightened(0.18f), roughness: 1f, outline: false));
-        var bedMesh = Merged(beds, Shapes.Mat(earth.Darkened(0.2f), roughness: 1f, outline: false));
-        foreach (var m in new[] { crustMesh, bedMesh }) { MarkScenery(m); AddChild(m); }
+            beds.Add((c + new Vector3(0, -size.Y / 2 + size.Y * 0.19f, 0), new Vector3(size.X + 0.006f, size.Y * 0.38f, size.Z + 0.006f)));   // thick, so it reads as a layer, not a seam
+        var bedMesh = Merged(beds, Shapes.Mat(earth.Lerp(new Color(0.52f, 0.48f, 0.45f), 0.35f), roughness: 1f, outline: false));   // greyer, as light as the earth
+        MarkScenery(bedMesh);
+        AddChild(bedMesh);
         // stones in the stony bed: scattered over the two side blocks' front faces (the cut), half sunk, of mixed sizes
         var rng = new RandomNumberGenerator { Seed = Fnv(seed) };
-        var stone = Shapes.Mat(Skins.ColorOf("basalt").Lightened(0.15f), roughness: 0.9f);
+        var stone = Shapes.Mat(Skins.ColorOf("basalt").Lightened(0.35f), roughness: 0.9f);
         foreach (var (c, size) in blocks.Where(b => Mathf.Abs(b.Centre.X - at.X) > 1e-3f))
             for (int k = 0; k < 5; k++)
             {
