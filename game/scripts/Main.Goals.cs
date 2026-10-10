@@ -116,6 +116,8 @@ public partial class GoalsPanel : CanvasLayer
     private VBoxContainer _rows = null!;
     private VBoxContainer _routeRows = null!;
     private readonly Dictionary<RoutesPanelLevel, Button> _levelButtons = [];
+    /// <summary>HEROIC_GOALS_DEV=1 shows each goal's developer trigger (field names) under its plain words, and as the tooltip.</summary>
+    private static readonly bool GoalsDev = OS.GetEnvironment("HEROIC_GOALS_DEV") == "1";
 
     public GoalsPanel(Main main) { _main = main; Layer = 70; }
 
@@ -208,17 +210,24 @@ public partial class GoalsPanel : CanvasLayer
                 var row = new Label
                 {
                     Text = (earned is null ? "[ ]  " : "[x]  ") + g.Title + (earned is { } e ? $"   (sol {e.Sol})" : ""),
-                    TooltipText = "Earned when: " + g.Trigger,
+                    TooltipText = GoalsDev ? "Earned when: " + g.Trigger : "",
                 };
                 if (earned is null) row.AddThemeColorOverride("font_color", HudTheme.CreamDim);
                 _rows.AddChild(row);
                 if (earned is { }) { var s = new Label { Text = "      " + g.Story, AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(500, 0) }; s.AddThemeFontSizeOverride("font_size", 12); s.AddThemeColorOverride("font_color", HudTheme.CreamDim); _rows.AddChild(s); }
                 else
                 {
-                    var s = new Label { Text = "      " + g.Trigger, AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(500, 0) };
+                    var s = new Label { Text = "      " + g.Plain, AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(500, 0) };
                     s.AddThemeFontSizeOverride("font_size", 11);
                     s.AddThemeColorOverride("font_color", new Color(1, 1, 1, 0.45f));
                     _rows.AddChild(s);
+                }
+                if (GoalsDev)   // HEROIC_GOALS_DEV=1: the exact trigger, with the sim's field names, under the plain words
+                {
+                    var t = new Label { Text = "      [dev] " + g.Trigger, AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(500, 0) };
+                    t.AddThemeFontSizeOverride("font_size", 10);
+                    t.AddThemeColorOverride("font_color", new Color(0.6f, 0.85f, 1f, 0.6f));
+                    _rows.AddChild(t);
                 }
             }
         }
