@@ -103,6 +103,7 @@ A route is a data file, `game/routes/*.route` (and `game/routes/<world>/*.route`
   - In a trace, `rot-z` is the absolute tilt from vertical; `angle` is measured from the starting position.
   - Don't judge a periodic motion from frames at fixed times; read the trace.
 - **Jolt physics:**
+  - **Jolt's gravity is the environment's** (owner, 2026-10-10; `Main.Gravity.cs`): the loaded world's planet (its first machine's), or the machine's planet in a machine run, Earth's 9.81 with nothing loaded; set at each load and checked every tick, so tuning and `scene.gravity` follow live; logged as `[physics] gravity 3.71 m/s² (mars)`. On Mars the rover, the rim's boulders and every body fall at 3.71. A machine's bodies are scaled by its planet's g over the space's (`MachineView.ApplyPlanetGravity`, 1 in a one-planet world). Anything that needs g reads the environment's (`Runtime.Outside.Gravity`, `Rover.GroundGravity`), never `Physics.Gravity` (Earth's, for reference); the evals that measure on Earth (RoverEval, CartEval, DirtEnergyEval, RoverDigEval) set Jolt to 9.81 themselves.
   - A Godot body's node shows the previous physics tick until the next step; read the physics server's state when copying poses.
   - **Jolt collision:** a body is pushed by another only if the other's layer is in its own **mask** (#189: the catapulta bolt fell through a frame that "saw" it).
   - Jolt takes the larger restitution of two surfaces (#87).
