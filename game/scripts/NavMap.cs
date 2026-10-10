@@ -364,7 +364,9 @@ public partial class NavMap : Control
         string head = "Ground (flat, in the light; a slope turned away looks darker)";
         string Row(KeyEntry e) => $"{char.ToUpper(e.Name[0])}{e.Name[1..]}: {e.Note}";
         float width = Math.Max((float)Shaped(font, head, fontSize).GetSize().X, _key.Max(e => (float)Shaped(font, Row(e), fontSize).GetSize().X + swatch + 10)) + 2 * pad;
-        var box = new Rect2(14, 38, width, pad * 2 + rowH * (_key.Count + 1) - 4);
+        const string foot = "Paler patches: loose or freshly tipped soil · darker: dug away or in shadow";
+        width = Math.Max(width, (float)Shaped(font, foot, fontSize).GetSize().X + 2 * pad);
+        var box = new Rect2(14, 38, width, pad * 2 + rowH * (_key.Count + 2) - 4);
         _marks.DrawRect(box, new Color(Ink, 0.72f));
         _marks.DrawRect(box, new Color(Paper, 0.5f), false, 1);
         Text(font, head, new Vector2(box.Position.X + pad, box.Position.Y + pad + 15), fontSize, Paper);
@@ -376,6 +378,7 @@ public partial class NavMap : Control
             _marks.DrawRect(chip, _key[i].Colour);
             Text(font, Row(_key[i]), new Vector2(chip.End.X + 10, y + 15), fontSize, Paper);
         }
+        Text(font, foot, new Vector2(box.Position.X + pad, box.Position.Y + pad + rowH * (_key.Count + 1) + 15), fontSize, new Color(Paper, 0.85f));
     }
 
     /// <summary>The title line, the compass, the scale bar and the legend.</summary>

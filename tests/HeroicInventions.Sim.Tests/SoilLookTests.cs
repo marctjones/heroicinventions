@@ -94,10 +94,9 @@ public class SoilLookTests
     [Fact]
     public void SoilsThatMeetOnTheMapStayApart()
     {
-        // Every pair of soils that touch on the victoria map (4-neighbours): worked from the table's drawn colours. A pair that differed by 50 or
-        // more in luminance before #244 (basalt and ice or silica; bedrock and silica or ice; regolith and ice) still does, and a pair that did not
-        // (bedrock and regolith 5 apart in luminance, basalt and bedrock, bedrock and sublimed) still differs by 30 or more in luminance or by 20
-        // or more bytes of colour. Bedrock and regolith are the same hue and differ in how grey they are: they were left as they were.
+        // Every pair of soils that touch on the victoria map (4-neighbours), from the table's drawn colours: each pair differs by 30 or more in
+        // luminance or by 20 or more bytes of colour (bedrock and regolith are 5 apart in luminance, the same hue, and differ in how grey they are:
+        // left as they were), and the floor (basalt sand) stays 30 under the wall and 50 under the pale soils.
         var t = Victoria();
         var pairs = new HashSet<(string, string)>();
         for (int j = 0; j < t.Nz; j++)
@@ -118,13 +117,16 @@ public class SoilLookTests
             return 255 * Math.Sqrt((ar - br) * (ar - br) + (ag - bg) * (ag - bg) + (ab - bb) * (ab - bb));
         }
         // the luminances this table had before #244 (drawn): the pairs that were 50 apart or more
-        var before = new Dictionary<string, double> { ["basalt-sand"] = 57.8, ["bedrock"] = 99.6, ["regolith"] = 103.9, ["sublimed-regolith"] = 136.7, ["ice-cemented-regolith"] = 139.4, ["silica-sand"] = 226 };
+        // Floors held in drawn (table) space, which is what a Sim test can see. Ice and silica are NOT held here: the ground renders ice glossy and
+        // silica tone-mapped, so their drawn gaps to bedrock (18, 73) say little; their measured separations from bedrock (55 and 66) were taken from
+        // frames by hand and are recorded in docs/art-direction.md 12.17; no test measures a frame.
+        Assert.True(DrawnLuminance("bedrock") - DrawnLuminance("basalt-sand") >= 30, "the floor against the wall");
+        foreach (var pale in new[] { "ice-cemented-regolith", "silica-sand" })
+            Assert.True(DrawnLuminance(pale) - DrawnLuminance("basalt-sand") >= 50, $"the floor against {pale}");
         foreach (var (a, b) in pairs)
         {
             double gap = Math.Abs(DrawnLuminance(a) - DrawnLuminance(b));
             Assert.True(gap >= 30 || Distance(a, b) >= 20, $"{a} / {b}: {gap:0} apart in luminance, {Distance(a, b):0} bytes of colour");
-            if (a is "ice-cemented-regolith" or "silica-sand" || b is "ice-cemented-regolith" or "silica-sand") continue;   // these two render brighter or dimmer than their table colour: measured in docs/art-direction.md 12.17
-            if (Math.Abs(before[a] - before[b]) >= 50) Assert.True(gap >= 50, $"{a} / {b}: {gap:0}");
         }
     }
 
