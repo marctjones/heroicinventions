@@ -258,8 +258,6 @@ public partial class Main
                 var s = JoinStep(["joinclick", a, "list"]);
                 if (s == ScriptedInput.Step.Again) return s;
                 DirectorStep(["frame", b, "6", "135", "18"]);
-                _orbit.Pivot += _camera.GlobalBasis.X * 0.8f;   // B off the centre: two clicks on one pixel read as "again, offer the list" (#225), which re-picks
-                _orbit.Apply();
                 _joinGesturePhase = 2;
                 return ScriptedInput.Step.Again;
             }

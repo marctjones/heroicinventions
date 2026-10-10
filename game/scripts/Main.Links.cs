@@ -172,6 +172,7 @@ public partial class Main : ScriptedInput.IJoinStep
     private Vector2 _joinRightAt;
     /// <summary>Where the last join click landed, and the first pick it was made on top of, so a second click on the spot (or a right-click) can offer the parts there and replace that pick (#225).</summary>
     private (Vector2 Screen, LinkEnd? FirstBefore)? _lastJoinClick;
+    private Transform3D _lastJoinCamera;   // the view the last join click was made in
 
     /// <summary>The parts whose pick boxes the ray through <paramref name="screen"/> crosses, with their views. The generator and the bank, which the view draws no body for, get a small box at their place (<see cref="PickBoxes.SimPartSide"/>).</summary>
     private List<(PickHit Hit, MachineView View, string Part)> PartsUnder(Vector3 from, Vector3 dir)
@@ -222,7 +223,9 @@ public partial class Main : ScriptedInput.IJoinStep
         if (under.Count > 1)   // say which boxes it crossed, nearest first
             GD.Print($"[links] the click crossed {under.Count} parts' boxes, nearest first: {string.Join(", ", ordered.Select(c => $"{c.Name} ({c.T:F1} m)"))}");
         if (PickBoxes.Choose(under.Select(u => u.Hit)) is not { } chosen) { GD.Print($"[links] nothing there to join (at {screen}, looking along {dir} from {from})"); _lastJoinClick = null; _lastPicked = null; return; }
-        bool again = _lastJoinClick is { } last && last.Screen.DistanceTo(screen) < 4;
+        // again: the same spot of the same view (a camera moved since then shows other parts at that pixel)
+        bool again = _lastJoinClick is { } last && last.Screen.DistanceTo(screen) < 4 && _camera.GlobalTransform.IsEqualApprox(_lastJoinCamera);
+        _lastJoinCamera = _camera.GlobalTransform;
         if (under.Count > 1 && (offerList || again))
         {
             var firstBefore = again ? _lastJoinClick!.Value.FirstBefore : _firstPick;
