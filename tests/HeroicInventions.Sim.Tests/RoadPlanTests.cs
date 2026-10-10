@@ -6,8 +6,8 @@ namespace HeroicInventions.Sim.Tests;
 /// The rover's road planner (docs/plans/road-plan.md). Predicted by hand before running:
 /// <list type="bullet">
 /// <item>a soil plane at 25 degrees, the target 8 m straight up it: one straight stretch facing it (yaw 270, +x), graded to 20
-/// degrees; the cut grows by tan 25 − tan 20 = 0.102 m a metre, so about 0.5 · 6 m · 0.6 m · 1.7 m ≈ 3 m³ (the road ends 2.1 m
-/// short of the target, and the pad runs a metre on);</item>
+/// degrees; the cut grows by tan 25 − tan 20 = 0.102 m a metre, to 0.56 m over the 5.5 m road (0.5 · 5.5 · 0.56 · 1.7 = 2.6 m³),
+/// and the pad, held level 1.5 m on into the 25 degree ground, deepens it to 1.26 m (1.5 · 0.91 · 1.7 = 2.3 m³): about 4.9 m³;</item>
 /// <item>along the contour of a 14 degree cross slope: level along, level across, a bench cut 0.21 m into the uphill edge
 /// (0.85 tan 14) and as much filled at the downhill one;</item>
 /// <item>a rock ridge 0.2 m high across a gentle slope is ridden over as it lies (nothing of it is cut); one 1 m high, steeper than
@@ -38,7 +38,7 @@ public class RoadPlanTests
         var leg = Assert.Single(plan.Segments);
         Assert.Equal(270, leg.HeadingDeg, 6);
         Assert.InRange(leg.GradeDeg, 19.0, 20.0 + 1e-9);
-        Assert.InRange(plan.Volume, 1.5, 4.5);
+        Assert.InRange(plan.Volume, 4.0, 6.0);
         Assert.All(plan.Stations, s => Assert.Equal(270, s.HeadingDeg, 6));
         Assert.All(plan.Stations, s => Assert.Equal(0, s.TeethZ, 6));
     }
