@@ -55,7 +55,10 @@ public sealed partial class Rover
             Form("dig-at", V(_lastDigAt)), Form("dump-at", V(_lastDumpAt))]));
         items.Add(new SList([new SSymbol("arm"), Form("step", _step), Form("time", _stepTime), new SList([new SSymbol("refused"), new SBool(_refused)]),
             new SList([new SSymbol("status"), new SString(ArmStatus)]),
-            Form("pose", PoseNums(_pose)), Form("from", PoseNums(_from)), Form("dig-start", PoseNums(_digStart)), Form("dig-end", PoseNums(_digEnd))]));
+            Form("pose", PoseNums(_pose)), Form("from", PoseNums(_from)), Form("dig-start", PoseNums(_digStart)), Form("dig-end", PoseNums(_digEnd)),
+            // the road's carrying (2026-10-10): the cycle's kind, its side and swing, and a load kept on the deck (absent in older saves: a full cycle to the right)
+            Form("cycle", Cycle == DigOnlyCycle ? 1 : Cycle == DumpOnlyCycle ? 2 : 0), Form("side", (int)_side), Form("dig-swing", _digSwing),
+            new SList([new SSymbol("keep"), new SBool(_keep)]), new SList([new SSymbol("carrying"), new SBool(CarryingOn)])]));
         return new SList(items);
     }
 
@@ -76,7 +79,8 @@ public sealed partial class Rover
         var cmd = Nums(drive, "command");
         var (pose, from, digStart, digEnd) = (P("pose"), P("from"), P("dig-start"), P("dig-end"));
         int step = (int)Num(arm, "step");
-        if (step < -1 || step >= Cycle.Length) throw new FormatException("the arm's step is not one of the cycle's");
+        var cycle = arm.Field("cycle") is null ? FullCycle : Num(arm, "cycle") switch { 1 => DigOnlyCycle, 2 => DumpOnlyCycle, _ => FullCycle };
+        if (step < -1 || step >= cycle.Length) throw new FormatException("the arm's step is not one of the cycle's");
 
         // all read: now set
         SetBody(Chassis, chassis);
@@ -90,6 +94,11 @@ public sealed partial class Rover
         _refused = arm.Field("refused")?.Items.ElementAtOrDefault(1) is SBool { Value: true };
         ArmStatus = arm.Field("status")?.Items.ElementAtOrDefault(1) is SString s ? s.Value : ArmStatus;
         _from = from; _digStart = digStart; _digEnd = digEnd;
+        Cycle = cycle;
+        _side = arm.Field("side") is null || Num(arm, "side") < 0 ? ArmSide.Right : ArmSide.Left;
+        _digSwing = arm.Field("dig-swing") is null ? 0 : Num(arm, "dig-swing");
+        _keep = arm.Field("keep")?.Items.ElementAtOrDefault(1) is SBool { Value: true };
+        CarryingOn = arm.Field("carrying")?.Items.ElementAtOrDefault(1) is SBool { Value: true };
         Apply(pose);
     }
 }

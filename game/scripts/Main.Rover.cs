@@ -17,7 +17,7 @@ namespace HeroicInventions;
 /// left panel only what the rover can do (sleep until, save and load, menu, speed), and building (#204: a new machine, joining
 /// machines, and editing the machines the player built; Main.Build.cs). The found cargo can't be rebuilt.
 ///
-/// Keys: arrows or W A S D drive (forward, back, turn); B runs the backhoe's dig-and-dump; Shift+arrows orbit the camera, + and -
+/// Keys: arrows or W A S D drive (forward, back, turn); B runs the backhoe's dig-and-dump to the right, Shift+B to the left; Shift+arrows orbit the camera, + and -
 /// (or Page Up / Down) zoom it, Home puts it back behind the rover; the mouse orbits and zooms as everywhere.
 /// </summary>
 public partial class Main
@@ -49,7 +49,7 @@ public partial class Main
         _rover.Frozen = !_running;
 
         _plainControls = _hudControls.Text;
-        _hudControls.Text = "Arrows or W A S D drive the rover · B backhoe: dig and dump · Space pause/run · H hide this panel · L all labels · Esc menu\n"
+        _hudControls.Text = "Arrows or W A S D drive the rover · B backhoe: dig and dump right, Shift+B left · Space pause/run · H hide this panel · L all labels · Esc menu\n"
                           + "Drag to orbit · scroll or pinch to zoom · Shift+arrows orbit · + / − or Page Up/Down zoom · Home puts the camera behind the rover";
         BuildRoverPanels();
         InstallRoverHands();   // every action from here on passes the rover's capability check (Main.RoverHands.cs)
@@ -107,7 +107,7 @@ public partial class Main
         switch (key.Keycode)
         {
             case Key.B:
-                if (!key.Echo) _rover!.StartCycle();
+                if (!key.Echo) _rover!.StartCycle(key.ShiftPressed ? Rover.ArmSide.Left : Rover.ArmSide.Right);   // (Shift alone moves the camera only with the arrows)
                 break;
             case Key.E or Key.J or Key.R or Key.D:
                 break;   // edit, join, restart and details belong to machine runs and build mode: used up so they do nothing here
@@ -244,7 +244,7 @@ public partial class Main
         _roverDrive!.Text = $"{r.Speed:0.0} m/s · nose {r.PitchDeg:+0;-0;0}° · tilt {r.TiltDeg:0}°"
             + (_windView is { } wind ? $"\nwind {wind.SpeedAt(r.Chassis.GlobalPosition):0.0} m/s here" : "");   // the crater's wind where the rover stands (WindView.cs)
         UpdateRoverAhead();
-        _roverArm!.Text = $"{r.ArmStatus}\nReaches {Rover.ArmReach:0.0} m · pushes up to {RoverSpec.PushForce(r.GroundGravity) / 1000:0.0} kN · never lifts a load. B digs and dumps.";
+        _roverArm!.Text = $"{r.ArmStatus}\nReaches {Rover.ArmReach:0.0} m · pushes up to {RoverSpec.PushForce(r.GroundGravity) / 1000:0.0} kN · never lifts a load. B digs and dumps right, Shift+B left.";
         _roverBucket!.Text = $"{r.Carried:0.00} of {Rover.BucketVolume:0.00} m³\ndug {r.Dug:0.00} m³, dumped {r.Dumped:0.00} m³";
         _roverEnergy!.Text = "Upkeep is free for now. The energy budget is not modelled yet (#62).";
         UpdateWinHud();   // the Bank section and the win banner (Main.Win.cs)
@@ -302,7 +302,8 @@ public partial class Main
         return box.Size == Vector3.Zero ? null : box;
     }
 
-    /// <summary>Scripted checks (tools/gui-check.sh): "rover" prints where it is and what it is doing; "rover place X Z HEADING" puts it on the ground there; "rover save FILE" writes a world save now.</summary>
+    /// <summary>Scripted checks (tools/gui-check.sh): "rover" prints where it is and what it is doing; "rover place X Z HEADING" puts it on the ground there; "rover save FILE" writes a world save now;
+    /// "rover dig [left|right] [swing DEG] [keep]" starts one backhoe cycle (as B or Shift+B, the dig swung DEG to the left, keeping the load).</summary>
     private ScriptedInput.Step? RoverStep(string[] w)
     {
         if (w[0] != "rover") return null;
@@ -316,6 +317,20 @@ public partial class Main
             return ScriptedInput.Step.Next;
         }
         if (w.Length == 2 && w[1] == "ground") { GD.Print($"[view] {RoverGroundText()}"); return ScriptedInput.Step.Continue; }   // the Driving section's ground line (#243)
+        if (w.Length == 2 && w[1] == "reach" && !_rover.ArmBusy)   // where the teeth and the tips would land from here (the arm put there and back)
+        {
+            string P(Vector3 v) => $"({v.X:F2} {v.Y:F2} {v.Z:F2})";
+            GD.Print($"[view] rover reach: dig -16 {P(_rover.DigPoint(-16))} 0 {P(_rover.DigPoint(0))} +16 {P(_rover.DigPoint(16))}; dump left {P(_rover.DumpPoint(Rover.ArmSide.Left))} right {P(_rover.DumpPoint(Rover.ArmSide.Right))}");
+            return ScriptedInput.Step.Continue;
+        }
+        if (w.Length > 1 && w[1] == "dig")
+        {
+            var side = w.Contains("left") ? Rover.ArmSide.Left : Rover.ArmSide.Right;
+            int at = Array.IndexOf(w, "swing");
+            double swing = at > 0 && at + 1 < w.Length ? double.Parse(w[at + 1], inv) : 0;
+            GD.Print($"[view] rover dig {side.ToString().ToLowerInvariant()} swing {swing:0} {(w.Contains("keep") ? "keep" : "")}: {(_rover.StartCycle(side, swing, w.Contains("keep")) ? "started" : "the arm is busy")}");
+            return ScriptedInput.Step.Next;
+        }
         if (w.Length == 3 && w[1] == "save") { SaveWorld(auto: false, w[2]); return ScriptedInput.Step.Next; }   // the world save, now, to this file (checks of #201)
         if (w.Length == 3 && w[1] == "until")   // wait for the arm to reach a phase (Digging, Lifting, Swinging, Placing, Dumping, Stowed ...)
             return _rover.PhaseName == w[2] ? ScriptedInput.Step.Next : ScriptedInput.Step.Again;

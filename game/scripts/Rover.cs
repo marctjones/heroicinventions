@@ -278,14 +278,38 @@ public sealed partial class Rover : Node3D
     private static double Slew(double now, double target, double most) =>
         now + Math.Clamp(target - now, -most, most);
 
+    /// <summary>m below the ground a wheel's sphere may sit (its spring's travel and a little) before it is taken to be under it.</summary>
+    private const double BuriedWheel = RoverSpec.SpringTravel + 0.05;
+    private const int BuriedTicks = 10;
+    private int _buriedTicks;
+
     private void KeepOnGround()
     {
         if (GroundHeight is not { } height) return;
         var at = Chassis.GlobalPosition;
-        if (at.Y > height(at.X, at.Z) - 3) return;
-        // fell through the ground (it was rebuilt under the rover, or a tunnelling step): stand it back on it, facing as it was
+        if (at.Y < height(at.X, at.Z) - 3)
+        {
+            // fell through the ground (it was rebuilt under the rover, or a tunnelling step): stand it back on it, facing as it was
+            Rescues++;
+            Place(at.X, at.Z, Mathf.RadToDeg(Chassis.GlobalRotation.Y), height(at.X, at.Z));   // upright on the ground under it, so a tipped rover is righted too
+            return;
+        }
+        // a wheel whose centre is under the ground (soil heaped over it, or the patch rebuilt under it) never comes back out of a
+        // height map: held there for a third of a second, the rover is stood up on the ground where it is, tilted to it
+        int deepest = -1;
+        double gap = 0;
+        for (int k = 0; k < _wheels.Count; k++)
+        {
+            var w = _wheels[k].GlobalPosition;
+            double g = w.Y - height(w.X, w.Z) - RoverSpec.WheelRadius;
+            if (g < gap) (gap, deepest) = (g, k);
+        }
+        _buriedTicks = gap < -BuriedWheel ? _buriedTicks + 1 : 0;
+        if (_buriedTicks < BuriedTicks) return;
+        _buriedTicks = 0;
         Rescues++;
-        Place(at.X, at.Z, Mathf.RadToDeg(Chassis.GlobalRotation.Y), height(at.X, at.Z));   // upright on the ground under it, so a tipped rover is righted too
+        GD.Print($"[rover] wheel {deepest} under the ground by {-gap * 100:0} cm: stood up");
+        Place(at.X, at.Z, Mathf.RadToDeg(Chassis.GlobalRotation.Y), height(at.X, at.Z));
     }
 
     // ---- readings ----------------------------------------------------------------------------------------------

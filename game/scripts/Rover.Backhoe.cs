@@ -39,15 +39,20 @@ public sealed partial class Rover
     private static readonly Pose DigStart = new(0, 20, -55, -35);   // A1 is solved so the teeth meet the ground
     private static readonly Pose DigEnd = new(0, 20, -92, 55);      // drawn in, the bucket curled up: level and full
     private static readonly Pose Carry = new(0, 50, -75, 30);
-    private static readonly Pose Dumping = new(-75, 28, -50, -10);
+    private static readonly Pose Dumping = new(-75, 28, -50, -10);   // to the right; a dump to the left swings the other way (ArmSide)
     private static readonly Pose Tipped = new(-75, 28, -50, -85);
 
     private enum Phase { Stowed, Reaching, Lowering, Digging, Lifting, Swinging, Placing, Dumping, SwingingBack, Stowing }
-    private static readonly (Phase Phase, double Seconds)[] Cycle =
+    private static readonly (Phase Phase, double Seconds)[] FullCycle =
     [
         (Phase.Reaching, 1.4), (Phase.Lowering, 1.0), (Phase.Digging, 1.8), (Phase.Lifting, 1.0), (Phase.Swinging, 1.4),
         (Phase.Placing, 0.9), (Phase.Dumping, 1.1), (Phase.SwingingBack, 1.4), (Phase.Stowing, 1.6),
     ];
+    // carrying (the road's haul, #road-plan): a dig that keeps its load folds away with it, and the dump-only cycle that follows
+    // lifts it from the deck, swings, tips and folds away
+    private static readonly (Phase Phase, double Seconds)[] DigOnlyCycle = [.. FullCycle.Take(4), FullCycle[^1]];
+    private static readonly (Phase Phase, double Seconds)[] DumpOnlyCycle = [(Phase.Lifting, 1.0), .. FullCycle.Skip(4)];
+    private (Phase Phase, double Seconds)[] Cycle = FullCycle;
 
     private Node3D _swing = null!, _boom = null!, _stick = null!, _bucket = null!, _tip = null!;
     private MeshInstance3D _fill = null!;
@@ -108,16 +113,57 @@ public sealed partial class Rover
         Apply(Stowed);
     }
 
-    /// <summary>Starts the dig-and-dump cycle; ignored while one is under way.</summary>
-    public bool StartCycle()
+    /// <summary>Which side the bucket swings to to tip: the turntable's swing is + to the left.</summary>
+    public enum ArmSide { Right = -1, Left = 1 }
+
+    private const double DumpSwingDeg = 75;   // the dump's swing either side, degrees (Dumping.Swing is the right's)
+    private ArmSide _side = ArmSide.Right;
+    private double _digSwing;
+    private bool _keep;
+    /// <summary>A load kept by a dig-only cycle is in the bucket: the next cycle only tips it.</summary>
+    public bool CarryingOn { get; private set; }
+
+    /// <summary>
+    /// Starts the dig-and-dump cycle; ignored while one is under way. <paramref name="dump"/> is the side it tips to (B: right,
+    /// Shift+B: left); <paramref name="digSwingDeg"/> swings the dig that many degrees left (+) or right of straight ahead; with
+    /// <paramref name="keep"/> it digs and folds away with the load, carrying it (the road's haul) and the next cycle, whatever its
+    /// arguments say of digging, only lifts the load from the deck and tips it.
+    /// </summary>
+    public bool StartCycle(ArmSide dump = ArmSide.Right, double digSwingDeg = 0, bool keep = false)
     {
         if (_step >= 0) return false;
+        _side = dump;
+        _digSwing = Math.Clamp(digSwingDeg, -45, 45);
+        bool dumpOnly = CarryingOn && Carried > 1e-9;
+        _keep = keep && !dumpOnly;
+        Cycle = dumpOnly ? DumpOnlyCycle : _keep ? DigOnlyCycle : FullCycle;
+        CarryingOn = false;
         _step = 0;
         _refused = false;
         _stepTime = 0;
         _from = _pose;
-        ArmStatus = "Backhoe reaching out";
+        ArmStatus = dumpOnly ? "Backhoe lifting the load it carried" : "Backhoe reaching out";
+        if (dumpOnly) BeginOf(Cycle[0].Phase);
         return true;
+    }
+
+    /// <summary>Where the bucket would tip to the given side, in the world, the rover as it stands now (the arm put there and back in the same frame).</summary>
+    public Vector3 DumpPoint(ArmSide side) => TipAt(Tipped with { Swing = DumpSwingDeg * (int)side });
+
+    /// <summary>Where the teeth would end a dig swung <paramref name="digSwingDeg"/> to the left, the rover as it stands now: the dig's own boom solve.</summary>
+    public Vector3 DigPoint(double digSwingDeg)
+    {
+        var pose = DigEnd with { Swing = digSwingDeg };
+        return TipAt(pose with { A1 = SolveBoomToGround(pose) });
+    }
+
+    private Vector3 TipAt(Pose p)
+    {
+        var was = _pose;
+        Apply(p);
+        var tip = _tip.GlobalPosition;
+        Apply(was);
+        return tip;
     }
 
     private void Apply(Pose p)
@@ -167,9 +213,9 @@ public sealed partial class Rover
         Phase.Lowering => _digStart,
         Phase.Digging => _digEnd,
         Phase.Lifting => Carry,
-        Phase.Swinging => Carry with { Swing = Dumping.Swing },
-        Phase.Placing => Dumping,
-        Phase.Dumping => Tipped,
+        Phase.Swinging => Carry with { Swing = DumpSwingDeg * (int)_side },
+        Phase.Placing => Dumping with { Swing = DumpSwingDeg * (int)_side },
+        Phase.Dumping => Tipped with { Swing = DumpSwingDeg * (int)_side },
         Phase.SwingingBack => Carry with { A3 = Tipped.A3 + 30 },
         _ => Stowed,
     };
@@ -179,8 +225,12 @@ public sealed partial class Rover
         if (_refused && phase != Phase.Lowering) return;   // keep the reason
         switch (phase)
         {
-            case Phase.Lowering: _digStart = DigStart with { A1 = SolveBoomToGround(DigStart) }; _digEnd = DigEnd with { A1 = SolveBoomToGround(DigEnd) }; break;
+            case Phase.Lowering:
+                _digStart = DigStart with { Swing = _digSwing, A1 = SolveBoomToGround(DigStart with { Swing = _digSwing }) };
+                _digEnd = DigEnd with { Swing = _digSwing, A1 = SolveBoomToGround(DigEnd with { Swing = _digSwing }) };
+                break;
             case Phase.Digging: ArmStatus = "Backhoe digging"; break;
+            case Phase.Lifting when _keep: ArmStatus = Carried > 0 ? "Backhoe folding away with the load" : ArmStatus; break;
             case Phase.Swinging: ArmStatus = Carried > 0 ? "Backhoe swinging the load round" : "Backhoe swinging round (nothing in the bucket)"; break;
             case Phase.Placing: if (Carried > 0) ArmStatus = "Backhoe lowering the load to the ground"; break;
             case Phase.Dumping: if (Carried > 0) ArmStatus = "Backhoe tipping the bucket out"; break;
@@ -195,6 +245,7 @@ public sealed partial class Rover
             case Phase.Lowering: _lastDigAt = _tip.GlobalPosition; break;
             case Phase.Digging: DigHere(); break;
             case Phase.Dumping: DumpHere(); break;
+            case Phase.Stowing when _keep: CarryingOn = Carried > 1e-9; break;   // the load rides on the deck to where it is tipped
         }
     }
 
@@ -202,6 +253,7 @@ public sealed partial class Rover
     private double SolveBoomToGround(Pose pose)
     {
         if (Ground is not { } ground) return pose.A1;
+        var was = _pose;
         double best = -30;
         for (double a1 = 60; a1 >= -30; a1 -= 0.5)
         {
@@ -209,7 +261,7 @@ public sealed partial class Rover
             var tip = _tip.GlobalPosition;
             if (tip.Y <= ground.HeightAt(tip.X, tip.Z) + 0.02) { best = a1; break; }
         }
-        Apply(_from);
+        Apply(was);
         return best;
     }
 
@@ -276,16 +328,17 @@ public sealed partial class Rover
     private const float BodySlack = 0.03f, BodyClearance = 0.05f;
 
     /// <summary>
-    /// The name of a loose body (a rigid body, frozen or not, other than the rover's own chassis and wheels) that the ground, risen at
+    /// The name of a loose body (a rigid body, frozen or not, the rover's own chassis and wheels too) that the ground, risen at
     /// this node, would reach: a column a fine cell across over it, from just under its old height to a little over its new one.
-    /// Null if there is none. (#72: the rover may move soil anywhere, but not lift or push a load with it.)
+    /// Null if there is none. (#72: the rover may move soil anywhere, but not lift or push a load with it.) The rover's own wheels
+    /// count (road plan, 2026-10-10): a heap tipped beside a wheel stops at it, as against a crate, so spoil never rises through a
+    /// wheel and buries it (a wheel's centre under a height map never comes back out).
     /// </summary>
     private string? BodyAt(WorkedGround.Raised r)
     {
         if (!IsInsideTree()) return null;
         var space = GetWorld3D().DirectSpaceState;
-        var exclude = new Godot.Collections.Array<Rid> { Chassis.GetRid() };
-        foreach (var w in _wheels) exclude.Add(w.GetRid());
+        var exclude = new Godot.Collections.Array<Rid>();
         float cell = (float)WorkedGround.FineCell;
         float lo = (float)r.Before - BodySlack, hi = (float)r.After + BodyClearance;
         var query = new PhysicsShapeQueryParameters3D

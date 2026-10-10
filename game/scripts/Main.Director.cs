@@ -193,7 +193,7 @@ public partial class Main
 
     // ---- digging ----------------------------------------------------------------------------------------------------------------------
 
-    /// <summary>dig N | dig until LABEL:target.field below V max N: backhoe cycles, as the B key starts them, each run to its end.</summary>
+    /// <summary>dig N [left|right] | dig until LABEL:target.field below V max N [left|right]: backhoe cycles, as the B key (right, the default) or Shift+B (left) starts them, each run to its end.</summary>
     private Func<double, bool> DigGoal(string[] w)
     {
         var inv = CultureInfo.InvariantCulture;
@@ -201,6 +201,7 @@ public partial class Main
         if (w.Length >= 7 && w[1] == "until" && w[3] == "below" && w[5] == "max")
         { untilPath = w[2]; untilBelow = double.Parse(w[4], inv); max = int.Parse(w[6], inv); }
         else max = int.Parse(w[1], inv);
+        var side = w.Contains("left") ? Rover.ArmSide.Left : Rover.ArmSide.Right;
         int done = 0; int phase = 0;   // 0 start a cycle, 1 waiting for the arm to move, 2 waiting for it to stow
         double waited = 0;
         if (untilPath is not null && DirectorReadPath(untilPath) < untilBelow) { GD.Print($"[director] dig: {untilPath} is already below {untilBelow}"); return _ => true; }
@@ -212,7 +213,7 @@ public partial class Main
             {
                 case 0:
                     if (Math.Abs(rover.Speed) > 0.05) return false;
-                    rover.StartCycle();
+                    rover.StartCycle(side);
                     phase = 1; waited = 0;
                     return false;
                 case 1:
