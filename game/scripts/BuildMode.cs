@@ -74,6 +74,8 @@ public partial class BuildMode : Node3D
     // camera: spherical coordinates around a pivot (OrbitCamera.cs, shared with run view)
     private Camera3D _camera = null!;
     private OrbitCamera _orbit = null!;
+    /// <summary>Build mode's own camera, for the run view's scripted look and camera steps while it is open.</summary>
+    public OrbitCamera Orbit => _orbit;
     private bool _orbiting, _panning;
 
     // selection and tools

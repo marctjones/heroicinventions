@@ -8,6 +8,7 @@
 #
 # VAR=value pairs pass through as environment (HEROIC_AUTOSELECT=trebuchet,
 # HEROIC_EDITOR=1, ...). The script goes to HEROIC_INPUT, or to
+# GUI_CHECK_ARGS adds Godot arguments (e.g. '--write-movie out.avi --fixed-fps 30' to record the run).
 # HEROIC_EDITOR_INPUT when HEROIC_EDITOR=1. --hidden launches the app hidden
 # as well (no window on screen at all; macOS may then draw it less often).
 # Put `quit` last; a timeout (GUI_CHECK_TIMEOUT, default 120 s) stops a run
@@ -33,7 +34,7 @@ if [[ $editor == 1 ]]; then envs+=(--env "HEROIC_EDITOR_INPUT=$script"); else en
 log="$(mktemp -t gui-check)"
 # -g: don't bring it forward; -n: a fresh instance; -W: wait for it to quit
 ( open -g -n -W ${hidden[@]+"${hidden[@]}"} -a "$godot_app" --stdout "$log" --stderr "$log" "${envs[@]}" \
-    --args --path "$here/game" --resolution 1280x800 ) &
+    --args --path "$here/game" --resolution 1280x800 ${GUI_CHECK_ARGS:-} ) &
 opener=$!
 for ((t = 0; t < ${GUI_CHECK_TIMEOUT:-120}; t++)); do
   kill -0 $opener 2>/dev/null || break
