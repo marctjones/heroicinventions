@@ -55,7 +55,10 @@ public partial class MachineView
             bool freed = _everHeld.Contains(id) && !b.Held;
             bool struck = digAt is { } d && xf.AffineInverse() * d is var l && CargoFind.InBox(l.X, l.Y, l.Z, b.Size, CargoFind.StrikeReach);
             bool touched = isRover is not null && Touched(b, xf, isRover);
-            if (CargoFind.Why(cover, freed, struck, touched) is { } why) MarkFound(id, why);
+            if (CargoFind.Why(cover, freed, struck, touched) is { } why)
+                MarkFound(id, struck && digAt is { } t && cover > CargoFind.ExposedCover && !freed
+                    ? $"{why}: the teeth at ({t.X:0.00} {t.Y:0.00} {t.Z:0.00}), the crate from {at.Y - b.Size / 2:0.00} to {top:0.00} round ({at.X:0.00} {at.Z:0.00}), {cover:0.00} m of ground over its top"
+                    : why);
         }
     }
 
