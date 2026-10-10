@@ -13,7 +13,7 @@ public sealed record Marker(string Id, string Name, double X, double Z, double R
 /// hillshade is brightest), and the cargo's name over its centre. The names say nothing of depth or cover. It follows the markers
 /// <see cref="Markers"/> hands it each frame (so it follows a crate as it creeps), is rebuilt only when a centre has moved or the
 /// ground has changed, and is a view: nothing here is solid or selectable. The chosen marker (<see cref="Chosen"/>) is drawn in amber.
-/// Build mode's own marker (BuildMode.Buried.cs) is separate and stays exact.
+/// Build mode's own marker (BuildMode.Buried.cs) is separate: the same disc until the crate is found, then its exact place and depth.
 /// </summary>
 public partial class CargoMarkers : Node3D
 {
@@ -65,7 +65,7 @@ public partial class CargoMarkers : Node3D
             if (d.Version != ground.Version || d.Chosen != isChosen || Math.Abs(d.Built.X - m.X) > 0.15 || Math.Abs(d.Built.Z - m.Z) > 0.15 || d.Built.R != radius)
             {
                 d.Version = ground.Version; d.Chosen = isChosen; d.Built = (m.X, m.Z, radius);
-                d.Disc.Mesh = DiscMesh(ground, m.X, m.Z, radius, isChosen);
+                d.Disc.Mesh = DiscMesh(ground.HeightAt, m.X, m.Z, radius, isChosen);
                 var label = (float)ground.HeightAt(m.X, m.Z);
                 d.Label.Position = new Vector3((float)m.X, label + 2.2f, (float)m.Z);
                 d.Label.Modulate = isChosen ? Amber : new Color(0.85f, 1f, 1f);
@@ -86,8 +86,8 @@ public partial class CargoMarkers : Node3D
         return new Drawn { Disc = disc, Label = label };
     }
 
-    /// <summary>The disc as three surfaces: the fill (a fan of rings), the dark casing and the bright ring, every vertex on the ground.</summary>
-    private static ArrayMesh DiscMesh(Terrain ground, double cx, double cz, double radius, bool chosen)
+    /// <summary>The disc as three surfaces: the fill (a fan of rings), the dark casing and the bright ring, every vertex on the ground (<paramref name="height"/>). Build mode's marker draws the same disc before a crate is found (BuildMode.Buried.cs).</summary>
+    internal static ArrayMesh DiscMesh(Func<double, double, double> height, double cx, double cz, double radius, bool chosen)
     {
         _fill ??= Flat(new Color(Cyan, 0.09f));
         _casing ??= Flat(new Color(0.02f, 0.04f, 0.07f, 0.55f));
@@ -97,13 +97,13 @@ public partial class CargoMarkers : Node3D
         {
             double a = 2 * Math.PI * s / Segments;
             double x = cx + r * Math.Cos(a), z = cz + r * Math.Sin(a);
-            return new Vector3((float)x, (float)ground.HeightAt(x, z) + Lift, (float)z);
+            return new Vector3((float)x, (float)height(x, z) + Lift, (float)z);
         }
         var mesh = new ArrayMesh();
         // fill: the centre, then four rings
         {
             const int rings = 4;
-            var v = new List<Vector3> { new((float)cx, (float)ground.HeightAt(cx, cz) + Lift, (float)cz) };
+            var v = new List<Vector3> { new((float)cx, (float)height(cx, cz) + Lift, (float)cz) };
             for (int k = 1; k <= rings; k++) for (int s = 0; s < Segments; s++) v.Add(At(radius * k / rings, s));
             var idx = new List<int>();
             for (int s = 0; s < Segments; s++) idx.AddRange([0, 1 + s, 1 + (s + 1) % Segments]);

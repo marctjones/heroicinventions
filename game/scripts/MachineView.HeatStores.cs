@@ -289,6 +289,7 @@ public partial class MachineView
             if (s.Substance.Latent > 0 && s.Frozen > 0) text += $", {s.Frozen * 100:0}% ice";
             if (v.Bin is { } b) text += b.Open >= 0.995 ? "\nlid open" : b.Open > 0.005 ? $"\nlid {b.Open * 100:0}% open" : $"\nlid shut, leaks {b.Leak:0.##} W/K";
             v.Label.Text = text;
+            v.Label.Visible = !_buried.Keys.Any(id => !BlockFound(id));   // a store in the rover's unfound cargo: no label over the spot (#240)
         }
         foreach (var v in _vaultViews)
         {

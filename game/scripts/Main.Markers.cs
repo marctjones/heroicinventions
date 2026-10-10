@@ -96,6 +96,7 @@ public partial class Main
     private void MarkersProcess()
     {
         EnsureMarkerNodes();
+        FoundTick();   // which buried crates the rover has found (Main.Found.cs, #240)
         if (_world != _markersWorld) { _markersWorld = _world; _navMap!.SetOpen(false); _navMap.Reset(); _chosenMarker = null; _testMarker = null; }
         if (_buildMode is not null && _navMap!.IsOpen) _navMap.SetOpen(false);   // build mode has the screen
         var list = new List<Marker>();
@@ -211,7 +212,7 @@ public partial class Main
 
     /// <summary>
     /// "marker" prints each marker and the chosen one's reading; "marker place X Z" puts an exact test marker there and chooses it; "marker next"
-    /// cycles; "marker choose ID"; "marker clear". "markers on|off" (not saved). "map open|close|print|follow|centre X Z [MPP]|zoom MPP".
+    /// cycles; "marker choose ID"; "marker clear"; "marker found LABEL [BLOCK]" marks a crate found (Main.Found.cs). "markers on|off" (not saved). "map open|close|print|follow|centre X Z [MPP]|zoom MPP".
     /// </summary>
     private ScriptedInput.Step? MarkerStep(string[] w)
     {
@@ -228,6 +229,7 @@ public partial class Main
             }
             if (w.Length == 2 && w[1] == "next") { MarkersProcess(); CycleMarker(); return ScriptedInput.Step.Next; }
             if (w.Length == 3 && w[1] == "choose") { MarkersProcess(); _chosenMarker = w[2]; return ScriptedInput.Step.Next; }
+            if (w.Length is 3 or 4 && w[1] == "found") { MarkFoundByHand(w[2], w.Length == 4 ? w[3] : "crate"); return ScriptedInput.Step.Next; }
             if (w.Length == 2 && w[1] == "clear") { _testMarker = null; _chosenMarker = null; return ScriptedInput.Step.Next; }
             MarkersProcess();
             double t = _views.Count > 0 ? _views[0].Runtime.Time : 0;

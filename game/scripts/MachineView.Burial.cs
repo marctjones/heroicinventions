@@ -13,7 +13,7 @@ namespace HeroicInventions;
 /// grip on its sides). Uncovered past that, it is let go as an ordinary
 /// body, lifted to stand on the ground where it was dug out. A slide that
 /// buries a block that was standing free holds it the same way. A buried
-/// block shows as a tag on the ground above it: how deep, and the pull.
+/// block shows as a tag on the ground above it: how deep, and the pull (for the rover's cargo only once found, #240: MachineView.Found.cs).
 /// </summary>
 public partial class MachineView
 {
@@ -67,7 +67,7 @@ public partial class MachineView
             {
                 tag.Visible = held;
                 tag.Position = new Vector3(at.X, (float)surface + 0.4f, at.Z);
-                tag.Text = $"{id} buried {b.Cover:F2} m · {b.Pull / 1000:F1} kN to pull out";
+                tag.Text = BurialTagText(id, b);   // no depth or pull until found (#240, MachineView.Found.cs)
             }
         }
     }

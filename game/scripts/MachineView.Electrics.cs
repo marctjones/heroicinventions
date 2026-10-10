@@ -241,7 +241,9 @@ public partial class MachineView
                 frost.Visible = cold > 0 || heat > 0;
                 fm.AlbedoColor = cold > 0 ? new Color(0.94f, 0.97f, 1f, 0.25f + 0.4f * cold) : new Color(0.95f, 0.25f, 0.15f, 0.12f + 0.2f * heat);
             }
-            v.Beacon.Visible = b.Won;
+            bool unfound = _buried.Keys.Any(id => !BlockFound(id));   // the rover's cargo not yet found: its label would give away the spot (#240)
+            v.Label.Visible = !unfound;
+            v.Beacon.Visible = b.Won && !unfound;
             v.Label.Text = $"{b.Name} {b.ChargeWh:0.0}/{b.CapacityWh:0.0} Wh · {b.Temperature:0.0} °C\n{BankState(b)}"
                          + (b.Won ? $" (sol {b.WonAtSol}, {HoursText(b.WonAtHour)})" : b.CallAnyTime ? " · call at any hour"
                             : b.InWindow(Runtime.Sun.Time) ? " · pass open" : $" · pass {HoursText(b.CallHour)}");
