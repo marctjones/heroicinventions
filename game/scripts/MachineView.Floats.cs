@@ -84,7 +84,7 @@ public partial class MachineView
     {
         if (_boxSize.TryGetValue(body, out var s)) return s;
         Aabb? box = null;
-        foreach (var mi in body.GetChildren().OfType<MeshInstance3D>())
+        foreach (var mi in body.GetChildren().OfType<MeshInstance3D>().Where(m => !m.HasMeta("scenery")))   // the body's own box, not a look riding on it (12.19)
         {
             var local = mi.Transform * mi.GetAabb();
             box = box is { } b ? b.Merge(local) : local;
