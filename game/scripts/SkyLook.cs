@@ -111,8 +111,10 @@ public readonly record struct SkyLook(
         // Mars's blue aureole round a low sun, gone in a storm (the dust that makes it then hides it)
         float halo = earth ? 0 : sunUp * (1 - Mathf.Clamp((el - 2) / 18, 0, 1)) * (1 - murk);
 
+        // Night (#250): the fill triples and its colour doubles, so the ground sits at about half its noon luminance (flat basalt sand 56 at noon,
+        // 27 at night; at 0.45 and (0.16, 0.2, 0.3) it was 20 and the rover a black shape on black): clearly dim, still readable.
         return new SkyLook(zenith, horizon, groundHorizon, GroundFor(planet, partsValue), light, energy,
-                           AmbientEnergy: earth ? 0.3f : 0.45f, NightAmbient: new Color(0.16f, 0.2f, 0.3f), NightShare: night,
+                           AmbientEnergy: (earth ? 0.3f : 0.45f) * (1 + 2 * night), NightAmbient: new Color(0.32f, 0.40f, 0.58f), NightShare: night,
                            Fog: fog, SunSizeDeg: sunSize, Halo: MarsHalo, HaloEnergy: halo * 1.2f);
     }
 
