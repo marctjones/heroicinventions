@@ -7,6 +7,12 @@
 # Predicted from the headless runs of 2026-10-10: the road takes about 49 backhoe cycles and 23 hauls (4.5 m3), the bank is free after
 # 3 buckets from the pad; the bank's cells pass 0 C in the evening of sol 1; the call goes out at the 03:00 pass on sol 2 or sol 3,
 # whichever the bank is full for.
+# Since Jolt runs at Mars's 3.71 m/s2, not Earth's 9.81 (owner, 2026-10-10), measured: the road 52 cycles, 23 hauls, 4.53 m3 (56, 24,
+# 4.78 at 9.81: the lighter rover settles a little differently at each station), the bank free after 4 buckets (3), the drive up the
+# slide 29.2 s + 11.2 s (28.1 + 10.5: its grip, mu g = 2.14 m/s2, is under the 2.5 m/s2 it is commanded to speed up at), cells past
+# 0 C at 33,646 s, the call on sol 3. The rubble is unchanged (its slide always settled at the planet's g): the bank's cover 1.044 m
+# at 280 s, the solar-panels crate's 2.148, boulder 4 still 1.78 m from that crate; the boulders, falling at 3.71 now, lie within
+# 0.35 m of where they lay (boulder 10 moved most; boulder 5 is 7.70 m from the bank, was 7.74).
 clock on
 wait 60
 caption Step 1/15: The crater rim came down on the cargo. The battery bank lies under {battery-bank:crate.cover:0.00} m of rubble at (254.5, 137.9). The rover is at (190, 140).
