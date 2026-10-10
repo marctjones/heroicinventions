@@ -23,10 +23,10 @@ namespace HeroicInventions;
 /// </summary>
 public partial class MachineView
 {
-    private sealed record StoreView(HeatStore Store, StandardMaterial3D Block, Label3D Label, HeatBin? Bin, Node3D? Lid, MeshInstance3D? Ice, float Height, float BaseY, RigidBody3D? Body = null);
+    private sealed record StoreView(HeatStore Store, StandardMaterial3D Block, Label3D Label, HeatBin? Bin, Node3D? Lid, MeshInstance3D? Ice, float Height, float BaseY, RigidBody3D? Body = null, Cracks? Cracks = null);
     private sealed record BinView(HeatBin Bin, Node3D Lid, Label3D Label);
     private readonly List<BinView> _binViews = [];
-    private sealed record VaultView(Enclosure Room, List<StandardMaterial3D> Liners, Label3D Label);
+    private sealed record VaultView(Enclosure Room, List<StandardMaterial3D> Liners, Label3D Label, Hatch? Hatch = null, Vector3 Centre = default);
     private readonly List<StoreView> _storeViews = [];
     private readonly List<VaultView> _vaultViews = [];
 
@@ -67,6 +67,10 @@ public partial class MachineView
                 block.Position = at + new Vector3(0, s / 2, 0);
             }
             AddChild(block);
+            // a lump of rock with cracks that glow as it heats, or a battery's cells (12.21)
+            Cracks? cracks = null;
+            if (!water && IsRock(store)) cracks = DressRock(block, s, id);
+            else if (!water) DressCells(block, s);
             var label = new Label3D
             {
                 FontSize = 24, OutlineSize = 6, PixelSize = Mathf.Clamp(s * 0.012f, 0.0025f, 0.006f), NoDepthTest = true,
@@ -93,8 +97,9 @@ public partial class MachineView
                 var lidMesh = Shapes.Box(new Vector3(outer, 0.04f, outer), woodMat);
                 lidMesh.Position = new Vector3(0, 0.02f, outer / 2);
                 lid.AddChild(lidMesh);
+                DressBin(at, inner, wall, wall, lid, woodMat);
             }
-            _storeViews.Add(new StoreView(store, mat, label, store.Bin, lid, ice, height, at.Y));
+            _storeViews.Add(new StoreView(store, mat, label, store.Bin, lid, ice, height, at.Y, Cracks: cracks));
             // a store that rides a body (the found bank's cells in its crate, #211) is drawn on it, so it goes where the crate goes
             if (CarrierBody(id) is { } host)
                 foreach (var node in Enumerable.Range(firstNode, GetChildCount() - firstNode).Select(i => GetChild(i)).OfType<Node3D>().ToList())
@@ -121,9 +126,14 @@ public partial class MachineView
             string earth = part.Symbol("wall", "regolith");
             void Block(Vector3 size, Vector3 pos, StandardMaterial3D m) { var b = Shapes.Box(size, m); b.Position = at + pos; AddChild(b); }
             var earthMat = Surface(earth);
-            Block(new Vector3(w + 2 * t, h, t), new Vector3(0, h / 2, -(d / 2 + t / 2)), earthMat);                       // back
-            Block(new Vector3(t, h, d), new Vector3(-(w / 2 + t / 2), h / 2, 0), earthMat);                                // sides
-            Block(new Vector3(t, h, d), new Vector3(w / 2 + t / 2, h / 2, 0), earthMat);
+            var blocks = new (Vector3 Size, Vector3 Pos)[]
+            {
+                (new Vector3(w + 2 * t, h, t), new Vector3(0, h / 2, -(d / 2 + t / 2))),   // back
+                (new Vector3(t, h, d), new Vector3(-(w / 2 + t / 2), h / 2, 0)),           // sides
+                (new Vector3(t, h, d), new Vector3(w / 2 + t / 2, h / 2, 0)),
+            };
+            foreach (var (size, pos) in blocks) Block(size, pos, earthMat);
+            DressVault(at, w, h, d, blocks.Select(b => (at + b.Pos, b.Size)), earthMat.AlbedoColor, id);   // layers, stones, props (12.21)
             // the inner face: 1 cm sheets on the back, the sides and the floor, washed with the surface's own temperature
             var liners = new List<StandardMaterial3D>();
             void Liner(Vector3 size, Vector3 pos)
@@ -143,7 +153,9 @@ public partial class MachineView
                 Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, Position = at + new Vector3(0, h + t * 0.4f + 0.55f, 0),
             };
             AddChild(label);
-            _vaultViews.Add(new VaultView(room, liners, label));
+            // a room under the ground gets a hatch on the surface over it (12.21)
+            var hatch = Ground is not null ? BuildHatch(w, d, at.Y + h) : null;
+            _vaultViews.Add(new VaultView(room, liners, label, hatch, at + new Vector3(0, h / 2, 0)));
         }
     }
 
@@ -156,7 +168,12 @@ public partial class MachineView
         {
             Name = part.Id, Position = V(part.At) + new Vector3(0, s / 2, 0), Freeze = true,
         };
-        foreach (var visual in block.GetChildren().OfType<MeshInstance3D>()) visual.MaterialOverride = mat;
+        Cracks? cracks = null;
+        foreach (var visual in block.GetChildren().OfType<MeshInstance3D>())
+        {
+            visual.MaterialOverride = mat;
+            cracks = DressRock(visual, s, part.Id);   // a lump of rock in the body's box (12.21)
+        }
         AddChild(block);
         var label = new Label3D
         {
@@ -167,7 +184,7 @@ public partial class MachineView
         Blocks.Add(block);
         _freezable.Add(block);
         _bodiesById[part.Id] = block;
-        _storeViews.Add(new StoreView(store, mat, label, null, null, null, s, (float)part.At.Y, block));
+        _storeViews.Add(new StoreView(store, mat, label, null, null, null, s, (float)part.At.Y, block, cracks));
     }
 
     /// <summary>
@@ -195,6 +212,7 @@ public partial class MachineView
         var lidMesh = Shapes.Box(new Vector3(outer, 0.04f, outer), woodMat);
         lidMesh.Position = new Vector3(0, 0.02f, outer / 2);
         lid.AddChild(lidMesh);
+        DressBin(at, inner, wall, 0, lid, woodMat);
         var label = new Label3D
         {
             FontSize = 24, OutlineSize = 6, PixelSize = 0.004f, NoDepthTest = true,
@@ -255,6 +273,7 @@ public partial class MachineView
             var s = v.Store;
             Skins.Warm(v.Block, s.Temperature);   // the stored heat, on the store (art direction 12.9)
             Skins.Glow(v.Block, s.Temperature);   // and a glow from 500 °C, as for any hot thing
+            if (v.Cracks is { } cracks) ShowCracks(cracks, s.Temperature);   // rime in its cracks when cold, a glow in them when hot (12.21)
             if (v.Ice is { } ice)
             {
                 ice.Visible = s.Frozen > 0.001;
@@ -275,6 +294,7 @@ public partial class MachineView
         {
             var wall = v.Room.Wall!;
             foreach (var m in v.Liners) Skins.Warm(m, wall.SurfaceTemperature);
+            if (v.Hatch is { } hatch) ShowHatch(hatch, v.Centre, v.Room.Temperature);
             v.Label.Text = $"{v.Room.Name}: wall {wall.SurfaceTemperature:0} °C, warmth {wall.PenetrationDepth * 100:0.#} cm deep\nsoaked {wall.Absorbed / 1e6:0.##} MJ, now {wall.Flux:0.#} W";
         }
     }

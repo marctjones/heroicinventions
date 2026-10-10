@@ -62,7 +62,10 @@ public partial class MachineView
             var spotMat = Shapes.Mat(new Color(1f, 0.93f, 0.6f), roughness: 1f, alpha: 0.6f);
             spotMat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
             spotMat.NoDepthTest = true;   // always there to take hold of, even inside its receiver
-            var spot = Shapes.Cylinder(Mathf.Max(0.12f, side * 0.35f), 0.02f, spotMat);
+            // a ring, not a disc (12.21): the receiver it lands on (a rock's glowing cracks) shows through the middle
+            float ring = Mathf.Max(0.12f, side * 0.35f);
+            var spot = new MeshInstance3D { Mesh = new TorusMesh { InnerRadius = ring * 0.6f, OuterRadius = ring, Rings = 48, RingSegments = 6 }, MaterialOverride = spotMat };
+            spot.Scale = new Vector3(1, 0.2f, 1);
             spot.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
             spot.Position = V(mirror.Target);
             AddChild(spot);
