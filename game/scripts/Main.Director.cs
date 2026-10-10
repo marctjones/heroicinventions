@@ -27,7 +27,7 @@ public partial class Main
     private Label? _captionLabel, _clockLabel;
     private bool _clockOn;
     private string? _captionTemplate;
-    private int _joinGesturePhase;
+    private int _joinGesturePhase, _joinGestureWaited;
 
     /// <summary>The step file's steps, one a line, joined for ScriptedInput (blank and '#' lines dropped; '#:' inside a line stays).</summary>
     private static string DirectorLoad(string path)
@@ -258,13 +258,24 @@ public partial class Main
                 var s = JoinStep(["joinclick", a, "list"]);
                 if (s == ScriptedInput.Step.Again) return s;
                 DirectorStep(["frame", b, "6", "135", "18"]);
+                _orbit.Pivot += _camera.GlobalBasis.X * 0.8f;   // B off the centre: two clicks on one pixel read as "again, offer the list" (#225), which re-picks
+                _orbit.Apply();
                 _joinGesturePhase = 2;
                 return ScriptedInput.Step.Again;
             }
-            default:
+            case 2:
             {
-                var s = JoinStep(["joinclick", b, "list"]);
+                var s = JoinStep(["joinclick", b]);   // a plain click: a choice from the pick list would replace the first pick, not join to it (#225)
                 if (s == ScriptedInput.Step.Again) return s;
+                _joinGesturePhase = 3;
+                _joinGestureWaited = 0;
+                return ScriptedInput.Step.Again;
+            }
+            default:   // the click is handled a frame later: keep joining on until the link is there (or ~2 s), then the button off
+            {
+                bool Is(LinkEnd e, string s) => $"{e.Label}.{e.Part}" == s;
+                bool made = _world?.Links.Any(l => (Is(l.From, a) && Is(l.To, b)) || (Is(l.From, b) && Is(l.To, a))) ?? false;
+                if (!made && ++_joinGestureWaited < 20) return ScriptedInput.Step.Again;
                 _joinGesturePhase = 0;
                 SetJoining(false);
                 return ScriptedInput.Step.Next;
