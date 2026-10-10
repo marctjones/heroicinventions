@@ -24,6 +24,13 @@ namespace HeroicInventions.Sim.Tests;
 ///       t=26,900      gear-up NEXT, cut-in AFTER, warm MET
 ///       t=32,100      gear-up NEXT, cut-in AFTER, full MET
 ///       t=55,490      the same: it never wins, the final goal stays unmet
+/// (d) #251, a windmill and a built 256:1 train that drive nothing (no generator joined; reading-level, bank at -63 C), then the same train read
+///     from a real runtime (found-electrics with its motor taken out: the 125:1 train, a bank at 20 C):
+///       reading, t=0      windmill and gear-up met, nothing else: gear-up MET, cut-in NEXT, wired AFTER   (the gear-up step is no longer 'next' for want of a generator)
+///       real, t=0         the bank is warm at the start, so warm is the last met:  cut-in NEXT, wired AFTER, warm MET
+///     The gear-up reason prints 'yours is not there yet.' with no train, 'yours is 40:1.' for a 40:1 generator train, 'yours is 256:1.' for 256:1
+///     (the ':1' belongs to the number, so the fallback has none). A joined generator's own ratio wins over the built train's: a 1:1 generator
+///     beside a 256:1 train reads 1:1 and the step stays unmet.
 /// (c) A vault warming a bank with no windmill anywhere starts the route through the shared 'warm' step (rule 2 as the owner wrote it):
 ///       warm MET, windmill NEXT, gear-up AFTER.
 /// </summary>
@@ -408,5 +415,59 @@ public class RoutesTests
         string root = RepoRoot()!;
         var bad = Route.Parse("(route r (name \"N\") (description \"d\") (proven-by \"racket/heroic/tests/no-such-test.rkt\") (step s (title \"T\") (reason \"r\") (met (bank-full))))", "bad.route");
         Assert.Single(MissingProofs([bad], root));
+    }
+
+    // ---- #251: the gear-up step reads the built train when no generator is joined, and its reason has no stray ':1' ----
+
+    private static RouteReading Built(double ratio, params GeneratorReading[] gens) => new(1, gens, [Bank(-63)], false, [ratio]);
+
+    [Fact]
+    public void ABuiltTrainWithNoGeneratorMeetsGearUpAndTheCutInStepIsNext()
+    {
+        var t = TrackerOf(Windmill());
+        Play(t, [new(0, Built(256), "gear-up:MET cut-in:NEXT wired:AFTER")]);
+        Assert.True(t.History.HasMet("windmill", "gear-up"));
+        Assert.False(t.History.HasMet("windmill", "wired"));
+    }
+
+    [Fact]
+    public void AShortBuiltTrainLeavesGearUpNextWithItsRatioInTheReason()
+    {
+        var t = TrackerOf(Windmill());
+        var views = Play(t, [new(0, Built(40), "windmill:MET gear-up:NEXT cut-in:AFTER")]);
+        Assert.Contains("yours is 40:1.", views[0].Routes.Single().Steps.Single(s => s.StepId == "gear-up").Reason);
+    }
+
+    [Fact]
+    public void AJoinedGeneratorsOwnRatioWinsOverTheBuiltTrain()
+    {
+        var t = TrackerOf(Windmill());
+        Play(t, [new(0, Built(256, Gen(12, 1)), "gear-up:NEXT cut-in:AFTER wired:MET")]);
+    }
+
+    [Fact]
+    public void TheGearUpReasonHasNoColonOneAfterItsFallback()
+    {
+        var step = Windmill().Steps.Single(s => s.Id == "gear-up");
+        Assert.EndsWith("yours is not there yet.", step.ReasonFor(R(1)));
+        Assert.DoesNotContain("yet:1", step.ReasonFor(R(1)));
+        Assert.EndsWith("yours is 40:1.", step.ReasonFor(R(1, Gen(0, 40))));
+        Assert.EndsWith("yours is 256:1.", step.ReasonFor(Built(256)));
+        Assert.True(step.IsMet(Built(256)));
+        Assert.False(step.IsMet(R(1)));
+    }
+
+    [Fact]
+    public void ARealWindmillAndTrainWithTheMotorTakenOutReadsItsBuiltRatio()
+    {
+        string text = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "machines", "found-electrics.machine"));
+        var lines = text.Split('\n').Where(l => !l.TrimStart().StartsWith("(part motor generator")).ToList();
+        var rt = new MachineRuntime(MachineDef.Parse(string.Join('\n', lines)), Materials);
+        var reading = RouteReading.Read([rt]);
+        Assert.Empty(reading.Generators);
+        Assert.Equal(125, Assert.Single(reading.BuiltTrains!), 6);                // three 100:20 meshes, from the teeth
+        var t = TrackerOf(Windmill());
+        t.Update(reading, rt.Time, 1);
+        Assert.Equal("cut-in:NEXT wired:AFTER warm:MET", Shown(t.View(reading)));
     }
 }

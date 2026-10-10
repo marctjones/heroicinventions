@@ -74,7 +74,6 @@ public partial class Hints : PanelContainer
 
     private readonly Func<State> _read;
     private readonly string _path;
-    private readonly ConfigFile _config = new();
     private readonly HashSet<string> _retired = [];
     private readonly Dictionary<string, double> _held = [];
     private Hint? _showing;
@@ -90,15 +89,16 @@ public partial class Hints : PanelContainer
     {
         _read = read;
         _path = OS.GetEnvironment("HEROIC_SETTINGS") is { Length: > 0 } p ? p : "user://settings.cfg";
-        _config.Load(_path);   // a missing file just leaves the defaults
-        foreach (var id in _config.GetValue("hints", "retired", Array.Empty<string>()).AsStringArray()) _retired.Add(id);
+        var config = new ConfigFile();
+        config.Load(_path);   // a missing file just leaves the defaults; read once here, never written back from this copy (Save loads afresh)
+        foreach (var id in config.GetValue("hints", "retired", Array.Empty<string>()).AsStringArray()) _retired.Add(id);
         bool scripted = OS.GetEnvironment("HEROIC_INPUT") != "" || OS.GetEnvironment("HEROIC_EDITOR_INPUT") != ""
                         || DisplayServer.GetName() == "headless";
         Enabled = OS.GetEnvironment("HEROIC_HINTS") switch
         {
             "1" => true,
             "0" => false,
-            _ => !scripted && _config.GetValue("hints", "enabled", true).AsBool(),
+            _ => !scripted && config.GetValue("hints", "enabled", true).AsBool(),
         };
     }
 
@@ -202,10 +202,13 @@ public partial class Hints : PanelContainer
         Visible = false;
     }
 
+    /// <summary>Load the file as it is now, change only the [hints] keys, save (#248): other sections (the routes panel's level, the markers toggle) written since this started survive. No copy of the file is held between saves.</summary>
     private void Save()
     {
-        _config.SetValue("hints", "enabled", Enabled);
-        _config.SetValue("hints", "retired", _retired.ToArray());
-        _config.Save(_path);
+        var cfg = new ConfigFile();
+        cfg.Load(_path);   // a missing file just starts empty
+        cfg.SetValue("hints", "enabled", Enabled);
+        cfg.SetValue("hints", "retired", _retired.ToArray());
+        cfg.Save(_path);
     }
 }

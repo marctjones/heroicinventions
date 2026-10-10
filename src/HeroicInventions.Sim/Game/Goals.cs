@@ -15,8 +15,12 @@ public enum GoalKind
     Route,
 }
 
-/// <summary>One goal or achievement: its id, how it is shown, the exact trigger in words (the field it reads), and the line the rover log carries.</summary>
-public sealed record GoalDef(string Id, GoalKind Kind, string Title, string Trigger, string Story);
+/// <summary>
+/// One goal or achievement: its id, how it is shown, then three texts. <c>Title</c>, <c>Plain</c> (what to do, in plain words with numbers where they
+/// help; never a route or the exact build) and <c>Story</c> (the line the rover log and the toast carry once earned) are the player's. <c>Trigger</c>
+/// is the developer's: the exact test in words, with the sim's field names. The goals panel shows it only with HEROIC_GOALS_DEV=1.
+/// </summary>
+public sealed record GoalDef(string Id, GoalKind Kind, string Title, string Plain, string Trigger, string Story);
 
 /// <summary>When a goal was earned: seconds of the first scene's clock, and the sol.</summary>
 public sealed record Earned(string Id, double Time, int Sol);
@@ -44,51 +48,51 @@ public sealed class GoalTracker
     // ---- the catalogue ----
     public static IReadOnlyList<GoalDef> Catalogue { get; } =
     [
-        new("find-bank", GoalKind.Path, "Find the bank (optional)", "Optional: a vault can be built round the crate where it lies, and the call needs neither this nor freeing it. The bank's crate, once the ground has settled, has its top clear of the ground (CrateReading.Cover <= 0); where a scene has a battery bank built into it, it is found",
+        new("find-bank", GoalKind.Path, "Find the bank (optional)", "Optional. The battery bank is a crate buried under the slide's rubble. Clear the dirt and stones until its top shows.", "Optional: a vault can be built round the crate where it lies, and the call needs neither this nor freeing it. The bank's crate, once the ground has settled, has its top clear of the ground (CrateReading.Cover <= 0); where a scene has a battery bank built into it, it is found",
             "The storm's rubble is off the crate: the battery bank is in sight."),
-        new("free-bank", GoalKind.Path, "Free it (optional)", "Optional, like finding it: the crate has been moved 2 m or more along the ground from where it was found, and its top is clear (CrateReading X, Z, Cover)",
+        new("free-bank", GoalKind.Path, "Free it (optional)", "Optional. Haul the crate 2 m or more from where it lay, with its top still clear of the ground.", "Optional, like finding it: the crate has been moved 2 m or more along the ground from where it was found, and its top is clear (CrateReading X, Z, Cover)",
             "The battery bank is out from the slide, hauled clear of the boulders."),
-        new("keep-warm", GoalKind.Path, "Keep it warm", "a bank's temperature stayed between its charging limits (0 to 45 C: <bank>.temperature, <bank>.accepting's range) through a whole night, from the sun going under the horizon to it rising (scene.sun-elevation < 0)",
+        new("keep-warm", GoalKind.Path, "Keep it warm", "Keep the bank between 0 and 45 °C all through one night, from sunset to sunrise.", "a bank's temperature stayed between its charging limits (0 to 45 C: <bank>.temperature, <bank>.accepting's range) through a whole night, from the sun going under the horizon to it rising (scene.sun-elevation < 0)",
             "The bank rode out a night between 0 and 45 C."),
-        new("charge-bank", GoalKind.Path, "Charge it", "a bank is full (<bank>.full) and has been charged by a generator (its per-source record is above 0)",
+        new("charge-bank", GoalKind.Path, "Charge it", "Fill the bank to full with power from a generator you have built.", "a bank is full (<bank>.full) and has been charged by a generator (its per-source record is above 0)",
             "The bank is full."),
-        new("the-call", GoalKind.Path, "The call", "a bank made the call on the relay pass (scene.won)",
+        new("the-call", GoalKind.Path, "The call", "Make the call to Earth when the relay passes over, with the bank's charge.", "a bank made the call on the relay pass (scene.won)",
             "The call went out. Earth has heard the rover."),
 
-        new("gear-up", GoalKind.Concept, "Gear up", "a generator charging a bank (<generator>.charging) above its cut-in (<generator>.rpm > <generator>.cut-in-rpm) turns at 100 times or more the speed of the prime mover it is geared to (rotor rad/s over the windmill's, water wheel's, jet wheel's or Stirling engine's)",
+        new("gear-up", GoalKind.Concept, "Gear up", "Have a generator charge the bank while it spins at least 100 times faster than the wheel, sail or engine that drives it.", "a generator charging a bank (<generator>.charging) above its cut-in (<generator>.rpm > <generator>.cut-in-rpm) turns at 100 times or more the speed of the prime mover it is geared to (rotor rad/s over the windmill's, water wheel's, jet wheel's or Stirling engine's)",
             "A 100:1 train brought a slow shaft up to the motor's cut-in: Step-up gearbox."),
-        new("thermostat", GoalKind.Concept, "Thermostat", "for one hour of the scene's clock a bank held between 0 and 45 C while the heat store in the bin its lid works ran above 100 C and the lid not wide open (<strip>.open < 1: the strip, or the sense switch, reading the bank's store)",
+        new("thermostat", GoalKind.Concept, "Thermostat", "For one hour, keep a bank between 0 and 45 °C beside a heat store hotter than 100 °C, with the store's lid working by itself and never wide open.", "for one hour of the scene's clock a bank held between 0 and 45 C while the heat store in the bin its lid works ran above 100 C and the lid not wide open (<strip>.open < 1: the strip, or the sense switch, reading the bank's store)",
             "A thermostat kept the bank under 45 C beside a store above 100 C: Lidded heat-bin."),
-        new("harrison", GoalKind.Concept, "Harrison", "the thermostat of Thermostat was a bimetallic strip (the bimetal part on the lid), not the ideal sense switch",
+        new("harrison", GoalKind.Concept, "Harrison", "Do the thermostat's job with a strip of two metals that bends as it warms, not with an ideal switch.", "the thermostat of Thermostat was a bimetallic strip (the bimetal part on the lid), not the ideal sense switch",
             "A bimetallic strip worked the lid, as in Harrison's H3 clock of 1759."),
-        new("archimedes-screw", GoalKind.Concept, "Archimedes' screw", "a lift worked by a screw has carried up half a store's capacity and the store above it is full (lift Moved, To.WaterVolume, Head > 0)",
+        new("archimedes-screw", GoalKind.Concept, "Archimedes' screw", "Lift water with a screw into a raised store, until that store is full.", "a lift worked by a screw has carried up half a store's capacity and the store above it is full (lift Moved, To.WaterVolume, Head > 0)",
             "A screw filled a raised store: Wind-driven screw."),
-        new("noria", GoalKind.Concept, "Noria", "a lift worked by a noria wheel has carried up half a store's capacity and the store above it is full",
+        new("noria", GoalKind.Concept, "Noria", "Lift water with a bucket wheel into a raised store, until that store is full.", "a lift worked by a noria wheel has carried up half a store's capacity and the store above it is full",
             "A bucket wheel filled a raised store: Noria."),
-        new("ctesibius", GoalKind.Concept, "Ctesibius", "a force pump (a piston lift) has carried up a litre or more to a head above the suction limit of its air for 20 C water (LiftPump.SuctionLimit(20, zone) < lift Head)",
+        new("ctesibius", GoalKind.Concept, "Ctesibius", "Pump a litre or more of water up higher than suction alone can lift it.", "a force pump (a piston lift) has carried up a litre or more to a head above the suction limit of its air for 20 C water (LiftPump.SuctionLimit(20, zone) < lift Head)",
             "A force pump lifted water higher than suction can: Force pump."),
-        new("constant-head", GoalKind.Concept, "Constant head", "a float valve kept its store's level (Tank.Level) inside its band, from the shut level down to Travel below it, with the feed flowing, without a break for one sol of the planet's day (planet Sol seconds)",
+        new("constant-head", GoalKind.Concept, "Constant head", "Keep a store's water level steady for a whole sol with a float valve, while the water keeps flowing in.", "a float valve kept its store's level (Tank.Level) inside its band, from the shut level down to Travel below it, with the feed flowing, without a break for one sol of the planet's day (planet Sol seconds)",
             "A float valve held a store's level for a sol: Float valve."),
-        new("safety-valve", GoalKind.Concept, "Safety valve", "a safety valve has been lifted for 10 s or more in all (<valve>.opening > 0) on a boiler that has not burst (<boiler>.burst = 0)",
+        new("safety-valve", GoalKind.Concept, "Safety valve", "Let a safety valve lift for 10 seconds or more in all, and keep the boiler from bursting.", "a safety valve has been lifted for 10 s or more in all (<valve>.opening > 0) on a boiler that has not burst (<boiler>.burst = 0)",
             "The valve lifted and the boiler lived: Safe boiler."),
-        new("boiler-burst", GoalKind.Concept, "Boiler burst", "a boiler burst (<boiler>.burst = 1)",
+        new("boiler-burst", GoalKind.Concept, "Boiler burst", "Let a boiler burst. Nobody asks for it, but it shows why valves exist.", "a boiler burst (<boiler>.burst = 1)",
             "A boiler burst. This is why Papin added the safety valve in 1679."),
-        new("measure-mars", GoalKind.Concept, "Measure Mars", "a pendulum's timed period (two turning points apart, doubled) gives g = 4 pi^2 L / T^2 within 2% of 3.71 m/s2, from at least 4 turning points",
+        new("measure-mars", GoalKind.Concept, "Measure Mars", "Time a pendulum's swing for at least four turns and work out Mars's gravity from it, to within 2%.", "a pendulum's timed period (two turning points apart, doubled) gives g = 4 pi^2 L / T^2 within 2% of 3.71 m/s2, from at least 4 turning points",
             "A pendulum measured Mars: g within 2% of 3.71."),
-        new("newcomens-mistake", GoalKind.Concept, "Newcomen's mistake", "a Newcomen (atmospheric) cylinder made a stroke (<cylinder>.strokes >= 1) in air under 10 kPa",
+        new("newcomens-mistake", GoalKind.Concept, "Newcomen's mistake", "Make an air-pushed (Newcomen) engine take a stroke where the air is thinner than 10 kPa.", "a Newcomen (atmospheric) cylinder made a stroke (<cylinder>.strokes >= 1) in air under 10 kPa",
             "Newcomen's engine ran on Mars, pushed by almost no air: why engines went to high pressure."),
 
-        new("route-windmiller", GoalKind.Route, "The windmiller", "at the call, 90% or more of the bank's charge came from wind (<bank>.from-wind over the sum of its sources)",
+        new("route-windmiller", GoalKind.Route, "The windmiller", "Make the call with 90% or more of the bank's charge from wind.", "at the call, 90% or more of the bank's charge came from wind (<bank>.from-wind over the sum of its sources)",
             "Won by windmills alone: Windmill-generator."),
-        new("route-hot-air", GoalKind.Route, "Hot air", "at the call, half or more of the bank's charge came from a Stirling engine (<bank>.from-stirling)",
+        new("route-hot-air", GoalKind.Route, "Hot air", "Make the call with half or more of the bank's charge from a Stirling engine.", "at the call, half or more of the bank's charge came from a Stirling engine (<bank>.from-stirling)",
             "Won on hot air: Stirling-generator."),
-        new("route-water-wheel", GoalKind.Route, "The water-wheel trap", "a water wheel has fed a generator (<bank>.from-water-wheel > 0)",
+        new("route-water-wheel", GoalKind.Route, "The water-wheel trap", "Feed a generator from a water wheel, even a little.", "a water wheel has fed a generator (<bank>.from-water-wheel > 0)",
             "A water wheel fed the generator; the log shows how little it gave."),
-        new("route-gravity-battery", GoalKind.Route, "The gravity battery", "falling weights have fed a generator (<bank>.from-falling-weight > 0)",
+        new("route-gravity-battery", GoalKind.Route, "The gravity battery", "Feed a generator from falling weights, even a little.", "falling weights have fed a generator (<bank>.from-falling-weight > 0)",
             "A falling weight fed the generator: Counterweight store."),
-        new("route-heron-purist", GoalKind.Route, "Heron purist", "an aeolipile has fed a generator (<bank>.from-aeolipile > 0, a generator named #:driven-by aeolipile)",
+        new("route-heron-purist", GoalKind.Route, "Heron purist", "Feed a generator from an aeolipile, Heron's spinning steam ball, even a little.", "an aeolipile has fed a generator (<bank>.from-aeolipile > 0, a generator named #:driven-by aeolipile)",
             "Heron's aeolipile fed the generator, and hardly at all."),
-        new("route-three-sols", GoalKind.Route, "Three sols to Earth", "the call was made within 4 sols of the scene's start (clock <= 4 x the planet's Sol)",
+        new("route-three-sols", GoalKind.Route, "Three sols to Earth", "Make the call within 4 sols of the start.", "the call was made within 4 sols of the scene's start (clock <= 4 x the planet's Sol)",
             "The call went out inside four sols."),
     ];
 

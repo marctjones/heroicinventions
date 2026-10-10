@@ -308,15 +308,17 @@ public partial class BearingArrow : Control
 }
 
 /// <summary>
-/// Whether the cargo markers show: View ▸ Cargo Markers, remembered in section [markers] of its own file, <c>markers.cfg</c> beside the settings
-/// (HEROIC_SETTINGS names the settings file, and this one gets ".markers" after it). Not in settings.cfg itself: Hints.Save writes that
-/// whole file from the copy it loaded at the start, so a [markers] section written after that would be lost the next time a hint retires.
+/// Whether the cargo markers show: View ▸ Cargo Markers, remembered in section [markers] of the settings file (settings.cfg; HEROIC_SETTINGS names
+/// another). Since #248 every writer of that file loads it, sets its own keys and saves, so the section survives the hints. Before that the choice
+/// lived in <c>markers.cfg</c> (HEROIC_SETTINGS plus ".markers"): when the settings file has no [markers] value yet, that old file's value is read once
+/// and copied into the settings file, so a saved choice is not lost. The old file is left in place and never read again after that.
 /// </summary>
 public static class MarkerSettings
 {
-    private static string Path => OS.GetEnvironment("HEROIC_SETTINGS") is { Length: > 0 } p ? p + ".markers" : "user://markers.cfg";
+    private static string Path => OS.GetEnvironment("HEROIC_SETTINGS") is { Length: > 0 } p ? p : "user://settings.cfg";
+    private static string LegacyPath => OS.GetEnvironment("HEROIC_SETTINGS") is { Length: > 0 } p ? p + ".markers" : "user://markers.cfg";
 
-    /// <summary>HEROIC_MARKERS=1/0 decides; a scripted or headless run shows them; a player's choice is read from the file.</summary>
+    /// <summary>HEROIC_MARKERS=1/0 decides; a scripted or headless run shows them; a player's choice is read from the settings file (else from the old markers.cfg once, and moved).</summary>
     public static bool Enabled()
     {
         switch (OS.GetEnvironment("HEROIC_MARKERS"))
@@ -328,7 +330,15 @@ public static class MarkerSettings
         if (scripted) return true;
         var cfg = new ConfigFile();
         cfg.Load(Path);
-        return cfg.GetValue("markers", "enabled", true).AsBool();
+        if (cfg.HasSectionKey("markers", "enabled")) return cfg.GetValue("markers", "enabled", true).AsBool();
+        var old = new ConfigFile();
+        if (old.Load(LegacyPath) == Error.Ok && old.HasSectionKey("markers", "enabled"))
+        {
+            bool on = old.GetValue("markers", "enabled", true).AsBool();
+            Save(on);   // copied once: the settings file now holds the choice
+            return on;
+        }
+        return true;
     }
 
     /// <summary>Load, set, save in one go; no copy is held between writes.</summary>

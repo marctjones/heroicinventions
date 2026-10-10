@@ -17,6 +17,10 @@
 ;;   suite. The order and the arithmetic above are checked at rate 30, which only scales the waits.
 ;;   Doing things: F2 pressed (no goals hint); a paused sleep (rover-sleep-hint-check.world: found-electrics, a Jolt-driven
 ;;   windmill, a sleep of 9,000 s with the engine paused) shows rover-sleep-paused once, after the wake.
+;; #248: a hint saving its state must keep the other sections of the settings file. Worked beforehand: at rate 3 the drive pointer shows at
+;;   20 s / 3 = 6.7 s of game time and expires 40 s / 3 = 13 s later (a save). The test waits for the "showing rover-drive" line, writes a [routes-panel]
+;;   section into the settings file then (after the game read it), lets the pointer expire, and expects both the section and the retired id in the file.
+;;   (Before the fix Hints saved the copy it read at the start, so the section was gone.)
 ;; Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list racket/file racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -42,7 +46,38 @@
 
 (define (rover-only ids) (filter (λ (id) (string-prefix? id "rover-")) ids))
 
+(define (section-survives-a-save)
+  (define settings (make-temporary-file "hints~a.cfg"))
+  (delete-file settings)
+  (define env (environment-variables-copy (current-environment-variables)))
+  (for ([kv `(("HEROIC_WORLD" . "lonely-rover-opening") ("HEROIC_HINTS" . "1") ("HEROIC_HINTS_RATE" . "3")
+              ("HEROIC_SAVES_DIR" . ,(path->string (find-system-path 'temp-dir)))
+              ("HEROIC_SETTINGS" . ,(path->string settings)) ("HEROIC_INPUT" . "frontend skip; wait 4000; quit"))])
+    (environment-variables-set! env (string->bytes/utf-8 (car kv)) (string->bytes/utf-8 (cdr kv))))
+  (define-values (sp out in err)
+    (parameterize ([current-directory game-dir] [current-environment-variables env])
+      (subprocess #f #f 'stdout godot-binary "--headless" "--fixed-fps" "120" "--path" ".")))
+  (close-output-port in)
+  (define wrote? #f)
+  (let loop ()
+    (define l (read-line out))
+    (unless (eof-object? l)
+      (when (and (not wrote?) (string-prefix? l "[hints] showing rover-drive"))
+        (set! wrote? #t)
+        (display-to-file "[routes-panel]\n\nlevel=\"outline\"\n" settings #:exists 'truncate))
+      (loop)))
+  (subprocess-wait sp)
+  (define text (if (file-exists? settings) (file->string settings) ""))
+  (when (file-exists? settings) (delete-file settings))
+  (values wrote? text))
+
 (when (godot-available?)
+  (test-case "a hint's save keeps a [routes-panel] section written after the game started (#248)"
+    (define-values (wrote? text) (section-survives-a-save))
+    (check-true wrote? "the drive pointer was shown, so the section was written mid-run")
+    (check-regexp-match #rx"\\[routes-panel\\]" text)
+    (check-regexp-match #rx"level=\"outline\"" text)
+    (check-regexp-match #rx"rover-drive" text "the pointer was retired in the same file"))
   (test-case "nothing done: the seven pointers come in order, each once, and no sandbox hint among them"
     (define shown (hints-shown "frontend skip; wait 4000; quit"))
     (check-equal? (rover-only shown) '("rover-drive" "rover-speed" "rover-goals" "rover-log" "rover-bank-cold" "rover-join" "rover-build"))
