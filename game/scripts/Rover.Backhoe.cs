@@ -127,14 +127,15 @@ public sealed partial class Rover
     /// Starts the dig-and-dump cycle; ignored while one is under way. <paramref name="dump"/> is the side it tips to (B: right,
     /// Shift+B: left); <paramref name="digSwingDeg"/> swings the dig that many degrees left (+) or right of straight ahead; with
     /// <paramref name="keep"/> it digs and folds away with the load, carrying it (the road's haul) and the next cycle, whatever its
-    /// arguments say of digging, only lifts the load from the deck and tips it.
+    /// arguments say of digging, only lifts the load from the deck and tips it (unless it keeps again with the bucket less than
+    /// 0.85 full: then it digs again and tops the load up).
     /// </summary>
     public bool StartCycle(ArmSide dump = ArmSide.Right, double digSwingDeg = 0, bool keep = false)
     {
         if (_step >= 0) return false;
         _side = dump;
         _digSwing = Math.Clamp(digSwingDeg, -45, 45);
-        bool dumpOnly = CarryingOn && Carried > 1e-9;
+        bool dumpOnly = CarryingOn && Carried > 1e-9 && !(keep && Carried < 0.85 * BucketVolume);   // a dig that keeps its load tops a part-load up
         _keep = keep && !dumpOnly;
         Cycle = dumpOnly ? DumpOnlyCycle : _keep ? DigOnlyCycle : FullCycle;
         CarryingOn = false;
@@ -245,7 +246,7 @@ public sealed partial class Rover
             case Phase.Lowering: _lastDigAt = _tip.GlobalPosition; break;
             case Phase.Digging: DigHere(); break;
             case Phase.Dumping: DumpHere(); break;
-            case Phase.Stowing when _keep: CarryingOn = Carried > 1e-9; break;   // the load rides on the deck to where it is tipped
+            case Phase.Stowing when _keep || Cycle == DumpOnlyCycle: CarryingOn = Carried > 1e-9; break;   // the load rides on the deck to where it is tipped (or back, if it was refused)
         }
     }
 

@@ -16,6 +16,12 @@ public sealed record RoadLimits
     public double StraightDeg { get; init; } = 27;
     /// <summary>The steepest a landing (where the road turns, or the rover stands to work) may be, along and across.</summary>
     public double LandingDeg { get; init; } = 5;
+    /// <summary>
+    /// The steepest ground the rover can stop on, and start from, at will: a haul spot is no steeper. Up the 25 to 27 degree rock
+    /// below the opening's shelf its tyres hold it with almost nothing to spare (0.577 cos 27 = 0.51 of its weight against sin 27
+    /// = 0.45): it slides a few tenths of a metre down the fall line at every stop and stalls from rest; at 23 it has three times the margin.
+    /// </summary>
+    public double StopDeg { get; init; } = 23;
     /// <summary>The steepest natural ground the road may cross without benching it, across its line.</summary>
     public double NaturalCrossDeg { get; init; } = 16;
     /// <summary>The road's width: two dig columns 0.39 m either side of its line, each 0.45 m round (the rover's track is 1.24 m, 1.36 m over the tyres).</summary>
@@ -35,9 +41,17 @@ public sealed record RoadLimits
     /// <summary>A side-cast heap must land this far below the road's floor beside it, or it spills back in.</summary>
     public double SpillDrop { get; init; } = 0.3;
     /// <summary>A haul spot's heap, beside road that is driven but not cut (the way the rover came), must land this far below it.</summary>
-    public double HaulDrop { get; init; } = 0.15;
-    /// <summary>Buckets one haul spot takes (a heap of about 1 m³, r ≈ 1 m).</summary>
-    public int HaulSpotBuckets { get; init; } = 4;
+    public double HaulDrop { get; init; } = 0.1;
+    /// <summary>Buckets one haul spot takes (a heap of 0.6 m³, r ≈ 0.9 m).</summary>
+    public int HaulSpotBuckets { get; init; } = 3;
+    /// <summary>
+    /// m a heap reaches from where it is tipped, and the run the rover takes up ground it cannot start on (long enough to be back on
+    /// its line at speed, where a turn bites, before the steep ground: at a crawl it slides off it there): no heap may lie beside road
+    /// the rover drives again (it is as wide as the road, and a wheel over a heap's flank slews it off its line: measured, 0.5 m in one
+    /// run), so haul spots lie behind the run's start, and a heap is never cast beside the road it came up.
+    /// </summary>
+    public double HeapReach { get; init; } = 0.9;
+    public double RunUp { get; init; } = 7.0;
     public double Bucket { get; init; } = 0.2;
     /// <summary>s: a dig-and-dump cycle, and a haul's drive back to its spot and up again.</summary>
     public double CycleSeconds { get; init; } = 11.6;
@@ -63,9 +77,18 @@ public sealed record RoadSpoil(bool Haul, double X, double Z, double LandX, doub
 public sealed record RoadStation(int Index, double X, double Z, double HeadingDeg, double TeethX, double TeethZ,
                                  IReadOnlyList<(double X, double Z)> Columns, double CutTo, double Volume, int Buckets, RoadSpoil Spoil);
 
-/// <summary>A road's plan: its stretches, the stations that cut it, the buckets and seconds that takes, and why (or why not).</summary>
+/// <summary>A point of a road's line: where, facing which way, its level there, and how far along it is (a turn is two points in one place).</summary>
+public sealed record RoadPoint(double X, double Z, double YawDeg, double Level, double S);
+
+/// <summary>Where spoil is hauled to: the rover stands at (X, Z) facing along the road and tips to the left, at (LandX, LandZ).</summary>
+public sealed record RoadSpot(double X, double Z, double LandX, double LandZ);
+
+/// <summary>A road's plan: its stretches, the stations that cut it, the buckets and seconds that takes, and why (or why not); its line, and the haul spots behind its cut.</summary>
 public sealed record RoadPlan(bool Found, IReadOnlyList<RoadSegment> Segments, IReadOnlyList<RoadStation> Stations, int Buckets, double Seconds, string Why)
 {
+    public IReadOnlyList<RoadPoint> Path { get; init; } = [];
+    public IReadOnlyList<RoadSpot> Spots { get; init; } = [];
+
     /// <summary>m³ the road's cut takes out in all.</summary>
     public double Volume => Stations.Sum(s => s.Volume);
 }
@@ -203,15 +226,30 @@ public static class RoadPlanner
         for (int at = goal; at >= 0; at = nodes[at].Parent) path.Add(nodes[at]);
         path.Reverse();
         var segments = Segments(path, X, Z);
-        var stations = Stations(path, X, Z, heightAt, floorAt, crates, L, out string spoilWhy);
+        var line = path.Select(n => new RoadPoint(X(n.I), Z(n.J), YawOf(n.H), n.Level, n.S)).ToList();
+        return Cut(line, segments, heightAt, floorAt, crates, L);
+    }
+
+    /// <summary>
+    /// The stations that cut a planned road's line as the ground now is (the executor's plan after each station): the same line and
+    /// levels, the cut that is left. Ground already at the road's level needs no station.
+    /// </summary>
+    public static RoadPlan Recut(RoadPlan plan, Func<double, double, double> heightAt, Func<double, double, double> floorAt,
+                                 IReadOnlyList<(double X, double Z, double R)> crates, RoadLimits limits) =>
+        plan.Found ? Cut(plan.Path, plan.Segments, heightAt, floorAt, crates, limits) : plan;
+
+    private static RoadPlan Cut(IReadOnlyList<RoadPoint> line, IReadOnlyList<RoadSegment> segments, Func<double, double, double> heightAt,
+                                Func<double, double, double> floorAt, IReadOnlyList<(double X, double Z, double R)> crates, RoadLimits L)
+    {
+        var stations = Stations(line, heightAt, floorAt, crates, L, out var spots, out string spoilWhy);
         int buckets = stations.Sum(s => s.Buckets);
         int hauled = stations.Where(s => s.Spoil.Haul).Sum(s => s.Buckets);
-        double length = path[^1].S;
+        double length = line[^1].S;
         double seconds = buckets * L.CycleSeconds + hauled * L.HaulSeconds + length / 1.0;
         string text = $"{segments.Count} stretch{(segments.Count == 1 ? "" : "es")} over {length:0.0} m ("
                       + string.Join("; ", segments.Select(g => $"{g.HeadingDeg:0} deg, {Math.Sqrt(Sq(g.X1 - g.X0) + Sq(g.Z1 - g.Z0)):0.0} m at {g.GradeDeg:0.0} deg{(g.TurnsAtStart ? " from a landing" : "")}"))
                       + $"); {stations.Count} station{(stations.Count == 1 ? "" : "s")} cut {stations.Sum(s => s.Volume):0.00} m3 in {buckets} buckets, {hauled} hauled{spoilWhy}";
-        return new RoadPlan(true, segments, stations, buckets, seconds, text);
+        return new RoadPlan(true, segments, stations, buckets, seconds, text) { Path = line, Spots = spots };
     }
 
     private static RoadPlan NotFound(string why) => new(false, [], [], 0, 0, why);
@@ -320,12 +358,14 @@ public static class RoadPlanner
     /// <summary>A point along the road and its level and cut (m² of cross-section), the road extended straight back before its start and straight on after its end.</summary>
     private readonly record struct Along(double S, double X, double Z, double Yaw, double Level, double CutArea);
 
-    private static List<RoadStation> Stations(List<Node> path, Func<int, double> X, Func<int, double> Z, Func<double, double, double> heightAt,
-                                              Func<double, double, double> floorAt, IReadOnlyList<(double X, double Z, double R)> crates, RoadLimits L, out string why)
+    private static List<RoadStation> Stations(IReadOnlyList<RoadPoint> path, Func<double, double, double> heightAt, Func<double, double, double> floorAt,
+                                              IReadOnlyList<(double X, double Z, double R)> crates, RoadLimits L, out List<RoadSpot> spotList, out string why)
     {
         why = "";
+        spotList = [];
         // the road every quarter metre, its last node's level carried on as the pad the rover stands on to work (its wheels 0.75 m
-        // ahead of its centre: the pad runs on a metre), but not into a crate's ground (that is the dig at the target, not the road)
+        // ahead of its centre, and it may stand up to half a metre on from the road's end to reach: the pad runs on 1.5 m), but not
+        // into a crate's ground (that is the dig at the target, not the road)
         var along = new List<Along>();
         void Add(double s, double x, double z, double yaw, double level)
         {
@@ -341,21 +381,21 @@ public static class RoadPlanner
         for (int k = 0; k + 1 < path.Count; k++)
         {
             var a = path[k]; var b = path[k + 1];
-            if (a.I == b.I && a.J == b.J) continue;   // a turn
+            if (b.S - a.S < 1e-9) continue;   // a turn
             double len = b.S - a.S;
             for (double t = 0; t < len - 1e-9; t += SampleStep)
             {
                 double u = t / len;
                 // the level between nodes: the node ahead's (a step is cut to its design all along)
-                Add(a.S + t, X(a.I) + (X(b.I) - X(a.I)) * u, Z(a.J) + (Z(b.J) - Z(a.J)) * u, YawOf(b.H), t == 0 ? a.Level : b.Level);
+                Add(a.S + t, a.X + (b.X - a.X) * u, a.Z + (b.Z - a.Z) * u, b.YawDeg, t == 0 ? a.Level : b.Level);
             }
         }
         var end = path[^1];
-        double endYaw = YawOf(end.H);
+        double endYaw = end.YawDeg;
         var (efx, efz) = Forward(endYaw);
-        for (double t = 0; t <= 1.0 + 1e-9; t += SampleStep)
+        for (double t = 0; t <= 1.5 + 1e-9; t += SampleStep)
         {
-            double x = X(end.I) + efx * t, z = Z(end.J) + efz * t;
+            double x = end.X + efx * t, z = end.Z + efz * t;
             if (crates.Any(c => Sq(x - c.X) + Sq(z - c.Z) < Sq(c.R + L.DigRadius))) break;
             Add(end.S + t, x, z, endYaw, end.Level);
         }
@@ -381,17 +421,22 @@ public static class RoadPlanner
             return a with { S = s, X = a.X + gx * (s - a.S), Z = a.Z + gz * (s - a.S) };
         }
         // haul spots: behind the cut (on the road where it needs no cutting, or on the way the rover came, straight back from the
-        // start), every metre, nearest first, where a heap tipped to the left lands well below the road and its fall line is clear
+        // start), every metre, nearest first, where the rover can stop and start, a heap tipped to the left lands below the road, and
+        // its fall line is clear
         var spots = new List<(double X, double Z, double LandX, double LandZ, int Room)>();
-        for (double s = sFirst - L.DumpAhead - 0.5; s > sFirst - L.DumpAhead - 8 && spots.Count < 6; s -= 1.0)
+        // (behind the start, and behind a run's start from there: a heap beside the road is driven past on every haul)
+        double behindRun = Math.Min(sFirst - L.Reach, 0) - L.RunUp - L.DumpAhead - L.HeapReach;
+        for (double s = behindRun; s > behindRun - 14 && spots.Count < 8; s -= 1.0)
         {
             var p = At(s);
             if (s >= along[0].S && along[Math.Max(0, along.FindLastIndex(a => a.S <= s + 1e-9))].CutArea > worth) continue;
+            if (Math.Abs(At(s + 0.5).Level - At(s - 0.5).Level) > Math.Tan(L.StopDeg * Math.PI / 180)) continue;   // it must stop there, and start again
             var land = Land(p, L);
             double road = At(s + L.DumpAhead).Level;   // the road beside where it lands
             if (heightAt(land.X, land.Z) > road - L.HaulDrop || FallLineMeets(heightAt, land.X, land.Z, crates, along, p.S, L) is not null) continue;
             spots.Add((p.X, p.Z, land.X, land.Z, L.HaulSpotBuckets));
         }
+        spotList = spots.Select(p => new RoadSpot(p.X, p.Z, p.LandX, p.LandZ)).ToList();
         int spot = 0;
         for (int n = 0; n < teeth.Count; n++)
         {
@@ -407,6 +452,9 @@ public static class RoadPlanner
             RoadSpoil spoil;
             double drop = At(chassis.S + L.DumpAhead).Level - heightAt(land.X, land.Z);
             string? meets = FallLineMeets(heightAt, land.X, land.Z, crates, along, t, L);
+            // a heap beside road the rover drives again (behind it, and the way it came) must keep clear of its wheels
+            double beside = L.DumpSide - L.HeapReach - L.Width / 2;
+            if (meets is null && beside < 0.15) meets = $"a heap there would reach {(-beside + 0.15):0.00} m into the road it drives back down";
             if (drop >= L.SpillDrop && meets is null)
                 spoil = RoadSpoil.Left(land.X, land.Z);
             else
@@ -444,7 +492,7 @@ public static class RoadPlanner
     }
 
     /// <summary>
-    /// What spoil heaped at (x, z) would run down onto, or null if it runs clear: the steepest way down from it, 6 m of it, passes
+    /// What spoil heaped at (x, z) would run down onto, or null if it runs clear: the steepest way down from it, 3 m of it (a heap of a few buckets spreads a metre; the rest is margin), passes
     /// no crate (within its radius and a metre) and does not cross the road ahead of <paramref name="behind"/> (a heap that slides
     /// onto road already cut, or still to be driven, undoes it).
     /// </summary>
@@ -452,7 +500,7 @@ public static class RoadPlanner
                                       List<Along> road, double behind, RoadLimits L)
     {
         double px = x, pz = z;
-        for (int k = 0; k < 24; k++)
+        for (int k = 0; k < 12; k++)
         {
             if (crates.Any(c => Sq(px - c.X) + Sq(pz - c.Z) < Sq(c.R + 1.0))) return $"its fall line meets a crate {k * SampleStep:0.0} m down";
             if (road.Any(a => a.S >= behind - L.Advance && Sq(px - a.X) + Sq(pz - a.Z) < Sq(L.Width / 2 + 0.3))) return $"its fall line crosses the road {k * SampleStep:0.0} m down";

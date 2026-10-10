@@ -12,14 +12,15 @@ namespace HeroicInventions.Sim.Tests;
 /// (0.85 tan 14) and as much filled at the downhill one;</item>
 /// <item>a rock ridge 0.2 m high across a gentle slope is ridden over as it lies (nothing of it is cut); one 1 m high, steeper than
 /// 27 degrees a metre and the whole width of the ground, leaves no road at all;</item>
-/// <item>spoil from such a bench is cast left (downhill, landing 1.4 tan 14 = 0.35 m below the road, more than the 0.3 needed;
-/// the last station, where the road is held level into the slope, lands only 0.24 below and is hauled) unless a crate lies down its
-/// fall line: then it is hauled;</item>
+/// <item>spoil from such a bench is cast left (downhill, well below the road) by an arm that tips 2.5 m out, unless a crate lies
+/// down its fall line: then it is hauled; this rover's arm tips only 1.4 m out, so its heap (0.9 m round) would reach its own
+/// wheels on the road it drives back down: all hauled;</item>
 /// <item>a 32 degree plane 16 m long: straight up at 20 degrees the cut would grow to (tan 32 − tan 20) 13.9 = 3.6 m (≈ 43 m³),
 /// so the road switches back across it, turning on a landing;</item>
 /// <item>the Lonely Rover's opening (victoria.map settled): from the rover at (249.8, 137.9) to the bank's crate at (254.5, 137.9),
 /// one straight stretch facing +x over the rock the rover already climbs and onto the rock shelf at −44.98 under the rubble; four
-/// stations, 13 to 22 buckets, every one past x 251.5 hauled back to the shoulder (a left heap on the shelf would spill back).</item>
+/// stations, 13 to 22 buckets, every one past x 251.5 hauled back to the shoulder (a left heap on the shelf would spill back), to
+/// spots below x 241, where the ground eases to 20 to 23 degrees and the rover can stop and start again, behind its 7 m run up.</item>
 /// </list>
 /// </summary>
 public class RoadPlanTests
@@ -78,15 +79,17 @@ public class RoadPlanTests
         // a road along +x, climbing 5 degrees, on a slope rising 14 degrees to +z: a bench cut into the uphill side, its line on the
         // ground, so a heap 1.4 m to the left lands 0.35 m below it
         Func<double, double, double> ground = (x, z) => Tan(14) * z + Tan(5) * x;
-        var clear = RoadPlanner.Plan(ground, NoFloor, [], (0, 0), (7, 0), Limits);
+        var arm = Limits with { DumpSide = 2.5 };   // an arm that tips well clear of the road (this rover's tips 1.4 m out: its heaps would reach its own wheels)
+        var clear = RoadPlanner.Plan(ground, NoFloor, [], (0, 0), (7, 0), arm);
         Console.WriteLine($"SPOIL {clear.Why}: {string.Join(", ", clear.Stations.Select(s => s.Spoil))}");
         Assert.True(clear.Found, clear.Why);
         Assert.NotEmpty(clear.Stations);
         Assert.True(clear.Stations.Count(s => !s.Spoil.Haul) >= clear.Stations.Count - 1, "cast left where it lands well below the road");
         Assert.DoesNotContain(clear.Stations, s => s.Spoil.Why.Contains("crate"));
         // a crate 3 m down the slope from the road: every left heap would run onto it
-        var crate = new[] { (X: 3.0, Z: -3.0, R: 1.0) };
-        var blocked = RoadPlanner.Plan(ground, NoFloor, crate.Select(c => (c.X, c.Z, c.R)).ToList(), (0, 0), (7, 0), Limits);
+        var crate = new[] { (X: 3.0, Z: -4.0, R: 1.0) };
+        var blocked = RoadPlanner.Plan(ground, NoFloor, crate.Select(c => (c.X, c.Z, c.R)).ToList(), (0, 0), (7, 0), arm);
+        Assert.All(RoadPlanner.Plan(ground, NoFloor, [], (0, 0), (7, 0), Limits).Stations, s => Assert.True(s.Spoil.Haul, $"this rover's heap at station {s.Index} would reach its wheels"));
         Console.WriteLine($"SPOIL-CRATE {blocked.Why}: {string.Join(", ", blocked.Stations.Select(s => s.Spoil))}");
         Assert.True(blocked.Found, blocked.Why);
         Assert.Contains(blocked.Stations, s => s.Spoil.Haul && s.Spoil.Why.Contains("crate"));
@@ -146,6 +149,11 @@ public class RoadPlanTests
         Assert.InRange(plan.Buckets, 13, 22);
         Assert.All(plan.Stations.Where(s => s.TeethX > 251.5), s => Assert.True(s.Spoil.Haul, $"station {s.Index}: {s.Spoil}"));
         Assert.All(plan.Stations.Where(s => s.TeethX > 251.5), s => Assert.Equal(-44.98, s.CutTo, 2));   // the shelf: the rock's own level
+        // the haul spots: where the rover can stop and start again, behind the 7 m run up to the 25 to 27 degree rock, and room for every bucket
+        foreach (var sp in plan.Spots) Console.WriteLine($"  spot: stand at ({sp.X:0.00} {sp.Z:0.00}), tip at ({sp.LandX:0.00} {sp.LandZ:0.00})");
+        Assert.NotEmpty(plan.Spots);
+        Assert.All(plan.Spots, sp => Assert.True(sp.X <= 241.0, $"a spot at {sp.X:0.00}: behind the run up the rock"));
+        Assert.True(plan.Spots.Count * Limits.HaulSpotBuckets >= plan.Buckets);
     }
 
     /// <summary>victoria.map as the opening loads it: settled, so the rubble the rim's slide left on the bedrock apron is there to be dug (#72).</summary>

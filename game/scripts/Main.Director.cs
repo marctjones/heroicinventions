@@ -66,10 +66,10 @@ public partial class Main
     {
         var inv = CultureInfo.InvariantCulture;
         double D(int i) => double.Parse(w[i], inv);
-        if (_heroicSetFailed && w[0] is "drive-to" or "turn-to" or "dig" or "join-gesture" or "expect") return ScriptedInput.Step.Again;   // failed: hold until the quit lands
+        if (_heroicSetFailed && w[0] is "drive-to" or "turn-to" or "dig" or "build-road-to" or "join-gesture" or "expect") return ScriptedInput.Step.Again;   // failed: hold until the quit lands
         switch (w[0])
         {
-            case "drive-to" or "turn-to" or "dig":
+            case "drive-to" or "turn-to" or "dig" or "build-road-to":
                 if (_directorGoal is not null) return ScriptedInput.Step.Again;
                 if (_directorFinished) { _directorFinished = false; return ScriptedInput.Step.Next; }
                 if (_rover is null) { DirectorFail($"{w[0]}: no rover in this world"); return ScriptedInput.Step.Next; }
@@ -77,6 +77,7 @@ public partial class Main
                 {
                     "drive-to" => DriveGoal(D(1), D(2), w.Length > 3 ? D(3) : 0.5),
                     "turn-to" => TurnGoal(D(1)),
+                    "build-road-to" => RoadGoal(D(1), D(2), w.Length > 3 ? D(3) : 20),   // Main.Road.cs
                     _ => DigGoal(w),
                 };
                 return ScriptedInput.Step.Again;
@@ -116,6 +117,9 @@ public partial class Main
                 DirectorOverlay();
                 _clockOn = w.Length < 2 || w[1] != "off";
                 _clockLabel!.Visible = _clockOn;
+                return ScriptedInput.Step.Continue;
+            case "speed":   // speed N: the game's time scale, as the speed row sets it (physics ticks and time together: the run is the same, only faster)
+                SetSpeed(D(1));
                 return ScriptedInput.Step.Continue;
             case "sleep-budget":   // ms of CPU a paused sleep may use per frame (the default is the tuning's 10 ms): a time-lapse's pace, not its result
                 _sleepBudgetOverride = D(1);
@@ -291,6 +295,7 @@ public partial class Main
         int colon = path.IndexOf(':');
         if (colon < 0) throw new InvalidOperationException($"'{path}': name the machine, LABEL:target.field");
         string label = path[..colon], rest = path[(colon + 1)..];
+        if (label == "road") return RoadField(rest);   // road:station, road:cycles ... (Main.Road.cs)
         int dot = rest.IndexOf('.');
         if (dot < 0) throw new InvalidOperationException($"'{path}': name the field as target.field");
         if (!_byName.TryGetValue(label, out var view)) throw new InvalidOperationException($"no machine {label}");
@@ -315,6 +320,9 @@ public partial class Main
             (bool ok, string seen) = w[1] switch
             {
                 "rover" when w[2] == "near" => Near(D(3), D(4), D(5)),
+                "rover" when w[2] == "grade-along" && w[5] == "below" => GradeBelow(D(3), D(4), D(6)),
+                "rover" when w[2] == "wheels-clear" => WheelsClear(),
+                "road" when w[2] == "done" => (RoadField("done") > 0.5, $"{RoadField("stations")} stations planned, {RoadField("cycles")} cycles, dug {RoadField("dug"):0.00} m3, hauled {RoadField("hauled")}"),
                 "field" => Field(w[2], w[3], D(4), w.Length > 5 ? D(5) : double.NaN),
                 "built" => Built(w[2], int.Parse(w[3], inv)),
                 "link" => Linked(w[2], w[3], w[4]),
@@ -332,6 +340,17 @@ public partial class Main
             var p = _rover!.Chassis.GlobalPosition;
             double d = Math.Sqrt((p.X - x) * (p.X - x) + (p.Z - z) * (p.Z - z));
             return (d <= tol, $"rover at ({p.X:0.00} {p.Z:0.00}), {d:0.00} m off");
+        }
+        (bool, string) GradeBelow(double x, double z, double g)
+        {
+            var p = _rover!.Chassis.GlobalPosition;
+            double worst = GradeAlong(x, z, p.X, p.Z);
+            return (worst < g, $"steepest metre from ({x:0.0} {z:0.0}) to the rover at ({p.X:0.00} {p.Z:0.00}): {worst:0.0} deg");
+        }
+        (bool, string) WheelsClear()
+        {
+            var gaps = WheelGaps();
+            return (gaps.Min() >= -0.1, $"wheel gaps cm: {string.Join(" ", gaps.Select(g => (g * 100).ToString("0", inv)))}");
         }
         (bool, string) Field(string path, string how, double a, double b)
         {
