@@ -139,6 +139,17 @@ public sealed partial class Terrain
         return CoarseHeightAt(x, z);
     }
 
+    /// <summary>
+    /// The soil under a world point, as the ground is drawn: where the rover has worked it, the patch's soil there (spoil on
+    /// bedrock is soil), else the map's cell. An index into <see cref="Soils"/>, with whether it lies loose; null off the map.
+    /// </summary>
+    public (int Soil, bool Loose)? SoilAt(double x, double z)
+    {
+        for (int n = 0; n < Worked.Count; n++)
+            if (Worked[n].Inside(x, z)) return Worked[n].SoilAt(x, z);
+        return CellAt(x, z) is { } k ? (Soil[k], Loose[k]) : null;
+    }
+
     /// <summary>The map's own cells, interpolated between their centres, whatever has been worked over them.</summary>
     public double CoarseHeightAt(double x, double z)
     {

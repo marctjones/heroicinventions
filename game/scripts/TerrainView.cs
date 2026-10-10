@@ -1,5 +1,6 @@
 using Godot;
 using HeroicInventions.Sim.Fluids;
+using HeroicInventions.Sim.Game;
 using HeroicInventions.Sim.Materials;
 
 namespace HeroicInventions;
@@ -76,6 +77,17 @@ public partial class TerrainView : Node3D
     private double[][] _colours = [[], [], [], []], _smoothed = [[], [], [], []];
     private byte[] _colourBytes = [];
     private (Color Colour, float Roughness)[] _soilLook = [];
+
+    /// <summary>
+    /// The colour a soil is drawn in on the ground (<see cref="SoilLook.Drawn"/> of its table colour): the one place, read by the
+    /// ground's cell colours here and by the navigation map's ground and key (#243), so a swatch is the ground's own colour.
+    /// </summary>
+    public static Color SoilColour(string material)
+    {
+        var raw = Shapes.ColorFor(material);
+        var (r, g, b) = SoilLook.Drawn(raw.R, raw.G, raw.B);
+        return new Color(r, g, b);
+    }
     private ArrayMesh? _mesh;
     private ImageTexture? _cellsTexture;
     private double[] _shownHeights = [];
@@ -101,17 +113,38 @@ public partial class TerrainView : Node3D
         return i1 < 0 ? null : new Box(i0, j0, i1, j1);
     }
 
+    /// <summary>
+    /// A cell of this soil with its neighbours two cells out all the same soil, untouched since the start (so the colour smoothing and the
+    /// looseness and scour cues leave it as the soil's own colour), or -1: for the scripted check that the key shows the ground's colour.
+    /// </summary>
+    public int InteriorCell(int soil)
+    {
+        int nx = _ground.Nx, nz = _ground.Nz;
+        for (int j = 3; j < nz - 3; j++)
+            for (int i = 3; i < nx - 3; i++)
+            {
+                bool all = true;
+                for (int dj = -3; dj <= 3 && all; dj++)
+                    for (int di = -3; di <= 3 && all; di++)
+                    {
+                        int k = i + di + (j + dj) * nx;
+                        all = _ground.Soil[k] == soil && !_ground.Loose[k] && Math.Abs(_ground.Heights[k] - _startHeights[k]) <= 0.002;
+                    }
+                if (all) return i + j * nx;
+            }
+        return -1;
+    }
+
+    /// <summary>The colour the ground's own cell texture holds at a cell, "#RRGGBB" (what the shader reads as the soil's colour).</summary>
+    public string CellColourHex(int cell) => $"#{_colourBytes[cell * 4]:X2}{_colourBytes[cell * 4 + 1]:X2}{_colourBytes[cell * 4 + 2]:X2}";
+
     private ArrayMesh GroundMesh()
     {
         int nx = _ground.Nx, nz = _ground.Nz, n = nx * nz;
         // Each soil's look worked out once, not once per cell: a little greyer than its table colour, so crates, a
         // rover and machines keep their own colour against what they stand on, each layer keeping its hue so the
         // crater's bands tell apart; ice-cemented ground glints where dry soil is matt.
-        _soilLook = _ground.Soils.Select(s =>
-        {
-            var raw = Shapes.ColorFor(s.Material);
-            return (Colour: Color.FromHsv(raw.H, raw.S * 0.85f, raw.V), Roughness: s.Material.Contains("ice") ? 0.3f : 0.95f);
-        }).ToArray();
+        _soilLook = _ground.Soils.Select(s => (Colour: SoilColour(s.Material), Roughness: s.Material.Contains("ice") ? 0.3f : 0.95f)).ToArray();
         _vertices = new Vector3[n]; _normals = new Vector3[n]; _shades = new Color[n];
         _soft = new double[n]; _scratch = new double[n]; _colourBytes = new byte[n * 4];
         for (int ch = 0; ch < 4; ch++) { _colours[ch] = new double[n]; _smoothed[ch] = new double[n]; }

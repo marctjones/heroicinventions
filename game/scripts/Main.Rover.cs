@@ -1,5 +1,6 @@
 using Godot;
 using HeroicInventions.Sim.Fluids;
+using HeroicInventions.Sim.Game;
 using HeroicInventions.Sim.Machines;
 
 namespace HeroicInventions;
@@ -23,7 +24,7 @@ public partial class Main
 {
     private Rover? _rover;
     private VBoxContainer? _roverInfo;     // the rover's section of the right panel
-    private Label? _roverDrive, _roverAhead, _roverArm, _roverBucket, _roverEnergy, _roverNear, _roverNote;
+    private Label? _roverDrive, _roverAhead, _roverGround, _roverArm, _roverBucket, _roverEnergy, _roverNear, _roverNote;
     private Label? _roverState;
     private readonly Dictionary<Control, bool> _roverHidden = [];   // what the game hides in the panels, as it was
     private string _roverNoteSeen = "";
@@ -191,6 +192,7 @@ public partial class Main
         Section("Driving");
         _roverInfo.AddChild(_roverDrive = Line("Driving"));
         _roverInfo.AddChild(_roverAhead = Line("Ahead"));
+        _roverInfo.AddChild(_roverGround = Line("Ground"));   // the soil under the rover (#243)
         _roverInfo.AddChild(BuildMarkRow());   // the chosen cargo area's distance, bearing and arrow (Main.Markers.cs, #239)
         Section("Arm");
         _roverInfo.AddChild(_roverArm = Line("Arm"));
@@ -273,10 +275,18 @@ public partial class Main
         return a >= RoverSpec.GradeDeg ? text + (grade > 0 ? " · too steep to climb" : " · a steep drop") : text;
     }
 
+    /// <summary>"ground here: basalt sand (dark)": the soil under the rover, from the same ground the terrain is drawn from (<see cref="Terrain.SoilAt"/>, the worked patch first).</summary>
+    private string RoverGroundText()
+    {
+        var p = _rover!.Chassis.GlobalPosition;
+        return SoilLook.GroundHere(_groundSim!.Ground, p.X, p.Z);
+    }
+
     private void UpdateRoverAhead()
     {
         if (_roverAhead is null || _groundSim is null) return;
         _roverAhead.Text = RoverAheadText(out double grade);
+        if (_roverGround is not null) _roverGround.Text = RoverGroundText();
         double a = Math.Abs(grade);
         if (a >= RoverSpec.GradeDeg) _roverAhead.AddThemeColorOverride("font_color", TerrainView.SlopeRed.Lightened(0.25f));
         else if (a >= RoverSpec.GradeDeg - 5) _roverAhead.AddThemeColorOverride("font_color", TerrainView.SlopeAmber);
@@ -303,6 +313,7 @@ public partial class Main
             _roverHeading = RoverHeading();
             return ScriptedInput.Step.Next;
         }
+        if (w.Length == 2 && w[1] == "ground") { GD.Print($"[view] {RoverGroundText()}"); return ScriptedInput.Step.Continue; }   // the Driving section's ground line (#243)
         if (w.Length == 3 && w[1] == "save") { SaveWorld(auto: false, w[2]); return ScriptedInput.Step.Next; }   // the world save, now, to this file (checks of #201)
         if (w.Length == 3 && w[1] == "until")   // wait for the arm to reach a phase (Digging, Lifting, Swinging, Placing, Dumping, Stowed ...)
             return _rover.PhaseName == w[2] ? ScriptedInput.Step.Next : ScriptedInput.Step.Again;

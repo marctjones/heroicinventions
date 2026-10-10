@@ -271,6 +271,15 @@ public partial class Main
                     var (bx, bz) = f.ToWorld(sx, sy);
                     GD.Print($"[map] {m.Id}: world ({m.X:F3} {m.Z:F3}) map ({sx:F1} {sy:F1}) back ({bx:F3} {bz:F3})");
                 }
+                // the ground key (#243): each soil's swatch, the colour the ground's own cell texture holds in the middle of a patch of that soil, and the
+                // map's texel there: the three are the one colour
+                foreach (var e in map.Key)
+                {
+                    int cell = _terrainView?.InteriorCell(e.Soil) ?? -1;
+                    string swatch = SoilLook.Hex(e.Colour.R, e.Colour.G, e.Colour.B);
+                    GD.Print(cell < 0 ? $"[map] key {e.Material}: swatch {swatch} name \"{e.Name}\" note \"{e.Note}\" (no interior cell)"
+                        : $"[map] key {e.Material}: swatch {swatch} ground {_terrainView!.CellColourHex(cell)} map {map.SoilTexelHex(cell)} name \"{e.Name}\" note \"{e.Note}\"");
+                }
                 if (RoverIsPlayer)
                 {
                     var p = _rover!.Chassis.GlobalPosition; var (sx, sy) = f.ToScreen(p.X, p.Z);

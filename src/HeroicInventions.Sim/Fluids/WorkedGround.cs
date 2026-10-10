@@ -177,6 +177,13 @@ public sealed class WorkedGround
         return sum * gravity * Area;
     }
 
+    /// <summary>The soil (an index into <see cref="Terrain.Soils"/>) and whether it lies loose, at a point of the patch: what the patch draws there.</summary>
+    public (int Soil, bool Loose) SoilAt(double x, double z)
+    {
+        int k = Node(x, z);
+        return (Fine.Soil[k], Fine.Loose[k]);
+    }
+
     private int Node(double x, double z)
     {
         int i = (int)Math.Round((x - MinX) / FineCell), j = (int)Math.Round((z - MinZ) / FineCell);
