@@ -415,10 +415,9 @@ public partial class TerrainView : Node3D
                     float damp = texture(wet, at).r;
                     vec3 soil = cell.rgb * (1.0 - 0.4 * damp);
                     vec3 lit = soil;
-                    if (patch > 0.5) {
-                        float tint = (COLOR.g - 0.5) * 2.0;
-                        lit = tint < 0.0 ? soil * (1.0 + 0.55 * tint) : mix(soil, vec3(0.98, 0.95, 0.85), 0.45 * tint);
-                    }
+                    // how far a patch's node has been dug (to -1) or heaped (to 1): applied after the slope tint below, so a pit
+                    // in steep rubble still reads darker than the rubble round it (12.19; before, the red tint covered it)
+                    float worked = patch > 0.5 ? (COLOR.g - 0.5) * 2.0 : 0.0;
                     // COLOR.r: the hillshade, from the fixed map light. Lifted (0.45 to 1 becomes 0.68 to 1.12) so slopes facing
                     // away still stand apart, and partly unlit (emission below) so they read at night too.
                     float shade = mix(0.68, 1.12, clamp((COLOR.r - 0.45) / 0.55, 0.0, 1.0));
@@ -443,6 +442,17 @@ public partial class TerrainView : Node3D
                     float marks = max(0.45 * fine_h, 0.18 * grid);
                     lit = mix(lit, band, grip);
                     lit = mix(lit, pale, marks);
+                    if (patch > 0.5) {
+                        lit = worked < 0.0 ? lit * (1.0 + 0.55 * worked) : mix(lit, vec3(0.98, 0.95, 0.85), 0.45 * worked);
+                        // turned soil (12.19): clods, an 8 cm speckle on dug and heaped ground and none on ground the rover has not
+                        // touched; faded out where it would shimmer (a clod under about two pixels)
+                        float clod = fract(sin(dot(floor(spot * 12.5), vec2(12.9898, 78.233))) * 43758.5453);
+                        float turned = smoothstep(0.04, 0.25, abs(worked)) * (1.0 - smoothstep(0.25, 0.5, fwidth(spot.x * 12.5)));
+                        lit *= 1.0 + turned * (clod - 0.5) * 0.22;
+                        // the cut's lip: a dark line where the ground drops from untouched to dug, crisp at any distance
+                        float lip = 1.0 - smoothstep(0.0, fwidth(worked) * 1.5 + 1e-4, abs(worked + 0.12));
+                        lit = mix(lit, vec3(0.05, 0.04, 0.03), 0.85 * lip);
+                    }
                     ALBEDO = lit * shade * (1.0 - 0.16 * fine - 0.32 * heavy);
                     EMISSION = lit * shade * 0.16 * (1.0 - 0.16 * fine - 0.32 * heavy) + band * grip * 0.12 + pale * marks * 0.12 * (1.0 - dark_soil);
                     ROUGHNESS = mix(cell.a, 0.25, damp);
@@ -578,6 +588,14 @@ public partial class TerrainView : Node3D
             foreach (var b in _ground.Boulders.Where(b => !_boulders.ContainsKey(b)))
             {
                 var body = new MaterialBlock(_materials[b.Material], Vector3.One * (float)b.Size, Shapes.ColorFor(b.Material)) { Name = b.Id };
+                // drawn as the rock it is (art direction 12.19): the material's own finish (granite's crystals) and outline, each
+                // boulder its own shade, so a 2 m rock never reads as a crate's flat brown box; look only, the body is unchanged
+                foreach (var mesh in body.GetChildren().OfType<MeshInstance3D>())
+                {
+                    var skin = Skins.For(_materials[b.Material]);
+                    Skins.Vary(skin, b.Id);
+                    mesh.MaterialOverride = skin;
+                }
                 body.Transform = new Transform3D(new Basis(new Quaternion((float)b.Qx, (float)b.Qy, (float)b.Qz, (float)b.Qw).Normalized()),
                                                  new Vector3((float)b.X, (float)b.Y, (float)b.Z));
                 body.LinearVelocity = new Vector3((float)b.Vx, (float)b.Vy, (float)b.Vz);

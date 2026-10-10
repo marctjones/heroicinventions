@@ -140,6 +140,7 @@ public partial class MachineView : Node3D
         Pass(BuildHeatStores);
         Pass(BuildBimetals);
         Pass(BuildElectrics);
+        Pass(BuildCargoMarkings);   // a cargo crate's battens, colour band and lid sign (12.19)
         Pass(BuildEnvelopes);
         Pass(BuildPanes);
         Pass(BuildRainHouse);
