@@ -339,7 +339,7 @@ public partial class Main
         var clear = SettledClearArea();
         var box = _rover.Bounds();
         string where = ScreenRect(box) is { } s ? $"screen ({s.Position.X:F0} {s.Position.Y:F0} {s.End.X:F0} {s.End.Y:F0}) clear ({clear.Position.X:F0} {clear.Position.Y:F0} {clear.End.X:F0} {clear.End.Y:F0}) inside {(clear.Encloses(s) ? "yes" : "no")}" : "behind the camera";
-        GD.Print($"[view] rover: at ({p.X:F2} {p.Y:F2} {p.Z:F2}) ground {_groundSim!.Ground.HeightAt(p.X, p.Z):F2} speed {_rover.Speed:F2} m/s pitch {_rover.PitchDeg:F1} tilt {_rover.TiltDeg:F1} heading {Mathf.RadToDeg(RoverHeading()):F0} rescues {_rover.Rescues}; {RoverAheadText(out _)}; " +
+        GD.Print($"[view] rover: at ({p.X:F2} {p.Y:F2} {p.Z:F2}) ground {_groundSim!.Ground.HeightAt(p.X, p.Z):F2} floor {_groundSim.Ground.FloorAt(p.X, p.Z):F2} speed {_rover.Speed:F2} m/s pitch {_rover.PitchDeg:F1} tilt {_rover.TiltDeg:F1} heading {Mathf.RadToDeg(RoverHeading()):F0} rescues {_rover.Rescues}; {RoverAheadText(out _)}; " +
                  $"arm: {_rover.ArmStatus}, bucket {_rover.Carried:F2} m3, dug {_rover.Dug:F3} dumped {_rover.Dumped:F3}; {where}");
         return ScriptedInput.Step.Continue;
     }
