@@ -36,7 +36,9 @@ public partial class NavMap : Control
     private ColorRect _quad = null!;
     private Control _marks = null!;
     private ShaderMaterial _material = null!;
-    private ImageTexture? _heights;
+    private ImageTexture? _heights, _soils;
+    private readonly List<KeyEntry> _key = [];
+    private byte[] _soilBytes = [];
     private int _shownVersion = -1;
     private double _sinceUpload;
     private Vector2 _pressAt;
@@ -131,6 +133,7 @@ public partial class NavMap : Control
         if (_heights is null || _heights.GetWidth() != _terrain.Nx || _heights.GetHeight() != _terrain.Nz) _heights = ImageTexture.CreateFromImage(image);
         else _heights.Update(image);
         _material.SetShaderParameter("heights", _heights);
+        UploadSoils();
         _material.SetShaderParameter("origin", new Vector2((float)_terrain.X0, (float)_terrain.Z0));
         _material.SetShaderParameter("cell", (float)_terrain.Cell);
         _material.SetShaderParameter("dims", new Vector2(_terrain.Nx, _terrain.Nz));
@@ -138,6 +141,41 @@ public partial class NavMap : Control
         _material.SetShaderParameter("low", (float)_terrain.Heights.Min());
         _material.SetShaderParameter("high", (float)_terrain.Heights.Max());
     }
+
+    /// <summary>One entry of the ground key: a soil, the colour it is drawn in (TerrainView's, the ground's own), and its words.</summary>
+    public readonly record struct KeyEntry(int Soil, string Material, Color Colour, string Name, string Note);
+
+    /// <summary>The soils the key lists now, those the map has under at least one cell, each in the colour TerrainView draws it in.</summary>
+    public IReadOnlyList<KeyEntry> Key => _key;
+
+    /// <summary>
+    /// The ground's soil colours, one texel per cell, from TerrainView.SoilColour (the colour the ground itself is drawn in, so the map
+    /// shows the soil the player sees and the key's swatches are those texels); and the key's entries, for the soils in the cells.
+    /// </summary>
+    private void UploadSoils()
+    {
+        var terrain = _terrain!;
+        var colours = terrain.Soils.Select(s => TerrainView.SoilColour(s.Material)).ToArray();
+        var bytes = _soilBytes = new byte[terrain.Soil.Length * 3];
+        for (int k = 0; k < terrain.Soil.Length; k++)
+        {
+            var c = colours[terrain.Soil[k]];
+            bytes[k * 3] = SoilLook.Byte(c.R); bytes[k * 3 + 1] = SoilLook.Byte(c.G); bytes[k * 3 + 2] = SoilLook.Byte(c.B);
+        }
+        var image = Image.CreateFromData(terrain.Nx, terrain.Nz, false, Image.Format.Rgb8, bytes);
+        if (_soils is null || _soils.GetWidth() != terrain.Nx || _soils.GetHeight() != terrain.Nz) _soils = ImageTexture.CreateFromImage(image);
+        else _soils.Update(image);
+        _material.SetShaderParameter("soils", _soils);
+        _key.Clear();
+        foreach (int i in SoilLook.SoilsPresent(terrain))
+        {
+            var w = SoilLook.WordsFor(terrain.Soils[i].Material);
+            _key.Add(new KeyEntry(i, terrain.Soils[i].Material, colours[i], w.Name, w.Note));
+        }
+    }
+
+    /// <summary>The colour the map's ground texture holds at a cell, "#RRGGBB" (for the scripted check that the key, the map and the ground agree).</summary>
+    public string SoilTexelHex(int cell) => $"#{_soilBytes[cell * 3]:X2}{_soilBytes[cell * 3 + 1]:X2}{_soilBytes[cell * 3 + 2]:X2}";
 
     private void PushUniforms(Terrain terrain)
     {
@@ -231,7 +269,7 @@ public partial class NavMap : Control
     // Shaped text kept between frames (shaping a string is most of what drawing one costs; the names and legend hardly change)
     private readonly Dictionary<(string, int), TextLine> _lines = [];
 
-    private void Text(Font font, string text, Vector2 at, int size, Color colour, bool centred = false)
+    private TextLine Shaped(Font font, string text, int size)
     {
         if (!_lines.TryGetValue((text, size), out var line))
         {
@@ -239,6 +277,12 @@ public partial class NavMap : Control
             _lines[(text, size)] = line = new TextLine();
             line.AddString(text, font, size);
         }
+        return line;
+    }
+
+    private void Text(Font font, string text, Vector2 at, int size, Color colour, bool centred = false)
+    {
+        var line = Shaped(font, text, size);
         var origin = new Vector2(centred ? at.X - (float)line.GetSize().X / 2 : at.X, at.Y - line.GetLineAscent());   // at is the baseline's left end
         var item = _marks.GetCanvasItem();
         line.DrawOutline(item, origin, 6, Ink);
@@ -306,6 +350,32 @@ public partial class NavMap : Control
         }
 
         DrawFurniture(font, f);
+        DrawKey(font);
+    }
+
+    /// <summary>
+    /// The ground key (#243): a swatch in each soil's own colour (the colours of <see cref="Key"/>, which are TerrainView's, the ground's) with its
+    /// name and a few plain words, for the soils this map has; a panel at the left under the title.
+    /// </summary>
+    private void DrawKey(Font font)
+    {
+        if (_key.Count == 0) return;
+        const int fontSize = 15; const float rowH = 24, swatch = 18, pad = 10;
+        string head = "Ground (flat, in the light; a slope turned away looks darker)";
+        string Row(KeyEntry e) => $"{char.ToUpper(e.Name[0])}{e.Name[1..]}: {e.Note}";
+        float width = Math.Max((float)Shaped(font, head, fontSize).GetSize().X, _key.Max(e => (float)Shaped(font, Row(e), fontSize).GetSize().X + swatch + 10)) + 2 * pad;
+        var box = new Rect2(14, 38, width, pad * 2 + rowH * (_key.Count + 1) - 4);
+        _marks.DrawRect(box, new Color(Ink, 0.72f));
+        _marks.DrawRect(box, new Color(Paper, 0.5f), false, 1);
+        Text(font, head, new Vector2(box.Position.X + pad, box.Position.Y + pad + 15), fontSize, Paper);
+        for (int i = 0; i < _key.Count; i++)
+        {
+            float y = box.Position.Y + pad + rowH * (i + 1);
+            var chip = new Rect2(box.Position.X + pad, y + 1, swatch, swatch);
+            _marks.DrawRect(chip.Grow(1.5f), Paper);
+            _marks.DrawRect(chip, _key[i].Colour);
+            Text(font, Row(_key[i]), new Vector2(chip.End.X + 10, y + 15), fontSize, Paper);
+        }
     }
 
     /// <summary>The title line, the compass, the scale bar and the legend.</summary>
@@ -338,6 +408,7 @@ public partial class NavMap : Control
     private const string ShaderCode = """
         shader_type canvas_item;
         uniform sampler2D heights : filter_nearest, repeat_disable;   // one height per cell (R32F), the ground's own array
+        uniform sampler2D soils : filter_linear, repeat_disable;   // each cell's soil colour (RGB8), the colour the ground itself is drawn in
         uniform vec2 origin;      // the map's corner (X0, Z0)
         uniform float cell;       // m
         uniform vec2 dims;        // cells
@@ -381,8 +452,7 @@ public partial class NavMap : Control
             vec3 n = normalize(vec3(-hx, 1.0, -hz));
             float lit = 0.45 + 0.55 * max(0.0, dot(n, normalize(light)));
             float shade = mix(0.5, 1.2, clamp((lit - 0.45) / 0.55, 0.0, 1.0));
-            float t = clamp((h - low) / max(high - low, 0.001), 0.0, 1.0);
-            vec3 base = mix(vec3(0.20, 0.20, 0.23), vec3(0.88, 0.85, 0.78), t);   // low ground dark, the rim pale; grey, so the slope tint stands out
+            vec3 base = texture(soils, (w - origin) / (dims * cell)).rgb;   // the soil's own colour, as on the ground (the key's swatches are these)
             float slope = degrees(atan(length(vec2(hx, hz))));
             float s_on = smoothstep(grade_deg - 16.5, grade_deg - 13.5, slope);
             float s_amber = smoothstep(grade_deg - 6.5, grade_deg - 3.5, slope);
