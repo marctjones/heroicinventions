@@ -123,12 +123,41 @@ public sealed partial class Rover : Node3D
         Name = "Rover";
     }
 
-    /// <summary>Stands the rover on the ground at (x, z) facing <paramref name="heading"/> degrees (Godot's yaw: 0 faces -z, 270 faces +x).</summary>
-    public void Place(double x, double z, double heading, double groundY, double pitchDeg = 0)
+    /// <summary>
+    /// Stands the rover on the ground at (x, z) facing <paramref name="heading"/> degrees (Godot's yaw: 0 faces -z, 270 faces +x).
+    /// With no <paramref name="pitchDeg"/> and a <see cref="GroundHeight"/>, it is tilted to the ground under its six wheels and
+    /// set down with every wheel a hand's breadth above it: stood level on a slope, the uphill wheels began inside the ground,
+    /// and a wheel whose centre starts under a height map never comes back out (a 23 degree face held one 14 cm under, and the
+    /// rover rolled backward with the motors full ahead). A given <paramref name="pitchDeg"/> stands it level across at that
+    /// pitch, <paramref name="groundY"/> under its centre, as before.
+    /// </summary>
+    public void Place(double x, double z, double heading, double groundY, double? pitchDeg = null)
     {
         _speedCmd = _turnCmd = 0;
-        var basis = new Basis(Vector3.Up, Mathf.DegToRad((float)heading)) * new Basis(Vector3.Right, Mathf.DegToRad((float)pitchDeg));
-        var origin = new Vector3((float)x, (float)groundY, (float)z) + basis.Y * (float)(RoverSpec.WheelRadius + 0.05);   // axle height, a hand's breadth to drop
+        var yaw = new Basis(Vector3.Up, Mathf.DegToRad((float)heading));
+        Basis basis;
+        Vector3 origin;
+        if (pitchDeg is null && GroundHeight is { } height)
+        {
+            var centre = new Vector3((float)x, 0, (float)z);
+            double Under(Basis b, int k) { var p = centre + b * WheelOffset(k); return height(p.X, p.Z); }
+            var h = new double[6];
+            for (int k = 0; k < 6; k++) h[k] = Under(yaw, k);
+            double front = (h[0] + h[1]) / 2, rear = (h[4] + h[5]) / 2;
+            double left = (h[0] + h[2] + h[4]) / 3, right = (h[1] + h[3] + h[5]) / 3;
+            float pitch = (float)Math.Atan2(front - rear, RoverSpec.WheelZ[2] - RoverSpec.WheelZ[0]);   // nose up +
+            float roll = (float)Math.Atan2(right - left, RoverSpec.Track);                              // right side up +
+            basis = yaw * new Basis(Vector3.Right, pitch) * new Basis(Vector3.Back, roll);
+            // the lowest the centre may be with no wheel's sphere in the ground (r / cos tilt above a plane), plus the hand's breadth
+            double clear = RoverSpec.WheelRadius / Math.Max(0.5, basis.Y.Dot(Vector3.Up)) + 0.05, y = double.MinValue;
+            for (int k = 0; k < 6; k++) y = Math.Max(y, Under(basis, k) + clear - (basis * WheelOffset(k)).Y);
+            origin = new Vector3((float)x, (float)y, (float)z);
+        }
+        else
+        {
+            basis = yaw * new Basis(Vector3.Right, Mathf.DegToRad((float)(pitchDeg ?? 0)));
+            origin = new Vector3((float)x, (float)groundY, (float)z) + basis.Y * (float)(RoverSpec.WheelRadius + 0.05);   // axle height, a hand's breadth to drop
+        }
         Chassis.GlobalTransform = new Transform3D(basis, origin);
         Chassis.LinearVelocity = Chassis.AngularVelocity = Vector3.Zero;
         for (int k = 0; k < _wheels.Count; k++)
@@ -218,6 +247,29 @@ public sealed partial class Rover : Node3D
             axle.SetParamX(Generic6DofJoint3D.Param.AngularMotorForceLimit, (float)WheelTorque);
         }
         KeepOnGround();
+        if (DriveDebug && ++_debugTicks % 15 == 0) GD.Print(DriveTrace());
+    }
+
+    /// <summary>HEROIC_DRIVE_DEBUG=1 prints <see cref="DriveTrace"/> every 15 physics ticks.</summary>
+    private static readonly bool DriveDebug = OS.GetEnvironment("HEROIC_DRIVE_DEBUG") == "1";
+    private int _debugTicks;
+
+    /// <summary>
+    /// The drive as it is: command, slewed command, speed, pitch, each wheel's rim speed on its axle (m/s; the motor's target is
+    /// the slewed speed ± the turn's share) and its sphere's gap above the ground under its centre (cm; well below 0 is a wheel
+    /// under the ground). Wheels in order left front, right front, left middle, right middle, left rear, right rear.
+    /// </summary>
+    public string DriveTrace()
+    {
+        var axis = Chassis.GlobalBasis.X;
+        var sb = new System.Text.StringBuilder($"[drive] cmd ({Command.Forward:0.##},{Command.Turn:0.##}) slewed {_speedCmd:F2} m/s {_turnCmd:F2} rad/s; speed {Speed:F2} pitch {PitchDeg:F1} tilt {TiltDeg:F1}; rims m/s:");
+        foreach (var w in _wheels) sb.Append($" {-(w.AngularVelocity - Chassis.AngularVelocity).Dot(axis) * MotorSign * RoverSpec.WheelRadius:F2}");
+        if (GroundHeight is { } height)
+        {
+            sb.Append("; gaps cm:");
+            foreach (var w in _wheels) sb.Append($" {(w.GlobalPosition.Y - height(w.GlobalPosition.X, w.GlobalPosition.Z) - RoverSpec.WheelRadius) * 100:F0}");
+        }
+        return sb.ToString();
     }
 
     /// <summary>+1 or -1: which way the axle motor's target must point for a positive speed to roll the rover forward (found by RoverEval).</summary>
@@ -233,7 +285,7 @@ public sealed partial class Rover : Node3D
         if (at.Y > height(at.X, at.Z) - 3) return;
         // fell through the ground (it was rebuilt under the rover, or a tunnelling step): stand it back on it, facing as it was
         Rescues++;
-        Place(at.X, at.Z, Mathf.RadToDeg(Chassis.GlobalRotation.Y), height(at.X, at.Z));   // level, so a tipped rover is righted too
+        Place(at.X, at.Z, Mathf.RadToDeg(Chassis.GlobalRotation.Y), height(at.X, at.Z));   // upright on the ground under it, so a tipped rover is righted too
     }
 
     // ---- readings ----------------------------------------------------------------------------------------------
