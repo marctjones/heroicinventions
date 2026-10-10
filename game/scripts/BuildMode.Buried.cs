@@ -13,8 +13,9 @@ namespace HeroicInventions;
 public partial class BuriedMarker : Node3D
 {
     public Func<double, double, double>? Ground { get; set; }
-    /// <summary>The rooms (enclosures) on the bench now: one that lies under the ground is outlined too, or a vault dug round the crate could not be seen at all.</summary>
-    public Func<IEnumerable<PartSpec>>? Rooms { get; set; }
+    /// <summary>The boxes of the parts on the bench now that lie under the ground: each is outlined, or a vault dug round the crate (and the
+    /// rock and bin put in it) could not be seen at all under the opaque soil, nor found to be picked (#223).</summary>
+    public Func<IEnumerable<Aabb>>? Buried { get; set; }
     private readonly List<MeshInstance3D> _rooms = [];
     private readonly List<(MachineView View, string Store, string Block, MeshInstance3D Box, MeshInstance3D Shaft, Label3D Tag)> _marks = [];
     private double _rescan = 0;
@@ -52,9 +53,7 @@ public partial class BuriedMarker : Node3D
 
     private void DrawRooms()
     {
-        List<PartSpec> rooms = Ground is { } ground && Rooms is { } list
-            ? list().Where(r => r.Kind == "enclosure" && ground(r.At.X, r.At.Z) > r.At.Y + r.Number("size-y") / 2).ToList()   // its middle is under the ground
-            : [];
+        List<Aabb> rooms = Buried is { } list ? list().ToList() : [];
         while (_rooms.Count < rooms.Count)
         {
             var m = new MeshInstance3D { Mesh = new BoxMesh(), MaterialOverride = Glow(new Color(1f, 0.6f, 0.2f, 0.28f)), TopLevel = true };
@@ -65,9 +64,8 @@ public partial class BuriedMarker : Node3D
         {
             _rooms[i].Visible = i < rooms.Count;
             if (i >= rooms.Count) continue;
-            var r = rooms[i];
-            ((BoxMesh)_rooms[i].Mesh).Size = new Vector3((float)r.Number("size-x"), (float)r.Number("size-y"), (float)r.Number("size-z")) + Vector3.One * 0.12f;
-            _rooms[i].Position = new Vector3((float)r.At.X, (float)(r.At.Y + r.Number("size-y") / 2), (float)r.At.Z);   // #:at is the middle of the floor
+            ((BoxMesh)_rooms[i].Mesh).Size = rooms[i].Size + Vector3.One * 0.12f;
+            _rooms[i].Position = rooms[i].GetCenter();
         }
     }
 

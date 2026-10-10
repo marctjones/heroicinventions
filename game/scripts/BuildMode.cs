@@ -109,7 +109,7 @@ public partial class BuildMode : Node3D
     private string SelectedText(string id) =>
         _session.Document.Parts.TryGetValue(id, out var p)
         && _entryByKey.TryGetValue(EntryKeyOf(p.Props.GetValueOrDefault("catalogue") is SSymbol c ? c.Name : p.Kind), out var e)
-            ? $"Selected: {e.Label.ToLowerInvariant()} ({id}). Drag to move it, Delete removes it"
+            ? $"Selected: {e.Label.ToLowerInvariant()} ({id}). Drag to move it, Ctrl-drag or the Depth slider sinks it, Delete removes it"
             : $"Selected {id}";
     private readonly Dictionary<LinkGestures.Kind, Button> _joinButtons = [];
     private FileDialog _saveDialog = null!, _loadDialog = null!;
@@ -232,7 +232,7 @@ public partial class BuildMode : Node3D
         BuildEntries(catalogue);
 
         BuildUi();
-        if (GroundHeight is { } groundOf) AddChild(new BuriedMarker { Name = "BuriedMarker", Ground = groundOf, Rooms = () => _session.Document.Parts.Values });   // the found bank's crate under the soil, drawn while building (#213)
+        if (GroundHeight is { } groundOf) AddChild(new BuriedMarker { Name = "BuriedMarker", Ground = groundOf, Buried = BuriedBoxes });   // the found bank's crate under the soil, drawn while building (#213)
         if (GroundHeight is null) BuildGrid();   // on a map the ground is the bench (#37); a grid round the map's origin would float far off
         _camera = new Camera3D { Fov = 50 };
         AddChild(_camera);
@@ -929,8 +929,8 @@ public partial class BuildMode : Node3D
     }
 
     private IEnumerable<Node3D> NodesOf(string id) =>
-        _preview?.PartNodes.GetValueOrDefault(id) is { } nodes ? nodes
-        : _fallbackVisuals.GetValueOrDefault(id) ?? (IEnumerable<Node3D>)[];
+        _preview?.PartNodes.GetValueOrDefault(id) is { Count: > 0 } nodes ? nodes
+        : _fallbackVisuals.GetValueOrDefault(id) ?? _preview?.NodesOf(id) ?? (IEnumerable<Node3D>)[];   // rooms, heat stores and bins are drawn after the part loop: found by their part_id tag (#223: they could not be clicked)
 
     /// <summary>A part's world bounding box: every mesh it drew, merged.</summary>
     private Aabb? BoundsOf(IEnumerable<Node3D> nodes)
@@ -986,7 +986,12 @@ public partial class BuildMode : Node3D
 
     private void RebuildInspector()
     {
-        foreach (var c in _inspector.GetChildren()) c.QueueFree();
+        // taken out at once, not only queued: a queued child still counts in the list's height, the scroll keeps its place past the new,
+        // shorter list and the panel reads blank (found typing a room's size from the numbers list, #223); the place is put back after
+        var scroller = _inspector.GetParent<ScrollContainer>();
+        int scrolled = scroller.ScrollVertical;
+        foreach (var c in _inspector.GetChildren()) { _inspector.RemoveChild(c); c.QueueFree(); }
+        Callable.From(() => scroller.ScrollVertical = scrolled).CallDeferred();
         if (_selectedId is not { } id || !_session.Document.Parts.TryGetValue(id, out var part))
         {
             _inspector.AddChild(new Label { Text = "Nothing selected. Click a part.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
@@ -1013,6 +1018,7 @@ public partial class BuildMode : Node3D
             posRow.AddChild(field);
         }
         _inspector.AddChild(posRow);
+        AddDepthRow(id, part);
 
         _inspector.AddChild(new Label { Text = "Made of" });
         var swatches = new HFlowContainer();
@@ -1298,7 +1304,7 @@ public partial class BuildMode : Node3D
             if (_dragging) Drag(id, mm.Position, Input.IsKeyPressed(Key.Ctrl) || Input.IsKeyPressed(Key.Meta), mm.Relative);
             return;
         }
-        string? hover = PickPart(mm.Position, out _);
+        string? hover = PickSelectable(mm.Position);
         if (hover != _hoverId) { _hoverId = hover; RefreshHighlights(); }
     }
 
@@ -1329,6 +1335,8 @@ public partial class BuildMode : Node3D
                 RunCommand("(undo)"); break;
             case Key.Y when cmd:
                 RunCommand("(redo)"); break;
+            case Key.Pagedown or Key.Pageup:
+                NudgeDepth((key.Keycode == Key.Pagedown ? -1 : 1) * (key.ShiftPressed ? 0.5f : 0.1f)); break;
             case Key.F:
                 if (_selectedId is { } s) Frame([s]); else FrameAll();
                 break;
@@ -1344,10 +1352,13 @@ public partial class BuildMode : Node3D
 
     // ----------------------------------------------------------- picking
 
+    /// <summary>What a click selects: a part, or failing that a room whose walls the ray crosses (including one buried under the ground, #223).</summary>
+    private string? PickSelectable(Vector2 screen) => PickPart(screen, out _) ?? PickPart(screen, out _, rooms: true);
+
     private (Vector3 From, Vector3 Dir) Ray(Vector2 screen) => (_camera.ProjectRayOrigin(screen), _camera.ProjectRayNormal(screen));
 
     /// <summary>The nearest part whose drawn shape the mouse ray passes through.</summary>
-    private string? PickPart(Vector2 screen, out float distance, string? exclude = null)
+    private string? PickPart(Vector2 screen, out float distance, string? exclude = null, bool rooms = false)
     {
         var (from, dir) = Ray(screen);
         string? best = null;
@@ -1355,6 +1366,7 @@ public partial class BuildMode : Node3D
         foreach (var id in _session.Document.Parts.Keys)
         {
             if (id == exclude) continue;
+            if ((_session.Document.Parts[id].Kind == "enclosure") != rooms) continue;   // a room is picked only where nothing inside or in front of it is: its box takes the whole click
             if (BoundsOf(NodesOf(id)) is not { } box) continue;
             if (RayHitsBox(from, dir, box, out float t) && t < distance) { distance = t; best = id; }
         }
@@ -1445,7 +1457,7 @@ public partial class BuildMode : Node3D
         }
         if (_link is { } link)
         {
-            if (PickPart(screen, out _) is { } hit) PickForLink(link, hit);
+            if (PickSelectable(screen) is { } hit) PickForLink(link, hit);
             return;
         }
         if (PickPort(screen) is { } port)
@@ -1465,7 +1477,7 @@ public partial class BuildMode : Node3D
             return;
         }
         if (_connectFrom is not null) { CancelConnect(); _status.Text = ""; }
-        string? id = PickPart(screen, out _);
+        string? id = PickSelectable(screen);
         Select(id);
         _pressedId = id;
         _pressPos = screen;
@@ -1495,6 +1507,89 @@ public partial class BuildMode : Node3D
 
     // --------------------------------------------------------------- move
 
+    /// <summary>
+    /// The Depth slider (#223): where a mouse click lands on the surface, this sinks the selected part below it (or lifts it) by the mouse,
+    /// with the depth written beside it. Dragging previews the move; letting go makes it one (move) command. Only on a map; the typed
+    /// position above stays.
+    /// </summary>
+    private void AddDepthRow(string id, PartSpec part)
+    {
+        if (GroundHeight is not { } ground) return;
+        var label = new Label { Text = DepthText(part.At) ?? "", AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        var slider = new HSlider
+        {
+            MinValue = -2, MaxValue = 8, Step = 0.05, Name = "DepthSlider", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(180, 20),
+            TooltipText = "Depth below the ground: slide right to sink the part, left to lift it. Ctrl-drag on the part, or Page Down and Page Up, do the same.",
+        };
+        slider.AddThemeStyleboxOverride("slider", new StyleBoxFlat { BgColor = new Color(0.55f, 0.65f, 0.7f), ContentMarginTop = 3, ContentMarginBottom = 3 });   // a visible track: the theme draws none
+        slider.AddThemeStyleboxOverride("grabber_area", new StyleBoxFlat { BgColor = new Color(1f, 0.62f, 0.1f), ContentMarginTop = 3, ContentMarginBottom = 3 });
+        slider.SetValueNoSignal(Math.Clamp(ground(part.At.X, part.At.Z) - part.At.Y, slider.MinValue, slider.MaxValue));
+        bool sliding = false;
+        void Apply(double depth)
+        {
+            var at = _session.Document.Parts[id].At;
+            MoveLive(id, new Vector3((float)at.X, (float)(ground(at.X, at.Z) - depth), (float)at.Z));
+            label.Text = DepthText(_session.Document.Parts[id].At) ?? "";
+        }
+        void Commit()
+        {
+            var at = _session.Document.Parts[id].At;
+            RunCommand($"(move {id} ({F(at.X)} {F(at.Y)} {F(at.Z)}))");
+            ShowDepth(id);
+        }
+        slider.DragStarted += () => sliding = true;
+        slider.ValueChanged += v => { Apply(v); if (!sliding) Commit(); };
+        slider.DragEnded += _ => { sliding = false; Commit(); };
+        _inspector.AddChild(new Label { Text = "Depth (m below the ground)" });
+        _inspector.AddChild(slider);
+        _inspector.AddChild(label);
+    }
+
+    /// <summary>Page Down sinks the selected part 0.1 m (0.5 with Shift), Page Up lifts it: the keyboard's way to the depth.</summary>
+    private void NudgeDepth(float metres)
+    {
+        if (_selectedId is not { } id || !_session.Document.Parts.TryGetValue(id, out var part)) return;
+        RunCommand($"(move {id} ({F(part.At.X)} {F(part.At.Y + metres)} {F(part.At.Z)}))");
+        ShowDepth(id);
+    }
+
+    /// <summary>Says how deep the part is, on the status line and in the log (the inspector's slider shows it beside itself).</summary>
+    private void ShowDepth(string id)
+    {
+        if (!_session.Document.Parts.TryGetValue(id, out var part) || DepthText(part.At) is not { } text) return;
+        _status.Text = $"{id}: {text}";
+        GD.Print($"[BuildMode] depth: {id} {text}");
+    }
+
+    /// <summary>The drawn boxes of the parts whose own point (#:at) lies under the ground, for the underground outline.</summary>
+    private IEnumerable<Aabb> BuriedBoxes()
+    {
+        if (GroundHeight is not { } ground) yield break;
+        foreach (var p in _session.Document.Parts.Values)
+        {
+            if (p.At.Y < ground(p.At.X, p.At.Z) - 0.05 && BoundsOf(NodesOf(p.Id)) is { } box) yield return box;
+        }
+    }
+
+    /// <summary>"depth 1.5 m below the ground" for a part at <paramref name="at"/>, from the ground height there; null when there is no map under build mode.</summary>
+    private string? DepthText(Vec3 at)
+    {
+        if (GroundHeight is not { } ground) return null;
+        double d = ground(at.X, at.Z) - at.Y;
+        return d > 0.005 ? $"depth {d:0.00} m below the ground" : d < -0.005 ? $"{-d:0.00} m above the ground" : "on the ground";
+    }
+
+    /// <summary>Moves the part's drawn nodes and its document position to <paramref name="target"/> without a command (a preview: the drag's, the depth slider's).</summary>
+    private void MoveLive(string id, Vector3 target)
+    {
+        var part = _session.Document.Parts[id];
+        var delta = target - new Vector3((float)part.At.X, (float)part.At.Y, (float)part.At.Z);
+        if (delta == Vector3.Zero) return;
+        _session.Document.Move(id, new Vec3(target.X, target.Y, target.Z));
+        foreach (var n in NodesOf(id)) n.GlobalPosition += delta;
+        if (DepthText(new Vec3(target.X, target.Y, target.Z)) is { } depth) _status.Text = $"{id}: {depth}";
+    }
+
     private void BeginDrag(string id, Vector2 screen)
     {
         _dragging = true;
@@ -1520,7 +1615,7 @@ public partial class BuildMode : Node3D
         if (vertical)
         {
             float dy = -relative.Y * _orbit.Distance * OrbitCamera.PanPerPixel;
-            target = current with { Y = Mathf.Max(0, current.Y + dy) };
+            target = current with { Y = GroundHeight is null ? Mathf.Max(0, current.Y + dy) : current.Y + dy };   // on a map the ground is not at 0, and a part may go under it (#223)
         }
         else
         {
@@ -1528,10 +1623,8 @@ public partial class BuildMode : Node3D
             target = new Vector3(p.X - _dragGrab.X, p.Y - _dragBottom, p.Z - _dragGrab.Z);
         }
         target = Snap(target);
-        var delta = target - current;
-        if (delta == Vector3.Zero) return;
-        _session.Document.Move(id, new Vec3(target.X, target.Y, target.Z));
-        foreach (var n in NodesOf(id)) n.GlobalPosition += delta;
+        if (target == current) return;
+        MoveLive(id, target);
         ShowSnapTargets(id);
     }
 
