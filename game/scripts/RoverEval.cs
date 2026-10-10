@@ -6,7 +6,7 @@ using HeroicInventions.Sim.Materials;
 namespace HeroicInventions;
 
 /// <summary>
-/// Issue #94: the rover's body, measured under the game's own physics (Jolt at 120 Hz, gravity 9.81). Run headless:
+/// Issue #94: the rover's body, measured under the game's own physics (Jolt at 120 Hz, under Earth's gravity 9.81, set by this eval). Run headless:
 ///   godot --headless --fixed-fps 120 --path game res://scenes/RoverEval.tscn
 /// It prints one "EVAL name value" line per measurement; heroic/tests/rover-eval-test.rkt checks them against the numbers
 /// worked out beforehand (RoverSpec): the top speed, the slope at which the tyres' grip stalls it (tan 30° = 0.577) on a box,
@@ -35,7 +35,7 @@ public partial class RoverEval : Node3D
 
     public override void _Ready()
     {
-        PhysicsServer3D.AreaSetParam(GetViewport().FindWorld3D().Space, PhysicsServer3D.AreaParameter.Gravity, (float)RoverSpec.Gravity);
+        PhysicsServer3D.AreaSetParam(GetViewport().FindWorld3D().Space, PhysicsServer3D.AreaParameter.Gravity, (float)RoverSpec.EarthGravity);
         GD.Print($"EVAL engine {ProjectSettings.GetSetting("physics/3d/physics_engine")}");
 
         _runs.Add(new Run("flat", 120 * 10, (r, t) => r.Command = (1, 0), (e, r) => e.Slope(r, 0)));

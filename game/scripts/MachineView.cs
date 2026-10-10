@@ -1591,24 +1591,28 @@ public partial class MachineView : Node3D
     }
 
     private double _shownGravity = Physics.Gravity;
+    private double _spaceGravityShown = Physics.Gravity;
     private bool _gravityApplied;
+    /// <summary>What this machine's bodies' gravity is scaled by: its planet's g over the g Jolt's space runs under (1 when they agree).</summary>
+    private float _gravityScale = 1;
 
     /// <summary>
-    /// The world falls at Earth's 9.81 m/s² (Main sets it once); this
-    /// machine's bodies fall at its planet's gravity (issue #38), each scaled
-    /// by g / 9.81, so a Mars machine and an Earth one can stand in one world
-    /// and each swing at its own rate. Set again whenever the planet's
-    /// gravity changes (scene.gravity, live).
+    /// This machine's bodies fall at its planet's gravity (issue #38). Jolt's space runs under the environment's g (the world's
+    /// planet's, or this machine's in a machine run: Main.Gravity.cs), so each body is scaled by g / the space's g: 1 in a world of
+    /// one planet, and a Mars machine and an Earth one can still stand in one world and each swing at its own rate. Set again
+    /// whenever the planet's gravity (scene.gravity, live) or the space's changes.
     /// </summary>
     private void ApplyPlanetGravity()
     {
         double g = Runtime.Outside.Gravity;
-        if (_gravityApplied && g == _shownGravity) return;
+        double space = IsInsideTree() ? (double)PhysicsServer3D.AreaGetParam(GetWorld3D().Space, PhysicsServer3D.AreaParameter.Gravity) : Physics.Gravity;
+        if (_gravityApplied && g == _shownGravity && space == _spaceGravityShown) return;
         _gravityApplied = true;
         _shownGravity = g;
-        float scale = (float)(g / Physics.Gravity);
+        _spaceGravityShown = space;
+        _gravityScale = space > 0 ? (float)(g / space) : 1;
         foreach (var b in FindChildren("*", nameof(RigidBody3D), true, false).OfType<RigidBody3D>())
-            b.GravityScale = scale;
+            b.GravityScale = _gravityScale;
     }
 
     /// <summary>Rotation and height of every dynamic body — a quick way to confirm Jolt is actually moving them (see HEROIC_DEBUG_PHYSICS).</summary>

@@ -11,7 +11,7 @@ namespace HeroicInventions;
 /// It prints "EVAL name value" lines; heroic/tests/dirt-energy-test.rkt checks them. The rover may move soil anywhere (owner
 /// decision 2026-10-08), but dirt must not hand energy to a body through a quirk of the model. Each run puts granite blocks (0.5 m,
 /// 337.5 kg, restitution 0.6: Jolt takes the larger of two surfaces', so a kick bounces) at rest on the ground and changes the ground
-/// round them, then reads each block's energy, ½ m v² + ½ I ω² + m g y (g = 9.81 m/s², the game's physics, RoverSpec.Gravity),
+/// round them, then reads each block's energy, ½ m v² + ½ I ω² + m g y (g = 9.81 m/s², Earth's, RoverSpec.EarthGravity, which this eval sets Jolt to),
 /// against what it had at rest:
 ///  - rest: nothing changes for 100 quarter-seconds: the floor any reading has (Jolt's resting jitter);
 ///  - reshape: 100 digs and dumps 4 to 6 m from a block on the level and one on a 16.7 degree slope, the patch's body replaced each
@@ -56,7 +56,7 @@ public partial class DirtEnergyEval : Node3D
 
     public override void _Ready()
     {
-        PhysicsServer3D.AreaSetParam(GetViewport().FindWorld3D().Space, PhysicsServer3D.AreaParameter.Gravity, (float)RoverSpec.Gravity);
+        PhysicsServer3D.AreaSetParam(GetViewport().FindWorld3D().Space, PhysicsServer3D.AreaParameter.Gravity, (float)RoverSpec.EarthGravity);
         _materials = MaterialLibrary.LoadDefault();
         string only = OS.GetEnvironment("HEROIC_ONLY");
         foreach (var (name, script) in new (string, Func<IEnumerable<int>>)[]
@@ -112,7 +112,7 @@ public partial class DirtEnergyEval : Node3D
         var spin = (Vector3)PhysicsServer3D.BodyGetState(rid, PhysicsServer3D.BodyState.AngularVelocity);
         double m = w.Body.Mass, inertia = m * w.Size * w.Size / 6;   // a cube's, about any axis through its centre
         double kinetic = 0.5 * m * v.LengthSquared() + 0.5 * inertia * spin.LengthSquared();
-        return (kinetic, kinetic + m * RoverSpec.Gravity * t.Origin.Y, t.Origin.Y);
+        return (kinetic, kinetic + m * RoverSpec.EarthGravity * t.Origin.Y, t.Origin.Y);
     }
 
     private static void Watch(Watched w)
@@ -192,7 +192,7 @@ public partial class DirtEnergyEval : Node3D
         {
             // dig 4 m and more from either block and tip it beside the hole: the slide stays well clear of both
             double x = -2 - (n % 3) * 0.6, z = -3 + (n % 5) * 0.4;
-            if (w.Scoop(x, z, 0.2) is { } s) { w.Settle(RoverSpec.Gravity); w.Pour(x - 1.5, z, s.Volume, s.Soil); w.Settle(RoverSpec.Gravity); }
+            if (w.Scoop(x, z, 0.2) is { } s) { w.Settle(RoverSpec.EarthGravity); w.Pour(x - 1.5, z, s.Volume, s.Soil); w.Settle(RoverSpec.EarthGravity); }
             yield return Secs(0.25);
             if (n == 9) Report("after-10");
         }
@@ -227,7 +227,7 @@ public partial class DirtEnergyEval : Node3D
         {
             var s = w.Scoop(-4, n * 0.8, 0.2)!.Value;
             w.Pour(0, 0, s.Volume, s.Soil);
-            w.Settle(RoverSpec.Gravity);
+            w.Settle(RoverSpec.EarthGravity);
             yield return Secs(2);
         }
         Say("ground-rise-m", w.HeightAt(0, 0));
@@ -245,7 +245,7 @@ public partial class DirtEnergyEval : Node3D
         {
             var s = w.Scoop(-4, n * 0.8, 0.2)!.Value;
             w.Pour(0, 0, s.Volume, s.Soil);
-            w.Settle(RoverSpec.Gravity);
+            w.Settle(RoverSpec.EarthGravity);
             yield return Secs(2);
         }
         Say("ground-rise-under-face-m", w.HeightAt(0.55, 0));
@@ -264,7 +264,7 @@ public partial class DirtEnergyEval : Node3D
         AtRest();
         // a bucket taken from the rim on the block's side: the wall slumps into the pit, its toe running across the floor
         var s = w.Scoop(2.7, 0, 0.2);
-        w.Settle(RoverSpec.Gravity);
+        w.Settle(RoverSpec.EarthGravity);
         Say("floor-rise-under-block-m", w.HeightAt(1.2, 0) + 1);
         yield return Secs(3);
         Report("after");
@@ -290,7 +290,7 @@ public partial class DirtEnergyEval : Node3D
 
     private void AddRover()
     {
-        _rover = new Rover { Ground = _terrain, GroundHeight = _terrain.HeightAt, GroundGravity = RoverSpec.Gravity };
+        _rover = new Rover { Ground = _terrain, GroundHeight = _terrain.HeightAt, GroundGravity = RoverSpec.EarthGravity };
         _world!.AddChild(_rover);
         _rover.Place(-12, -12, 0, _terrain.HeightAt(-12, -12));   // out of the way while the blocks come to rest
     }

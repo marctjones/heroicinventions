@@ -143,6 +143,7 @@ public partial class MachineView
                 // whose mask misses the other's layer treats it as immovable,
                 // and a 134 kg ram bounced off a 3 kg splinter
                 CollisionMask = 1 | PendulumLayer | SprungArmLayer | AxleLayer,
+                GravityScale = _gravityScale,   // falls at the machine's planet's g, as its other bodies do
             };
             AddChild(piece);
             _freezable.Add(piece);
@@ -153,7 +154,7 @@ public partial class MachineView
             _touching[piece] = [];
             // the post held this height as a fixture; loose, it counts, and the
             // machine's starting energy with it, or "energy retained" would jump
-            _initialMechanicalEnergy += piece.Mass * Physics.Gravity * centre.Y;
+            _initialMechanicalEnergy += piece.Mass * Runtime.Outside.Gravity * centre.Y;   // at the machine's planet's g, as the energy audit counts it
         }
     }
 
