@@ -199,6 +199,7 @@ public partial class Main
             _directorCommand = (0, e > 0 ? -1 : 1);
             stalled = Math.Abs(rover.YawRate) < 0.05 && elapsed > 1 ? stalled + delta : 0;
             if (stalled > StallSeconds) throw new InvalidOperationException($"turn-to {bearingDeg}: the rover will not turn ({e:0} deg off)");
+            if (elapsed > 60) throw new InvalidOperationException($"turn-to {bearingDeg}: not round after 60 s ({e:0} deg off)");   // e.g. nosing a trench wall
             return false;
         };
     }
