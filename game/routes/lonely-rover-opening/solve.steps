@@ -4,7 +4,7 @@
 # Honest about the game today: building is free (parts appear from nothing: CONJURED), the generator and the bank are FOUND in the cargo,
 # and the rover digs with its backhoe where it can reach (the rubble round the bank is as steep as it can grip: 25-30 deg). Predicted from the headless runs of 2026-10-10: the bank's cells pass 0 C at about
 # 29,000 s (about 20:00 on sol 1); the first night's wind is too weak to fill 500 Wh by the 03:00 pass on sol 2; the bank is full on sol 2's
-# morning; the call goes out at the 03:00 pass on sol 2 or sol 3, whichever the bank is full for (one headless run at 30 fps: sol 2, 03:07).
+# morning; the call goes out at the 03:00 pass on sol 2 or sol 3, whichever the bank is full for (headless at 30 fps: sol 2, 03:07 before Rover.Place stood the rover on the slope under it; sol 3, 03:00 after).
 clock on
 wait 60
 caption Step 1/14: The crater rim came down on the cargo. The battery bank lies under {battery-bank:crate.cover:0.00} m of rubble at (254.5, 137.9). The rover is at (190, 140).
@@ -15,8 +15,8 @@ wait 120
 caption Step 2/14: Drive east up the slide toward the bank, between the hand-tools crate and the motors crate.
 follow
 drive-to 240 137.5 0.8
+# no turn-to 270 here: it arrives heading about 263 (-97), and turning in place on this 26 deg rubble slides it 0.3-0.5 m down, out of reach of the rubble over the bank (bedrock under the teeth by the 2nd or 3rd bucket)
 drive-to 250.3 137.9 0.4
-turn-to 270
 look 200 22 9 252.5 -44 137.9
 
 caption Step 3/14: The rubble round the bank lies at 25 to 30°, as steep as the rover can grip: it can climb no higher. It digs what its backhoe reaches, 0.20 m³ a bucket.
