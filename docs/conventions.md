@@ -35,6 +35,7 @@ racket racket/build.rkt                     # racket/machines/*.rkt -> game/mach
 cd game && dotnet build HeroicInventions.csproj -nologo -v q
 /Applications/Godot_mono.app/Contents/MacOS/Godot --path game           # not on PATH
 tools/gui-check.sh --hidden HEROIC_AUTOSELECT=<m> HEROIC_AUTORUN=1 -- "wait 5; shot /path/a.png; quit"   # real window, never takes focus
+tools/hand-vault-gui.sh /tmp/out            # a vault built round the buried bank by mouse alone (#222, #223); shots with camera prints
 ```
 
 Environment switches (all `HEROIC_*`):
@@ -91,6 +92,8 @@ A route is a data file, `game/routes/*.route` (and `game/routes/<world>/*.route`
 - **Godot and screenshots:**
   - Never test the GUI with computer-use; `tools/gui-check.sh --hidden` doesn't take focus. Hidden shots can drift if real input reaches the window, so confirm the camera with a `camera` print at each shot.
   - Headless Godot has no real window: projected screen positions are nonsense there.
+  - **A GUI script's clicks are window pixels found from its own shots, and a panel's width moves them.** The build-mode inspector grows with its content (the numbers list makes it wider than the window), so a slider's pixels-per-metre differs between parts: drag, read the label, finish with Page Down/Up (`tools/hand-vault-gui.sh`). `wheel` over a scroll panel at its end also zooms the camera.
+  - A part drawn by a later build pass (an enclosure, heat store, heat bin) is not in `MachineView.PartNodes`; use `MachineView.NodesOf` (its `part_id` tags), as `BuildMode.NodesOf` now does.
   - **`res://` is not a folder in an exported game**: it lives inside the pack. Read with Godot's `FileAccess`/`DirAccess` (`GetFileAsBytes`, `AppendFromBuffer`, `LoadPngFromBuffer`), never `GlobalizePath` plus .NET or `*FromFile` reads (#99).
   - `QueueFree()` frees at the frame's end, so the node keeps its name until then. Creating a node with the same name in the same frame gets an auto-name (`@Node3D@390`). Detach first (`GetParent().RemoveChild(n)`), as ClearWorld does, or anything matched by name (saves, scripts) silently misses.
   - The viewport is 1600×1000 whatever the window size. Screen rules (the clear area between panels) are in viewport units.
