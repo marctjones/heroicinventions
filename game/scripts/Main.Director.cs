@@ -225,7 +225,8 @@ public partial class Main
                     done++;
                     string status = rover.ArmStatus;
                     string cover = untilPath is null ? "" : $"; {untilPath} = {DirectorReadPath(untilPath):0.000}";
-                    GD.Print($"[director] dig {done}/{max}: {status}; dug {rover.Dug:0.00} m3, dumped {rover.Dumped:0.00} m3{cover}");
+                    var teeth = rover.LastDigAt;
+                    GD.Print($"[director] dig {done}/{max}: {status}; dug {rover.Dug:0.00} m3, dumped {rover.Dumped:0.00} m3; teeth at ({teeth.X:0.00} {teeth.Z:0.00}), ground {_groundSim!.Ground.HeightAt(teeth.X, teeth.Z):0.00}, floor {_groundSim.Ground.FloorAt(teeth.X, teeth.Z):0.00}{cover}");
                     if (status.StartsWith("Dug nothing") || status.StartsWith("Kept") || status.Contains("too hard"))
                         throw new InvalidOperationException($"dig: {status}");
                     if (untilPath is not null && DirectorReadPath(untilPath) < untilBelow) return true;

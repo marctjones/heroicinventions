@@ -177,6 +177,9 @@ public sealed class WorkedGround
         return sum * gravity * Area;
     }
 
+    /// <summary>The lowest the backhoe may cut at a point of the patch (its nearest node's <see cref="Floor"/>): the rock's top, or minus infinity over soil all the way down.</summary>
+    public double FloorAt(double x, double z) => Floor[Node(x, z)];
+
     /// <summary>The soil (an index into <see cref="Terrain.Soils"/>) and whether it lies loose, at a point of the patch: what the patch draws there.</summary>
     public (int Soil, bool Loose) SoilAt(double x, double z)
     {

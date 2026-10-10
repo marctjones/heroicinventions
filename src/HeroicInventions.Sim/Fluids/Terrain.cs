@@ -150,6 +150,22 @@ public sealed partial class Terrain
         return CellAt(x, z) is { } k ? (Soil[k], Loose[k]) : null;
     }
 
+    /// <summary>
+    /// The lowest the backhoe can cut the ground at a world point: where the rover has worked it, the patch's floor there
+    /// (<see cref="WorkedGround.FloorAt"/>); else what a patch made now would give it, by the patch's own rule: under rubble a
+    /// slide left on rock (<see cref="Covering"/>) the rock's top as it was, one level for the whole 5 m cell; rock itself at its
+    /// surface (it cannot be cut at all); soil all the way down, minus infinity. Null off the map.
+    /// </summary>
+    public double? FloorAt(double x, double z)
+    {
+        for (int n = 0; n < Worked.Count; n++)
+            if (Worked[n].Inside(x, z)) return Worked[n].FloorAt(x, z);
+        if (CellAt(x, z) is not { } cell) return null;
+        double surface = CoarseSurfaceAt(x, z);
+        if (Covering(cell) is { } covered && surface > covered.RockTop) return covered.RockTop;
+        return IsRock(cell) ? surface : double.NegativeInfinity;
+    }
+
     /// <summary>The map's own cells, interpolated between their centres, whatever has been worked over them.</summary>
     public double CoarseHeightAt(double x, double z)
     {
