@@ -39,6 +39,7 @@ public sealed class WorldZones
 
     /// <summary>What is held now.</summary>
     public IReadOnlyList<Hold> Holds => _held.Select(h => h.Hold).ToList();
+    private readonly HashSet<Hold> _told = [];   // the holds the log last said were joined
 
     /// <summary>
     /// The body a heat store rides, or null: a battery bank #:in the store and #:on a body (#209: the found bank's cells
@@ -81,17 +82,22 @@ public sealed class WorldZones
                 if (best is not null) want.Add(best);
             }
 
+        // the log is by name (the Hold record), not by object: a machine rebuilt in build mode has new rooms and stores but holds
+        // the same things, and one whose room machine is gone for a moment (being rebuilt) has not moved; only a real change is told
         var log = new List<string>();
+        var present = machines.Select(m => m.Label).ToHashSet();
         foreach (var h in _held)
             if (!want.Any(w => ReferenceEquals(w.Room, h.Room) && ReferenceEquals(w.Store, h.Store)))
             {
                 h.Room.Release(h.Store);
                 if (ReferenceEquals(h.Store.Zone, h.Room)) h.Store.Zone = h.Home.ZoneOf(h.Hold.Store);   // back in its own machine's air
+                if (want.Any(w => w.Hold == h.Hold) || !present.Contains(h.Hold.RoomLabel)) continue;
+                _told.Remove(h.Hold);
                 log.Add($"{h.Hold.StoreLabel}.{h.Hold.Store} left {h.Hold.RoomLabel}.{h.Hold.Room} at {h.Store.Temperature:0.00} C");
             }
         foreach (var w in want)
         {
-            if (!_held.Any(h => ReferenceEquals(h.Room, w.Room) && ReferenceEquals(h.Store, w.Store)))
+            if (_told.Add(w.Hold))
                 log.Add($"{w.Hold.StoreLabel}.{w.Hold.Store} joined {w.Hold.RoomLabel}.{w.Hold.Room} at {w.Store.Temperature:0.00} C (the room at {w.Room.Temperature:0.00} C)");
             w.Room.Hold(w.Store);       // no-op when it is already held
             w.Store.Zone = w.Room;      // re-asserted every tick: the store's own machine no longer steps it in the open
@@ -103,6 +109,7 @@ public sealed class WorldZones
     /// <summary>Lets every held store go back to its own machine's air (the world is being cleared).</summary>
     public void Release()
     {
+        _told.Clear();
         foreach (var h in _held)
         {
             h.Room.Release(h.Store);
