@@ -373,6 +373,15 @@ public partial class BuildMode : Node3D
                 if (_cardPresets.GetChildren().OfType<Button>().FirstOrDefault(b => b.GetMeta("preset").AsString() == label) is not { } button) return ScriptedInput.Step.Next;
                 if (button.Size.X < 1) return ScriptedInput.Step.Again;   // not laid out yet: the card was filled this frame
                 var at = GetViewport().GetScreenTransform() * button.GetGlobalRect().GetCenter();
+                if (!_presetHovered)
+                {
+                    // the mouse onto the button first, a frame before the click, as a hand moves (straight from the list's click, the first
+                    // press went to the list the mouse was still over)
+                    _presetHovered = true;
+                    _inputScript!.Mouse(at);
+                    return ScriptedInput.Step.Again;
+                }
+                _presetHovered = false;
                 _inputScript!.Mouse(at);
                 _inputScript.Mouse(at, MouseButton.Left, true);
                 _inputScript.Mouse(at, MouseButton.Left, false);
@@ -429,22 +438,36 @@ public partial class BuildMode : Node3D
             case "hover-at":   // "hover-at X Y Z [alt]": the mouse moved to wherever that world point is drawn, no click (a placing ghost follows it)
                 _inputScript!.Mouse(GetViewport().GetScreenTransform() * _camera.UnprojectPosition(ScriptPoint(w, 1)), alt: w.Length > 4 && w[4] == "alt");
                 return ScriptedInput.Step.Next;
+            case "palette-click":   // "palette-click NAME": a real click on the entry in the list (a click on "Show all" first when the starter list hasn't it)
+            {
+                string key = EntryKeyOf(w[1]);
+                int i = ListIndexOf(key);
+                if (i < 0 && !_showAll && !_paletteClickShowAll)
+                {
+                    _paletteClickShowAll = true;   // once: a real click on the switch, then the entry next frame
+                    var sw = GetViewport().GetScreenTransform() * _showAllToggle.GetGlobalRect().GetCenter();
+                    _inputScript!.Mouse(sw);
+                    _inputScript.Mouse(sw, MouseButton.Left, true);
+                    _inputScript.Mouse(sw, MouseButton.Left, false);
+                    return ScriptedInput.Step.Again;
+                }
+                _paletteClickShowAll = false;
+                if (i < 0) { GD.Print($"[BuildMode] no palette entry {w[1]} in the list"); return ScriptedInput.Step.Next; }
+                if (key != w[1]) _variantChosen[key] = w[1];
+                if (PaletteItemPoint(i) is not { } at) { GD.Print($"[BuildMode] palette entry {w[1]} is scrolled out of sight"); return ScriptedInput.Step.Next; }
+                _inputScript!.Mouse(at);
+                _inputScript.Mouse(at, MouseButton.Left, true);
+                _inputScript.Mouse(at, MouseButton.Left, false);
+                GD.Print($"[BuildMode] palette-click {w[1]}: a click on the list's entry at ({F(at.X)}, {F(at.Y)})");
+                return ScriptedInput.Step.Next;
+            }
             case "palette-drag":   // "palette-drag ID X Y": press on the entry in the list, drag it out over the scene, let go at X Y
             {
                 string key = EntryKeyOf(w[1]);
                 if (key != w[1]) _variantChosen[key] = w[1];
                 int i = ListIndexOf(key);
                 if (i < 0) { GD.Print($"[BuildMode] no palette entry {w[1]} in the list (show-all on?)"); return ScriptedInput.Step.Next; }
-                // the item's rect leaves out the list's own margin and scroll; step down its column until the list itself says the point is on it
-                var rect = _paletteList.GetItemRect(i);
-                // scroll it into the list's view first, as a person would before dragging it
-                _paletteList.GetVScrollBar().Value = Math.Max(0, rect.Position.Y - 8);
-                var centre = rect.GetCenter() - new Vector2(0, (float)_paletteList.GetVScrollBar().Value);
-                var local = centre;
-                for (int dy = -40; dy <= 40 && _paletteList.GetItemAtPosition(local, exact: true) != i; dy += 2)
-                    local = centre + new Vector2(0, dy);
-                if (_paletteList.GetItemAtPosition(local, exact: true) != i) { GD.Print($"[BuildMode] palette entry {w[1]} is scrolled out of sight"); return ScriptedInput.Step.Next; }
-                var from = GetViewport().GetScreenTransform() * (_paletteList.GetGlobalTransform() * local);   // injected events are in window pixels
+                if (PaletteItemPoint(i) is not { } from) { GD.Print($"[BuildMode] palette entry {w[1]} is scrolled out of sight"); return ScriptedInput.Step.Next; }
                 var to = new Vector2(float.Parse(w[2], System.Globalization.CultureInfo.InvariantCulture), float.Parse(w[3], System.Globalization.CultureInfo.InvariantCulture));
                 _inputScript!.Mouse(from);
                 _inputScript.Mouse(from, MouseButton.Left, true);

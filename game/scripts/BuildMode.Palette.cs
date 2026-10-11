@@ -518,4 +518,23 @@ public partial class BuildMode
         more.ItemSelected += index => { if (index > 0) pick(all[(int)index - 1].Id); };
         row.AddChild(more);
     }
+
+    private bool _paletteClickShowAll, _presetHovered;
+
+    /// <summary>
+    /// Where palette entry <paramref name="i"/> is drawn, in window pixels (injected events are), the list scrolled to show it first as a
+    /// person would; null when it can't be shown. The item's rect leaves out the list's own margin and scroll: the point steps down its
+    /// column until the list itself says it is on the item.
+    /// </summary>
+    private Vector2? PaletteItemPoint(int i)
+    {
+        var rect = _paletteList.GetItemRect(i);
+        _paletteList.GetVScrollBar().Value = Math.Max(0, rect.Position.Y - 8);
+        var centre = rect.GetCenter() - new Vector2(0, (float)_paletteList.GetVScrollBar().Value);
+        var local = centre;
+        for (int dy = -40; dy <= 40 && _paletteList.GetItemAtPosition(local, exact: true) != i; dy += 2)
+            local = centre + new Vector2(0, dy);
+        if (_paletteList.GetItemAtPosition(local, exact: true) != i) return null;
+        return GetViewport().GetScreenTransform() * (_paletteList.GetGlobalTransform() * local);
+    }
 }
