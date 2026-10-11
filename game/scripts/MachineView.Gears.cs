@@ -222,10 +222,7 @@ public partial class MachineView
         joint.SetParam(HingeJoint3D.Param.LimitLower, 0);
         if (_bodiesById.TryGetValue(lead, out var body))
             foreach (var b in _arborMates.GetValueOrDefault(body, []).Prepend(body))
-            {
                 b.AngularVelocity = Vector3.Zero;   // a start-rpm can't carry it through teeth that are dug in
-                b.SetMeta("jammed", true);
-            }
     }
 
     /// <summary>The world, as a shaft end: it doesn't turn, and nothing turns it. A jammed arbor is linked to it, ratio 1.</summary>
