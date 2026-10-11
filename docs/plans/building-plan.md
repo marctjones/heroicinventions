@@ -23,3 +23,6 @@ Allow, don't forbid (a poor design stays possible: snap by default, Shift for fr
 
 ## Leave alone
 MachineView.Gears.cs physics and GearPhase; the PickBoxes rule (consume it); Electrics.PrimeMoverOf; the found-only list (BM:206); WithPlaceDefaults; the director, sleep and road code; world join (Main.Links.cs). Keep the free ghost untouched: add a constraint consulted in MoveGhost only. Scripted `build (...)` is origin-relative (Main.Build.cs:225-229), mouse placements absolute: compare relative positions. The live ratio is tooth counts; any rpm shown is an estimate.
+
+## Status
+Phases 0-4 landed on main (2026-10-11): phase 0 d5d4f21, phase 1 61aefea, phase 2 11f6317, phase 3 7e70853, bad meshes run with real physics 53bc33c (owner: too far = not touching, too close = jammed), phase 4 cdf3523..8ef9d9b (tools/route-mouse.sh builds the whole mill by mouse and wins at 55,490 s like the typed route). Phase 5 (the vault by mouse) and materials are not started.
