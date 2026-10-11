@@ -25,6 +25,16 @@
 # wheel_10, ratio 256:1 (4 meshes)"; the hub on the post's top (phase 1), so 5 cm higher than the route's typed (0 11 0) over the tower's
 # ground, give or take the ground under the click. The run as route-gui.sh's (docs/e2e-route.md, "The route played as a person"): the bank
 # full by the wake (54,800 s), the call at 55,484 to 55,495 s (03:00 on sol 2), a trace frame with bank.won 1 at 55,490 s and none before.
+# Observed (2026-10-11, two runs to the win; the last after the stage view was turned face on): as predicted. The build's spot (178.69,
+# 103.88) (the open-loop drive ends 1.5 m off route-gui.sh's recorded (180.12, 105.00); the spot is wherever the button opens it);
+# post_1 #:size-y 10.6 at (179.05 -63.48 102.5); windmill_2 at (178.6 -52.43 103.95), the hub (-0.09 10.98 0.07) from the spot (the route
+# types (0 11 0)); wheel_3..wheel_10 exactly the route's offsets from the hub, 72/18 alternately; the saved world's arbors windmill_2 wheel_3,
+# wheel_4 wheel_5, wheel_6 wheel_7, wheel_8 wheel_9 and meshes wheel_3 wheel_4 ... wheel_9 wheel_10; "ratio 256:1 (4 meshes)"; joined: shaft
+# shaft-1 from built-1.wheel_10 to motors.rotor, wire wire-1 from motors.motor to battery-bank.bank (each a plain click, no pick list); the
+# sleep held the motor at 17.2 W (estimate); full at 32,095 s; at the wake cells 24.476 C, 25 Wh; the rover log "t=55484.4s route: ...
+# Call Earth" and "t=55485.4s win"; first trace frame with bank.won 1 at 55,490 s (cells 24.60 C), none before; "ending source wind:
+# 25.000 Wh". Shots: docs/art/building/route-mouse-06-first-stage.png (the first stage framed face on, its 4:1 label),
+# route-mouse-07-the-mouse-built-train.png (the finished train, "windmill_2 -> wheel_10: 256:1").
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 out="${1:-${TMPDIR:-/tmp}/route-mouse}"
