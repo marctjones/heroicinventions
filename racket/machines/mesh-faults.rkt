@@ -27,6 +27,7 @@
 (define wheel-40 (spur-gear #:teeth 40 #:module md #:width (cm 3)))
 (define true-apart (* md (+ 10 20)))                    ; 0.30 m
 (define wheel-angle (radians->degrees (mate-angle 20 0 40 0)))   ; the 40 +x of its 20, a tooth in a gap
+(define pinion-angle (radians->degrees (mate-angle 40 0 20 0)))  ; the 20 +x of its 40 (phased as every shipped mesh is, though it never turns it)
 (define hub-y (m 6))
 
 (define-machine mesh-faults
@@ -41,22 +42,22 @@
   (mesh loose-a loose-b)
   ;; not touching: 3 m apart
   (wheel far-a #:shape pinion-20 #:at (0 (m 3) 0) #:material iron #:drive-rpm 30 #:drive-torque 50)
-  (wheel far-b #:shape wheel-40 #:at ((m 3) (m 3) 0) #:material iron)
+  (wheel far-b #:shape wheel-40 #:at ((m 3) (m 3) 0) #:material iron #:angle-deg wheel-angle)
   (mesh far-a far-b)
   ;; jammed: 50 mm too close, a crank of 5 N.m on it
   (wheel jam-a #:shape pinion-20 #:at (0 (m 4) 0) #:material iron #:drive-rpm 30 #:drive-torque 5)
-  (wheel jam-b #:shape wheel-40 #:at ((m 0.25) (m 4) 0) #:material iron)
+  (wheel jam-b #:shape wheel-40 #:at ((m 0.25) (m 4) 0) #:material iron #:angle-deg wheel-angle)
   (mesh jam-a jam-b)
   ;; a windmill whose 40 is jammed against a 20
   (windmill mill-jam #:at ((m 12) hub-y 0) #:radius (m 5) #:mass 200 #:wind 3 #:cp 0.3 #:tip-speed-ratio 2.5 #:material oak)
   (wheel mill-jam-wheel #:shape wheel-40 #:at ((m 12) hub-y (cm -130)) #:material iron)
-  (wheel mill-jam-pinion #:shape pinion-20 #:at ((+ (m 12) (m 0.25)) hub-y (cm -130)) #:material iron)
+  (wheel mill-jam-pinion #:shape pinion-20 #:at ((+ (m 12) (m 0.25)) hub-y (cm -130)) #:material iron #:angle-deg pinion-angle)
   (arbor mill-jam mill-jam-wheel)
   (mesh mill-jam-wheel mill-jam-pinion)
   ;; a windmill whose 40 is three metres from its 20
   (windmill mill-far #:at ((m 26) hub-y 0) #:radius (m 5) #:mass 200 #:wind 3 #:cp 0.3 #:tip-speed-ratio 2.5 #:material oak)
   (wheel mill-far-wheel #:shape wheel-40 #:at ((m 26) hub-y (cm -130)) #:material iron)
-  (wheel mill-far-pinion #:shape pinion-20 #:at ((+ (m 26) (m 3)) hub-y (cm -130)) #:material iron)
+  (wheel mill-far-pinion #:shape pinion-20 #:at ((+ (m 26) (m 3)) hub-y (cm -130)) #:material iron #:angle-deg pinion-angle)
   (arbor mill-far mill-far-wheel)
   (mesh mill-far-wheel mill-far-pinion)
   ;; a belt, built in a pass after the gear trains (a bad mesh once skipped it): a 10 cm pulley cranked at 60 rpm drives a 20 cm one
