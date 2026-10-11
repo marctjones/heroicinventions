@@ -17,6 +17,10 @@ namespace HeroicInventions;
 /// </summary>
 public partial class MachineView
 {
+    /// <summary>The radius of the ball at the sails' hub (the nave the stocks cross in). Build mode sets a mill's hub this far above a
+    /// post's top when its ghost is put on one (building plan, phase 1): the nave rests on the post.</summary>
+    public const float WindmillHubRadius = 0.45f;
+
     private readonly List<(Windmill mill, Node3D sails)> _windmills = [];
     private readonly List<(Windmill mill, Node3D yaw, Node3D arrow)> _windmillYaw = [];
 
@@ -47,7 +51,7 @@ public partial class MachineView
 
         var sails = new Node3D();
         yaw.AddChild(sails);
-        sails.AddChild(Shapes.Sphere(0.45f, wood));
+        sails.AddChild(Shapes.Sphere(WindmillHubRadius, wood));
         const int count = 4;
         float width = r * 0.22f;
         for (int i = 0; i < count; i++)

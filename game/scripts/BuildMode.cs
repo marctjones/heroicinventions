@@ -362,6 +362,22 @@ public partial class BuildMode : Node3D
                 _pickChoose?.Invoke(n - 1);   // what its button n does
                 return ScriptedInput.Step.Next;
             }
+            case "preset":   // "preset NAME SIZE": a real click on the card's preset button nearest SIZE ("preset post 10" takes 10.6 m); placing NAME first
+            {
+                string key = EntryKeyOf(w[1]);
+                if (!Presets.TryGetValue(key, out var presets)) { GD.Print($"[BuildMode] {w[1]} has no preset sizes"); return ScriptedInput.Step.Next; }
+                if (_placingKey != key || !_cardPresets.Visible) { GD.Print($"[BuildMode] preset {w[1]}: its card isn't showing (build palette {w[1]} first)"); return ScriptedInput.Step.Next; }
+                double want = double.Parse(w[2], System.Globalization.CultureInfo.InvariantCulture);
+                double Height(int i) => presets[i].Props.FirstOrDefault(q => q.Key == "size-y").Value;
+                string label = presets[Enumerable.Range(0, presets.Length).MinBy(i => Math.Abs(Height(i) - want))].Label;
+                if (_cardPresets.GetChildren().OfType<Button>().FirstOrDefault(b => b.GetMeta("preset").AsString() == label) is not { } button) return ScriptedInput.Step.Next;
+                if (button.Size.X < 1) return ScriptedInput.Step.Again;   // not laid out yet: the card was filled this frame
+                var at = GetViewport().GetScreenTransform() * button.GetGlobalRect().GetCenter();
+                _inputScript!.Mouse(at);
+                _inputScript.Mouse(at, MouseButton.Left, true);
+                _inputScript.Mouse(at, MouseButton.Left, false);
+                return ScriptedInput.Step.Next;
+            }
             case "palette-has":   // "palette-has NAME": prints whether the full parts list (show-all) has that entry; the game's omits found parts
                 SetShowAll(true);
                 GD.Print($"[BuildMode] palette-has {w[1]} {(ListIndexOf(EntryKeyOf(w[1])) >= 0 ? "yes" : "no")} (InGame {InGame})");
@@ -1850,14 +1866,40 @@ public partial class BuildMode : Node3D
     private void MoveGhost(Vector2 screen)
     {
         if (_ghost is null) return;
+        _ghostOnPost = null;
+        if (_placingKey == "windmill" && PostUnder(screen) is { } post)
+        {
+            // the sails' ghost on a post (building plan, phase 1): its hub straight over the post's middle, the nave resting on the top. The
+            // grid's snap is skipped (this is the snap). The post holds nothing in the sim: the mill is not joined to it.
+            _ghostOnPost = post.Id;
+            _ghost.Visible = true;
+            _ghost.Position = HubOnPost(post);
+            _status.Text = $"Windmill on {post.Id}'s top: its hub {F(MachineView.WindmillHubRadius)} m above it (the nave rests on the post). Click to put it there, Esc cancels";
+            return;
+        }
         if (!SurfacePoint(screen, null, out var p)) { _ghost.Visible = false; return; }
         _ghost.Visible = true;
         _ghost.Position = Snap(new Vector3(p.X, p.Y - _ghostBottom, p.Z));
     }
 
+    private string? _ghostOnPost;   // the post the windmill's ghost is set on, while it is
+
+    /// <summary>The post the ray under the mouse meets first, if the nearest box it crosses is a post's.</summary>
+    private PartSpec? PostUnder(Vector2 screen)
+    {
+        var nearest = PickHits(screen, null, grow: 0).OrderBy(h => h.T).FirstOrDefault();
+        return nearest.Name is { } id && _session.Document.Parts.TryGetValue(id, out var part) && part.Kind == "post" ? part : null;
+    }
+
+    /// <summary>Where a windmill's hub goes on a post: over its middle, the post's top (its #:at is its foot) plus the nave's radius.</summary>
+    private static Vector3 HubOnPost(PartSpec post) =>
+        new((float)post.At.X, (float)(post.At.Y + post.Number("size-y", 1)) + MachineView.WindmillHubRadius, (float)post.At.Z);
+
     private void PlaceGhost(string paletteId, bool keepPlacing)
     {
         if (_ghost is not { Visible: true }) return;
+        if (_ghostOnPost is { } onPost && _session.Document.Parts.TryGetValue(onPost, out var post))
+            GD.Print($"[BuildMode] the windmill's hub on {onPost}'s top: post top {F(post.At.Y + post.Number("size-y", 1))} + nave radius {F(MachineView.WindmillHubRadius)} = {F(_ghost.Position.Y)}, over its middle ({F(post.At.X)} {F(post.At.Z)})");
         var item = _palette.First(p => p.Id == paletteId);
         string id = $"{paletteId.Replace('-', '_')}_{_serial++}";
         while (_session.Document.Parts.ContainsKey(id)) id = $"{paletteId.Replace('-', '_')}_{_serial++}";

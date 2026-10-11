@@ -12,6 +12,12 @@
 ;;    ray enters the sails' box first (it reaches back past the gears to the windshaft's end), the log names sails first and says
 ;;    "pinion-b lies inside sails's box and is the smaller: it takes the click"; selected=pinion-b;
 ;;  - the same click again (same spot, same view) offers the pick list, sails first; "build picklist 1" chooses the sails: selected=sails.
+;; Phase 1 (post and sails by mouse), a second run at (200, 130): "build palette post", "build preset post 10" (a real click on the card's
+;; nearest preset button, 10.6 m), a click at the build's spot places it; "build palette windmill" and a click on the post's top.
+;; Predicted: "[BuildMode] preset post: 10.6 m (size-x 0.6 size-y 10.6 size-z 0.6)"; the post's command carries #:size-y 10.6; the log
+;; says the windmill's hub is on post_1's top (post top + nave radius 0.45), so hub - post foot = (0, 11.05, 0), within 0.1 m of the
+;; route's (0, 11, 0) over a 10.6 m post; "build list" says "post_1:post windmill_2:windmill". A second windmill clicked on open ground
+;; 8 m off is placed as before (no hub-on-post line for it, its hub not 11 m over the post's foot).
 ;; The mouse path in a real window, with a shot, is tools/windmill-gui.sh. Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -66,3 +72,29 @@
     (check-true (and listed #t))
     (check-true (and (index-of-line #rx"^\\[BuildMode\\] chosen from the list: 1 sails" lines) #t))
     (check-equal? (field "selected" (list-ref st 5)) "sails")))
+
+(when (godot-available?)
+  (define lines
+    (run (string-join
+          '("wait 360" "build new 200 130" "build palette post" "wait 5" "build preset post 10" "wait 5" "build click-at 0 0 0" "wait 5"
+            "build palette windmill" "wait 5" "build click-at 0 10.6 0" "wait 5"
+            "build palette windmill" "wait 5" "build click-at 8 0 0" "wait 5" "build log" "build list" "quit")
+          "; ")))
+  (define all (string-join lines "\n"))
+  (define (at-of id)   ; a part's #:at from the last state line, as numbers
+    (define st (last (states lines)))
+    (map string->number (string-split (cadr (regexp-match (regexp (string-append " parts=.*" id "@\\(([^)]*)\\)")) st)))))
+
+  (test-case "the post's card: the tall preset by a click gives the route's 10.6 m tower"
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] preset post: 10.6 m \\(size-x 0.6 size-y 10.6 size-z 0.6\\)" lines) #t) all)
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] > \\(post post_1 .*#:size-x 0.6 #:size-y 10.6 #:size-z 0.6" lines) #t)))
+
+  (test-case "the windmill's ghost on the post's top: hub over its middle, the nave resting on the top"
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] the windmill's hub on post_1's top: post top .* \\+ nave radius 0.45" lines) #t) all)
+    (check-true (and (index-of-line #rx"^\\[build\\] built-1: design post_1:post windmill_2:windmill windmill_3:windmill" lines) #t))
+    (define post (at-of "post_1"))
+    (define hub (at-of "windmill_2"))
+    (define rel (map - hub post))
+    (for ([got rel] [want '(0 11 0)]) (check-within got want 0.1 (format "hub - post foot = ~a" rel)))
+    (check-equal? (length (filter (λ (l) (regexp-match? #rx"hub on post_1's top" l)) lines)) 1 "the windmill off the post isn't snapped")
+    (check-true (> (abs (- (- (cadr (at-of "windmill_3")) (cadr post)) 11.05)) 0.1) "off the post the ghost rests as before")))

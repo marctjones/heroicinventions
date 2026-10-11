@@ -179,7 +179,42 @@ public partial class BuildMode
     /// <summary>The material a part from this entry is made of unless a swatch says otherwise.</summary>
     private string UsualMaterial(string key) => EntryDefaults.TryGetValue(EntryKeyOf(key), out var d) && d.Material is { } m ? m : _material;
 
-    private (string Key, double Value)[] ExtraProps(string key) => EntryDefaults.TryGetValue(EntryKeyOf(key), out var d) ? d.Props : [];
+    /// <summary>
+    /// Sizes a part's card offers as one click each (building plan, phase 1): a post as a short plinth, a 3 m post, or the tower the
+    /// route's windmill stands on (10.6 m, 0.6 m square: the 10 m sails, their nave resting on its top, clear the ground by about a metre).
+    /// The first is the part's usual size. Any size can still be typed or set in the inspector.
+    /// </summary>
+    private static readonly Dictionary<string, (string Label, string Tip, (string Key, double Value)[] Props)[]> Presets = new()
+    {
+        ["post"] =
+        [
+            ("1 m", "A plinth or a short post, 20 cm square", [("size-x", 0.2), ("size-y", 1.0), ("size-z", 0.2)]),
+            ("3 m", "A 3 m post, 30 cm square", [("size-x", 0.3), ("size-y", 3.0), ("size-z", 0.3)]),
+            ("10.6 m", "A windmill's tower, 60 cm square: the 10 m sails, their hub on its top, clear the ground by about a metre", [("size-x", 0.6), ("size-y", 10.6), ("size-z", 0.6)]),
+        ],
+    };
+
+    private readonly Dictionary<string, int> _presetChosen = [];
+
+    /// <summary>The preset size an entry places now (the first, its usual size, until one is picked on its card); null for an entry with none.</summary>
+    private (string Label, string Tip, (string Key, double Value)[] Props)? PresetOf(string key) =>
+        Presets.TryGetValue(EntryKeyOf(key), out var p) ? p[Math.Clamp(_presetChosen.GetValueOrDefault(EntryKeyOf(key)), 0, p.Length - 1)] : null;
+
+    /// <summary>Picks preset <paramref name="i"/> of an entry's card: the ghost is rebuilt at that size where it was.</summary>
+    private void ChoosePreset(string key, int i)
+    {
+        key = EntryKeyOf(key);
+        _presetChosen[key] = i;
+        var p = Presets[key][i];
+        GD.Print($"[BuildMode] preset {key}: {p.Label} ({string.Join(" ", p.Props.Select(q => $"{q.Key} {F(q.Value)}"))})");
+        if (_placingKey == key) { StartPlacing(VariantOf(key)); ShowCard(key); }
+    }
+
+    private (string Key, double Value)[] ExtraProps(string key)
+    {
+        var props = EntryDefaults.TryGetValue(EntryKeyOf(key), out var d) ? d.Props : [];
+        return PresetOf(key) is { } preset ? [.. props.Where(p => preset.Props.All(q => q.Key != p.Key)), .. preset.Props] : props;
+    }
     private float Lift(string key) => EntryDefaults.TryGetValue(EntryKeyOf(key), out var d) ? d.Lift : 0;
 
     /// <summary>A catalogue size in plain words: "60 cm across", "24 teeth, 12 cm across", with small/medium/large when there are two or three.</summary>
@@ -350,6 +385,7 @@ public partial class BuildMode
     private Label _cardTitle = null!, _cardSays = null!, _cardJoins = null!;
     private TextureRect _cardPicture = null!;
     private OptionButton _cardSize = null!;
+    private HFlowContainer _cardPresets = null!;   // a part's preset sizes, one button each (a post's 1 m / 3 m / 10.6 m)
     private Label _cardMadeOf = null!;
     private HFlowContainer _cardSwatches = null!;
     private string? _cardKey;
@@ -380,6 +416,8 @@ public partial class BuildMode
             if (_placingKey == key) { StartPlacing(VariantOf(key)); ShowCard(key); }
         };
         col.AddChild(_cardSize);
+        _cardPresets = new HFlowContainer { Visible = false, TooltipText = "How big to make it" };
+        col.AddChild(_cardPresets);
         _cardMadeOf = new Label { Text = "Made of:" };
         _cardMadeOf.AddThemeFontSizeOverride("font_size", 12);
         col.AddChild(_cardMadeOf);
@@ -410,6 +448,23 @@ public partial class BuildMode
             _cardSize.Clear();
             foreach (var v in e.Variants) _cardSize.AddItem(VariantLabel(e, v));
             _cardSize.Select(Math.Max(0, e.Variants.ToList().IndexOf(VariantOf(key))));
+        }
+        _cardPresets.Visible = placing && Presets.ContainsKey(key);
+        foreach (var c in _cardPresets.GetChildren()) { _cardPresets.RemoveChild(c); c.QueueFree(); }
+        if (_cardPresets.Visible)
+        {
+            _cardPresets.AddChild(new Label { Text = "Size:" });
+            int chosen = Math.Clamp(_presetChosen.GetValueOrDefault(key), 0, Presets[key].Length - 1);
+            for (int i = 0; i < Presets[key].Length; i++)
+            {
+                var (label, tip, _) = Presets[key][i];
+                int n = i;
+                var b = new Button { Text = label, TooltipText = tip, ToggleMode = true, ButtonPressed = i == chosen, FocusMode = Control.FocusModeEnum.None };
+                b.SetMeta("preset", label);
+                if (i == chosen) b.Modulate = new Color(1.15f, 1.15f, 0.8f);
+                b.Pressed += () => ChoosePreset(key, n);
+                _cardPresets.AddChild(b);
+            }
         }
         _cardMadeOf.Visible = _cardSwatches.Visible = placing;
         if (placing)
