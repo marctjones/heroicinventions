@@ -438,7 +438,9 @@ public partial class BuildMode
         _cardTitle.Text = $"What is this? {e.Label}";
         _cardSays.Text = e.Says;
         _cardJoins.Text = e.Joins;
-        _cardJoins.Visible = e.Joins != "";
+        if (key == "windmill")   // the snap onto a post (building plan, phase 1), and how to get out of it
+            _cardJoins.Text = (e.Joins + " Over a post it sits on the post's top, the post under its gears behind the sails; hold Alt to place it freely.").Trim();
+        _cardJoins.Visible = _cardJoins.Text != "";
         _cardPicture.Texture = _thumbs.GetValueOrDefault(key) ?? (key == "rope" ? RopeIcon() : null);
         _cardPicture.Visible = _cardPicture.Texture is not null;
         bool placing = key == _placingKey && e.Join is null;

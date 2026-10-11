@@ -302,13 +302,13 @@ public partial class BuildMode : Node3D
                 _paletteDrag = true;
                 break;
             case InputEventMouseMotion motion when _paletteDrag && !_paletteList.GetGlobalRect().HasPoint(motion.Position):
-                MoveGhost(motion.Position);
+                MoveGhost(motion.Position, motion.AltPressed);
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false } up when _paletteDrag:
                 _paletteDrag = false;
                 if (_placingPaletteId is { } id && !OverPanel(up.Position))
                 {
-                    MoveGhost(up.Position);
+                    MoveGhost(up.Position, up.AltPressed);
                     PlaceGhost(id, up.ShiftPressed);
                     // not marked handled: the list took the press, so it must see the release too,
                     // or the GUI keeps sending it every mouse event as if the button were still down
@@ -423,11 +423,11 @@ public partial class BuildMode : Node3D
                 return ScriptedInput.Step.Next;
             case "wait-test":   // wait until no test is running or about to run (the lesson presses Test itself)
                 return Testing || _lessonAutoTestIn is not null ? ScriptedInput.Step.Again : ScriptedInput.Step.Next;
-            case "click-at":   // "click-at X Y Z": a click wherever that world point is drawn
-                ClickAt(ScriptPoint(w, 1));
+            case "click-at":   // "click-at X Y Z [alt]": a click wherever that world point is drawn (alt: Alt held, the snap off)
+                ClickAt(ScriptPoint(w, 1), alt: w.Length > 4 && w[4] == "alt");
                 return ScriptedInput.Step.Next;
-            case "hover-at":   // "hover-at X Y Z": the mouse moved to wherever that world point is drawn, no click (a placing ghost follows it)
-                _inputScript!.Mouse(GetViewport().GetScreenTransform() * _camera.UnprojectPosition(ScriptPoint(w, 1)));
+            case "hover-at":   // "hover-at X Y Z [alt]": the mouse moved to wherever that world point is drawn, no click (a placing ghost follows it)
+                _inputScript!.Mouse(GetViewport().GetScreenTransform() * _camera.UnprojectPosition(ScriptPoint(w, 1)), alt: w.Length > 4 && w[4] == "alt");
                 return ScriptedInput.Step.Next;
             case "palette-drag":   // "palette-drag ID X Y": press on the entry in the list, drag it out over the scene, let go at X Y
             {
@@ -505,14 +505,14 @@ public partial class BuildMode : Node3D
     }
 
     /// <summary>A scripted click on whatever is drawn at <paramref name="world"/>.</summary>
-    private void ClickAt(Vector3 world)
+    private void ClickAt(Vector3 world, bool alt = false)
     {
         // injected events are in window pixels; the camera projects to the
         // 3D viewport's, which the window's content scale stretches
         var at = GetViewport().GetScreenTransform() * _camera.UnprojectPosition(world);
-        _inputScript!.Mouse(at);
-        _inputScript.Mouse(at, MouseButton.Left, true);
-        _inputScript.Mouse(at, MouseButton.Left, false);
+        _inputScript!.Mouse(at, alt: alt);
+        _inputScript.Mouse(at, MouseButton.Left, true, alt: alt);
+        _inputScript.Mouse(at, MouseButton.Left, false, alt: alt);
     }
 
     // ------------------------------------------------------------------ UI
@@ -1332,7 +1332,7 @@ public partial class BuildMode : Node3D
             _orbit.Pan(mm.Relative);
             return;
         }
-        if (_placingPaletteId is not null) { MoveGhost(mm.Position); return; }
+        if (_placingPaletteId is not null) { MoveGhost(mm.Position, mm.AltPressed); return; }
         var hoverPort = PickPort(mm.Position);
         foreach (var p in _ports) p.Node.Scale = Vector3.One * (hoverPort is { } h && h.Part == p.Part && h.Port == p.Port ? 1.8f : 1f);
         if (_connectFrom is not null)
@@ -1866,18 +1866,19 @@ public partial class BuildMode : Node3D
         return null;
     }
 
-    private void MoveGhost(Vector2 screen)
+    private void MoveGhost(Vector2 screen, bool free = false)
     {
         if (_ghost is null) return;
         _ghostOnPost = null;
-        if (_placingKey == "windmill" && PostUnder(screen) is { } post)
+        if (_placingKey == "windmill" && !free && PostUnder(screen) is { } post)
         {
-            // the sails' ghost on a post (building plan, phase 1): its hub straight over the post's middle, the nave resting on the top. The
-            // grid's snap is skipped (this is the snap). The post holds nothing in the sim: the mill is not joined to it.
+            // the sails' ghost on a post (building plan, phase 1): the post under the windshaft behind the sails, where the route's train
+            // goes (HubOnPost), the hub at the post's top plus the nave's radius. The grid's snap is skipped (this is the snap); Alt places
+            // it freely. The post holds nothing in the sim: the mill is not joined to it.
             _ghostOnPost = post.Id;
             _ghost.Visible = true;
             _ghost.Position = HubOnPost(post);
-            _status.Text = $"Windmill on {post.Id}'s top: its hub {F(MachineView.WindmillHubRadius)} m above it (the nave rests on the post). Click to put it there, Esc cancels";
+            _status.Text = $"Windmill on {post.Id}: the post under its windshaft, {F(MillTrainSetback)} m behind the sails, the hub {F(MachineView.WindmillHubRadius)} m above its top. Click to put it there; Alt places it freely, Esc cancels";
             return;
         }
         if (!SurfacePoint(screen, null, out var p)) { _ghost.Visible = false; return; }
@@ -1894,15 +1895,60 @@ public partial class BuildMode : Node3D
         return nearest.Name is { } id && _session.Document.Parts.TryGetValue(id, out var part) && part.Kind == "post" ? part : null;
     }
 
-    /// <summary>Where a windmill's hub goes on a post: over its middle, the post's top (its #:at is its foot) plus the nave's radius.</summary>
-    private static Vector3 HubOnPost(PartSpec post) =>
-        new((float)post.At.X, (float)(post.At.Y + post.Number("size-y", 1)) + MachineView.WindmillHubRadius, (float)post.At.Z);
+    /// <summary>
+    /// Where a windmill's gear train goes, seen from its hub with the sails facing +z (the route's, solve.steps): four 72:18 stages of
+    /// module-5 gears, each pinion beside its wheel by m (72 + 18) / 2 = 0.225 m, so the train runs 4 x 0.225 = 0.9 m across (+x) and its
+    /// middle is 0.45 m to the side; the first wheel 1.3 m back down the windshaft, each stage 0.1 m further, so the train's middle is
+    /// 1.3 + 3 x 0.1 / 2 = 1.45 m behind the sails. A post set there carries the train and stands clear of the sails' disc.
+    /// </summary>
+    private const float MillTrainSide = 4 * 0.005f * (72 + 18) / 2 / 2, MillTrainSetback = 1.3f + 3 * 0.1f / 2;
+
+    /// <summary>
+    /// Where a windmill's hub goes on a post: the post under the middle of its train (<see cref="MillTrainSide"/>, <see cref="MillTrainSetback"/>),
+    /// turned with the sails' #:facing-deg (azimuth from +x toward +z, 90 = +z, #193), the hub at the post's top (its #:at is its foot) plus
+    /// the nave's radius. The route's post is at (0.45 0 -1.45) from its hub: the same.
+    /// </summary>
+    private Vector3 HubOnPost(PartSpec post)
+    {
+        var yaw = new Basis(Vector3.Up, Mathf.DegToRad(90 - GhostFacingDeg()));
+        var postFromHub = yaw * new Vector3(MillTrainSide, 0, -MillTrainSetback);
+        return new Vector3((float)post.At.X - postFromHub.X, (float)(post.At.Y + post.Number("size-y", 1)) + MachineView.WindmillHubRadius, (float)post.At.Z - postFromHub.Z);
+    }
+
+    /// <summary>The facing a placed windmill starts with (its template's #:facing-deg, 90 = +z).</summary>
+    private static float GhostFacingDeg() => (float)PartTemplates.Create("windmill", "ghost", new Vec3(0, 0, 0), "oak").Number("facing-deg", 90);
+
+    /// <summary>
+    /// How far the sails' disc (radius #:radius about the hub, in the plane across the windshaft; its stocks and cloth within 0.12 m of
+    /// that plane) stands clear of a post's box, along the windshaft: negative where the turning sails would cross the post.
+    /// </summary>
+    private static float SailsClearOfPost(Vector3 hub, PartSpec post, float facingDeg, float radius)
+    {
+        var f = new Basis(Vector3.Up, Mathf.DegToRad(90 - facingDeg)) * Vector3.Back;   // the way the sails face (+z at 90)
+        var centre = new Vector3((float)post.At.X, (float)(post.At.Y + post.Number("size-y", 1) / 2), (float)post.At.Z);
+        var yaw = new Basis(Vector3.Up, Mathf.DegToRad((float)post.Number("heading-deg", 0)));
+        var half = new Vector3((float)post.Number("size-x", 0.2) / 2, (float)post.Number("size-y", 1) / 2, (float)post.Number("size-z", 0.2) / 2);
+        float reach = Mathf.Abs((yaw * Vector3.Right).Dot(f)) * half.X + Mathf.Abs((yaw * Vector3.Back).Dot(f)) * half.Z;   // the box's half depth along f
+        float along = (hub - centre).Dot(f);
+        float gap = Mathf.Abs(along) - reach - 0.12f;
+        if (gap > 0) return gap;
+        // the plane cuts the box: the disc reaches it unless the box lies wholly beyond the radius
+        var nearest = new Vector3(Mathf.Clamp(hub.X, centre.X - half.X - half.Z, centre.X + half.X + half.Z), Mathf.Clamp(hub.Y, centre.Y - half.Y, centre.Y + half.Y), Mathf.Clamp(hub.Z, centre.Z - half.X - half.Z, centre.Z + half.X + half.Z));
+        return nearest.DistanceTo(hub) > radius ? nearest.DistanceTo(hub) - radius : gap;
+    }
 
     private void PlaceGhost(string paletteId, bool keepPlacing)
     {
         if (_ghost is not { Visible: true }) return;
         if (_ghostOnPost is { } onPost && _session.Document.Parts.TryGetValue(onPost, out var post))
-            GD.Print($"[BuildMode] the windmill's hub on {onPost}'s top: post top {F(post.At.Y + post.Number("size-y", 1))} + nave radius {F(MachineView.WindmillHubRadius)} = {F(_ghost.Position.Y)}, over its middle ({F(post.At.X)} {F(post.At.Z)})");
+        {
+            var hub = _ghost.Position;
+            var rel = hub - new Vector3((float)post.At.X, (float)post.At.Y, (float)post.At.Z);
+            float clear = SailsClearOfPost(hub, post, GhostFacingDeg(), (float)PartTemplates.Create("windmill", "ghost", new Vec3(0, 0, 0), "oak").Number("radius", 10));
+            GD.Print($"[BuildMode] the windmill's hub on {onPost}'s top: post top {F(post.At.Y + post.Number("size-y", 1))} + nave radius {F(MachineView.WindmillHubRadius)} = {F(hub.Y)}; "
+                + $"hub - post foot = ({F(rel.X)} {F(rel.Y)} {F(rel.Z)}), the post under the train {F(MillTrainSetback)} m behind the sails and {F(MillTrainSide)} m aside; "
+                + (clear > 0 ? $"the sails' disc clears the post by {F(clear)} m" : $"the sails' disc crosses the post ({F(clear)} m)"));
+        }
         var item = _palette.First(p => p.Id == paletteId);
         string id = $"{paletteId.Replace('-', '_')}_{_serial++}";
         while (_session.Document.Parts.ContainsKey(id)) id = $"{paletteId.Replace('-', '_')}_{_serial++}";

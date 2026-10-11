@@ -209,16 +209,16 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
     }
 
     /// <summary>Moves the mouse to <paramref name="at"/>, then presses or releases <paramref name="button"/> there if one is given.</summary>
-    public void Mouse(Vector2 at, MouseButton button = MouseButton.None, bool? pressed = null, bool shift = false)
+    public void Mouse(Vector2 at, MouseButton button = MouseButton.None, bool? pressed = null, bool shift = false, bool alt = false)
     {
         if (at != _lastMouse)
         {
             var mask = pressed is null && button != MouseButton.None ? (MouseButtonMask)(1 << ((int)button - 1)) : 0;
-            Input.ParseInputEvent(new InputEventMouseMotion { Position = at, GlobalPosition = at, Relative = at - _lastMouse, ShiftPressed = shift, ButtonMask = mask });
+            Input.ParseInputEvent(new InputEventMouseMotion { Position = at, GlobalPosition = at, Relative = at - _lastMouse, ShiftPressed = shift, AltPressed = alt, ButtonMask = mask });
             _lastMouse = at;
         }
         if (button != MouseButton.None && pressed is { } p)
-            Input.ParseInputEvent(new InputEventMouseButton { Position = at, GlobalPosition = at, ButtonIndex = button, Pressed = p, ShiftPressed = shift });
+            Input.ParseInputEvent(new InputEventMouseButton { Position = at, GlobalPosition = at, ButtonIndex = button, Pressed = p, ShiftPressed = shift, AltPressed = alt });
     }
 
     private static string F(double v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);

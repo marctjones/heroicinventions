@@ -15,9 +15,11 @@
 ;; Phase 1 (post and sails by mouse), a second run at (200, 130): "build palette post", "build preset post 10" (a real click on the card's
 ;; nearest preset button, 10.6 m), a click at the build's spot places it; "build palette windmill" and a click on the post's top.
 ;; Predicted: "[BuildMode] preset post: 10.6 m (size-x 0.6 size-y 10.6 size-z 0.6)"; the post's command carries #:size-y 10.6; the log
-;; says the windmill's hub is on post_1's top (post top + nave radius 0.45), so hub - post foot = (0, 11.05, 0), within 0.1 m of the
-;; route's (0, 11, 0) over a 10.6 m post; "build list" says "post_1:post windmill_2:windmill". A second windmill clicked on open ground
-;; 8 m off is placed as before (no hub-on-post line for it, its hub not 11 m over the post's foot).
+;; says the windmill's hub is on post_1's top (post top + nave radius 0.45), the post under the train 1.45 m behind the sails and 0.45 m
+;; aside, so hub - post foot = (-0.45, 11.05, 1.45), within 0.1 m of the route's (0 11 0) - (0.45 0 -1.45) = (-0.45, 11, 1.45), and
+;; "the sails' disc clears the post by 1.03 m" (1.45 - 0.3 half depth - 0.12 the stocks); "build list" says "post_1:post windmill_2:windmill".
+;; A second windmill clicked on open ground 8 m off is placed as before (no hub-on-post line for it), and a third clicked on the post's top
+;; with Alt held is placed freely (no hub-on-post line either).
 ;; The mouse path in a real window, with a shot, is tools/windmill-gui.sh. Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -78,7 +80,8 @@
     (run (string-join
           '("wait 360" "build new 200 130" "build palette post" "wait 5" "build preset post 10" "wait 5" "build click-at 0 0 0" "wait 5"
             "build palette windmill" "wait 5" "build click-at 0 10.6 0" "wait 5"
-            "build palette windmill" "wait 5" "build click-at 8 0 0" "wait 5" "build log" "build list" "quit")
+            "build palette windmill" "wait 5" "build click-at 8 0 0" "wait 5"
+            "build palette windmill" "wait 5" "build click-at 0 10.6 0 alt" "wait 5" "build log" "build list" "quit")
           "; ")))
   (define all (string-join lines "\n"))
   (define (at-of id)   ; a part's #:at from the last state line, as numbers
@@ -90,11 +93,12 @@
     (check-true (and (index-of-line #rx"^\\[BuildMode\\] > \\(post post_1 .*#:size-x 0.6 #:size-y 10.6 #:size-z 0.6" lines) #t)))
 
   (test-case "the windmill's ghost on the post's top: hub over its middle, the nave resting on the top"
-    (check-true (and (index-of-line #rx"^\\[BuildMode\\] the windmill's hub on post_1's top: post top .* \\+ nave radius 0.45" lines) #t) all)
-    (check-true (and (index-of-line #rx"^\\[build\\] built-1: design post_1:post windmill_2:windmill windmill_3:windmill" lines) #t))
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] the windmill's hub on post_1's top: post top .* \\+ nave radius 0.45 = .*the post under the train 1.45 m behind the sails and 0.45 m aside; the sails' disc clears the post by 1.03 m" lines) #t) all)
+    (check-true (and (index-of-line #rx"^\\[build\\] built-1: design post_1:post windmill_2:windmill windmill_3:windmill windmill_4:windmill" lines) #t))
     (define post (at-of "post_1"))
     (define hub (at-of "windmill_2"))
     (define rel (map - hub post))
-    (for ([got rel] [want '(0 11 0)]) (check-within got want 0.1 (format "hub - post foot = ~a" rel)))
-    (check-equal? (length (filter (λ (l) (regexp-match? #rx"hub on post_1's top" l)) lines)) 1 "the windmill off the post isn't snapped")
+    (for ([got rel] [want '(-0.45 11 1.45)]) (check-within got want 0.1 (format "hub - post foot = ~a" rel)))
+    (check-equal? (length (filter (λ (l) (regexp-match? #rx"hub on post_1's top" l)) lines)) 1 "the windmill off the post, and the one placed with Alt, aren't snapped")
+    (check-true (> (abs (- (car (at-of "windmill_4")) (car hub))) 0.1) "with Alt the hub isn't put where the snap puts it")
     (check-true (> (abs (- (- (cadr (at-of "windmill_3")) (cadr post)) 11.05)) 0.1) "off the post the ghost rests as before")))
