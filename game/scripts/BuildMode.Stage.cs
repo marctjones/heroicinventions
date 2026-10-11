@@ -11,7 +11,7 @@ namespace HeroicInventions;
 /// on the selected part's axle where "Put a gear on this shaft" puts it by default (1.3 m behind a bare windmill's hub, else one gear
 /// width, 0.1 m, behind the hindmost wheel on the axle) and the pinion on the wheel's pitch circle at +x (where "Add a meshing gear" starts)
 /// as one (begin ...) of the same commands (<see cref="StageSlots"/>), so one Ctrl+Z takes the whole stage back. Then the new pinion is
-/// selected (the next click on the button adds the next stage on its axle) and the camera frames the new pair. The click ends any placing
+/// selected (the next click on the button adds the next stage on its axle) and the camera frames the new pair from behind, a little to the side, both gears face on. The click ends any placing
 /// first, as Esc does; a stage has no placing of its own to back out of (Ctrl+Z is the way back). Nothing is refused: two sizes of
 /// different modules mesh and are drawn orange, as any such mesh.
 /// </summary>
@@ -80,6 +80,15 @@ public partial class BuildMode
         MeshNote(w, p);
         Select(p);
         Frame([w, p]);
+        // and from behind, a little to the side, so both gears are seen face on (edge on the pinion hides its wheel): the orbit's camera
+        // stands at pivot + (sin yaw, cos yaw) x distance, so yaw = the axle's way back, turned 20 degrees
+        if (ShaftSlots.Of(_session.Document, w) is { } axle && Math.Abs(axle.Behind.Y) < 0.9)
+        {
+            _orbit.Yaw = Mathf.Atan2((float)axle.Behind.X, (float)axle.Behind.Z) + Mathf.DegToRad(20);
+            _orbit.Pitch = Mathf.DegToRad(14);
+            _orbit.Distance = Mathf.Max(_orbit.Distance, 2f);
+            _orbit.Apply();
+        }
         _status.Text = WithRatio($"A stage on {id}: {w} on its axle, {p} meshing it. Add a stage again for the next on {p}'s axle; Ctrl+Z takes it back");
     }
 

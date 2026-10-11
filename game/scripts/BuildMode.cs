@@ -491,6 +491,13 @@ public partial class BuildMode : Node3D
                 return ScriptedInput.Step.Next;
             case "gear-on":   // "gear-on TEETH [hover]": the selected windmill's or wheel's "Put a gear on this shaft" (phase 2, BuildMode.Shaft.cs)
                 return GearOnStep(w);
+            case "look":   // "look YAW PITCH DIST X Y Z": build mode's camera (degrees, metres), its pivot taken from the build's spot as click-at's points are
+                _orbit.Yaw = Mathf.DegToRad(float.Parse(w[1], System.Globalization.CultureInfo.InvariantCulture));
+                _orbit.Pitch = Mathf.DegToRad(float.Parse(w[2], System.Globalization.CultureInfo.InvariantCulture));
+                if (w.Length > 3) _orbit.Distance = float.Parse(w[3], System.Globalization.CultureInfo.InvariantCulture);
+                if (w.Length > 6) _orbit.Pivot = ScriptPoint(w, 4);
+                _orbit.Apply();
+                return ScriptedInput.Step.Next;
             case "add-stage":   // "add-stage [WHEEL PINION]": the selected windmill's or wheel's "Add a stage" (phase 4, BuildMode.Stage.cs)
                 return AddStageStep(w);
             case "mesh-with":   // "mesh-with TEETH [hover]": the selected wheel's "Add a meshing gear" (phase 3, BuildMode.Mesh.cs)
