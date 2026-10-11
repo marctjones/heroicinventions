@@ -1040,6 +1040,7 @@ public partial class BuildMode : Node3D
     {
         // taken out at once, not only queued: a queued child still counts in the list's height, the scroll keeps its place past the new,
         // shorter list and the panel reads blank (found typing a room's size from the numbers list, #223); the place is put back after
+        if (_shaft is null) HideAxle();   // drawn while the mouse was on a "Put a gear on this shaft" being taken away (phase 2)
         var scroller = _inspector.GetParent<ScrollContainer>();
         int scrolled = scroller.ScrollVertical;
         foreach (var c in _inspector.GetChildren()) { _inspector.RemoveChild(c); c.QueueFree(); }
