@@ -4,7 +4,7 @@ namespace HeroicInventions.Sim.Editor;
 
 /// <summary>
 /// The live ratio (building plan, phase 3): for each prime mover in a design (a windmill, water wheel, jet wheel or Stirling engine), the
-/// gear train its arbors and meshes reach and the ratio from it to the train's last gear, from the tooth counts (as the sim's
+/// gear train its arbors and meshes reach (a mesh that doesn't turn its partner, not touching or jammed, is no step of it) and the ratio from it to the train's last gear, from the tooth counts (as the sim's
 /// <see cref="MachineRuntime.TrainOf"/> and the gear view: a mesh turns its partner at teeth / teeth, an arbor at 1, the sense dropped).
 /// Over the editor's document, so build mode shows it as the train is built. Belts are left out (a belt's ratio is its drums' radii).
 /// </summary>
@@ -52,8 +52,8 @@ public static class TrainRatio
             string here = queue.Dequeue();
             var (num, den, meshes) = seen[here];
             var next = doc.Arbors.Where(a => a.Parts.Contains(here)).SelectMany(a => a.Parts).Select(n => (n, 1L, 1L, 0))
-                .Concat(doc.Meshes.Where(m => m.A == here).Select(m => (m.B, Size(doc, here), Size(doc, m.B), 1)))
-                .Concat(doc.Meshes.Where(m => m.B == here).Select(m => (m.A, Size(doc, here), Size(doc, m.A), 1)));
+                .Concat(doc.Meshes.Where(m => m.A == here && Turns(doc, m)).Select(m => (m.B, Size(doc, here), Size(doc, m.B), 1)))
+                .Concat(doc.Meshes.Where(m => m.B == here && Turns(doc, m)).Select(m => (m.A, Size(doc, here), Size(doc, m.A), 1)));
             foreach (var (n, top, bottom, k) in next)
             {
                 if (seen.ContainsKey(n)) continue;
@@ -72,6 +72,10 @@ public static class TrainRatio
         var (lNum, lDen, lMeshes) = seen[last];
         return new Train(start, last, lNum, lDen, lMeshes);
     }
+
+    /// <summary>Whether a mesh turns its partner (<see cref="LinkGestures.MeshFit.Engaged"/>): one not touching passes nothing, a jammed one locks.</summary>
+    private static bool Turns(EditorDocument doc, MeshSpec m) =>
+        !doc.Parts.TryGetValue(m.A, out var a) || !doc.Parts.TryGetValue(m.B, out var b) || LinkGestures.FitOf(a, b).Engaged;
 
     /// <summary>A wheel's size for a mesh's step: its teeth, else its pitch radius (or radius) in micrometres, so the ratio stays whole numbers.</summary>
     private static long Size(EditorDocument doc, string id)

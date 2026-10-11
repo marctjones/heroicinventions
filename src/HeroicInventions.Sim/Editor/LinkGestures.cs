@@ -185,22 +185,57 @@ public static class LinkGestures
         !(a.Props.ContainsKey("module") && b.Props.ContainsKey("module")) || Math.Abs(a.Number("module") - b.Number("module")) < 1e-9;
 
     /// <summary>
-    /// How far a mesh may be off its centre distance, as a share of it, and still turn: 2 %, the machine view's own check
-    /// (MachineView.CheckMesh, game/scripts/MachineView.Gears.cs), so what build mode draws orange is what the view won't run.
+    /// A gear's outside radius, to the tips of its teeth: its #:tip-radius (a generated gear's), else its pitch radius and one module (an
+    /// involute gear's addendum), else, for a plain wheel with no teeth, its rim (#:radius).
+    /// </summary>
+    public static double TipRadius(PartSpec p) =>
+        p.Number("tip-radius", 0) is > 0 and var t ? t
+        : p.Number("module", 0) is > 0 and var m && p.Symbol("shape", "") == "gear" ? PitchRadius(p) + m
+        : p.Number("radius", 0) is > 0 and var r ? r
+        : PitchRadius(p);
+
+    /// <summary>
+    /// How far a mesh may be off its centre distance, as a share of it, and still count as true: 2 %, where build mode draws it amber
+    /// and the machine view runs it exactly as cut (MachineView.BuildGearTrains, game/scripts/MachineView.Gears.cs). Off it, the mesh is
+    /// still made and still runs, as its geometry says (<see cref="MeshContact"/>).
     /// </summary>
     public const double MeshTolerance = 0.02;
 
     /// <summary>
-    /// How a mesh between <paramref name="A"/> and <paramref name="B"/> stands, by the machine view's rule (MachineView.CheckMesh): both
-    /// gears (<paramref name="Gears"/>), one module (<paramref name="Modules"/>), and B's centre from A's axle, across it
-    /// (<paramref name="Have"/>), within <see cref="MeshTolerance"/> of the centre distance (<paramref name="Want"/>,
-    /// <see cref="MeshCentreDistance"/>). A mesh that isn't (<see cref="True"/> false) is made all the same (allowed, never refused here)
-    /// and drawn orange in build mode; the machine view then refuses it when it builds the gear trains.
+    /// What two meshed wheels do, by where they stand (owner, 2026-10-11: a mesh off its distance runs with real physics and fails
+    /// honestly). <see cref="True"/>: within <see cref="MeshTolerance"/> of the centre distance, teeth of one size: the tooth ratio,
+    /// as cut. <see cref="Loose"/>: farther than that but the tip circles still overlap: the teeth still reach into each other's gaps,
+    /// with play (backlash); an involute pair's ratio doesn't depend on the centre distance, so it runs at the tooth ratio, as a true one.
+    /// <see cref="NotTouching"/>: the tip circles don't overlap (or exactly meet): no tooth reaches the other wheel, nothing passes, each
+    /// turns on its own. <see cref="Jammed"/>: nearer than the true distance by more than the tolerance (the teeth dig into each other's
+    /// roots), or teeth of two sizes (two modules, or a plain rim) whose tip circles overlap (a tooth lands on a tooth, not in a gap, a
+    /// pitch later at the latest): the pair can't turn at all.
     /// </summary>
-    public sealed record MeshFit(string A, string B, double Want, double Have, bool Gears, bool Modules)
+    public enum MeshContact { True, Loose, NotTouching, Jammed }
+
+    /// <summary>
+    /// How a mesh between <paramref name="A"/> and <paramref name="B"/> stands: both gears (<paramref name="Gears"/>), one module
+    /// (<paramref name="Modules"/>), and B's centre from A's axle, across it (<paramref name="Have"/>), against the centre distance
+    /// (<paramref name="Want"/>, <see cref="MeshCentreDistance"/>) and the sum of the two tip radii (<paramref name="Reach"/>,
+    /// <see cref="TipRadius"/>). A mesh that isn't true (<see cref="True"/> false) is made all the same (allowed, never refused here),
+    /// drawn orange in build mode, and runs as <see cref="Contact"/> says: the machine view (MachineView.BuildGearTrains) follows it.
+    /// </summary>
+    public sealed record MeshFit(string A, string B, double Want, double Have, bool Gears, bool Modules, double Reach)
     {
         public double Off => Have - Want;
-        public bool True => Gears && Modules && Math.Abs(Off) <= MeshTolerance * Want;
+        public bool True => Contact == MeshContact.True;
+
+        /// <summary>What the pair does when it runs (see <see cref="MeshContact"/>).</summary>
+        public MeshContact Contact =>
+            Gears && Modules
+                ? Math.Abs(Off) <= MeshTolerance * Want ? MeshContact.True
+                  : Have < Want ? MeshContact.Jammed
+                  : Have < Reach ? MeshContact.Loose
+                  : MeshContact.NotTouching
+                : Have < Reach ? MeshContact.Jammed : MeshContact.NotTouching;
+
+        /// <summary>Whether it turns its partner when it runs: true or loose.</summary>
+        public bool Engaged => Contact is MeshContact.True or MeshContact.Loose;
 
         /// <summary>What is wrong with it, in words, or "" for a true mesh.</summary>
         public string Why => True ? "" : string.Join("; ", new[]
@@ -209,6 +244,36 @@ public static class LinkGestures
             Modules ? null : "the modules differ (teeth of different sizes)",
             Math.Abs(Off) <= MeshTolerance * Want ? null : $"{Num(Have)} m apart, not {Num(Want)} m ({(Off > 0 ? "too far" : "too close")} by {Num(Math.Abs(Off))} m)",
         }.Where(s => s is not null));
+
+        /// <summary>The scene's word for it: "not touching", "jammed", "loose", or "" for a true mesh.</summary>
+        public string Word => Contact switch
+        {
+            MeshContact.NotTouching => "not touching",
+            MeshContact.Jammed => "jammed",
+            MeshContact.Loose => "loose",
+            _ => "",
+        };
+
+        /// <summary>
+        /// What it does, for the log: "not touching (400.0 mm apart; to mesh 225.0 mm): the tips are 165.0 mm short of each other, nothing
+        /// passes", "jammed (200.0 mm apart; to mesh 225.0 mm): ...", "loose (230.0 mm apart; to mesh 225.0 mm): ..."; "" for a true mesh.
+        /// </summary>
+        public string Note
+        {
+            get
+            {
+                string apart = $"{Mm(Have)} mm apart; to mesh {Mm(Want)} mm";
+                string sizes = Gears ? "teeth of two sizes" : "one has no teeth";
+                return Contact switch
+                {
+                    MeshContact.True => "",
+                    MeshContact.Loose => $"loose ({apart}): the teeth reach {Mm(Reach - Have)} mm into each other, with play; it turns at the tooth ratio",
+                    MeshContact.NotTouching => $"not touching ({apart}): {(Gears && Modules ? "" : sizes + "; ")}the tips are {Mm(Have - Reach)} mm short of each other, nothing passes",
+                    _ when !(Gears && Modules) => $"jammed ({apart}): {sizes}, their tips overlap by {Mm(Reach - Have)} mm: a tooth lands on a tooth, neither can turn",
+                    _ => $"jammed ({apart}): {Mm(Want - Have)} mm too close, the teeth dig into each other's roots, neither can turn",
+                };
+            }
+        }
     }
 
     /// <summary>The fit of a mesh between two wheels where they stand: B's centre measured across A's axle, as the machine view does.</summary>
@@ -219,9 +284,10 @@ public static class LinkGestures
         double along = d.X * axle.X + d.Y * axle.Y + d.Z * axle.Z;
         double across = Math.Sqrt(Math.Max(0, d.X * d.X + d.Y * d.Y + d.Z * d.Z - along * along));
         bool gears = a.Symbol("shape", "") == "gear" && b.Symbol("shape", "") == "gear";
-        return new MeshFit(a.Id, b.Id, MeshCentreDistance(a, b), across, gears, SameModule(a, b));
+        return new MeshFit(a.Id, b.Id, MeshCentreDistance(a, b), across, gears, SameModule(a, b), TipRadius(a) + TipRadius(b));
     }
 
     private static double Distance(Vec3 a, Vec3 b) => Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2) + Math.Pow(a.Z - b.Z, 2));
     private static string Num(double v) => Math.Round(v, 3).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    private static string Mm(double m) => (m * 1000).ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
 }

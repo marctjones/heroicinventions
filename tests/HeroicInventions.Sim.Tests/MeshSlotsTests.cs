@@ -144,4 +144,101 @@ public class MeshSlotsTests
         Assert.Empty(TrainRatio.Of(Session(Route(1).Take(3).ToArray()).Document));   // the sails and a gear on their shaft: nothing meshed yet
         Assert.Empty(TrainRatio.Of(Session("(wheel a #:catalogue involute-gear-m5-72 #:at (0 0 0))", "(wheel b #:catalogue involute-gear-m5-18 #:at (0.225 0 0))", "(mesh a b)").Document));
     }
+
+    // ---- what a mesh off its distance does when it runs (owner, 2026-10-11): true, loose, not touching, jammed
+
+    /// <summary>A 72 (m5, pitch 0.18, tips 0.185) and an 18 (pitch 0.045, tips 0.05) <paramref name="x"/> m apart: centre distance 0.225, tips 0.235.</summary>
+    private static LinkGestures.MeshFit Pair(double x, string pinion = "involute-gear-m5-18")
+    {
+        var p = Session("(wheel a #:catalogue involute-gear-m5-72 #:at (0 0 0))",
+            $"(wheel b #:catalogue {pinion} #:at ({x.ToString(System.Globalization.CultureInfo.InvariantCulture)} 0 0))").Document.Parts;
+        return LinkGestures.FitOf(p["a"], p["b"]);
+    }
+
+    [Fact]
+    public void TheTipRadiusIsTheTipRadiusPropElseThePitchRadiusAndOneModule()
+    {
+        var p = Session("(wheel a #:catalogue involute-gear-m5-72 #:at (0 0 0))").Document.Parts;
+        Assert.Equal(0.185, LinkGestures.TipRadius(p["a"]), 9);   // the catalogue here has no tip-radius: 0.18 + 0.005
+        Assert.Equal(0.235, Pair(0.225).Reach, 9);
+    }
+
+    [Fact]
+    public void WithinTwoPercentOfTheCentreDistanceAMeshIsTrue()
+    {
+        foreach (double x in new[] { 0.225, 0.229, 0.221 })   // 2 % of 0.225 is 4.5 mm
+        {
+            var f = Pair(x);
+            Assert.Equal(LinkGestures.MeshContact.True, f.Contact);
+            Assert.True(f.True && f.Engaged);
+            Assert.Equal("", f.Note);
+        }
+    }
+
+    [Fact]
+    public void FartherThanThatButWithTheTipCirclesOverlappingItIsLooseAndStillTurnsItsPartner()
+    {
+        foreach (double x in new[] { 0.230, 0.234 })   // past 0.2295, short of the tips' 0.235
+        {
+            var f = Pair(x);
+            Assert.Equal(LinkGestures.MeshContact.Loose, f.Contact);
+            Assert.True(f.Engaged);
+            Assert.False(f.True);   // drawn orange in build mode all the same
+            Assert.StartsWith("loose (", f.Note);
+        }
+    }
+
+    [Fact]
+    public void WithTheTipCirclesApartNothingTouches()
+    {
+        foreach (double x in new[] { 0.235, 0.3, 3.0 })   // tip to tip, or apart: no tooth reaches the other wheel
+        {
+            var f = Pair(x);
+            Assert.Equal(LinkGestures.MeshContact.NotTouching, f.Contact);
+            Assert.False(f.Engaged);
+            Assert.Equal("not touching", f.Word);
+        }
+        Assert.Equal("not touching (400.0 mm apart; to mesh 225.0 mm): the tips are 165.0 mm short of each other, nothing passes", Pair(0.4).Note);
+    }
+
+    [Fact]
+    public void NearerThanTheCentreDistanceByMoreThanTwoPercentTheTeethJam()
+    {
+        foreach (double x in new[] { 0.22, 0.2, 0.1 })   // 0.2205 is the edge
+        {
+            var f = Pair(x);
+            Assert.Equal(LinkGestures.MeshContact.Jammed, f.Contact);
+            Assert.False(f.Engaged);
+            Assert.Equal("jammed", f.Word);
+        }
+        Assert.StartsWith("jammed (200.0 mm apart; to mesh 225.0 mm): 25.0 mm too close", Pair(0.2).Note);
+    }
+
+    [Fact]
+    public void TeethOfTwoSizesJamWhereTheirTipsOverlapAndOtherwiseDontTouch()
+    {
+        // the m5 72 (tips 0.185) and the m10 18 (pitch 0.09, tips 0.10): their pitch circles touch at 0.27, their tips at 0.285
+        var at = Pair(0.27, "involute-gear-m10-18");
+        Assert.Equal(LinkGestures.MeshContact.Jammed, at.Contact);   // on the pitch circles, but a tooth lands on a tooth
+        Assert.Contains("teeth of two sizes", at.Note);
+        Assert.Equal(LinkGestures.MeshContact.Jammed, Pair(0.28, "involute-gear-m10-18").Contact);
+        Assert.Equal(LinkGestures.MeshContact.NotTouching, Pair(0.29, "involute-gear-m10-18").Contact);
+        // a plain wheel (no teeth): its rim in the gear's teeth jams; clear of them it touches nothing
+        Assert.Equal(LinkGestures.MeshContact.Jammed, new LinkGestures.MeshFit("g", "w", 0.2, 0.2, false, true, 0.25).Contact);
+        Assert.Equal(LinkGestures.MeshContact.NotTouching, new LinkGestures.MeshFit("g", "w", 0.2, 0.3, false, true, 0.25).Contact);
+    }
+
+    [Fact]
+    public void AMeshThatDoesntTurnItsPartnerIsNoStepOfTheLiveRatio()
+    {
+        // the route's two stages (16:1); then the second stage's 18 swapped for one three metres off wheel-b's 72: 4:1 (pinion-b's arbor, wheel-b)
+        var far = Session(Route(2));
+        Assert.Equal("sails -> pinion-c: 16:1", Assert.Single(TrainRatio.Of(far.Document)).Text);
+        far.Execute("(wheel lost #:catalogue involute-gear-m5-18 #:at (3.225 11 -1.4))");
+        far.Execute("(mesh wheel-b lost)");
+        far.Execute("(unmesh wheel-b pinion-c)");
+        var t = Assert.Single(TrainRatio.Of(far.Document));
+        Assert.Equal("4:1", t.RatioText);
+        Assert.NotEqual("lost", t.Last);
+    }
 }

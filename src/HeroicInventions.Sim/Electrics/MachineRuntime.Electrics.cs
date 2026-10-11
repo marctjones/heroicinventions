@@ -122,6 +122,8 @@ public sealed partial class MachineRuntime
         var def = Def;
         double Size(string id) => def.Part(id) is { } p ? (p.Number("teeth", 0) is > 0 and var t ? t : p.Number("pitch-radius", 0) is > 0 and var r ? r : p.Number("radius", 0)) : 0;
         double Step(string a, string b) => Size(a) > 0 && Size(b) > 0 ? Size(a) / Size(b) : 1;   // ω_b / ω_a
+        // a mesh off its distance that doesn't turn its partner (not touching, or jammed) is no step of the train, as in the view
+        bool Turns(MeshSpec m) => def.Part(m.A) is not { } a || def.Part(m.B) is not { } b || Editor.LinkGestures.FitOf(a, b).Engaged;
         var seen = new Dictionary<string, (double Ratio, double Eta)> { [start] = (1, 1) };
         var queue = new Queue<string>([start]);
         while (queue.Count > 0)
@@ -129,8 +131,8 @@ public sealed partial class MachineRuntime
             string here = queue.Dequeue();
             var (ratio, eta) = seen[here];
             var next = def.Arbors.Where(a => a.Parts.Contains(here)).SelectMany(a => a.Parts).Select(n => (n, 1.0, 1.0))
-                .Concat(def.Meshes.Where(m => m.A == here).Select(m => (m.B, Step(here, m.B), m.Efficiency)))
-                .Concat(def.Meshes.Where(m => m.B == here).Select(m => (m.A, Step(here, m.A), m.Efficiency)))
+                .Concat(def.Meshes.Where(m => m.A == here && Turns(m)).Select(m => (m.B, Step(here, m.B), m.Efficiency)))
+                .Concat(def.Meshes.Where(m => m.B == here && Turns(m)).Select(m => (m.A, Step(here, m.A), m.Efficiency)))
                 .Concat(def.Belts.Where(b => b.A == here).Select(b => (b.B, Step(here, b.B), 1.0)))
                 .Concat(def.Belts.Where(b => b.B == here).Select(b => (b.A, Step(here, b.A), 1.0)));
             foreach (var (n, k, e) in next)
