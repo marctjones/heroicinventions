@@ -1394,7 +1394,7 @@ public partial class BuildMode : Node3D
     /// tools pick alike), with how far along the ray. Rooms only when <paramref name="rooms"/>: a room is picked only where nothing inside
     /// or in front of it is, its box taking the whole click.
     /// </summary>
-    private List<PickHit> PickHits(Vector2 screen, string? exclude = null, bool rooms = false)
+    private List<PickHit> PickHits(Vector2 screen, string? exclude = null, bool rooms = false, float grow = 0.05f)
     {
         var (from, dir) = Ray(screen);
         var hits = new List<PickHit>();
@@ -1403,7 +1403,7 @@ public partial class BuildMode : Node3D
             if (id == exclude) continue;
             if ((_session.Document.Parts[id].Kind == "enclosure") != rooms) continue;
             if (BoundsOf(NodesOf(id)) is not { } box) continue;
-            var g = box.Grow(0.05f);
+            var g = box.Grow(grow);
             if (RayHitsBox(from, dir, g, out float t))
                 hits.Add(new PickHit(id, new PickBox(g.Position.X, g.Position.Y, g.Position.Z, g.End.X, g.End.Y, g.End.Z), t));
         }
@@ -1491,7 +1491,7 @@ public partial class BuildMode : Node3D
     {
         var (from, dir) = Ray(screen);
         // the nearest box the ray meets, not the nested pick: the free ghost rests on what is in front (the sails' box, not a gear in it)
-        var nearest = PickHits(screen, exclude).OrderBy(h => h.T).FirstOrDefault();
+        var nearest = PickHits(screen, exclude, grow: 0).OrderBy(h => h.T).FirstOrDefault();   // the drawn box itself, as before
         string? hit = nearest.Name;
         float t = (float)nearest.T;
         if (hit is not null && BoundsOf(NodesOf(hit)) is { } box)

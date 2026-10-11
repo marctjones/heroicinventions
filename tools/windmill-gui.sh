@@ -15,6 +15,10 @@
 # end, holding every gear), so the log says "the click crossed N parts' boxes, nearest first: sails ..." and "pinion-e lies inside sails's
 # box and is the smaller: it takes the click"; the state line says selected=pinion-e. The second click says "pick list at ...: 1 sails, ..."
 # with pinion-e in it; item 1 makes the state line say selected=sails.
+# Observed (first run, 2026-10-11): "crossed 3 parts' boxes, nearest first: sails (0.0 m), wheel-d (2.7 m), pinion-e (2.7 m)": the
+# camera stands inside the sails' box (t = 0), the ray through pinion-e's middle grazes wheel-d's box too (grown 5 cm); pinion-e, the
+# smallest box inside the sails', takes the click; selected=pinion-e; the list "1 sails, 2 wheel-d, 3 pinion-e"; item 1: selected=sails.
+# The shot of pinion-e selected is docs/art/building/windmill-02-pinion-e-selected.png, the list windmill-03-pick-list.png.
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 out="${1:-${TMPDIR:-/tmp}/windmill-gui}"
