@@ -36,6 +36,20 @@
 # = (-0.45 11.05 1.45) ... the sails' disc clears the post by 1.03 m"; windmill_2@(199.55 -48.17 131.45); "built-2: design post_1:post
 # windmill_2:windmill". Shots: docs/art/building/windmill-05-post-tall-preset.png (the card's 10.6 m pressed, the ghost),
 # windmill-06-ghost-on-the-post.png, windmill-07-windmill-on-the-post.png.
+#
+# Building plan, phase 2 ("Put a gear on this shaft"), the same run after shot 07: "build select windmill_2" (the windmill on the post),
+# a view from beside and behind the hub, "build gear-on 72 hover" (picks the 72 on the gear's card and presses the inspector's "Put a gear
+# on this shaft" by a real click: the ghost waits on the windshaft), "build hover-at" the default spot 1.3 m behind the hub (shot 08: the
+# ghost on the line, the axle drawn), "build click-at" there (a real click; shot 09: the gear placed, the arbor drawn).
+# Predicted: "gear on windmill_2's shaft: placing involute-gear-m5-72, the ghost 1.3 m behind windmill_2 along its axle (0 0 -1)";
+# "(wheel wheel_3 #:at (199.55 -48.17 130.15) #:catalogue involute-gear-m5-72 ...)", "arbor: windmill_2, wheel_3", "... 1.3 m behind
+# windmill_2 along its axle, on windmill_2's arbor (the default spot 1.3 m)"; "build list" says "post_1:post windmill_2:windmill
+# wheel_3:wheel".
+# Observed (first run, 2026-10-11): as predicted, wheel_3 at (199.55 -48.17 130.15), "arbor: windmill_2, wheel_3"; but the gear can't be
+# seen: the windshaft is drawn 0.25 m round (MachineView.Windmills.cs) and a module-5 72 reaches 0.185 m, so it lies inside the rod, as
+# the route's gears do. The ghost on the shaft is now drawn through everything (as the axle is): shot 08,
+# docs/art/building/windmill-08-gear-ghost-on-the-shaft.png (the cyan disc on the cyan axle, 1.3 m behind the hub); the placed gear shows
+# by its label and the inspector's "Joined to: axle with windmill_2", shot 09, windmill-09-gear-on-the-shaft.png.
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 out="${1:-${TMPDIR:-/tmp}/windmill-gui}"
@@ -55,7 +69,11 @@ S+="build done; wait 30; build new 200 130; wait 60; build palette post; wait 10
 S+="look 125 20 30 200 -54 130; wait 20; build hover-at 0 0 0; wait 20; $(shot 05-post-tall-preset)build click-at 0 0 0; wait 20; build log; "
 S+="build palette windmill; wait 10; look 90 20 34 200 -50 130; wait 20; build hover-at 0 10.6 0; wait 20; $(shot 06-ghost-on-the-post)"
 S+="build click-at 0 10.6 0; wait 20; build log; build list; "
-S+="look 90 12 40 200 -52 130; wait 30; $(shot 07-windmill-on-the-post) quit"
+S+="look 90 12 40 200 -52 130; wait 30; $(shot 07-windmill-on-the-post)"
+# phase 2: a gear on the windmill's shaft, by the inspector's button and a click on the line
+S+="build select windmill_2; wait 10; look 120 25 5 199.55 -48.17 130.3; wait 20; build gear-on 72 hover; wait 20; "
+S+="build hover-at -0.45 11.05 0.15; wait 20; $(shot 08-gear-ghost-on-the-shaft)"
+S+="build click-at -0.45 11.05 0.15; wait 20; build log; build list; wait 20; $(shot 09-gear-on-the-shaft) quit"
 GUI_CHECK_TIMEOUT="${GUI_CHECK_TIMEOUT:-300}" "$here/tools/gui-check.sh" --hidden \
   HEROIC_WORLD=lonely-rover-opening HEROIC_HINTS=0 HEROIC_SAVES_DIR="$out/saves" -- "$S" > "$out/run.log" 2>&1 || echo "windmill-gui: gui-check exited $?" >&2
 grep -E "^\[(build|BuildMode)\]|camera:" "$out/run.log" | grep -v "input:" || true

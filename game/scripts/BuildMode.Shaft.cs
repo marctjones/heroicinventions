@@ -72,7 +72,16 @@ public partial class BuildMode
         var along = V(s.Behind).Normalized();
         var z = new Vector3(0, 0, 1);
         _ghost.Basis = Mathf.Abs(along.Dot(z)) > 0.9999f ? Basis.Identity : new Basis(new Quaternion(z, -along));   // a gear is the same either way round
+        // seen through whatever is drawn round the shaft: a windmill's windshaft (0.25 m) is thicker than a module-5 72 (0.185 m at its tips)
+        foreach (var g in Descendants(_ghost).OfType<GeometryInstance3D>())
+            if (g is not Label3D) g.MaterialOverlay = ShaftGhostOverlay;
     }
+
+    private static readonly StandardMaterial3D ShaftGhostOverlay = new()
+    {
+        AlbedoColor = new Color(0.2f, 1f, 0.85f, 0.45f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, NoDepthTest = true,
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha, RenderPriority = 1,
+    };
 
     /// <summary>
     /// The ghost held on the axle: the point of the line nearest the mouse's ray, in 5 cm steps from the selected part while grid snap is
