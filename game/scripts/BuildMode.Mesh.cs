@@ -13,7 +13,8 @@ namespace HeroicInventions;
 /// mouse's ray meets the plane), drawn orange, and still meshed: build mode doesn't refuse it. A click places it with an ordinary
 /// (wheel ...) and meshes it by an ordinary (mesh selected new), so nothing in the physics changes (BuildSession rephases the teeth). A
 /// mesh not at its centre distance, made here with Alt or by the Gear mesh tool, is drawn orange (<see cref="LinkGestures.MeshFit"/>,
-/// the machine view's own rule): the machine view (MachineView.CheckMesh, left as it is) refuses such a mesh when it builds the trains. The live ratio (<see cref="TrainRatio"/>) is on the status line and on a label at the
+/// the machine view's own rule), and the note says what it will do when it runs (<see cref="LinkGestures.MeshContact"/>): loose (still turns its
+/// partner), not touching (passes nothing) or jammed (the pair can't turn). The live ratio (<see cref="TrainRatio"/>) is on the status line and on a label at the
 /// train's last gear: "sails -> wheel_8: 256:1".
 /// </summary>
 public partial class BuildMode
@@ -77,6 +78,20 @@ public partial class BuildMode
         return (float)LinkGestures.MeshCentreDistance(wheel, PartTemplates.Create(entry, "ghost", new Vec3(0, 0, 0), "bronze"));
     }
 
+    /// <summary>
+    /// How a gear from the card would mesh with the ring's wheel <paramref name="have"/> m from its centre (in its plane): what the
+    /// machine view will run it as (<see cref="LinkGestures.MeshFit.Contact"/>). Null when the card or the wheel is missing.
+    /// </summary>
+    private LinkGestures.MeshFit? RingFit(MeshSlots.Ring ring, double have)
+    {
+        var entry = _palette.FirstOrDefault(p => p.Id == _placingPaletteId).Catalogue;
+        if (entry is null || !_session.Document.Parts.TryGetValue(ring.Anchor, out var wheel)) return null;
+        var ghost = PartTemplates.Create(entry, "ghost", new Vec3(0, 0, 0), "bronze");
+        return new LinkGestures.MeshFit(ring.Anchor, "ghost", LinkGestures.MeshCentreDistance(wheel, ghost), have,
+            wheel.Symbol("shape", "") == "gear" && ghost.Symbol("shape", "") == "gear", LinkGestures.SameModule(wheel, ghost),
+            LinkGestures.TipRadius(wheel) + LinkGestures.TipRadius(ghost));
+    }
+
     /// <summary>Whether the gear on the card has teeth the ring's wheel's size.</summary>
     private bool RingModulesMatch(MeshSlots.Ring ring)
     {
@@ -88,8 +103,9 @@ public partial class BuildMode
     private string RingStatus() => _meshRing is { } r
         ? _ghostOnRing
             ? $"A gear meshing with {r.Anchor}, on the pitch circle {F(RingRadius(r, _placingPaletteId))} m from its centre, at {F(Mathf.RadToDeg(_ringAngle))}°: move the mouse round, click to put it there. Alt places it freely (orange, still meshed), Esc cancels"
-                + (RingModulesMatch(r) ? "" : ". Its teeth are another size than " + r.Anchor + "'s (another module): drawn orange, the machine won't run that mesh")
-            : $"A gear meshing with {r.Anchor}, placed freely (Alt): {F(_ghost!.Position.DistanceTo(V(r.Centre)))} m from its centre, the pitch circle is {F(RingRadius(r, _placingPaletteId))} m. Drawn orange: still meshed, but the machine won't run a mesh off its circle (the view's check)"
+                + (RingModulesMatch(r) ? "" : ". Its teeth are another size than " + r.Anchor + "'s (another module): drawn orange; it will run " + RingFit(r, RingRadius(r, _placingPaletteId))?.Note)
+            : $"A gear meshing with {r.Anchor}, placed freely (Alt): {F(_ghost!.Position.DistanceTo(V(r.Centre)))} m from its centre, the pitch circle is {F(RingRadius(r, _placingPaletteId))} m. Drawn orange: still meshed; "
+              + (RingFit(r, _ghost.Position.DistanceTo(V(r.Centre))) is { } fit ? fit.True ? "it will run true" : $"it will run {fit.Note}" : "")
         : "";
 
     /// <summary>Turns the ghost (a gear built along +z) parallel to the ring's wheel, seen through what stands round it.</summary>
@@ -258,7 +274,7 @@ public partial class BuildMode
         _ratioLabels.Clear();
     }
 
-    /// <summary>A mesh's line: amber when its gears stand at their centre distance, orange and thicker when not (allowed).</summary>
+    /// <summary>A mesh's line: amber when its gears stand at their centre distance, orange and thicker when not (allowed; it runs as <see cref="LinkGestures.MeshFit.Contact"/> says).</summary>
     private (Color Colour, float Radius, LinkGestures.MeshFit? Fit) MeshLook(MeshSpec m)
     {
         var doc = _session.Document;
@@ -274,7 +290,7 @@ public partial class BuildMode
         if (!doc.Parts.TryGetValue(a, out var pa) || !doc.Parts.TryGetValue(b, out var pb)) return;
         var fit = LinkGestures.FitOf(pa, pb);
         GD.Print($"[BuildMode] mesh: {a}, {b}: centre distance {F(fit.Want)} m (pitch radii {F(LinkGestures.PitchRadius(pa))} + {F(LinkGestures.PitchRadius(pb))}), they stand {F(fit.Have)} m apart: "
-            + (fit.True ? "on it" : $"drawn orange ({fit.Why}); meshed all the same, but the machine view won't run it (MachineView.CheckMesh: one module, within 2% of the centre distance)"));
+            + (fit.True ? "on it" : $"drawn orange ({fit.Why}); meshed all the same: it will run {fit.Note}"));
     }
 
     /// <summary>"a+b" for a true mesh, "a+b~0.31/0.225" for one off its centre distance (have/want, m): the log's meshes field.</summary>

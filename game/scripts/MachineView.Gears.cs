@@ -1,4 +1,5 @@
 using Godot;
+using HeroicInventions.Sim.Editor;
 using HeroicInventions.Sim.Machines;
 using HeroicInventions.Sim.Mechanics;
 
@@ -101,7 +102,25 @@ public partial class MachineView
 
     private static double Unwrap(double delta) => delta - Math.Tau * Math.Round(delta / Math.Tau);
 
+    /// <summary>
+    /// The meshes that turn their partners (true or loose, <see cref="LinkGestures.MeshFit.Engaged"/>), in the machine's order: the
+    /// only ones the trains are built from.
+    /// </summary>
+    private readonly List<MeshSpec> _engagedMeshes = [];
+
+    /// <summary>
+    /// The gear trains. A mesh off its centre distance is never refused (owner, 2026-10-11): it runs as its geometry says
+    /// (<see cref="LinkGestures.MeshContact"/>), is logged once, and is drawn in the scene (<see cref="DrawBadMesh"/>). Anything
+    /// else that stops the trains being built (a loop of meshes that disagrees, a wheel off its windmill's axle) leaves them
+    /// unbuilt, marked in the scene and the log, and the rest of the machine is built all the same.
+    /// </summary>
     private void BuildGearTrains()
+    {
+        try { BuildGearTrainsOrThrow(); }
+        catch (MachineFormatException e) { GearTrainsUnfinished(e.Message); }
+    }
+
+    private void BuildGearTrainsOrThrow()
     {
         if (Runtime.Def.Meshes.Count == 0 && !Runtime.Def.Arbors.Any(a => a.Parts.Any(IsSimTurned))) return;
         // Wheels on one arbor turn together: work in terms of each arbor's first wheel (a sim part on it is coupled to that, below).
@@ -110,12 +129,22 @@ public partial class MachineView
             foreach (var p in arbor.Parts.Where(p => !IsSimTurned(p))) leader[p] = ArborLead(arbor);
 
         var edges = new Dictionary<string, List<(string To, double Factor)>>();
+        var jammed = new HashSet<string>();   // the arbor leads a jammed mesh holds still
         foreach (var m in Runtime.Def.Meshes)
         {
-            var a = Runtime.Def.Part(m.A)!;
-            var b = Runtime.Def.Part(m.B)!;
-            CheckMesh(a, b, m.Location);
-            double ab = -a.Number("teeth") / b.Number("teeth");
+            var fit = MeshFitOf(m);
+            if (fit is null || !fit.Engaged)
+            {
+                // logged once, drawn, and built as it stands: not touching passes nothing (no edge: each turns on its own); jammed holds both arbors
+                GD.Print($"[gears] {m.A}+{m.B}: {fit?.Note ?? "not touching: one of them is not a wheel"}");
+                if (fit is null) continue;
+                DrawBadMesh(m, fit);
+                if (fit.Contact == LinkGestures.MeshContact.Jammed) { jammed.Add(leader[m.A]); jammed.Add(leader[m.B]); }
+                continue;
+            }
+            if (!fit.True) GD.Print($"[gears] {m.A}+{m.B}: {fit.Note}");
+            _engagedMeshes.Add(m);
+            double ab = -Runtime.Def.Part(m.A)!.Number("teeth") / Runtime.Def.Part(m.B)!.Number("teeth");
             edges.TryAdd(leader[m.A], []);
             edges.TryAdd(leader[m.B], []);
             edges[leader[m.A]].Add((leader[m.B], ab));
@@ -145,9 +174,14 @@ public partial class MachineView
             }
         }
 
+        // a cranked train with a jammed gear in it can't turn at all: every wheel of it is held, the crank too (it stalls)
+        var stalled = factor.Where(kv => jammed.Contains(kv.Key)).Select(kv => kv.Value.Root).ToHashSet();
+        foreach (var (id, (root, _)) in factor)
+            if (stalled.Contains(root)) jammed.Add(id);
+
         foreach (var (id, (root, f)) in factor)
         {
-            if (id == root) continue;
+            if (id == root || jammed.Contains(id)) continue;
             var joint = _axleJoints[id];
             joint.SetFlag(HingeJoint3D.Flag.EnableMotor, true);
             joint.SetParam(HingeJoint3D.Param.MotorMaxImpulse, 1e6f);
@@ -161,9 +195,98 @@ public partial class MachineView
             });
         }
 
-        BuildDrivenTrains(leader, edges, factor.Keys.ToHashSet());
-        foreach (var m in Runtime.Def.Meshes)
+        BuildDrivenTrains(leader, edges, factor.Keys.ToHashSet(), jammed);
+        foreach (var m in _engagedMeshes)
             _meshTeeth.Add((m, _bodiesById[m.A], _bodiesById[m.B], Runtime.Def.Part(m.A)!.Number("teeth"), Runtime.Def.Part(m.B)!.Number("teeth")));
+        foreach (var id in jammed) Jam(id);
+    }
+
+    /// <summary>How a mesh stands (<see cref="LinkGestures.FitOf"/>, B's centre across A's axle), or null when one of its parts is not a wheel.</summary>
+    private LinkGestures.MeshFit? MeshFitOf(MeshSpec m) =>
+        Runtime.Def.Part(m.A) is { Kind: "wheel" } a && Runtime.Def.Part(m.B) is { Kind: "wheel" } b && _bodiesById.ContainsKey(m.A) && _bodiesById.ContainsKey(m.B)
+            ? LinkGestures.FitOf(a, b) : null;
+
+    /// <summary>
+    /// Holds a jammed arbor still: its axle's hinge limited to where it stands (no turn either way, inside Jolt's step: a crank's
+    /// motor on it stalls, its finite torque against the limit), and its drive let go, so nothing asks it to turn. A driven train
+    /// (a windmill or water wheel on it) is held by the world in the momentum exchange as well (<see cref="BuildDrivenTrains"/>).
+    /// </summary>
+    private void Jam(string lead)
+    {
+        if (!_axleJoints.TryGetValue(lead, out var joint)) return;
+        _driveJoints.RemoveAll(d => d.Joint == joint);
+        joint.SetFlag(HingeJoint3D.Flag.EnableMotor, false);
+        joint.SetFlag(HingeJoint3D.Flag.UseLimit, true);
+        joint.SetParam(HingeJoint3D.Param.LimitUpper, 0);
+        joint.SetParam(HingeJoint3D.Param.LimitLower, 0);
+        if (_bodiesById.TryGetValue(lead, out var body))
+            foreach (var b in _arborMates.GetValueOrDefault(body, []).Prepend(body))
+            {
+                b.AngularVelocity = Vector3.Zero;   // a start-rpm can't carry it through teeth that are dug in
+                b.SetMeta("jammed", true);
+            }
+    }
+
+    /// <summary>The world, as a shaft end: it doesn't turn, and nothing turns it. A jammed arbor is linked to it, ratio 1.</summary>
+    private sealed class WorldShaft : IShaft
+    {
+        public static readonly WorldShaft World = new();
+        public double AngularVelocity => 0;
+        public double ShaftInertia => double.PositiveInfinity;
+        public void AddAngularImpulse(double impulse) { }
+    }
+
+    private static readonly Color NotTouchingColour = new(1f, 0.45f, 0.05f), JammedColour = new(1f, 0.22f, 0.12f);
+
+    /// <summary>
+    /// A mesh that doesn't run as cut, in the scene: a line between the two axles and a word over it, "not touching" in orange (the
+    /// colour build mode draws a mesh off its circle) or "jammed" in red-orange. Seen through the gears, as a label is.
+    /// </summary>
+    private void DrawBadMesh(MeshSpec m, LinkGestures.MeshFit fit)
+    {
+        if (fit.Contact is not (LinkGestures.MeshContact.NotTouching or LinkGestures.MeshContact.Jammed)) return;
+        var colour = fit.Contact == LinkGestures.MeshContact.Jammed ? JammedColour : NotTouchingColour;
+        Vector3 pa = ToLocal(_bodiesById[m.A].GlobalPosition), pb = ToLocal(_bodiesById[m.B].GlobalPosition);
+        var mat = new StandardMaterial3D
+        {
+            AlbedoColor = colour with { A = 0.85f }, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, NoDepthTest = true,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha, RenderPriority = 1,
+        };
+        if (pa.DistanceTo(pb) > 0.01f) AddChild(Shapes.Rod(pa, pb, 0.012f, mat));
+        float up = (float)Math.Max(LinkGestures.TipRadius(Runtime.Def.Part(m.A)!), LinkGestures.TipRadius(Runtime.Def.Part(m.B)!)) + 0.08f;
+        AddChild(new Label3D
+        {
+            Name = $"mesh-{m.A}-{m.B}-{fit.Word.Replace(' ', '-')}",
+            Text = fit.Word, Position = (pa + pb) / 2 + new Vector3(0, up, 0), FontSize = 26, OutlineSize = 8, PixelSize = 0.0022f,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, Modulate = colour,
+        });
+    }
+
+    /// <summary>
+    /// The gear trains couldn't be built (<paramref name="why"/>): whatever of them was half made is taken down, the gears are left
+    /// turning freely, and a red mark and tag say so over the first meshed gear; the rest of the machine is built as usual.
+    /// </summary>
+    private void GearTrainsUnfinished(string why)
+    {
+        GD.PrintErr($"[gears] {Name}: the gear trains are unfinished: {why}");
+        GD.Print($"[gears] {Name}: the gear trains are unfinished: {why}");
+        foreach (var d in _drivenLinks) d.Label.QueueFree();
+        _drivenLinks.Clear();
+        _drivenShaftLinks.Clear();
+        _trainOf.Clear();
+        _meshTeeth.Clear();
+        var near = Runtime.Def.Meshes.Select(m => m.A).Concat(Runtime.Def.Arbors.SelectMany(a => a.Parts))
+            .Select(id => _bodiesById.GetValueOrDefault(id)).FirstOrDefault(b => b is not null);
+        var at = near is not null ? ToLocal(near.GlobalPosition) : Vector3.Zero;
+        var red = new Color(0.9f, 0.15f, 0.1f);
+        var mark = Shapes.Sphere(0.06f, Shapes.Mat(red));
+        mark.Position = at;
+        AddChild(mark);
+        AddChild(new Label3D
+        {
+            Name = "gear-trains-unfinished", Text = $"gear train unfinished\n{why}", Position = at + new Vector3(0, 0.35f, 0),
+            FontSize = 24, OutlineSize = 8, PixelSize = 0.0022f, Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true, Modulate = red,
+        });
     }
 
     /// <summary>Each mesh's two bodies and tooth counts, to read where its teeth stand (#85).</summary>
@@ -186,7 +309,7 @@ public partial class MachineView
     }
 
     /// <summary>The trains no crank turns (issue #113): their meshes, and the sim parts keyed on their arbors, as ShaftLinks.</summary>
-    private void BuildDrivenTrains(Dictionary<string, string> leader, Dictionary<string, List<(string To, double Factor)>> edges, HashSet<string> cranked)
+    private void BuildDrivenTrains(Dictionary<string, string> leader, Dictionary<string, List<(string To, double Factor)>> edges, HashSet<string> cranked, HashSet<string> jammed)
     {
         var shafts = new Dictionary<string, IShaft>();
         IShaft Shaft(string id) => shafts.TryGetValue(id, out var s) ? s
@@ -252,7 +375,7 @@ public partial class MachineView
             }
         }
 
-        foreach (var m in Runtime.Def.Meshes)
+        foreach (var m in _engagedMeshes)
         {
             string a = leader[m.A], b = leader[m.B];
             if (cranked.Contains(a) || a == b) continue;
@@ -262,6 +385,12 @@ public partial class MachineView
         }
         foreach (var (sim, lead, sense, _) in simEdges)
             AddDrivenLink(new ShaftLink(Shaft(sim), Shaft(lead), sense), sim, lead, null, _bodiesById[lead]);
+        // a jammed arbor in a driven train is held by the world in the exchange too: its hinge's limit acts only inside Jolt's step,
+        // after the exchange has passed the sails' turn to it, so the sails (inertia far above the wheel's) would keep turning;
+        // linked to the world (infinite inertia, ratio 1), the whole train is brought to rest each tick, and the sails' torque is
+        // what the teeth hold
+        foreach (var lead in jammed.Where(id => !cranked.Contains(id) && adjacency.ContainsKey(id)))
+            _drivenShaftLinks.Add(new ShaftLink(WorldShaft.World, Shaft(lead), 1));
     }
 
     private void AddDrivenLink(ShaftLink link, string fromId, string toId, RigidBody3D? from, RigidBody3D to)
@@ -331,23 +460,6 @@ public partial class MachineView
         return inertia > 0 ? momentum / inertia : 0;
     }
 
-    /// <summary>Gears only mesh if cut to one module and set their pitch circles' radii apart.</summary>
-    private static void CheckMesh(PartSpec a, PartSpec b, SourceLocation? at)
-    {
-        foreach (var g in new[] { a, b })
-            if (g.Symbol("shape", "") != "gear")
-                throw new MachineFormatException($"{g.Id} is not a gear, so it can't mesh", at);
-        if (Math.Abs(a.Number("module") - b.Number("module")) > 1e-9)
-            throw new MachineFormatException($"{a.Id} and {b.Id} are cut to different modules ({a.Number("module") * 1000} and {b.Number("module") * 1000} mm); their teeth can't engage", at);
-        double want = a.Number("pitch-radius") + b.Number("pitch-radius");
-        // the distance between their axles, in the plane square to them: x and y for an axle along z, as written; turned with the heading
-        var axle = YawOf(a) * AxleOf(a);
-        var between = new Vector3((float)(a.At.X - b.At.X), (float)(a.At.Y - b.At.Y), (float)(a.At.Z - b.At.Z));
-        double apart = (between - axle * axle.Dot(between)).Length();
-        if (Math.Abs(apart - want) > 0.02 * want)
-            throw new MachineFormatException($"{a.Id} and {b.Id} are {apart * 1000:F1} mm apart; to mesh they must be {want * 1000:F1} mm (the sum of their pitch radii)", at);
-    }
-
     /// <summary>
     /// After a save is laid on (RestoreView): the bodies have jumped to their saved angles, so every link of a train takes up from
     /// where its gears now stand. Without it the jump was counted as turning, and the angle pull (capped at a tenth of the speed)
@@ -393,7 +505,7 @@ public partial class MachineView
     /// </summary>
     private void CoupleDrivenTrains(double dt)
     {
-        if (_drivenLinks.Count == 0) return;
+        if (_drivenShaftLinks.Count == 0) return;
         foreach (var d in _drivenLinks)
         {
             double to = RawAngle(d.ToBody!, _hinges[d.ToBody!].Axis);

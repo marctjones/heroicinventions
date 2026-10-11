@@ -41,7 +41,8 @@
 ;; from behind the train looking down the axles: "mesh-with 18 hover" on wheel_1 and a click at (0 11.225 -1.3): the ghost on the pitch
 ;; circle where the ray meets the wheel's plane, 90 degrees (up), wheel_9 - sails = (0 0.225 -1.3), "on the pitch circle at 90°"; with Alt
 ;; a click at (-0.4 11 -1.3) puts wheel_10 there (in the wheel's plane, off the circle), still meshed, "drawn orange", meshes field
-;; wheel_1+wheel_10~0.4/0.225. The Gear mesh tool on a typed 18 at (-0.2 10.4 -1.3) and wheel_1: meshed, 0.632 m apart, drawn orange.
+;; wheel_1+wheel_10~0.4/0.225, "it will run not touching (400.0 mm apart; to mesh 225.0 mm)" (the tips, 0.235 m, 165 mm short). The Gear
+;; mesh tool on a typed 18 at (-0.2 10.4 -1.3) and wheel_1: meshed, 0.632 m apart, drawn orange, not touching.
 ;; The train's last gear stays wheel_8 at 256:1 (the most meshes from the sails).
 ;; The mouse path in a real window, with a shot, is tools/windmill-gui.sh. Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list racket/runtime-path
@@ -218,11 +219,12 @@
     (near "wheel_9" '(0 0.225 -1.3))
     (check-true (and (index-of-line #rx"^\\[BuildMode\\] mesh with wheel_1: wheel_10 .*placed freely \\(Alt\\)" lines) #t))
     (check-true (and (index-of-line #rx"^\\[BuildMode\\] mesh: wheel_1, wheel_10: .* drawn orange \\(0.4 m apart, not 0.225 m \\(too far by 0.175 m\\)\\)" lines) #t))
-    ;; (the machine view as it stands, MachineView.CheckMesh at 2 %, refuses it on stderr, which run doesn't read: "wheel_1 and wheel_10
-    ;; are 400.0 mm apart; to mesh they must be 225.0 mm")
+    ;; and what it will do when it runs (owner, 2026-10-11): the tips (0.185 + 0.05 = 0.235 m) are 165 mm short of each other
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] mesh: wheel_1, wheel_10: .* it will run not touching \\(400.0 mm apart; to mesh 225.0 mm\\)" lines) #t))
     (near "wheel_10" '(-0.4 0 -1.3)))
 
   (test-case "the Gear mesh tool on two gears off their centre distance: meshed, drawn orange; the train still ends at wheel_8, 256:1"
     (check-true (and (index-of-line #rx"^\\[BuildMode\\] mesh: far, wheel_1: .* drawn orange" lines) #t) all)
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] mesh: far, wheel_1: .* it will run not touching \\(632\\.[0-9] mm apart; to mesh 225.0 mm\\)" lines) #t) all)
     (check-regexp-match #rx" meshes=wheel_1\\+wheel_2,wheel_3\\+wheel_4,wheel_5\\+wheel_6,wheel_7\\+wheel_8,wheel_1\\+wheel_9,wheel_1\\+wheel_10~0.4/0.225,far\\+wheel_1~0.632/0.225 " (last st))
     (check-false (index-of-line #rx"^\\[BuildMode\\] train: sails -> wheel_(9|10)|train: sails -> far" lines))))
