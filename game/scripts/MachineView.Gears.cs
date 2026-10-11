@@ -65,6 +65,7 @@ public partial class MachineView
         public RigidBody3D? FromBody, ToBody;           // the arbors' first Jolt wheels; null for a sim part
         public double FromAngle, ToAngle, LastFrom, LastTo;
         public required Label3D Label;
+        public bool Held;                               // in a train a jammed mesh holds: no angle pull (nothing may turn to catch up)
     }
 
     private readonly List<DrivenLink> _drivenLinks = [];
@@ -339,6 +340,7 @@ public partial class MachineView
             adjacency[lead].Add((sim, sense));       // and back: sense is ±1
         }
         var factor = new Dictionary<string, double>();
+        var held = new HashSet<string>();   // the members of trains a jammed mesh holds
         foreach (var start in adjacency.Keys)
         {
             if (factor.ContainsKey(start)) continue;
@@ -363,6 +365,7 @@ public partial class MachineView
                 }
             }
             // what each Jolt body in it feels when it is slowed: the train's inertia, seen from it
+            if (members.Any(jammed.Contains)) held.UnionWith(members);
             var train = members.Select(id => (Shaft(id), factor[id])).ToList();
             foreach (var id in members.Where(id => !IsSimTurned(id)))
             {
@@ -381,10 +384,10 @@ public partial class MachineView
             if (cranked.Contains(a) || a == b) continue;
             double ratio = -Runtime.Def.Part(m.A)!.Number("teeth") / Runtime.Def.Part(m.B)!.Number("teeth");
             RigidBody3D bodyA = _bodiesById[a], bodyB = _bodiesById[b];
-            AddDrivenLink(new ShaftLink(Shaft(a), Shaft(b), ratio, m.Efficiency), m.A, m.B, bodyA, bodyB);
+            AddDrivenLink(new ShaftLink(Shaft(a), Shaft(b), ratio, m.Efficiency), m.A, m.B, bodyA, bodyB).Held = held.Contains(a);
         }
         foreach (var (sim, lead, sense, _) in simEdges)
-            AddDrivenLink(new ShaftLink(Shaft(sim), Shaft(lead), sense), sim, lead, null, _bodiesById[lead]);
+            AddDrivenLink(new ShaftLink(Shaft(sim), Shaft(lead), sense), sim, lead, null, _bodiesById[lead]).Held = held.Contains(lead);
         // a jammed arbor in a driven train is held by the world in the exchange too: its hinge's limit acts only inside Jolt's step,
         // after the exchange has passed the sails' turn to it, so the sails (inertia far above the wheel's) would keep turning;
         // linked to the world (infinite inertia, ratio 1), the whole train is brought to rest each tick, and the sails' torque is
@@ -393,7 +396,7 @@ public partial class MachineView
             _drivenShaftLinks.Add(new ShaftLink(WorldShaft.World, Shaft(lead), 1));
     }
 
-    private void AddDrivenLink(ShaftLink link, string fromId, string toId, RigidBody3D? from, RigidBody3D to)
+    private DrivenLink AddDrivenLink(ShaftLink link, string fromId, string toId, RigidBody3D? from, RigidBody3D to)
     {
         // what the link carries, shown under the wheel it drives
         float below = (float)(Runtime.Def.Part(toId)?.Number("radius", 0.2) ?? 0.2) + 0.15f;
@@ -409,6 +412,7 @@ public partial class MachineView
         d.LastTo = RawAngle(to, _hinges[to].Axis);
         _drivenLinks.Add(d);
         _drivenShaftLinks.Add(link);
+        return d;
     }
 
     /// <summary>
@@ -519,7 +523,7 @@ public partial class MachineView
             // crank on a water wheel's axle keeps the wheel's angle, so its pin's mean
             // speed is the wheel's, though its load slows it within every step
             double most = 0.1 * Math.Abs(d.Link.Ratio * d.Link.From.AngularVelocity);
-            d.Link.Bias = Math.Clamp(20 * (d.Link.Ratio * d.FromAngle - d.ToAngle), -most, most);
+            d.Link.Bias = d.Held ? 0 : Math.Clamp(20 * (d.Link.Ratio * d.FromAngle - d.ToAngle), -most, most);
         }
         FrictionDrivenTrains(dt);
         ShaftLink.StepAll(_drivenShaftLinks, dt, 8);
