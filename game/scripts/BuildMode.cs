@@ -426,6 +426,9 @@ public partial class BuildMode : Node3D
             case "click-at":   // "click-at X Y Z": a click wherever that world point is drawn
                 ClickAt(ScriptPoint(w, 1));
                 return ScriptedInput.Step.Next;
+            case "hover-at":   // "hover-at X Y Z": the mouse moved to wherever that world point is drawn, no click (a placing ghost follows it)
+                _inputScript!.Mouse(GetViewport().GetScreenTransform() * _camera.UnprojectPosition(ScriptPoint(w, 1)));
+                return ScriptedInput.Step.Next;
             case "palette-drag":   // "palette-drag ID X Y": press on the entry in the list, drag it out over the scene, let go at X Y
             {
                 string key = EntryKeyOf(w[1]);
