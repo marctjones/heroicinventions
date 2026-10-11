@@ -44,7 +44,17 @@
 ;; wheel_1+wheel_10~0.4/0.225, "it will run not touching (400.0 mm apart; to mesh 225.0 mm)" (the tips, 0.235 m, 165 mm short). The Gear
 ;; mesh tool on a typed 18 at (-0.2 10.4 -1.3) and wheel_1: meshed, 0.632 m apart, drawn orange, not touching.
 ;; The train's last gear stays wheel_8 at 256:1 (the most meshes from the sails).
-;; The mouse path in a real window, with a shot, is tools/windmill-gui.sh. Skipped when Godot is not installed.
+;; Phase 4 ("Add a stage"), a fifth run at (200, 130): the route's post and sails typed; "build select sails", then "build add-stage" four
+;; times (the third as "build add-stage 72 18", the sizes named) presses the selected part's "Add a stage" by a real click: a 72 on its axle
+;; and an 18 meshing it, as one (begin ...); then Ctrl+Z.
+;; Predicted: one "> (begin (wheel wheel_1 ... involute-gear-m5-72 ...) (arbor sails wheel_1) (wheel wheel_2 ... involute-gear-m5-18 ...)
+;; (mesh wheel_1 wheel_2))" a stage; the same eight places relative to the sails as phase 3's (the route's wheel-a ... pinion-e within
+;; 1 mm), the same arbors and meshes, all true; the log's "stage on sails: wheel_1 ... 1.3 m behind sails", "stage on wheel_2: wheel_3 ...
+;; 0.1 m behind wheel_2"; train lines 4:1, 16:1, 64:1, "sails -> wheel_8, ratio 256:1 (4 meshes)"; the pinion selected after each stage;
+;; "build list" has 10 parts. One Ctrl+Z: "undone", the train back to "sails -> wheel_6, ratio 64:1 (3 meshes)" and 8 parts: the whole
+;; stage (two wheels, their arbor and mesh) in one undo.
+;; The mouse path in a real window, with a shot, is tools/windmill-gui.sh; the whole route by mouse, tools/route-mouse.sh. Skipped when
+;; Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
 
@@ -228,3 +238,47 @@
     (check-true (and (index-of-line #rx"^\\[BuildMode\\] mesh: far, wheel_1: .* it will run not touching \\(632\\.[0-9] mm apart; to mesh 225.0 mm\\)" lines) #t) all)
     (check-regexp-match #rx" meshes=wheel_1\\+wheel_2,wheel_3\\+wheel_4,wheel_5\\+wheel_6,wheel_7\\+wheel_8,wheel_1\\+wheel_9,wheel_1\\+wheel_10~0.4/0.225,far\\+wheel_1~0.632/0.225 " (last st))
     (check-false (index-of-line #rx"^\\[BuildMode\\] train: sails -> wheel_(9|10)|train: sails -> far" lines))))
+
+(when (godot-available?)
+  (define lines
+    (run (string-join
+          '("wait 360" "build new 200 130"
+            "build (post tower #:at (0.45 0 -1.45) #:size-y 10.6 #:size-x 0.6 #:size-z 0.6)"
+            "build (windmill sails #:at (0 11 0) #:wind-from-map #f)"
+            "build select sails" "wait 5" "build add-stage" "wait 5" "build log" "build add-stage" "wait 5"
+            "build add-stage 72 18" "wait 5" "build add-stage" "wait 5" "build log" "build list"
+            "key ctrl+z" "wait 5" "build log" "build list" "quit")
+          "; ")))
+  (define all (string-join lines "\n"))
+  (define st (states lines))
+  (define (at-of id [n (sub1 (length st))])
+    (map string->number (string-split (cadr (regexp-match (regexp (string-append "[ ,=]" id "@\\(([^)]*)\\)")) (list-ref st n))))))
+  (define (rel id [n (sub1 (length st))]) (map - (at-of id n) (at-of "sails" n)))
+  (define (near id want [n (sub1 (length st))])
+    (for ([r (rel id n)] [w want]) (check-within r w 0.001 (format "~a - sails = ~a, want ~a" id (rel id n) want))))
+
+  (test-case "add-stage on the sails: a 72 on the windshaft and an 18 meshing it, one (begin ...); the pinion selected"
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] > \\(begin \\(wheel wheel_1 #:at .* #:catalogue involute-gear-m5-72 .*\\(arbor sails wheel_1\\) \\(wheel wheel_2 #:at .* #:catalogue involute-gear-m5-18 .*\\(mesh wheel_1 wheel_2\\)\\)$" lines) #t) all)
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] stage on sails: wheel_1 \\(involute-gear-m5-72\\) .*, 1.3 m behind sails on sails's arbor; wheel_2 \\(involute-gear-m5-18\\) .*\\(0.225 0 0\\) from wheel_1" lines) #t))
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] stage on wheel_2: wheel_3 .*, 0.1 m behind wheel_2 on wheel_2's arbor" lines) #t))
+    (check-equal? (field "selected" (list-ref st 0)) "wheel_2")
+    (near "wheel_1" '(0 0 -1.3) 0)
+    (near "wheel_2" '(0.225 0 -1.3) 0))
+
+  (test-case "four add-stage clicks: the route's train at 256:1, the same places, arbors and meshes as gear-on and mesh-with"
+    (for ([id '("wheel_1" "wheel_2" "wheel_3" "wheel_4" "wheel_5" "wheel_6" "wheel_7" "wheel_8")]
+          [want '((0 0 -1.3) (0.225 0 -1.3) (0.225 0 -1.4) (0.45 0 -1.4) (0.45 0 -1.5) (0.675 0 -1.5) (0.675 0 -1.6) (0.9 0 -1.6))])
+      (near id want 1))
+    (check-equal? (length (filter (λ (l) (regexp-match? #rx"^\\[BuildMode\\] > \\(begin " l)) lines)) 4)
+    (check-equal? (field "selected" (list-ref st 1)) "wheel_8")
+    (check-regexp-match #rx" meshes=wheel_1\\+wheel_2,wheel_3\\+wheel_4,wheel_5\\+wheel_6,wheel_7\\+wheel_8 arbors=sails\\+wheel_1,wheel_2\\+wheel_3,wheel_4\\+wheel_5,wheel_6\\+wheel_7$" (list-ref st 1))
+    (for ([r '("4:1 \\(1 mesh\\)" "16:1" "64:1")]) (check-true (and (index-of-line (regexp (string-append "^\\[BuildMode\\] train: sails -> wheel_[0-9]+, ratio " r)) lines) #t) r))
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] train: sails -> wheel_8, ratio 256:1 \\(4 meshes\\)$" lines) #t))
+    (check-true (and (index-of-line #rx"^\\[build\\] built-1: design tower:post sails:windmill wheel_1:wheel wheel_2:wheel wheel_3:wheel wheel_4:wheel wheel_5:wheel wheel_6:wheel wheel_7:wheel wheel_8:wheel; running 10 parts" lines) #t)))
+
+  (test-case "one Ctrl+Z takes the last stage back whole: 64:1 and 8 parts"
+    (define undone (index-of-line #rx"^\\[BuildMode\\] undone$" lines))
+    (check-true (and undone #t) all)
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] train: sails -> wheel_6, ratio 64:1 \\(3 meshes\\)$" lines undone) #t))
+    (check-true (and (index-of-line #rx"^\\[build\\] built-1: design tower:post sails:windmill wheel_1:wheel wheel_2:wheel wheel_3:wheel wheel_4:wheel wheel_5:wheel wheel_6:wheel; running 8 parts" lines undone) #t))
+    (check-regexp-match #rx" meshes=wheel_1\\+wheel_2,wheel_3\\+wheel_4,wheel_5\\+wheel_6 arbors=sails\\+wheel_1,wheel_2\\+wheel_3,wheel_4\\+wheel_5$" (list-ref st 2))))

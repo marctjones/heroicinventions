@@ -468,6 +468,8 @@ public partial class BuildMode : Node3D
                 return ScriptedInput.Step.Next;
             case "gear-on":   // "gear-on TEETH [hover]": the selected windmill's or wheel's "Put a gear on this shaft" (phase 2, BuildMode.Shaft.cs)
                 return GearOnStep(w);
+            case "add-stage":   // "add-stage [WHEEL PINION]": the selected windmill's or wheel's "Add a stage" (phase 4, BuildMode.Stage.cs)
+                return AddStageStep(w);
             case "mesh-with":   // "mesh-with TEETH [hover]": the selected wheel's "Add a meshing gear" (phase 3, BuildMode.Mesh.cs)
                 return MeshWithStep(w);
             case "click-part":
@@ -761,7 +763,7 @@ public partial class BuildMode : Node3D
         {
             string result = loadFrom is null ? _session.Execute(command) : _session.LoadFile(loadFrom);
             _console.AddText($"{result}\n");
-            GD.Print($"[BuildMode] {result}");
+            foreach (var line in result.Split('\n')) GD.Print($"[BuildMode] {line}");   // a (begin ...) answers a line a command
         }
         catch (Exception e) when (e is FormatException or InvalidOperationException or MachineFormatException or KeyNotFoundException)
         {
@@ -1203,6 +1205,7 @@ public partial class BuildMode : Node3D
 
         AddGearOnButton(part);   // a windmill's or a wheel's (building plan, phase 2): BuildMode.Shaft.cs
         AddMeshWithButton(part);   // a wheel's (phase 3): BuildMode.Mesh.cs
+        AddStageButton(part);   // a windmill's or a wheel's: both in one click (phase 4): BuildMode.Stage.cs
         var buttons = new HBoxContainer();
         if (MachineDef.TurnableKinds.Contains(part.Kind))
         {
