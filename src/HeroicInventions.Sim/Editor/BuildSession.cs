@@ -64,6 +64,7 @@ namespace HeroicInventions.Sim.Editor;
 ///   (remove id)             ; a part, with every link on it; or a pipe, rope, inflow, channel, lift or cylinder by its own id
 ///   (snap a.port b.port)         ; picks pipe vs connect by port kind (PortRules)
 ///   (undo) (redo)
+///   (begin cmd cmd ...)          ; several commands as one edit: one (undo) takes them all back, and if one fails none of them is kept
 ///   (check)                      ; builds MachineDef + MachineRuntime; reports MachineFormatException, with source location
 ///   (run seconds)
 ///   (save name) (load name)      ; by name, under the session's machines directory
@@ -184,6 +185,7 @@ public sealed class BuildSession
         "snap" => Snap(cmd),
         "undo" => Undo(),
         "redo" => Redo(),
+        "begin" => Begin(cmd),
         "check" => Check(),
         "run" => Run(cmd),
         "save" => SaveNamed(Id(cmd, 1)),
@@ -851,6 +853,42 @@ public sealed class BuildSession
         Snapshot();
         Document.Connect(new PortHandle(a.Part, a.Port), new PortHandle(b.Part, b.Port));
         return $"snapped {a} to {b}";
+    }
+
+    /// <summary>
+    /// (begin cmd ...): the commands in turn as one edit (building plan, phase 4: "Add a stage" is a wheel, its arbor, a pinion and its
+    /// mesh, and one Ctrl+Z takes the stage back). Each command snapshots as it always does; afterwards only the first snapshot (the
+    /// document before the group) is kept. If one throws, the document, the undo and the redo stacks go back to what they were before
+    /// the group and the error is rethrown: a group is kept whole or not at all. Undo, redo, load and save don't go in a group.
+    /// Returns the commands' results, one per line.
+    /// </summary>
+    private string Begin(SList cmd)
+    {
+        int depth = _undo.Count;
+        var redo = _redo.Reverse().ToList();
+        var before = Document.ToMachineDef();
+        var results = new List<string>();
+        try
+        {
+            foreach (var form in cmd.Items.Skip(1))
+            {
+                if (form is not SList { Items.Count: > 0 } sub || sub.Items[0] is not SSymbol h)
+                    throw new FormatException("(begin …) takes commands, each in parentheses");
+                if (h.Name is "undo" or "redo" or "load" or "save")
+                    throw new FormatException($"({h.Name}) can't go in (begin …)");
+                results.Add(Dispatch(h.Name, sub));
+            }
+        }
+        catch
+        {
+            while (_undo.Count > depth) _undo.Pop();
+            Document = EditorDocument.Load(before);
+            _redo.Clear();
+            foreach (var r in redo) _redo.Push(r);
+            throw;
+        }
+        while (_undo.Count > depth + 1) _undo.Pop();   // the later snapshots; the one left is the document before the group
+        return string.Join("\n", results);
     }
 
     private string Undo()

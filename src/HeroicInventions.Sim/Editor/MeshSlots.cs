@@ -39,12 +39,21 @@ public static class MeshSlots
     public static Ring? Of(EditorDocument doc, string id)
     {
         if (!doc.Parts.TryGetValue(id, out var part) || !Takes(part) || ShaftSlots.Of(doc, id) is not { } shaft) return null;
-        var n = Unit(shaft.Behind);
+        return Around(id, part.At, shaft.Behind, shaft.WheelProps);
+    }
+
+    /// <summary>
+    /// The ring round a wheel at <paramref name="centre"/> whose axle runs along <paramref name="axle"/> (either way): what <see cref="Of"/>
+    /// gives once the wheel is in the document, worked out before it is (phase 4's stage places a wheel and its pinion in one edit).
+    /// </summary>
+    public static Ring Around(string id, Vec3 centre, Vec3 axle, IReadOnlyList<(string Key, string Value)> wheelProps)
+    {
+        var n = Unit(axle);
         // world +x laid into the plane; for an axle along x, world -z (what +x is for a wheel turned that way)
         var u = Unit(Reject(new Vec3(1, 0, 0), n));
         if (Length(Reject(new Vec3(1, 0, 0), n)) < 0.1) u = Unit(Reject(new Vec3(0, 0, -1), n));
         var v = Cross(u, n);   // up for an axle along -z
-        return new Ring(id, part.At, n, u, v, shaft.WheelProps);
+        return new Ring(id, centre, n, u, v, wheelProps);
     }
 
     private static double Dot(Vec3 a, Vec3 b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
