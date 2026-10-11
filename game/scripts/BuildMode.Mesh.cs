@@ -236,8 +236,8 @@ public partial class BuildMode
             if (centre(t.Last) is not { } at || !_session.Document.Parts.TryGetValue(t.Last, out var last)) continue;
             var label = new Label3D
             {
-                Text = t.Text, Position = at + Vector3.Up * ((float)LinkGestures.PitchRadius(last) + 0.12f),
-                FontSize = 48, OutlineSize = 14, PixelSize = 0.0026f, Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
+                Text = t.Text, Position = at + Vector3.Up * Mathf.Max(0.3f, (float)LinkGestures.PitchRadius(last) + 0.15f),   // over the gears beside it
+                FontSize = 32, OutlineSize = 10, PixelSize = 0.0018f, Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
                 Modulate = new Color(1f, 0.95f, 0.6f), OutlineModulate = new Color(0.05f, 0.07f, 0.12f), RenderPriority = 10, OutlineRenderPriority = 9,
             };
             AddChild(label);

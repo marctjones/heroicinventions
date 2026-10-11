@@ -52,6 +52,20 @@
 # the windshaft is drawn 0.035 m round (MachineView.WindshaftRadius, under the m5 18's root circle; drawing only, a HEROIC_TRACE of the
 # route's mill to 285 s byte-identical before and after): the placed gear shows on the shaft, shot 09, windmill-09-gear-on-the-shaft.png,
 # and so does the route's own four-stage train, shot 01, windmill-01-the-train.png (shots 02 and 03 retaken with it; picks unchanged).
+#
+# Building plan, phase 3 ("Add a meshing gear" and the live ratio), the same run after shot 09 (wheel_3, the 72 on windmill_2's shaft,
+# selected): a view from behind, down the axle; "build mesh-with 18 hover" (the 18 on the card, the inspector's "Add a meshing gear" by a
+# real click); "build hover-at" the pitch circle at +x (shot 10: the green ghost on the green circle, 0.225 m from wheel_3's centre);
+# "build hover-at" a point off the circle with Alt held (shot 11: the ghost where the mouse meets the wheel's plane, drawn orange, the
+# spoke orange); "build click-at" the circle at +x (no Alt): wheel_4 there; then three "build gear-on 72" and "build mesh-with 18" (the
+# default spots) finish the route's four stages, and a view of the train (shot 12: the label at the last pinion).
+# Predicted: "mesh with wheel_3: wheel_4 (involute-gear-m5-18) at (...), (0.225 0 0) from wheel_3, on the pitch circle at 0°"; "mesh:
+# wheel_3, wheel_4: centre distance 0.225 m ... on it"; the train lines 4:1, 16:1, 64:1, then "train: windmill_2 -> wheel_10, ratio 256:1
+# (4 meshes)"; "build list" ends "wheel_3:wheel ... wheel_10:wheel"; the label reads "windmill_2 -> wheel_10: 256:1".
+# Observed (2026-10-11): as predicted; wheel_4 at (199.775 -48.17 130.15), (0.225 0 0) from wheel_3; wheel_10 at (200.45 -48.17 129.85);
+# "built-2: design post_1:post windmill_2:windmill wheel_3:wheel ... wheel_10:wheel; running 10 parts". Shots (quantized to 256 colours):
+# windmill-10-meshing-gear-on-the-pitch-circle.png, windmill-11-meshing-gear-off-the-circle-alt.png, windmill-12-the-train-and-its-ratio.png;
+# shot 01 retaken (the route's train now carries its label, "sails -> pinion-e: 256:1").
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 out="${1:-${TMPDIR:-/tmp}/windmill-gui}"
@@ -75,7 +89,15 @@ S+="look 90 12 40 200 -52 130; wait 30; $(shot 07-windmill-on-the-post)"
 # phase 2: a gear on the windmill's shaft, by the inspector's button and a click on the line
 S+="build select windmill_2; wait 10; look 120 25 5 199.55 -48.17 130.3; wait 20; build gear-on 72 hover; wait 20; "
 S+="build hover-at -0.45 11.05 0.15; wait 20; $(shot 08-gear-ghost-on-the-shaft)"
-S+="build click-at -0.45 11.05 0.15; wait 20; build log; build list; wait 20; $(shot 09-gear-on-the-shaft) quit"
+S+="build click-at -0.45 11.05 0.15; wait 20; build log; build list; wait 20; $(shot 09-gear-on-the-shaft)"
+# phase 3: a meshing gear on the pitch circle round wheel_3 (green), one off it with Alt (orange, not placed), then the rest of the train
+S+="look 200 12 1.6 199.68 -48.17 130.15; wait 20; build mesh-with 18 hover; wait 20; "
+S+="build hover-at -0.225 11.05 0.15; wait 20; $(shot 10-meshing-gear-on-the-pitch-circle)"
+S+="build hover-at -0.12 11.3 0.15 alt; wait 20; $(shot 11-meshing-gear-off-the-circle-alt)"
+S+="build click-at -0.225 11.05 0.15; wait 20; build log; "
+S+="build gear-on 72; wait 10; build mesh-with 18; wait 10; build gear-on 72; wait 10; build mesh-with 18; wait 10; "
+S+="build gear-on 72; wait 10; build mesh-with 18; wait 10; build log; build list; key escape; "
+S+="look 205 14 2.6 199.95 -48.1 130.0; wait 30; $(shot 12-the-train-and-its-ratio) quit"
 GUI_CHECK_TIMEOUT="${GUI_CHECK_TIMEOUT:-300}" "$here/tools/gui-check.sh" --hidden \
   HEROIC_WORLD=lonely-rover-opening HEROIC_HINTS=0 HEROIC_SAVES_DIR="$out/saves" -- "$S" > "$out/run.log" 2>&1 || echo "windmill-gui: gui-check exited $?" >&2
 grep -E "^\[(build|BuildMode)\]|camera:" "$out/run.log" | grep -v "input:" || true
