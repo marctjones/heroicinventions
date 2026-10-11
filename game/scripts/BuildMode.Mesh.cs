@@ -137,7 +137,12 @@ public partial class BuildMode
         if (Mathf.Abs(denom) > 1e-3f && (c - from).Dot(n) / denom is var t and > 0) hit = from + dir * t;
         if (free)
         {
-            if (hit is not { } h) return;
+            if (hit is not { } h)
+            {
+                // edge-on to the plane: the ghost stays, on the circle or not as it was
+                _ghostOnRing = _ghost!.Position.DistanceTo(V(r.At(_ringAngle, RingRadius(r, _placingPaletteId)))) < 1e-3f;
+                return;
+            }
             _ghost!.Visible = true;
             _ghost.Position = h;
             _ghostOnRing = false;
