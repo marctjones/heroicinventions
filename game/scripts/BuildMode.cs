@@ -468,6 +468,8 @@ public partial class BuildMode : Node3D
                 return ScriptedInput.Step.Next;
             case "gear-on":   // "gear-on TEETH [hover]": the selected windmill's or wheel's "Put a gear on this shaft" (phase 2, BuildMode.Shaft.cs)
                 return GearOnStep(w);
+            case "mesh-with":   // "mesh-with TEETH [hover]": the selected wheel's "Add a meshing gear" (phase 3, BuildMode.Mesh.cs)
+                return MeshWithStep(w);
             case "click-part":
             {
                 // click a part wherever it is on screen: "click-part gear-1"
@@ -497,7 +499,7 @@ public partial class BuildMode : Node3D
                 return ScriptedInput.Step.Continue;
             }
             case "log":
-                GD.Print($"[BuildMode] state: px={F(1 / GetViewport().GetScreenTransform().Scale.X)} selected={_selectedId ?? "none"} placing={_placingPaletteId ?? "none"} link={_link?.ToString() ?? "none"} testing={Testing} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})" + (p.Props.GetValueOrDefault("heading-deg") is SNumber h ? $"^{F(h.Value)}" : "")))} arbors={string.Join(",", _session.Document.Arbors.Select(a => string.Join("+", a.Parts)))}");
+                GD.Print($"[BuildMode] state: px={F(1 / GetViewport().GetScreenTransform().Scale.X)} selected={_selectedId ?? "none"} placing={_placingPaletteId ?? "none"} link={_link?.ToString() ?? "none"} testing={Testing} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})" + (p.Props.GetValueOrDefault("heading-deg") is SNumber h ? $"^{F(h.Value)}" : "")))} meshes={MeshesField()} arbors={string.Join(",", _session.Document.Arbors.Select(a => string.Join("+", a.Parts)))}");
                 return ScriptedInput.Step.Continue;
             case "focus":
                 if (w[1] == "console") _consoleInput.GrabFocus(); else GetViewport().GuiReleaseFocus();
@@ -862,7 +864,7 @@ public partial class BuildMode : Node3D
             : $"{_unfinished.Count} part{(_unfinished.Count == 1 ? "" : "s")} not finished (red): {string.Join("; ", _unfinished.Select(kv => $"{kv.Key}: {Plain(kv.Value)}"))}";
         if (_link is { } activeLink) _status.Text = LinkSteps(activeLink, _linkPicks.Count);
         else if (problem is not null) _status.Text = problem;
-        else if (_placingPaletteId is null && !_keepStatus) _status.Text = _selectedId is { } s ? SelectedText(s) : "";
+        else if (_placingPaletteId is null && !_keepStatus) _status.Text = WithRatio(_selectedId is { } s ? SelectedText(s) : "");
         _keepStatus = false;
         DrawLinks();
         DrawPorts();
@@ -1041,6 +1043,7 @@ public partial class BuildMode : Node3D
         // taken out at once, not only queued: a queued child still counts in the list's height, the scroll keeps its place past the new,
         // shorter list and the panel reads blank (found typing a room's size from the numbers list, #223); the place is put back after
         if (_shaft is null) HideAxle();   // drawn while the mouse was on a "Put a gear on this shaft" being taken away (phase 2)
+        if (_meshRing is null) HideRing();   // and "Add a meshing gear" (phase 3)
         var scroller = _inspector.GetParent<ScrollContainer>();
         int scrolled = scroller.ScrollVertical;
         foreach (var c in _inspector.GetChildren()) { _inspector.RemoveChild(c); c.QueueFree(); }
@@ -1199,6 +1202,7 @@ public partial class BuildMode : Node3D
         }
 
         AddGearOnButton(part);   // a windmill's or a wheel's (building plan, phase 2): BuildMode.Shaft.cs
+        AddMeshWithButton(part);   // a wheel's (phase 3): BuildMode.Mesh.cs
         var buttons = new HBoxContainer();
         if (MachineDef.TurnableKinds.Contains(part.Kind))
         {
@@ -1564,7 +1568,7 @@ public partial class BuildMode : Node3D
         RefreshHighlights();
         RebuildInspector();
         if (_link is { } l) _status.Text = LinkSteps(l, _linkPicks.Count);
-        else _status.Text = id is null ? "" : SelectedText(id);
+        else _status.Text = WithRatio(id is null ? "" : SelectedText(id));
     }
 
     private void OnLeftDown(Vector2 screen, bool shift)
@@ -1757,9 +1761,11 @@ public partial class BuildMode : Node3D
         bool wasShown = _ghost is { Visible: true };
         var at = _ghost?.Position;
         var shaft = key == _placingKey ? _shaft : null;   // a new size on the card keeps a gear on its shaft (phase 2)
+        var ring = key == _placingKey ? _meshRing : null;   // or on its pitch circle (phase 3), the circle's size the new gear's
         CancelPlacing();
         CancelLink();
         _shaft = shaft;
+        _meshRing = ring;
         _placingKey = key;
         _placeMaterial = material;
         _placingPaletteId = paletteId;
@@ -1770,6 +1776,7 @@ public partial class BuildMode : Node3D
         string label = _entryByKey.TryGetValue(key, out var e) ? e.Label : paletteId;
         _status.Text = $"Placing {label.ToLowerInvariant()} ({_materials[material].Name.ToLowerInvariant()}): click in the scene to put it there. Shift keeps placing, Esc cancels";
         if (_shaft is not null) { AimGhostOnShaft(); _status.Text = ShaftStatus(); }
+        if (_meshRing is not null && _ghost.Visible) { AimGhostOnRing(); PutGhostOnRing(); }
     }
 
     private void CancelPlacing()
@@ -1778,6 +1785,8 @@ public partial class BuildMode : Node3D
         _ghost = null;
         _shaft = null;
         HideAxle();
+        _meshRing = null;
+        HideRing();
         _placingPaletteId = null;
         _placingKey = null;
         _placeMaterial = null;
@@ -1880,6 +1889,8 @@ public partial class BuildMode : Node3D
         if (_ghost is null) return;
         _ghostOnPost = null;
         _ghostOnShaft = false;
+        _ghostOnRing = false;
+        if (_meshRing is { } ring) { MoveGhostOnRing(screen, ring, free); return; }   // a gear meshing with a wheel (phase 3), Alt frees it in the plane
         if (_shaft is { } shaft && !free) { MoveGhostOnShaft(screen, shaft); return; }   // a gear on a shaft (phase 2), Alt frees it
         if (_placingKey == "windmill" && !free && PostUnder(screen) is { } post)
         {
@@ -1951,6 +1962,7 @@ public partial class BuildMode : Node3D
     private void PlaceGhost(string paletteId, bool keepPlacing)
     {
         if (_ghost is not { Visible: true }) return;
+        if (_meshRing is not null) { PlaceMeshingGear(paletteId); return; }   // phase 3: BuildMode.Mesh.cs
         if (_shaft is not null) { PlaceGearOnShaft(paletteId, keepPlacing); return; }   // phase 2: BuildMode.Shaft.cs
         if (_ghostOnPost is { } onPost && _session.Document.Parts.TryGetValue(onPost, out var post))
         {
@@ -2095,8 +2107,9 @@ public partial class BuildMode : Node3D
         {
             string command = LinkGestures.Command(_session.Document, kind, _linkPicks);
             var last = _linkPicks[^1];
+            var picks = _linkPicks.ToList();
             CancelLink();
-            RunCommand(command);
+            if (RunCommand(command) && kind == LinkGestures.Kind.Mesh) MeshNote(picks[0], picks[1]);   // drawn orange when off (phase 3)
             Select(last);
             _status.Text = kind == LinkGestures.Kind.Rope ? "Tied. The rope's length is in the panel on the right" : "Joined";
         }
@@ -2126,10 +2139,19 @@ public partial class BuildMode : Node3D
             AddChild(rod);
             _pipeVisuals.Add(rod);
         }
-        foreach (var g in doc.Meshes) Line(g.A, g.B, new Color(1f, 0.75f, 0.2f));
+        foreach (var g in doc.Meshes)
+        {
+            // amber at the centre distance; orange and thicker when not, by the machine view's rule (LinkGestures.MeshFit, phase 3)
+            var (colour, radius, _) = MeshLook(g);
+            if (Centre(g.A) is not { } pa || Centre(g.B) is not { } pb || pa.DistanceTo(pb) < 0.01f) continue;
+            var rod = Shapes.Rod(pa, pb, radius, Shapes.Mat(colour));
+            AddChild(rod);
+            _pipeVisuals.Add(rod);
+        }
         foreach (var a in doc.Arbors) for (int i = 1; i < a.Parts.Count; i++) Line(a.Parts[0], a.Parts[i], new Color(0.7f, 0.7f, 0.75f));
         foreach (var a in doc.SealedAir) for (int i = 1; i < a.Tanks.Count; i++) Line(a.Tanks[0], a.Tanks[i], new Color(0.6f, 0.85f, 1f));
         foreach (var c in doc.Cylinders) Line(c.Piston, c.Boiler, new Color(1f, 0.5f, 0.2f));
+        DrawRatio(Centre);   // the live ratio at each train's last gear (phase 3)
     }
 
     // -------------------------------------------------------------- ports

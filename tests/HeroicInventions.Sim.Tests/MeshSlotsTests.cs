@@ -90,7 +90,7 @@ public class MeshSlotsTests
     }
 
     [Fact]
-    public void TheRoutesMeshesAreTrueAndAMeshThreeMetresApartOrAcrossModulesIsNot()
+    public void TheRoutesMeshesAreTrueAndAMeshThreeMetresApartOrAcrossModulesIsNotAsTheMachineViewJudges()
     {
         var s = Session(Route(4).Append("(wheel far #:catalogue involute-gear-m5-18 #:at (3 11 -1.3))").Append("(mesh wheel-a far)")
             .Append("(wheel odd #:catalogue involute-gear-m10-18 #:at (0.27 11 -1.3))").Append("(mesh wheel-a odd)").ToArray());
@@ -105,6 +105,10 @@ public class MeshSlotsTests
         Assert.Equal(0, odd.Off, 9);
         Assert.False(odd.True);
         Assert.Contains("modules differ", odd.Why);
+        // the view's 2 %: 4 mm off 0.225 m turns, 5 mm doesn't
+        var near = Session("(wheel a #:catalogue involute-gear-m5-72 #:at (0 0 0))", "(wheel b #:catalogue involute-gear-m5-18 #:at (0.229 0 0))", "(wheel c #:catalogue involute-gear-m5-18 #:at (0 -0.23 0))").Document.Parts;
+        Assert.True(LinkGestures.FitOf(near["a"], near["b"]).True);
+        Assert.False(LinkGestures.FitOf(near["a"], near["c"]).True);
     }
 
     [Fact]

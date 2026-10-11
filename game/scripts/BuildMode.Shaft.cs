@@ -48,6 +48,8 @@ public partial class BuildMode
         if (ShaftSlots.Of(_session.Document, id) is not { } shaft) return;
         StartEntry("gear");
         if (_placingPaletteId is null) return;
+        _meshRing = null;   // not a gear meshing with a wheel, whatever was being placed before (phase 3)
+        HideRing();
         _shaft = shaft;
         _shaftT = (float)shaft.DefaultT;
         AimGhostOnShaft();
@@ -170,27 +172,35 @@ public partial class BuildMode
     /// many teeth on the gear's card, presses the inspector's "Put a gear on this shaft" (a real click), and then (without "hover") places
     /// the gear at the default spot as a click there does; with "hover" the ghost waits on the axle for the mouse (click-at, hover-at).
     /// </summary>
-    private ScriptedInput.Step GearOnStep(string[] w)
+    private ScriptedInput.Step GearOnStep(string[] w) => ButtonStep(w, "gear_on", "gear-on", ShaftSlots.Takes,
+        id => _shaft is { } s && s.Anchor == id, size => PlaceGearOnShaft(size, keepPlacing: false));
+
+    /// <summary>
+    /// A script word that presses one of the selected part's inspector buttons that start placing a gear (<paramref name="meta"/> names
+    /// the button): picks the module-5 gear of w[1] teeth on the gear's card, scrolls to the button and clicks it (a real click) until
+    /// <paramref name="started"/> says its mode is on, then (without "hover") <paramref name="place"/>s the gear where the ghost starts.
+    /// </summary>
+    private ScriptedInput.Step ButtonStep(string[] w, string meta, string word, Func<PartSpec, bool> takes, Func<string, bool> started, Action<string> place)
     {
         string size = $"involute-gear-m5-{w[1]}";
         bool hover = w.Length > 2 && w[2] == "hover";
-        if (_shaft is { } s && s.Anchor == _gearOnFor && _placingPaletteId == size)
+        if (_gearOnFor is { } pressed && started(pressed) && _placingPaletteId == size)
         {
             _gearOnFor = null;
             _gearOnTries = 0;
-            if (!hover) PlaceGearOnShaft(size, keepPlacing: false);
+            if (!hover) place(size);
             return ScriptedInput.Step.Next;
         }
         if (_gearOnFor is null)
         {
-            if (_selectedId is not { } id || !_session.Document.Parts.TryGetValue(id, out var part) || !ShaftSlots.Takes(part))
-            { GD.Print($"[BuildMode] gear-on: select a windmill or a wheel first (selected: {_selectedId ?? "none"})"); return ScriptedInput.Step.Next; }
-            if (_palette.All(p => p.Id != size)) { GD.Print($"[BuildMode] gear-on: no gear {size} in the catalogue"); return ScriptedInput.Step.Next; }
+            if (_selectedId is not { } id || !_session.Document.Parts.TryGetValue(id, out var part) || !takes(part))
+            { GD.Print($"[BuildMode] {word}: select a {(meta == "gear_on" ? "windmill or a wheel" : "wheel")} first (selected: {_selectedId ?? "none"})"); return ScriptedInput.Step.Next; }
+            if (_palette.All(p => p.Id != size)) { GD.Print($"[BuildMode] {word}: no gear {size} in the catalogue"); return ScriptedInput.Step.Next; }
             _variantChosen["gear"] = size;   // the card's size, as picking it there does
             _gearOnFor = id;
         }
-        if (++_gearOnTries > 60) { GD.Print($"[BuildMode] gear-on: the button didn't start placing on {_gearOnFor}"); _gearOnFor = null; _gearOnTries = 0; return ScriptedInput.Step.Next; }
-        var button = Descendants(_inspector).OfType<Button>().FirstOrDefault(b => b.HasMeta("gear_on") && b.GetMeta("gear_on").AsString() == _gearOnFor);
+        if (++_gearOnTries > 60) { GD.Print($"[BuildMode] {word}: the button didn't start placing on {_gearOnFor}"); _gearOnFor = null; _gearOnTries = 0; return ScriptedInput.Step.Next; }
+        var button = Descendants(_inspector).OfType<Button>().FirstOrDefault(b => b.HasMeta(meta) && b.GetMeta(meta).AsString() == _gearOnFor);
         if (button is null || button.Size.X < 1) return ScriptedInput.Step.Again;   // laid out first
         if (_gearOnTries % 10 == 1) { _inspector.GetParent<ScrollContainer>().EnsureControlVisible(button); return ScriptedInput.Step.Again; }   // scrolled to it, as a person would
         if (_gearOnTries % 10 != 3) return ScriptedInput.Step.Again;   // then a click, every 10 frames till it takes

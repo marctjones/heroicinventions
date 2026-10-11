@@ -177,7 +177,6 @@ public static class LinkGestures
     /// How far apart two meshing gears' axles stand: the sum of their pitch radii, m (zA + zB) / 2 at one module (the route's m5 72 and
     /// 18: 0.005 x 90 / 2 = 0.225 m). Two different modules have no true mesh (the teeth are different sizes); the sum of the pitch
     /// radii is still where their pitch circles touch, so that is what this gives, and <see cref="SameModule"/> says they differ.
-    /// Only where the gear is drawn and placed; the sim's ratio is the tooth counts' wherever the gears stand.
     /// </summary>
     public static double MeshCentreDistance(PartSpec a, PartSpec b) => PitchRadius(a) + PitchRadius(b);
 
@@ -185,42 +184,42 @@ public static class LinkGestures
     public static bool SameModule(PartSpec a, PartSpec b) =>
         !(a.Props.ContainsKey("module") && b.Props.ContainsKey("module")) || Math.Abs(a.Number("module") - b.Number("module")) < 1e-9;
 
-    /// <summary>How far an off mesh may be from its centre distance and still count as on it: 1 mm.</summary>
-    public const double MeshTolerance = 0.001;
+    /// <summary>
+    /// How far a mesh may be off its centre distance, as a share of it, and still turn: 2 %, the machine view's own check
+    /// (MachineView.CheckMesh, game/scripts/MachineView.Gears.cs), so what build mode draws orange is what the view won't run.
+    /// </summary>
+    public const double MeshTolerance = 0.02;
 
     /// <summary>
-    /// How a mesh between <paramref name="A"/> and <paramref name="B"/> stands. <paramref name="Want"/>: the centre distance
-    /// (<see cref="MeshCentreDistance"/>); <paramref name="Have"/>: B's centre from A's axle, across it; <paramref name="Along"/>: B's
-    /// centre along A's axle (0 when their faces are side by side); <paramref name="Parallel"/>: their axles are. A mesh is drawn true
-    /// (<see cref="True"/>) when the modules match, the axles are parallel, the distance is within <see cref="MeshTolerance"/> of the
-    /// centre distance and the faces overlap; otherwise orange in build mode, allowed (never refused), its ratio the tooth counts' all the same.
+    /// How a mesh between <paramref name="A"/> and <paramref name="B"/> stands, by the machine view's rule (MachineView.CheckMesh): both
+    /// gears (<paramref name="Gears"/>), one module (<paramref name="Modules"/>), and B's centre from A's axle, across it
+    /// (<paramref name="Have"/>), within <see cref="MeshTolerance"/> of the centre distance (<paramref name="Want"/>,
+    /// <see cref="MeshCentreDistance"/>). A mesh that isn't (<see cref="True"/> false) is made all the same (allowed, never refused here)
+    /// and drawn orange in build mode; the machine view then refuses it when it builds the gear trains.
     /// </summary>
-    public sealed record MeshFit(string A, string B, double Want, double Have, double Along, bool Modules, bool Parallel, double Faces)
+    public sealed record MeshFit(string A, string B, double Want, double Have, bool Gears, bool Modules)
     {
         public double Off => Have - Want;
-        public bool True => Modules && Parallel && Math.Abs(Off) <= MeshTolerance && Along <= Faces;
+        public bool True => Gears && Modules && Math.Abs(Off) <= MeshTolerance * Want;
 
         /// <summary>What is wrong with it, in words, or "" for a true mesh.</summary>
         public string Why => True ? "" : string.Join("; ", new[]
         {
+            Gears ? null : "one of them is not a gear",
             Modules ? null : "the modules differ (teeth of different sizes)",
-            Parallel ? null : "the axles are not parallel",
-            Math.Abs(Off) <= MeshTolerance ? null : $"{Num(Have)} m apart, not {Num(Want)} m ({(Off > 0 ? "too far" : "too close")} by {Num(Math.Abs(Off))} m)",
-            Along <= Faces ? null : $"{Num(Along)} m apart along the axle, past the faces",
+            Math.Abs(Off) <= MeshTolerance * Want ? null : $"{Num(Have)} m apart, not {Num(Want)} m ({(Off > 0 ? "too far" : "too close")} by {Num(Math.Abs(Off))} m)",
         }.Where(s => s is not null));
     }
 
-    /// <summary>The fit of a mesh between two wheels where they stand (their #:at and axles).</summary>
+    /// <summary>The fit of a mesh between two wheels where they stand: B's centre measured across A's axle, as the machine view does.</summary>
     public static MeshFit FitOf(PartSpec a, PartSpec b)
     {
         var axle = ShaftSlots.BehindWheel(a);   // A's axle in the world (negated: the same line)
-        var other = ShaftSlots.BehindWheel(b);
         var d = new Vec3(b.At.X - a.At.X, b.At.Y - a.At.Y, b.At.Z - a.At.Z);
         double along = d.X * axle.X + d.Y * axle.Y + d.Z * axle.Z;
         double across = Math.Sqrt(Math.Max(0, d.X * d.X + d.Y * d.Y + d.Z * d.Z - along * along));
-        double dot = axle.X * other.X + axle.Y * other.Y + axle.Z * other.Z;
-        double faces = (a.Number("width", 0.04) + b.Number("width", 0.04)) / 2;
-        return new MeshFit(a.Id, b.Id, MeshCentreDistance(a, b), across, Math.Abs(along), SameModule(a, b), Math.Abs(dot) > 0.9995, faces);
+        bool gears = a.Symbol("shape", "") == "gear" && b.Symbol("shape", "") == "gear";
+        return new MeshFit(a.Id, b.Id, MeshCentreDistance(a, b), across, gears, SameModule(a, b));
     }
 
     private static double Distance(Vec3 a, Vec3 b) => Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2) + Math.Pow(a.Z - b.Z, 2));

@@ -29,6 +29,20 @@
 ;; wheel_1, wheel_3" (ShaftSlots.PartnerOf); a click with Alt held puts wheel_4 where the free ghost is (on the sails' box, metres off the
 ;; line), still "arbor: wheel_1, wheel_4", and the log says "placed freely (Alt)". The document's arbors: sails+wheel_1, wheel_1+wheel_2,
 ;; wheel_1+wheel_3, wheel_1+wheel_4.
+;; Phase 3 ("Add a meshing gear" and the live ratio), a fourth run at (200, 130): the route's post and sails typed; "build select sails",
+;; "build gear-on 72", "build mesh-with 18" (presses the selected wheel's "Add a meshing gear" by a real click, places at the default: the
+;; pitch circle at +x), then three times "build gear-on 72" (on the new pinion's axle, 0.1 m behind it) and "build mesh-with 18".
+;; Predicted, relative to the sails: wheel_1 (0 0 -1.3), wheel_2 (0.225 0 -1.3), wheel_3 (0.225 0 -1.4), wheel_4 (0.45 0 -1.4), wheel_5
+;; (0.45 0 -1.5), wheel_6 (0.675 0 -1.5), wheel_7 (0.675 0 -1.6), wheel_8 (0.9 0 -1.6): the route's wheel-a, pinion-b ... pinion-e
+;; (solve.steps:93-115) within 1 mm; 72s and 18s alternately (the catalogue ids in the echoed commands); arbors sails+wheel_1,
+;; wheel_2+wheel_3, wheel_4+wheel_5, wheel_6+wheel_7 and meshes wheel_1+wheel_2, wheel_3+wheel_4, wheel_5+wheel_6, wheel_7+wheel_8, as the
+;; route's (sails+wheel-a, pinion-b+wheel-b, ...; wheel-a+pinion-b, ...), all at their centre distance (no "~" in the log's meshes field);
+;; the log's train lines 4:1, 16:1, 64:1, then "sails -> wheel_8, ratio 256:1 (4 meshes)"; "build list" has 10 parts. Then by the mouse,
+;; from behind the train looking down the axles: "mesh-with 18 hover" on wheel_1 and a click at (0 11.225 -1.3): the ghost on the pitch
+;; circle where the ray meets the wheel's plane, 90 degrees (up), wheel_9 - sails = (0 0.225 -1.3), "on the pitch circle at 90°"; with Alt
+;; a click at (-0.4 11 -1.3) puts wheel_10 there (in the wheel's plane, off the circle), still meshed, "drawn orange", meshes field
+;; wheel_1+wheel_10~0.4/0.225. The Gear mesh tool on a typed 18 at (-0.2 10.4 -1.3) and wheel_1: meshed, 0.632 m apart, drawn orange.
+;; The train's last gear stays wheel_8 at 256:1 (the most meshes from the sails).
 ;; The mouse path in a real window, with a shot, is tools/windmill-gui.sh. Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -155,3 +169,60 @@
     (define r4 (rel "wheel_4"))
     (check-true (> (sqrt (+ (* (car r4) (car r4)) (* (cadr r4) (cadr r4)))) 1) (format "the Alt-placed wheel is off the axle: ~a" r4))
     (check-regexp-match #rx"arbors=sails\\+wheel_1,wheel_1\\+wheel_2,wheel_1\\+wheel_3,wheel_1\\+wheel_4$" (last st))))
+
+(when (godot-available?)
+  (define lines
+    (run (string-join
+          '("wait 360" "build new 200 130"
+            "build (post tower #:at (0.45 0 -1.45) #:size-y 10.6 #:size-x 0.6 #:size-z 0.6)"
+            "build (windmill sails #:at (0 11 0) #:wind-from-map #f)"
+            "build select sails" "wait 5" "build gear-on 72" "wait 5" "build mesh-with 18" "wait 5" "build log"
+            "build gear-on 72" "wait 5" "build mesh-with 18" "wait 5"
+            "build gear-on 72" "wait 5" "build mesh-with 18" "wait 5"
+            "build gear-on 72" "wait 5" "build mesh-with 18" "wait 5" "build log" "build list"
+            "look 180 8 3 200 -48.2 128.7" "wait 10" "build select wheel_1" "wait 5"
+            "build mesh-with 18 hover" "wait 5" "build hover-at 0 11.225 -1.3" "wait 5" "build click-at 0 11.225 -1.3" "wait 5"
+            "build select wheel_1" "wait 5" "build mesh-with 18 hover" "wait 5" "build click-at -0.4 11 -1.3 alt" "wait 5"
+            "build (wheel far #:catalogue involute-gear-m5-18 #:at (-0.2 10.4 -1.3))" "wait 5"
+            "build link mesh" "wait 5" "build click-part far" "wait 10" "build click-part wheel_1" "wait 10" "build log" "quit")
+          "; ")))
+  (define all (string-join lines "\n"))
+  (define st (states lines))
+  (define (at-of id [n (sub1 (length st))])
+    (map string->number (string-split (cadr (regexp-match (regexp (string-append "[ ,=]" id "@\\(([^)]*)\\)")) (list-ref st n))))))
+  (define (rel id [n (sub1 (length st))]) (map - (at-of id n) (at-of "sails" n)))
+  (define (near id want [n (sub1 (length st))])
+    (for ([r (rel id n)] [w want]) (check-within r w 0.001 (format "~a - sails = ~a, want ~a" id (rel id n) want))))
+
+  (test-case "gear-on 72 then mesh-with 18 on the sails: the route's first stage, the pinion on the pitch circle at +x, 4:1"
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] mesh with wheel_1: wheel_2 \\(involute-gear-m5-18\\) .*on the pitch circle at 0°" lines) #t) all)
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] mesh: wheel_1, wheel_2: centre distance 0.225 m .* they stand 0.225 m apart: on it$" lines) #t))
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] train: sails -> wheel_2, ratio 4:1 \\(1 mesh\\)$" lines) #t))
+    (check-equal? (field "selected" (list-ref st 0)) "wheel_2")
+    (near "wheel_1" '(0 0 -1.3) 0)
+    (near "wheel_2" '(0.225 0 -1.3) 0))
+
+  (test-case "four stages by gear-on 72 and mesh-with 18: the route's train, 256:1"
+    (for ([id '("wheel_1" "wheel_2" "wheel_3" "wheel_4" "wheel_5" "wheel_6" "wheel_7" "wheel_8")]
+          [want '((0 0 -1.3) (0.225 0 -1.3) (0.225 0 -1.4) (0.45 0 -1.4) (0.45 0 -1.5) (0.675 0 -1.5) (0.675 0 -1.6) (0.9 0 -1.6))])
+      (near id want 1))
+    (for ([id '("wheel_1" "wheel_2" "wheel_3" "wheel_4" "wheel_5" "wheel_6" "wheel_7" "wheel_8")] [teeth '(72 18 72 18 72 18 72 18)])
+      (check-true (and (index-of-line (regexp (format "^\\[BuildMode\\] > \\(wheel ~a #:at .* #:catalogue involute-gear-m5-~a " id teeth)) lines) #t) id))
+    (check-regexp-match #rx" meshes=wheel_1\\+wheel_2,wheel_3\\+wheel_4,wheel_5\\+wheel_6,wheel_7\\+wheel_8 arbors=sails\\+wheel_1,wheel_2\\+wheel_3,wheel_4\\+wheel_5,wheel_6\\+wheel_7$" (list-ref st 1))
+    (for ([r '("16:1" "64:1")]) (check-true (and (index-of-line (regexp (string-append "^\\[BuildMode\\] train: sails -> wheel_[0-9]+, ratio " r)) lines) #t) r))
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] train: sails -> wheel_8, ratio 256:1 \\(4 meshes\\)$" lines) #t))
+    (check-true (and (index-of-line #rx"^\\[build\\] built-1: design tower:post sails:windmill wheel_1:wheel wheel_2:wheel wheel_3:wheel wheel_4:wheel wheel_5:wheel wheel_6:wheel wheel_7:wheel wheel_8:wheel;" lines) #t)))
+
+  (test-case "by the mouse: the ghost on the pitch circle where the ray meets the wheel's plane; Alt frees it in the plane, orange, still meshed"
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] mesh with wheel_1: wheel_9 .*on the pitch circle at 90°" lines) #t) all)
+    (near "wheel_9" '(0 0.225 -1.3))
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] mesh with wheel_1: wheel_10 .*placed freely \\(Alt\\)" lines) #t))
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] mesh: wheel_1, wheel_10: .* drawn orange \\(0.4 m apart, not 0.225 m \\(too far by 0.175 m\\)\\)" lines) #t))
+    ;; (the machine view as it stands, MachineView.CheckMesh at 2 %, refuses it on stderr, which run doesn't read: "wheel_1 and wheel_10
+    ;; are 400.0 mm apart; to mesh they must be 225.0 mm")
+    (near "wheel_10" '(-0.4 0 -1.3)))
+
+  (test-case "the Gear mesh tool on two gears off their centre distance: meshed, drawn orange; the train still ends at wheel_8, 256:1"
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] mesh: far, wheel_1: .* drawn orange" lines) #t) all)
+    (check-regexp-match #rx" meshes=wheel_1\\+wheel_2,wheel_3\\+wheel_4,wheel_5\\+wheel_6,wheel_7\\+wheel_8,wheel_1\\+wheel_9,wheel_1\\+wheel_10~0.4/0.225,far\\+wheel_1~0.632/0.225 " (last st))
+    (check-false (index-of-line #rx"^\\[BuildMode\\] train: sails -> wheel_(9|10)|train: sails -> far" lines))))
