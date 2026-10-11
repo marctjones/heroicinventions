@@ -7,7 +7,7 @@
 #
 # Steps (every click is at window pixels, 1280x800, found by looking at the shots):
 #   1  the rover is put 8 m west of the bank's crate (254.5, 137.9) facing +x; "Build a new machine" (left panel, 126 166)
-#   2  the short list is up (Beam, Block ... Water tank) with the "More parts: keep things warm, ..." button under it: press it (100 700)
+#   2  the short list is up (Beam, Block ... Water tank) with the "More parts: keep things warm, ..." button under it: press it (100 600; the join tools sit under it since the building plan's phase 0)
 #   3  the full list opens with "Keep things warm" first: press Enclosure (100 143), then click the scene over the marked bank (640 500)
 #   4  "Show all its numbers" (1115 273), scroll the panel, type 0.5 into size-x, size-y, size-z (a regolith cavity as the route's)
 #   5  scroll back up; drag the Depth slider (1102 130) right until the label reads about 1.1 m: the crate is not in the room yet;
@@ -26,7 +26,7 @@ size() { echo "$(click 1200 "$1") key meta+a; type 0.5; key enter; wait 40; "; }
 shot() { echo "camera; shot $out/$1.png; "; }
 S="waitsim 8; rover place 246.5 137.9 270; wait 120; $(shot 01-near-the-bank)"
 S+="$(click 126 166) wait 60; $(shot 02-build-mode-short-list)"
-S+="$(click 100 700) $(shot 03-more-parts)"
+S+="$(click 100 600) $(shot 03-more-parts)"
 S+="$(click 100 143) $(click 640 500) $(shot 04-enclosure-placed-on-the-surface)"
 S+="$(click 1115 273) wheel 1150 450 4; wait 40; $(size 389) $(size 419) $(size 449) $(shot 05-sized)"
 S+="wheel 1150 450 -4; wait 40; drag 1102 130 1130 130; wait 40; $(shot 06-sunk-not-yet-at-the-crate)"

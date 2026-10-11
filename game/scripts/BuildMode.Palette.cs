@@ -35,7 +35,7 @@ public partial class BuildMode
     private string? _placingKey;      // the entry being placed
     private string? _placeMaterial;   // what it will be made of: its own usual material, or the swatch picked
     private CheckButton _showAllToggle = null!;
-    private Control _joinBox = null!;
+    private Control _settingsBox = null!;   // "Material and planet": shown with Show all (the join tools always show)
     private Button _moreCue = null!;
 
     /// <summary>The parts build mode opens with, in order.</summary>
@@ -59,7 +59,7 @@ public partial class BuildMode
         ["post"] = ("Post", "A solid pillar that never moves. Stand things on it or tie a rope to it.",
                     "Parts rest on its top. A rope can tie it to something."),
         ["cart-wheel"] = ("Wheel", "A spoked wheel on an axle. It turns when something pushes or pulls it round.",
-                          "Under Show all parts: Axle joins wheels on one shaft, Belt and Gear mesh turn one from another."),
+                          "Join parts, under the list: Axle joins wheels on one shaft, Belt and Gear mesh turn one from another."),
         ["rope"] = ("Rope", "A rope ties two things together: click one, then the other.",
                     "Ties any two parts. Change how long it is in the panel on the right."),
         ["tank"] = ("Water tank", "A tank that holds water.",
@@ -243,7 +243,7 @@ public partial class BuildMode
     {
         _showAll = on;
         if (_showAllToggle.ButtonPressed != on) _showAllToggle.SetPressedNoSignal(on);
-        _joinBox.Visible = on;
+        _settingsBox.Visible = on;
         _moreCue.Visible = !on;
         GD.Print($"[BuildMode] palette: {(on ? "all parts, grouped by purpose" : "the short starter list")}");
         FillPalette();

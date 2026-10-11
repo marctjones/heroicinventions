@@ -18,7 +18,9 @@ namespace HeroicInventions;
 ///
 /// Scripted (HEROIC_INPUT, tools/gui-check.sh or headless): "build new [X Z]" starts a machine at X Z (default: ahead of the rover);
 /// "build (COMMAND …)" runs one build-mode command, with every <c>#:at (x y z)</c> taken from the build's spot on the ground;
-/// "build edit LABEL" opens a built machine; "build done" closes build mode; "build list" prints the built machines.
+/// "build edit LABEL" opens a built machine; "build done" closes build mode; "build list" prints the built machines. Any other
+/// "build WORD ..." is one of build mode's own scripted steps (BuildMode.ScriptStep: "build palette gear", "build click-part pinion-e",
+/// "build link mesh", "build select sails", "build log" ...; docs/conventions.md), its world points taken from the build's spot too.
 /// </summary>
 public partial class Main
 {
@@ -221,6 +223,12 @@ public partial class Main
                 return ScriptedInput.Step.Next;
         }
         if (_buildMode is null) { GD.Print("[build] no build open"); return ScriptedInput.Step.Next; }
+        if (!w[1].StartsWith('('))   // one of build mode's own steps (palette, click-part, link, select, log ...), as HEROIC_EDITOR_INPUT says it
+        {
+            if (_buildMode.ScriptStep(w[1..], _buildOrigin) is { } step) return step;
+            GD.Print($"[build] unknown build word: {w[1]}");
+            return ScriptedInput.Step.Next;
+        }
         string command = string.Join(' ', w[1..]);
         command = AtClause.Replace(command, m =>
         {

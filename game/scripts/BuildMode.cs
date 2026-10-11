@@ -278,7 +278,9 @@ public partial class BuildMode : Node3D
     /// PART.PORT" click whatever is on screen there; "link KIND" starts a join;
     /// "cmd ..." runs a console command; "save PATH" saves the design; "log"
     /// prints the parts; "focus console" / "focus none" give or take the
-    /// keyboard from the console.
+    /// keyboard from the console; "picklist N" takes item N of the list a
+    /// second click on one spot offers. The world's script reaches the same
+    /// steps as "build WORD ..." (<see cref="ScriptStep"/>).
     /// </summary>
     private ScriptedInput? _inputScript;
 
@@ -329,10 +331,37 @@ public partial class BuildMode : Node3D
         _inputScript?.Process(delta);
     }
 
+    /// <summary>
+    /// One of build mode's own scripted steps (<see cref="EditorStep"/>) run from the world's script (HEROIC_INPUT's "build WORD ...",
+    /// Main.Build.cs): the same words as HEROIC_EDITOR_INPUT, with every world point (click-at, drag-to) taken from
+    /// <paramref name="origin"/>, the build's spot, as a "build (COMMAND)"'s #:at is. Null for a word build mode doesn't know.
+    /// </summary>
+    public ScriptedInput.Step? ScriptStep(string[] w, Vector3 origin)
+    {
+        _inputScript ??= new ScriptedInput("BuildMode", "", this, () => _orbit, EditorStep);   // only its mouse: the clicks go through Godot's input as a person's do
+        _scriptOrigin = origin;
+        try { return EditorStep(w); }
+        finally { _scriptOrigin = Vector3.Zero; }
+    }
+
+    private Vector3 _scriptOrigin;
+
+    private Vector3 ScriptPoint(string[] w, int i) => _scriptOrigin + new Vector3(float.Parse(w[i], System.Globalization.CultureInfo.InvariantCulture),
+                                                                                   float.Parse(w[i + 1], System.Globalization.CultureInfo.InvariantCulture),
+                                                                                   float.Parse(w[i + 2], System.Globalization.CultureInfo.InvariantCulture));
+
     private ScriptedInput.Step? EditorStep(string[] w)
     {
         switch (w[0])
         {
+            case "picklist":   // "picklist N": take item N (from 1) of the pick list a second click on one spot offered
+            {
+                if (_pickList is not { IsOpen: true }) { GD.Print("[BuildMode] no pick list is open (a second click on one spot offers it where the click crosses more than one part)"); return ScriptedInput.Step.Next; }
+                int n = int.Parse(w[1], System.Globalization.CultureInfo.InvariantCulture);
+                if (n < 1 || n > _pickListed.Count) { GD.Print($"[BuildMode] the pick list has {_pickListed.Count} item(s), not {n}"); return ScriptedInput.Step.Next; }
+                _pickChoose?.Invoke(n - 1);   // what its button n does
+                return ScriptedInput.Step.Next;
+            }
             case "palette-has":   // "palette-has NAME": prints whether the full parts list (show-all) has that entry; the game's omits found parts
                 SetShowAll(true);
                 GD.Print($"[BuildMode] palette-has {w[1]} {(ListIndexOf(EntryKeyOf(w[1])) >= 0 ? "yes" : "no")} (InGame {InGame})");
@@ -356,9 +385,7 @@ public partial class BuildMode : Node3D
                 if (BoundsOf(NodesOf(w[1])) is not { } box) { GD.Print($"[BuildMode] no part {w[1]}"); return ScriptedInput.Step.Next; }
                 var screen = GetViewport().GetScreenTransform();
                 var from = screen * _camera.UnprojectPosition(box.GetCenter());
-                var to = screen * _camera.UnprojectPosition(new Vector3(float.Parse(w[2], System.Globalization.CultureInfo.InvariantCulture),
-                                                                        float.Parse(w[3], System.Globalization.CultureInfo.InvariantCulture),
-                                                                        float.Parse(w[4], System.Globalization.CultureInfo.InvariantCulture)));
+                var to = screen * _camera.UnprojectPosition(ScriptPoint(w, 2));
                 _inputScript!.Mouse(from);
                 _inputScript.Mouse(from, MouseButton.Left, true);
                 for (int k = 1; k <= 10; k++) _inputScript.Mouse(from.Lerp(to, k / 10f), MouseButton.Left);
@@ -381,9 +408,7 @@ public partial class BuildMode : Node3D
             case "wait-test":   // wait until no test is running or about to run (the lesson presses Test itself)
                 return Testing || _lessonAutoTestIn is not null ? ScriptedInput.Step.Again : ScriptedInput.Step.Next;
             case "click-at":   // "click-at X Y Z": a click wherever that world point is drawn
-                ClickAt(new Vector3(float.Parse(w[1], System.Globalization.CultureInfo.InvariantCulture),
-                                    float.Parse(w[2], System.Globalization.CultureInfo.InvariantCulture),
-                                    float.Parse(w[3], System.Globalization.CultureInfo.InvariantCulture)));
+                ClickAt(ScriptPoint(w, 1));
                 return ScriptedInput.Step.Next;
             case "palette-drag":   // "palette-drag ID X Y": press on the entry in the list, drag it out over the scene, let go at X Y
             {
@@ -513,8 +538,9 @@ public partial class BuildMode : Node3D
 
         BuildPaletteUi(leftCol);
 
-        var joinBox = new VBoxContainer { Visible = _showAll };
-        _joinBox = joinBox;
+        // the join tools show in the short list too (building plan, phase 0): a wheel, a rope and a windmill's gears are joined by them, and
+        // a tool hidden behind "Show all" is one a newcomer never finds. Only "Material and planet" waits for Show all.
+        var joinBox = new VBoxContainer();
         joinBox.AddChild(new Label { Text = "Join parts: pick a tool, then click the parts" });
         var joinGrid = new GridContainer { Columns = 3 };
         foreach (var (kind, label, tip) in new[]
@@ -537,11 +563,14 @@ public partial class BuildMode : Node3D
         leftCol.AddChild(joinBox);
 
         // the material for parts with no usual one, and the planet, are set once in a while: folded away so the parts list keeps the height (#181)
+        var settingsBox = new VBoxContainer { Visible = _showAll };
+        _settingsBox = settingsBox;
+        leftCol.AddChild(settingsBox);
         var moreToggle = new CheckButton { Text = "Material and planet", FocusMode = Control.FocusModeEnum.None, TooltipText = "The material for parts with no usual one, and the planet the scene stands on" };
-        joinBox.AddChild(moreToggle);
+        settingsBox.AddChild(moreToggle);
         var moreBox = new VBoxContainer { Visible = false };
         moreToggle.Toggled += on => moreBox.Visible = on;
-        joinBox.AddChild(moreBox);
+        settingsBox.AddChild(moreBox);
         moreBox.AddChild(new Label { Text = "Parts with no usual material are made of", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         _materialBox = new OptionButton();
         _materialIds = _materials.All.OrderBy(m => m.Id).Select(m => m.Id).ToList();
@@ -1319,7 +1348,8 @@ public partial class BuildMode : Node3D
                 if (_link is { } l) FinishLink(l);
                 break;
             case Key.Escape:
-                if (_link is not null) { CancelLink(); _status.Text = ""; }
+                if (_pickList is { IsOpen: true }) _pickList.Close();
+                else if (_link is not null) { CancelLink(); _status.Text = ""; }
                 else if (_connectFrom is not null) { CancelConnect(); _status.Text = ""; }
                 else if (_placingPaletteId is not null) CancelPlacing();
                 else if (_selectedId is not null) Select(null);
@@ -1359,20 +1389,81 @@ public partial class BuildMode : Node3D
 
     private (Vector3 From, Vector3 Dir) Ray(Vector2 screen) => (_camera.ProjectRayOrigin(screen), _camera.ProjectRayNormal(screen));
 
-    /// <summary>The nearest part whose drawn shape the mouse ray passes through.</summary>
-    private string? PickPart(Vector2 screen, out float distance, string? exclude = null, bool rooms = false)
+    /// <summary>
+    /// Every part whose drawn shape's box the mouse ray crosses (grown 5 cm, as the world's Join machines tool grows its boxes, so the two
+    /// tools pick alike), with how far along the ray. Rooms only when <paramref name="rooms"/>: a room is picked only where nothing inside
+    /// or in front of it is, its box taking the whole click.
+    /// </summary>
+    private List<PickHit> PickHits(Vector2 screen, string? exclude = null, bool rooms = false)
     {
         var (from, dir) = Ray(screen);
-        string? best = null;
-        distance = float.MaxValue;
+        var hits = new List<PickHit>();
         foreach (var id in _session.Document.Parts.Keys)
         {
             if (id == exclude) continue;
-            if ((_session.Document.Parts[id].Kind == "enclosure") != rooms) continue;   // a room is picked only where nothing inside or in front of it is: its box takes the whole click
+            if ((_session.Document.Parts[id].Kind == "enclosure") != rooms) continue;
             if (BoundsOf(NodesOf(id)) is not { } box) continue;
-            if (RayHitsBox(from, dir, box, out float t) && t < distance) { distance = t; best = id; }
+            var g = box.Grow(0.05f);
+            if (RayHitsBox(from, dir, g, out float t))
+                hits.Add(new PickHit(id, new PickBox(g.Position.X, g.Position.Y, g.Position.Z, g.End.X, g.End.Y, g.End.Z), t));
         }
-        return best;
+        return hits;
+    }
+
+    /// <summary>
+    /// The part a click picks, by the nested-box rule (#225, <see cref="PickBoxes.Choose"/>): where the boxes the ray crosses do not hold
+    /// one another the nearest wins; where the nearest holds others (the gears inside the sails' box) the smaller wins, so a gear on the
+    /// windmill can be clicked. <paramref name="distance"/> is how far along the ray the pick's box starts.
+    /// </summary>
+    private string? PickPart(Vector2 screen, out float distance, string? exclude = null, bool rooms = false)
+    {
+        var chosen = PickBoxes.Choose(PickHits(screen, exclude, rooms));
+        distance = chosen is { } c ? (float)c.T : float.MaxValue;
+        return chosen?.Name;
+    }
+
+    private Vector2? _lastPickClick;          // where the last click in the scene picked something (a second click there offers the list)
+    private Transform3D _lastPickCamera;      // the camera then: the same spot of another view shows other parts
+    private PickList? _pickList;
+    private List<string> _pickListed = [];
+    private Action<int>? _pickChoose;         // what the open list's button N-1 does
+
+    /// <summary>
+    /// A click's pick in the scene, saying (as the world's Join machines tool does) which boxes it crossed and when a smaller box inside
+    /// the nearest took it. A second click on the same spot in the same view, where the ray crosses more than one part, offers them all,
+    /// nearest first (<see cref="PickList"/>, shared with Main.Links.cs); then null is returned and <paramref name="chosen"/> gets the
+    /// part picked from the list.
+    /// </summary>
+    private string? ClickPick(Vector2 screen, Action<string> chosen)
+    {
+        _pickList?.Close();
+        var hits = PickHits(screen);
+        if (hits.Count == 0) hits = PickHits(screen, rooms: true);
+        var ordered = PickBoxes.List(hits);
+        if (PickBoxes.Choose(hits) is not { } pick) { _lastPickClick = null; return null; }
+        if (hits.Count > 1)
+            GD.Print($"[BuildMode] the click crossed {hits.Count} parts' boxes, nearest first: {string.Join(", ", ordered.Select(h => $"{h.Name} ({h.T:F1} m)"))}");
+        bool again = _lastPickClick is { } last && last.DistanceTo(screen) < 4 && _camera.GlobalTransform.IsEqualApprox(_lastPickCamera);
+        _lastPickClick = screen;
+        _lastPickCamera = _camera.GlobalTransform;
+        if (again && hits.Count > 1)
+        {
+            _pickListed = ordered.Select(h => h.Name).ToList();
+            GD.Print($"[BuildMode] pick list at ({screen.X:F0} {screen.Y:F0}): {string.Join(", ", _pickListed.Select((n, i) => $"{i + 1} {n}"))}");
+            if (_pickList is null) AddChild(_pickList = new PickList { Name = "PickList" });
+            _pickChoose = i =>
+            {
+                _pickList?.Close();
+                if (i < 0 || i >= _pickListed.Count) return;
+                GD.Print($"[BuildMode] chosen from the list: {i + 1} {_pickListed[i]}");
+                chosen(_pickListed[i]);
+            };
+            _pickList.Offer(screen, ordered.Select(h => $"{h.Name} ({h.T:F1} m){(h.Name == pick.Name ? " - the click's pick" : "")}").ToList(), _pickChoose);
+            return null;
+        }
+        if (hits.Count > 1 && pick.Name != ordered[0].Name)
+            GD.Print($"[BuildMode] {pick.Name} lies inside {ordered[0].Name}'s box and is the smaller: it takes the click");
+        return pick.Name;
     }
 
     private static bool RayHitsBox(Vector3 from, Vector3 dir, Aabb box, out float t)
@@ -1399,7 +1490,10 @@ public partial class BuildMode : Node3D
     private bool SurfacePoint(Vector2 screen, string? exclude, out Vector3 point)
     {
         var (from, dir) = Ray(screen);
-        string? hit = PickPart(screen, out float t, exclude);
+        // the nearest box the ray meets, not the nested pick: the free ghost rests on what is in front (the sails' box, not a gear in it)
+        var nearest = PickHits(screen, exclude).OrderBy(h => h.T).FirstOrDefault();
+        string? hit = nearest.Name;
+        float t = (float)nearest.T;
         if (hit is not null && BoundsOf(NodesOf(hit)) is { } box)
         {
             var p = from + dir * t;
@@ -1459,7 +1553,7 @@ public partial class BuildMode : Node3D
         }
         if (_link is { } link)
         {
-            if (PickSelectable(screen) is { } hit) PickForLink(link, hit);
+            if (ClickPick(screen, id => PickForLink(link, id)) is { } hit) PickForLink(link, hit);
             return;
         }
         if (PickPort(screen) is { } port)
@@ -1479,7 +1573,8 @@ public partial class BuildMode : Node3D
             return;
         }
         if (_connectFrom is not null) { CancelConnect(); _status.Text = ""; }
-        string? id = PickSelectable(screen);
+        string? id = ClickPick(screen, Select);
+        if (id is null && _pickList is { IsOpen: true }) return;   // the list's choice selects; no press to drag from
         Select(id);
         _pressedId = id;
         _pressPos = screen;
