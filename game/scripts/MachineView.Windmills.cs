@@ -21,6 +21,15 @@ public partial class MachineView
     /// post's top when its ghost is put on one (building plan, phase 1): the nave rests on the post.</summary>
     public const float WindmillHubRadius = 0.45f;
 
+    /// <summary>
+    /// The radius the windshaft is drawn at: 0.035 m, under the root circle of the smallest involute gear a windmill is geared with (the
+    /// module-5 18-tooth pinion, root radius 0.03875 m; catalogue.rktd), so every module-5, 10 and 20 gear put on the shaft shows its
+    /// teeth and web round it, and over the 72's bore (0.026 m) so the shaft still reads as passing through the gear. It was 0.25 m, the
+    /// thickness of a real mill's oak windshaft, which hid the route's 0.185 m wheels inside it (building plan, phase 2: legibility over
+    /// realism). Drawing only: the sails are turned by the sim (Windmill), nothing collides with this rod.
+    /// </summary>
+    public const float WindshaftRadius = 0.035f;
+
     private readonly List<(Windmill mill, Node3D sails)> _windmills = [];
     private readonly List<(Windmill mill, Node3D yaw, Node3D arrow)> _windmillYaw = [];
 
@@ -36,8 +45,8 @@ public partial class MachineView
         var yaw = new Node3D { Position = hub };
         AddChild(yaw);
 
-        // the windshaft, running back into the buck behind the sails
-        yaw.AddChild(Shapes.Rod(Vector3.Zero, new Vector3(0, 0.15f, -2.5f), 0.25f, wood));
+        // the windshaft, running back into the buck behind the sails: drawn thinner than any gear put on it can hide (WindshaftRadius)
+        yaw.AddChild(Shapes.Rod(Vector3.Zero, new Vector3(0, 0.15f, -2.5f), WindshaftRadius, wood));
         if (mill.Vane)
         {
             // a tail vane: a boom out behind the buck and a fin at its end, which the wind pushes round to lie downwind

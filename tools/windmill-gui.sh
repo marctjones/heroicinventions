@@ -48,8 +48,10 @@
 # Observed (first run, 2026-10-11): as predicted, wheel_3 at (199.55 -48.17 130.15), "arbor: windmill_2, wheel_3"; but the gear can't be
 # seen: the windshaft is drawn 0.25 m round (MachineView.Windmills.cs) and a module-5 72 reaches 0.185 m, so it lies inside the rod, as
 # the route's gears do. The ghost on the shaft is now drawn through everything (as the axle is): shot 08,
-# docs/art/building/windmill-08-gear-ghost-on-the-shaft.png (the cyan disc on the cyan axle, 1.3 m behind the hub); the placed gear shows
-# by its label and the inspector's "Joined to: axle with windmill_2", shot 09, windmill-09-gear-on-the-shaft.png.
+# docs/art/building/windmill-08-gear-ghost-on-the-shaft.png (the cyan disc on the cyan axle, 1.3 m behind the hub). Then (merger's call)
+# the windshaft is drawn 0.035 m round (MachineView.WindshaftRadius, under the m5 18's root circle; drawing only, a HEROIC_TRACE of the
+# route's mill to 285 s byte-identical before and after): the placed gear shows on the shaft, shot 09, windmill-09-gear-on-the-shaft.png,
+# and so does the route's own four-stage train, shot 01, windmill-01-the-train.png (shots 02 and 03 retaken with it; picks unchanged).
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 out="${1:-${TMPDIR:-/tmp}/windmill-gui}"
