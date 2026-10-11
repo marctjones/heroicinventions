@@ -162,6 +162,67 @@ public static class LinkGestures
             if (!doc.HasName($"{stem}-{i}")) return $"{stem}-{i}";
     }
 
+    // ------------------------------------------------- where meshed gears stand (building plan, phase 3)
+
+    /// <summary>
+    /// A gear's (or plain wheel's) pitch radius: its #:pitch-radius (a catalogue gear's, m z / 2), else #:module x #:teeth / 2, else its
+    /// #:radius (a friction wheel), else 0.
+    /// </summary>
+    public static double PitchRadius(PartSpec p) =>
+        p.Number("pitch-radius", 0) is > 0 and var r ? r
+        : p.Number("module", 0) * p.Number("teeth", 0) / 2 is > 0 and var q ? q
+        : p.Number("radius", 0);
+
+    /// <summary>
+    /// How far apart two meshing gears' axles stand: the sum of their pitch radii, m (zA + zB) / 2 at one module (the route's m5 72 and
+    /// 18: 0.005 x 90 / 2 = 0.225 m). Two different modules have no true mesh (the teeth are different sizes); the sum of the pitch
+    /// radii is still where their pitch circles touch, so that is what this gives, and <see cref="SameModule"/> says they differ.
+    /// Only where the gear is drawn and placed; the sim's ratio is the tooth counts' wherever the gears stand.
+    /// </summary>
+    public static double MeshCentreDistance(PartSpec a, PartSpec b) => PitchRadius(a) + PitchRadius(b);
+
+    /// <summary>Whether two gears' teeth are one size: their #:module props equal, or either has none (a plain wheel).</summary>
+    public static bool SameModule(PartSpec a, PartSpec b) =>
+        !(a.Props.ContainsKey("module") && b.Props.ContainsKey("module")) || Math.Abs(a.Number("module") - b.Number("module")) < 1e-9;
+
+    /// <summary>How far an off mesh may be from its centre distance and still count as on it: 1 mm.</summary>
+    public const double MeshTolerance = 0.001;
+
+    /// <summary>
+    /// How a mesh between <paramref name="A"/> and <paramref name="B"/> stands. <paramref name="Want"/>: the centre distance
+    /// (<see cref="MeshCentreDistance"/>); <paramref name="Have"/>: B's centre from A's axle, across it; <paramref name="Along"/>: B's
+    /// centre along A's axle (0 when their faces are side by side); <paramref name="Parallel"/>: their axles are. A mesh is drawn true
+    /// (<see cref="True"/>) when the modules match, the axles are parallel, the distance is within <see cref="MeshTolerance"/> of the
+    /// centre distance and the faces overlap; otherwise orange in build mode, allowed (never refused), its ratio the tooth counts' all the same.
+    /// </summary>
+    public sealed record MeshFit(string A, string B, double Want, double Have, double Along, bool Modules, bool Parallel, double Faces)
+    {
+        public double Off => Have - Want;
+        public bool True => Modules && Parallel && Math.Abs(Off) <= MeshTolerance && Along <= Faces;
+
+        /// <summary>What is wrong with it, in words, or "" for a true mesh.</summary>
+        public string Why => True ? "" : string.Join("; ", new[]
+        {
+            Modules ? null : "the modules differ (teeth of different sizes)",
+            Parallel ? null : "the axles are not parallel",
+            Math.Abs(Off) <= MeshTolerance ? null : $"{Num(Have)} m apart, not {Num(Want)} m ({(Off > 0 ? "too far" : "too close")} by {Num(Math.Abs(Off))} m)",
+            Along <= Faces ? null : $"{Num(Along)} m apart along the axle, past the faces",
+        }.Where(s => s is not null));
+    }
+
+    /// <summary>The fit of a mesh between two wheels where they stand (their #:at and axles).</summary>
+    public static MeshFit FitOf(PartSpec a, PartSpec b)
+    {
+        var axle = ShaftSlots.BehindWheel(a);   // A's axle in the world (negated: the same line)
+        var other = ShaftSlots.BehindWheel(b);
+        var d = new Vec3(b.At.X - a.At.X, b.At.Y - a.At.Y, b.At.Z - a.At.Z);
+        double along = d.X * axle.X + d.Y * axle.Y + d.Z * axle.Z;
+        double across = Math.Sqrt(Math.Max(0, d.X * d.X + d.Y * d.Y + d.Z * d.Z - along * along));
+        double dot = axle.X * other.X + axle.Y * other.Y + axle.Z * other.Z;
+        double faces = (a.Number("width", 0.04) + b.Number("width", 0.04)) / 2;
+        return new MeshFit(a.Id, b.Id, MeshCentreDistance(a, b), across, Math.Abs(along), SameModule(a, b), Math.Abs(dot) > 0.9995, faces);
+    }
+
     private static double Distance(Vec3 a, Vec3 b) => Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2) + Math.Pow(a.Z - b.Z, 2));
     private static string Num(double v) => Math.Round(v, 3).ToString(System.Globalization.CultureInfo.InvariantCulture);
 }
