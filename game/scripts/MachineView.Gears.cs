@@ -118,7 +118,8 @@ public partial class MachineView
     private void BuildGearTrains()
     {
         try { BuildGearTrainsOrThrow(); }
-        catch (MachineFormatException e) { GearTrainsUnfinished(e.Message); }
+        // a design's fault (a wheel a train can't reach, a missing axle) as well as the view's own refusals: never skip the passes after
+        catch (Exception e) when (e is MachineFormatException or KeyNotFoundException or InvalidOperationException) { GearTrainsUnfinished(e.Message); }
     }
 
     private void BuildGearTrainsOrThrow()
