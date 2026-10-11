@@ -28,8 +28,9 @@ public static class ShaftSlots
     /// differ from a wheel's own (axis z, no tilt or heading). A catalogue wheel's command takes only #:at and #:material, so build mode
     /// sets these after it, one (set ...) each.
     /// </summary>
+    /// <paramref name="Partner"/> is the part the new gear is joined to, (arbor Partner new): see <see cref="PartnerOf"/>.
     public sealed record Shaft(string Anchor, Vec3 Point, Vec3 Behind, double DefaultT, IReadOnlyList<string> Mates,
-                               IReadOnlyList<(string Key, string Value)> WheelProps)
+                               IReadOnlyList<(string Key, string Value)> WheelProps, string Partner)
     {
         public Vec3 At(double t) => new(Point.X + Behind.X * t, Point.Y + Behind.Y * t, Point.Z + Behind.Z * t);
     }
@@ -67,6 +68,20 @@ public static class ShaftSlots
         return new Vec3(-world.X, -world.Y, -world.Z);
     }
 
+    /// <summary>
+    /// What a new gear on <paramref name="id"/>'s axle is joined to: the part itself, unless it is a wheel already on an arbor, when it is
+    /// that arbor's lead (its first part the sim doesn't turn, the one the view gives the bearing and the gear train counts the arbor by,
+    /// MachineView.ArborLead). Joined to a rider instead, (arbor wheel_2 wheel_3) beside (arbor wheel_1 wheel_2), wheel_2 would lead one
+    /// arbor and ride another, and the view's gear train (BuildGearTrains, which takes each arbor's lead in turn) would count wheel_3's
+    /// meshes apart from wheel_1's, the sails' wheel: all on one lead, the axle is one shaft wherever the gear is put on it.
+    /// </summary>
+    public static string PartnerOf(EditorDocument doc, string id)
+    {
+        if (!doc.Parts.TryGetValue(id, out var part) || part.Kind != "wheel") return id;
+        var arbor = doc.Arbors.FirstOrDefault(a => a.Parts.Contains(id));
+        return arbor?.Parts.FirstOrDefault(p => doc.Parts.GetValueOrDefault(p)?.Kind is not ("windmill" or "waterwheel" or "jetwheel")) ?? id;
+    }
+
     private static double Dot(Vec3 a, Vec3 b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
     private static Vec3 Minus(Vec3 a, Vec3 b) => new(a.X - b.X, a.Y - b.Y, a.Z - b.Z);
 
@@ -97,7 +112,7 @@ public static class ShaftSlots
             props = [("axis", "z"), ("heading-deg", Num(90 - part.Number("facing-deg", 90)))];
         else
             props = [("axis", part.Symbol("axis", "z")), ("tilt-deg", Num(part.Number("tilt-deg", 0))), ("heading-deg", Num(MachineDef.HeadingOf(part)))];
-        return new Shaft(id, part.At, behind, t, mates, props.Where(p => !(p.Item1 is "tilt-deg" or "heading-deg" && p.Item2 == "0" || p.Item1 == "axis" && p.Item2 == "z")).ToList());
+        return new Shaft(id, part.At, behind, t, mates, props.Where(p => !(p.Item1 is "tilt-deg" or "heading-deg" && p.Item2 == "0" || p.Item1 == "axis" && p.Item2 == "z")).ToList(), PartnerOf(doc, id));
     }
 
     private static string Num(double v) => Math.Round(v, 6).ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);

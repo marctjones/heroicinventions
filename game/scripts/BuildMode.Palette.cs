@@ -440,6 +440,8 @@ public partial class BuildMode
         _cardJoins.Text = e.Joins;
         if (key == "windmill")   // the snap onto a post (building plan, phase 1), and how to get out of it
             _cardJoins.Text = (e.Joins + " Over a post it sits on the post's top, the post under its gears behind the sails; hold Alt to place it freely.").Trim();
+        if (key == "gear" && _shaft is { } shaft)   // a gear on a shaft (building plan, phase 2)
+            _cardJoins.Text = $"Going on {shaft.Anchor}'s shaft, joined on its axle: slide it along the line with the mouse. Pick its size below; hold Alt to place it freely (still joined).";
         _cardJoins.Visible = _cardJoins.Text != "";
         _cardPicture.Texture = _thumbs.GetValueOrDefault(key) ?? (key == "rope" ? RopeIcon() : null);
         _cardPicture.Visible = _cardPicture.Texture is not null;

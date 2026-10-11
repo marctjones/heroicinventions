@@ -20,6 +20,15 @@
 ;; "the sails' disc clears the post by 1.03 m" (1.45 - 0.3 half depth - 0.12 the stocks); "build list" says "post_1:post windmill_2:windmill".
 ;; A second windmill clicked on open ground 8 m off is placed as before (no hub-on-post line for it), and a third clicked on the post's top
 ;; with Alt held is placed freely (no hub-on-post line either).
+;; Phase 2 ("Put a gear on this shaft"), a third run at (200, 130): the route's post and sails typed, "build select sails", "build gear-on 72"
+;; (picks the 72 on the gear's card, presses the inspector's button by a real click, places at the default spot).
+;; Predicted: "[BuildMode] arbor: sails, wheel_1", wheel_1 - sails = (0, 0, -1.3) (the route's wheel-a: the windshaft runs back along -z
+;; from a mill facing +z); the new wheel is selected, so a second "build gear-on 72" puts wheel_2 0.1 m further back, (0, 0, -1.4), "arbor:
+;; wheel_1, wheel_2"; "build list" has both. Then by the mouse, viewed across the shaft: "gear-on 72 hover" on wheel_2 and a click at
+;; (0 11 -2): the ghost held on the axle where the ray passes nearest, wheel_3 - sails = (0, 0, -2), joined to the axle's lead, "arbor:
+;; wheel_1, wheel_3" (ShaftSlots.PartnerOf); a click with Alt held puts wheel_4 where the free ghost is (on the sails' box, metres off the
+;; line), still "arbor: wheel_1, wheel_4", and the log says "placed freely (Alt)". The document's arbors: sails+wheel_1, wheel_1+wheel_2,
+;; wheel_1+wheel_3, wheel_1+wheel_4.
 ;; The mouse path in a real window, with a shot, is tools/windmill-gui.sh. Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -102,3 +111,47 @@
     (check-equal? (length (filter (λ (l) (regexp-match? #rx"hub on post_1's top" l)) lines)) 1 "the windmill off the post, and the one placed with Alt, aren't snapped")
     (check-true (> (abs (- (car (at-of "windmill_4")) (car hub))) 0.1) "with Alt the hub isn't put where the snap puts it")
     (check-true (> (abs (- (- (cadr (at-of "windmill_3")) (cadr post)) 11.05)) 0.1) "off the post the ghost rests as before")))
+
+(when (godot-available?)
+  (define lines
+    (run (string-join
+          '("wait 360" "build new 200 130"
+            "build (post tower #:at (0.45 0 -1.45) #:size-y 10.6 #:size-x 0.6 #:size-z 0.6)"
+            "build (windmill sails #:at (0 11 0) #:wind-from-map #f)"
+            "build select sails" "wait 5" "build gear-on 72" "wait 5" "build log"
+            "build gear-on 72" "wait 5" "build log" "build list"
+            "look 90 10 6 200 -48.2 128.5" "wait 10" "build gear-on 72 hover" "wait 5" "build hover-at 0 11 -2" "wait 5" "build click-at 0 11 -2" "wait 5"
+            "build gear-on 72 hover" "wait 5" "build click-at 0.5 11 -3 alt" "wait 5" "build log" "quit")
+          "; ")))
+  (define all (string-join lines "\n"))
+  (define st (states lines))
+  (define (at-of id [n (sub1 (length st))])   ; a part's #:at from state line n, as numbers
+    (map string->number (string-split (cadr (regexp-match (regexp (string-append "[ ,=]" id "@\\(([^)]*)\\)")) (list-ref st n))))))
+  (define (arbor-line a b) (index-of-line (regexp (string-append "^\\[BuildMode\\] arbor: " a ", " b "$")) lines))
+  (define (rel id) (map - (at-of id) (at-of "sails")))
+  (define (on-shaft id want)
+    (define r (rel id))
+    (check-within (car r) 0 0.001 (format "~a - sails = ~a" id r))
+    (check-within (cadr r) 0 0.001 (format "~a - sails = ~a" id r))
+    (check-within (caddr r) want 0.01 (format "~a - sails = ~a" id r)))
+
+  (test-case "gear-on 72 on the selected sails: a 72 on the windshaft 1.3 m behind the hub, joined on the sails' arbor"
+    (check-true (and (arbor-line "sails" "wheel_1") #t) all)
+    (check-equal? (field "selected" (list-ref st 0)) "wheel_1")
+    (check-regexp-match #rx"arbors=sails\\+wheel_1$" (list-ref st 0))
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] > \\(wheel wheel_1 #:at .* #:catalogue involute-gear-m5-72 " lines) #t))
+    (on-shaft "wheel_1" -1.3))
+
+  (test-case "a second gear-on 72, on the new wheel: 0.1 m further back on the same axle"
+    (check-true (and (arbor-line "wheel_1" "wheel_2") #t) all)
+    (on-shaft "wheel_2" -1.4)
+    (check-true (and (index-of-line #rx"^\\[build\\] built-1: design tower:post sails:windmill wheel_1:wheel wheel_2:wheel" lines) #t)))
+
+  (test-case "by the mouse: the ghost held on the axle where the ray passes nearest; Alt frees it, still joined"
+    (check-true (and (arbor-line "wheel_1" "wheel_3") #t) all)
+    (on-shaft "wheel_3" -2)
+    (check-true (and (arbor-line "wheel_1" "wheel_4") #t))
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] gear on wheel_3's shaft: wheel_4 .*placed freely \\(Alt\\): [0-9.]+ m off the axle line" lines) #t))
+    (define r4 (rel "wheel_4"))
+    (check-true (> (sqrt (+ (* (car r4) (car r4)) (* (cadr r4) (cadr r4)))) 1) (format "the Alt-placed wheel is off the axle: ~a" r4))
+    (check-regexp-match #rx"arbors=sails\\+wheel_1,wheel_1\\+wheel_2,wheel_1\\+wheel_3,wheel_1\\+wheel_4$" (last st))))

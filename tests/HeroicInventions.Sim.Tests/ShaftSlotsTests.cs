@@ -53,8 +53,11 @@ public class ShaftSlotsTests
         Assert.Equal(0.1, onWheel.DefaultT, 9);
         Near(0, 11, -1.4, onWheel.At(onWheel.DefaultT));
         // a second arbor through wheel-a is the same axle: the next goes behind wheel-b, from whichever part is chosen
+        Assert.Equal("sails", ShaftSlots.Of(s.Document, "sails")!.Partner);
+        Assert.Equal("wheel-a", onWheel.Partner);   // the sails' arbor's lead (the sim turns the sails)
         s.Execute("(wheel wheel-b #:catalogue g72 #:at (0 11 -1.4))");
         s.Execute("(arbor wheel-a wheel-b)");
+        Assert.Equal("wheel-a", ShaftSlots.Of(s.Document, "wheel-b")!.Partner);   // not wheel-b: one lead for the whole axle
         Assert.Equal(["wheel-a", "sails", "wheel-b"], ShaftSlots.AxleMates(s.Document, "wheel-a"));
         Near(0, 11, -1.5, ShaftSlots.Of(s.Document, "sails")!.At(ShaftSlots.Of(s.Document, "sails")!.DefaultT));
         var fromA = ShaftSlots.Of(s.Document, "wheel-a")!;

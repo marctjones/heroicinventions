@@ -466,6 +466,8 @@ public partial class BuildMode : Node3D
             case "link":
                 StartLink(Enum.Parse<LinkGestures.Kind>(w[1], ignoreCase: true));
                 return ScriptedInput.Step.Next;
+            case "gear-on":   // "gear-on TEETH [hover]": the selected windmill's or wheel's "Put a gear on this shaft" (phase 2, BuildMode.Shaft.cs)
+                return GearOnStep(w);
             case "click-part":
             {
                 // click a part wherever it is on screen: "click-part gear-1"
@@ -495,7 +497,7 @@ public partial class BuildMode : Node3D
                 return ScriptedInput.Step.Continue;
             }
             case "log":
-                GD.Print($"[BuildMode] state: px={F(1 / GetViewport().GetScreenTransform().Scale.X)} selected={_selectedId ?? "none"} placing={_placingPaletteId ?? "none"} link={_link?.ToString() ?? "none"} testing={Testing} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})" + (p.Props.GetValueOrDefault("heading-deg") is SNumber h ? $"^{F(h.Value)}" : "")))}");
+                GD.Print($"[BuildMode] state: px={F(1 / GetViewport().GetScreenTransform().Scale.X)} selected={_selectedId ?? "none"} placing={_placingPaletteId ?? "none"} link={_link?.ToString() ?? "none"} testing={Testing} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})" + (p.Props.GetValueOrDefault("heading-deg") is SNumber h ? $"^{F(h.Value)}" : "")))} arbors={string.Join(",", _session.Document.Arbors.Select(a => string.Join("+", a.Parts)))}");
                 return ScriptedInput.Step.Continue;
             case "focus":
                 if (w[1] == "console") _consoleInput.GrabFocus(); else GetViewport().GuiReleaseFocus();
@@ -1195,6 +1197,7 @@ public partial class BuildMode : Node3D
             }
         }
 
+        AddGearOnButton(part);   // a windmill's or a wheel's (building plan, phase 2): BuildMode.Shaft.cs
         var buttons = new HBoxContainer();
         if (MachineDef.TurnableKinds.Contains(part.Kind))
         {
@@ -1752,8 +1755,10 @@ public partial class BuildMode : Node3D
         string material = key == _placingKey && _placeMaterial is { } m ? m : UsualMaterial(key);
         bool wasShown = _ghost is { Visible: true };
         var at = _ghost?.Position;
+        var shaft = key == _placingKey ? _shaft : null;   // a new size on the card keeps a gear on its shaft (phase 2)
         CancelPlacing();
         CancelLink();
+        _shaft = shaft;
         _placingKey = key;
         _placeMaterial = material;
         _placingPaletteId = paletteId;
@@ -1763,12 +1768,15 @@ public partial class BuildMode : Node3D
         if (at is { } p) _ghost.Position = p;
         string label = _entryByKey.TryGetValue(key, out var e) ? e.Label : paletteId;
         _status.Text = $"Placing {label.ToLowerInvariant()} ({_materials[material].Name.ToLowerInvariant()}): click in the scene to put it there. Shift keeps placing, Esc cancels";
+        if (_shaft is not null) { AimGhostOnShaft(); _status.Text = ShaftStatus(); }
     }
 
     private void CancelPlacing()
     {
         _ghost?.QueueFree();
         _ghost = null;
+        _shaft = null;
+        HideAxle();
         _placingPaletteId = null;
         _placingKey = null;
         _placeMaterial = null;
@@ -1870,6 +1878,8 @@ public partial class BuildMode : Node3D
     {
         if (_ghost is null) return;
         _ghostOnPost = null;
+        _ghostOnShaft = false;
+        if (_shaft is { } shaft && !free) { MoveGhostOnShaft(screen, shaft); return; }   // a gear on a shaft (phase 2), Alt frees it
         if (_placingKey == "windmill" && !free && PostUnder(screen) is { } post)
         {
             // the sails' ghost on a post (building plan, phase 1): the post under the windshaft behind the sails, where the route's train
@@ -1940,6 +1950,7 @@ public partial class BuildMode : Node3D
     private void PlaceGhost(string paletteId, bool keepPlacing)
     {
         if (_ghost is not { Visible: true }) return;
+        if (_shaft is not null) { PlaceGearOnShaft(paletteId, keepPlacing); return; }   // phase 2: BuildMode.Shaft.cs
         if (_ghostOnPost is { } onPost && _session.Document.Parts.TryGetValue(onPost, out var post))
         {
             var hub = _ghost.Position;
