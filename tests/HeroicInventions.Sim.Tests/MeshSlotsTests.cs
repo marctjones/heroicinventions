@@ -145,6 +145,23 @@ public class MeshSlotsTests
         Assert.Empty(TrainRatio.Of(Session("(wheel a #:catalogue involute-gear-m5-72 #:at (0 0 0))", "(wheel b #:catalogue involute-gear-m5-18 #:at (0.225 0 0))", "(mesh a b)").Document));
     }
 
+    /// <summary>
+    /// Lesson 5's rig (tutorial plan, gap 6): a 72 turned by a crank (#:drive-rpm) drives an 18, which drives a 36. The crank is the
+    /// train's mover: the 36 turns 72/36 = 2 times as fast, 2:1, the 18 between them only passing it on; a crank let go (rpm 0) drives nothing.
+    /// </summary>
+    [Fact]
+    public void AWheelTurnedByACrankDrivesItsTrain()
+    {
+        string[] rig = ["(wheel crank #:catalogue involute-gear-m5-72 #:at (0 1.19 0))", "(wheel second #:catalogue involute-gear-m5-18 #:at (0.225 1.19 0))",
+                        "(wheel third #:catalogue involute-gear-m5-36 #:at (0.36 1.19 0))", "(mesh crank second)", "(mesh second third)"];
+        Assert.Empty(TrainRatio.Of(Session(rig).Document));
+        var t = Assert.Single(TrainRatio.Of(Session([.. rig, "(set crank #:drive-rpm 30)"]).Document));
+        Assert.Equal(("crank", "third", 2L, 1L, 2), (t.Mover, t.Last, t.Num, t.Den, t.Meshes));
+        Assert.Equal("crank -> third: 2:1", t.Text);
+        Assert.Single(TrainRatio.Of(Session([.. rig, "(set crank #:drive-rpm -30)"]).Document));   // turned the other way: the same train
+        Assert.Empty(TrainRatio.Of(Session([.. rig, "(set crank #:drive-rpm 30)", "(set crank #:drive-rpm 0)"]).Document));
+    }
+
     // ---- what a mesh off its distance does when it runs (owner, 2026-10-11): true, loose, not touching, jammed
 
     /// <summary>A 72 (m5, pitch 0.18, tips 0.185) and an 18 (pitch 0.045, tips 0.05) <paramref name="x"/> m apart: centre distance 0.225, tips 0.235.</summary>

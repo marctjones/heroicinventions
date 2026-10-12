@@ -3,7 +3,8 @@ using HeroicInventions.Sim.Machines;
 namespace HeroicInventions.Sim.Editor;
 
 /// <summary>
-/// The live ratio (building plan, phase 3): for each prime mover in a design (a windmill, water wheel, jet wheel or Stirling engine), the
+/// The live ratio (building plan, phase 3): for each prime mover in a design (a windmill, water wheel, jet wheel or Stirling engine, or a
+/// wheel turned by a crank, #:drive-rpm not 0: the tutorial's lesson 5), the
 /// gear train its arbors and meshes reach (a mesh that doesn't turn its partner, not touching or jammed, is no step of it) and the ratio from it to the train's last gear, from the tooth counts (as the sim's
 /// <see cref="MachineRuntime.TrainOf"/> and the gear view: a mesh turns its partner at teeth / teeth, an arbor at 1, the sense dropped).
 /// Over the editor's document, so build mode shows it as the train is built. Belts are left out (a belt's ratio is its drums' radii).
@@ -35,10 +36,13 @@ public static class TrainRatio
     public static IReadOnlyList<Train> Of(EditorDocument doc)
     {
         var trains = new List<Train>();
-        foreach (var mover in doc.Parts.Values.Where(p => PrimeMoverKinds.Contains(p.Kind)).OrderBy(p => p.Id, StringComparer.Ordinal))
+        foreach (var mover in doc.Parts.Values.Where(Drives).OrderBy(p => p.Id, StringComparer.Ordinal))
             if (From(doc, mover.Id) is { } t) trains.Add(t);
         return trains;
     }
+
+    /// <summary>Whether a part turns a train: a prime mover, or a wheel turned by a crank (#:drive-rpm, the hand or the walkers' speed, not 0).</summary>
+    public static bool Drives(PartSpec p) => PrimeMoverKinds.Contains(p.Kind) || p.Kind == "wheel" && p.Number("drive-rpm", 0) != 0;
 
     /// <summary>The train from part <paramref name="start"/>, or null when it crosses no mesh.</summary>
     public static Train? From(EditorDocument doc, string start)
