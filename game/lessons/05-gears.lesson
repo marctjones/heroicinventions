@@ -1,0 +1,64 @@
+;; Lesson 5: a crank and three gears, the first of "Build five machines" (docs/plans/tutorial-plan.md). Read by
+;; src/HeroicInventions.Sim/Editor/Lessons.cs; the format is described there.
+;;
+;; The numbers, worked by hand before writing the steps (the catalogue's module-5 spur gears, bronze; materials.rktd):
+;;   a gear's pitch radius is module × teeth / 2:   72 -> 0.005 × 72 / 2 = 0.18 m,  18 -> 0.045 m,  36 -> 0.09 m
+;;   two gears mesh with their centres the sum apart: 72 and 18 at 0.18 + 0.045 = 0.225 m, 18 and 36 at 0.045 + 0.09 = 0.135 m
+;;   (the mouse's "Add a meshing gear" puts the new gear on that circle: the 18 at x = 0.225, the 36 at x = 0.36)
+;;   across a mesh the speed goes up by teeth driving / teeth driven, and the way it turns reverses:
+;;     crank (the 72) 30 rpm -> the 18 at 30 × 72 / 18 = 120 rpm, the other way -> the 36 at 120 × 18 / 36 = 60 rpm, the crank's way
+;;     the 36 turns 72 / 36 = 2 times the crank's speed (2:1): the 18 between them only passes the motion on (an idler)
+;;   in the Test's 30 s (a turning machine never goes quiet, so a Test runs its whole 30 s): 15, 60 and 30 turns, less the start:
+;;     the crank is a hand of at most 5 N·m on a bronze 72 of 0.003963 m³ × 8800 kg/m³ = 34.9 kg, about its axle
+;;     6.534e-5 × 8800 = 0.575 kg·m²: it speeds up at 5 / 0.575 = 8.7 rad/s² and reaches 30 rpm (pi rad/s) in 0.36 s, losing
+;;     half of that at full speed, 0.09 of a turn; the others keep step with it, 4 × and 2 × that: 14.91, 59.64 and 29.82 turns.
+;;   120 rpm is far under the engine's 3,000 rpm limit. The driven gears are turned at their speed by the crank (a hand-turned
+;;   train of light gears: they don't slow it), so the ratio is exact.
+;; Traced (this rig built through build mode's mouse words, then Test, 2026-10-12): "turns involute_gear_m5_72_2=14.9078 rpm=30.0
+;; | turns wheel_3=-59.6384 rpm=-120.0 | turns wheel_4=29.8188 rpm=60.0", t=30.01 by=limit. The Test's check: the 36 ends at
+;; 60 rpm, within 2; the done text quotes the 18's and the 36's traced speeds.
+;;
+;; Geometry: a 1 m post (its card's first size) at the middle; the 72's centre 1.19 m up (its teeth reach 0.185 m, so they clear the
+;; post's top by 5 mm; the ghost clicked on the post's top stands at 1.18, and the lesson sets it on 1.19). All three gears turn about
+;; z, facing the camera.
+
+(lesson gears
+  (title "Lesson 5: crank and gears")
+  (view 0 0.2 2.4 0.15 0.85 0)
+
+  (step
+    (text "Gears need something to stand on. Pick Post in the parts list (it is lit up), then click on the green post in the scene. The card's first size, 1 m tall, is the right one.")
+    (highlight post)
+    (target (kind post) (at 0 0 0) (within 0.5))
+    (check place (kind post) (as post)))
+
+  (step
+    (text "Now a big gear on top of the post. Pick Gear in the parts list (it is lit up; the lesson has opened Show all parts for you). The card offers the one with 72 teeth. Click on the green gear over the post. The lesson then fits a handle to it, a crank, turned by hand at 30 turns a minute: half a turn every second.")
+    (highlight gear)
+    (variant involute-gear-m5-72)
+    (target (kind involute-gear-m5-72) (at 0 1.19 0) (within 0.3))
+    (check place (kind wheel) (teeth 72) (as crank)
+           (then "(set {id} #:drive-rpm 30)")
+           (then "(set {id} #:drive-torque 5)")))
+
+  (step
+    (text "A small gear for the big one to turn. The big gear is selected, so the panel on the right is about it: press Add a meshing gear there (it is lit up; scroll the panel down if you can't see it). The card offers the one with 18 teeth. A green circle shows where its teeth meet the big gear's: move the mouse round the circle and click to put the small gear there. On the right of the big gear is a good place.")
+    (select crank)
+    (highlight button:mesh_with)
+    (variant involute-gear-m5-18)
+    (check mesh (with crank) (teeth 18) (as second)))
+
+  (step
+    (text "And a middle-sized gear for the small one to turn. The small gear is selected now: press Add a meshing gear again (lit up). This time the card offers 36 teeth. Click on the circle on the small gear's far side, away from the big gear, so the two bigger gears don't touch. A label over the last gear then says how much faster it turns than the crank.")
+    (select second)
+    (highlight button:mesh_with)
+    (variant involute-gear-m5-36)
+    (check mesh (with second) (teeth 36) (as third)))
+
+  (step
+    (text "Press Test it (lit, top left) and watch: gears never stop by themselves, so the Test runs for its full 30 seconds. When two gears mesh, the one with fewer teeth turns faster, as many times faster as it has fewer teeth. The crank's 72 teeth push the 18 round 72 / 18 = 4 times as fast, 120 turns a minute, the other way round. The 18 pushes the 36 round half as fast as itself, 60 turns a minute, back the crank's way. So the last gear turns twice as fast as the crank, 72 / 36 = 2: the label's 2:1.")
+    (highlight test)
+    (fail "The last gear was turning at {third.rpm} at the end, not the {expect} it should. Are all three gears meshed, each put on its green circle? A gear put off the circle (drawn orange) may not reach its neighbour, or may jam against it. Press Test it again after you have changed it.")
+    (check turned (part third) (rpm 60) (within 2)))
+
+  (done "The small gear turned at {second.rpm} and the last gear at {third.rpm}: twice the crank's 30, as counting teeth said. Big drives small: faster. Small drives big: slower. The little gear in the middle turned the last one back the crank's way, but did not change how fast it goes: only the first and the last gears' teeth set that, 72 against 36."))

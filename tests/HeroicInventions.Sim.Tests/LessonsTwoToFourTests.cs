@@ -42,10 +42,11 @@ public class LessonsTwoToFourTests
     public void AllFourLessonsAreShippedInOrderAndReadInPlainWords()
     {
         string[] files = Directory.GetFiles(LessonPath(""), "*.lesson").Select(Path.GetFileName).OrderBy(f => f, StringComparer.Ordinal).ToArray()!;
-        Assert.Equal(["01-see-saw.lesson", "02-pulley.lesson", "03-ramp.lesson", "04-water.lesson"], files);
+        Assert.Equal(["01-see-saw.lesson", "02-pulley.lesson", "03-ramp.lesson", "04-water.lesson"], files.Take(4));   // then "Build five machines", 05 on
+        Assert.All(files.Skip(4), f => Assert.True(string.CompareOrdinal(f, "05") >= 0, f));
         var lessons = files.Select(Load).ToList();
-        Assert.Equal(["see-saw", "pulley", "ramp", "water"], lessons.Select(l => l.Id));
-        for (int i = 0; i < 4; i++) Assert.StartsWith($"Lesson {i + 1}: ", lessons[i].Title);
+        Assert.Equal(["see-saw", "pulley", "ramp", "water"], lessons.Take(4).Select(l => l.Id));
+        for (int i = 0; i < lessons.Count; i++) Assert.StartsWith($"Lesson {i + 1}: ", lessons[i].Title);
         foreach (var lesson in lessons)
             foreach (var text in lesson.Steps.SelectMany(s => new[] { s.Text, s.Fail ?? "" }).Append(lesson.Done))
                 foreach (var jargon in new[] { "torque", "#:", "_1", "_2", "Jolt", "rigid", "hinge", "prop", "inertia", "conductance", "sim ", "engine" })

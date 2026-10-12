@@ -24,6 +24,16 @@ namespace HeroicInventions.Sim.Editor;
 ///   (check rolled (part ball) (far 1.0) (within 0.15))       after a Test: the ball went at the speed rolling from where it began gives,
 ///                                                            sqrt(10/7 g h) plus or minus 0.15 m/s, and ended at least 1 m from the start
 ///   (check level (part lower) (litres 10) (within 0.5))      after a Test: that tank ended with that much water, plus or minus
+///   (check place (kind wheel) (teeth 72) (as crank))         a gear of that many teeth ((catalogue involute-gear-m5-72) names the exact
+///                                                            catalogue part; (on-shaft drum) asks for it on the same axle as "drum")
+///   (check mesh (with crank) (teeth 18) (as second))         a new gear meshed with the remembered "crank" (either way round), remembered as "second"
+///   (check turned (part third) (rpm 60) (within 2))          after a Test: that wheel was turning at 60 rpm at the end, either way, plus or minus
+///
+/// A step's (highlight ...) is a palette entry (post, gear), test, part:ROLE (that part lit in the scene), or a button:
+/// button:gear_on, button:mesh_with or button:add_stage (the selected part's inspector button, "Put a gear on this shaft", "Add a
+/// meshing gear", "Add a stage") and button:preset:LABEL (the part's card's size button, "button:preset:3 m" in quotes). A step's
+/// (select crank) selects that remembered part as the step begins (and lights it while it isn't), so its inspector shows the button;
+/// a lit button is the one for that part.
 ///
 /// The lesson may say (view YAW PITCH DISTANCE X Y Z) where the camera starts: a tall rig is seen
 /// from straight in front, so that nothing stands between the camera and the ground the blocks go on.
@@ -47,8 +57,8 @@ namespace HeroicInventions.Sim.Editor;
 /// {tilt} (the last test's largest lean, degrees). Also: {hoist}, {rise} (how
 /// far the part of the step's check rose), {accel} (m/s²), {drop}, {speed}, {slide}, {top}, {across} (a ball's
 /// worked and measured numbers), {moved}, {reached}, {empties}, {upper.litres},
-/// {lower.litres} and {lower.level} (water). (done "...") is what the lesson
-/// says once its last step is done.
+/// {lower.litres} and {lower.level} (water), {third.rpm} (how fast that wheel was turning at the end of the last Test, either way).
+/// (done "...") is what the lesson says once its last step is done.
 /// </summary>
 public sealed record Lesson(string Id, string Title, IReadOnlyList<LessonStep> Steps, string Done)
 {
@@ -97,6 +107,11 @@ public sealed record Lesson(string Id, string Title, IReadOnlyList<LessonStep> S
             Within = Number("within") ?? 0.1,
             Far = Number("far"),
             Litres = Number("litres"),
+            Teeth = Number("teeth"),
+            Catalogue = Opt("catalogue"),
+            OnShaft = Opt("on-shaft"),
+            With = Opt("with"),
+            Rpm = Number("rpm"),
             Then = c.Fields("then").Select(t => Str(t) ?? "").Where(t => t != "").ToList(),
         };
         return new LessonStep(text, step.Field("highlight") is { } h ? Sym(h, 1) : null,
@@ -104,6 +119,7 @@ public sealed record Lesson(string Id, string Title, IReadOnlyList<LessonStep> S
         {
             Variant = step.Field("variant") is { } v ? Sym(v, 1) : null,
             Fail = Str(step.Field("fail")),
+            Select = step.Field("select") is { } sel ? Sym(sel, 1) : null,
         };
     }
 
@@ -123,13 +139,19 @@ public sealed record LessonStep(string Text, string? Highlight, string? Material
 
     /// <summary>What to say, in the lesson's own words, when a Test's outcome is not the worked one (its numbers filled in); null for a plain statement of the numbers.</summary>
     public string? Fail { get; init; }
+
+    /// <summary>The remembered part the step selects as it begins (its inspector has the step's button), or null.</summary>
+    public string? Select { get; init; }
+
+    /// <summary>The inspector or card button the step lights ("mesh_with", "gear_on", "add_stage", "preset:3 m"), from (highlight button:...); null for none.</summary>
+    public string? Button => Highlight is { } h && h.StartsWith("button:", StringComparison.Ordinal) ? h["button:".Length..] : null;
 }
 
 /// <summary>Where a step's part should go: a point, or a place along a remembered beam (see <see cref="Lesson"/>).</summary>
 public sealed record LessonTarget(string Kind, Vec3? At, string? On, double Along, double Up, (string Heavy, string Light)? Balance, double Within);
 
 /// <summary>
-/// What completes a step: "place", "join", "test", or one of the checks of a Test's outcome, "balanced", "lifted", "rolled" and "level"
+/// What completes a step: "place", "mesh", "join", "test", or one of the checks of a Test's outcome, "balanced", "lifted", "rolled", "level" and "turned"
 /// (see <see cref="Lesson"/>).
 /// </summary>
 public sealed record LessonCheck(string Type, string? Kind, string? Category, string? As, string? Part, string? Beam, double WithinDeg)
@@ -144,11 +166,26 @@ public sealed record LessonCheck(string Type, string? Kind, string? Category, st
     public double? Far { get; init; }
     public double? Litres { get; init; }
 
+    /// <summary>A gear's tooth count the place or mesh check asks for (#:teeth), or null for any.</summary>
+    public double? Teeth { get; init; }
+
+    /// <summary>The catalogue part the place or mesh check asks for (#:catalogue involute-gear-m5-72), or null for any.</summary>
+    public string? Catalogue { get; init; }
+
+    /// <summary>The remembered part the placed part must share an axle with (on one arbor, or a chain of them: <see cref="ShaftSlots.AxleMates"/>).</summary>
+    public string? OnShaft { get; init; }
+
+    /// <summary>The remembered gear a "mesh" check's new gear meshes with.</summary>
+    public string? With { get; init; }
+
+    /// <summary>A "turned" check's speed at the end of the Test, rpm (either way round).</summary>
+    public double? Rpm { get; init; }
+
     /// <summary>Commands run once the step is done, "{id}" being the part that counted: ((then "(set {id} #:water 0)") pours a tank out, for one).</summary>
     public IReadOnlyList<string> Then { get; init; } = [];
 
     /// <summary>A check on how a Test run came out: the lesson reads the run's facts, and the player presses Test (only "balanced" is run by the lesson itself).</summary>
-    public bool IsOutcome => Type is "balanced" or "lifted" or "rolled" or "level";
+    public bool IsOutcome => Type is "balanced" or "lifted" or "rolled" or "level" or "turned";
 }
 
 /// <summary>
@@ -181,6 +218,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         Index = Math.Clamp(index, 0, Lesson.Steps.Count - 1);
         _baseline = null;
         _baselineLinks = null;
+        _baselineMeshes = null;
         Nudge = null;
         Roles.Clear();
         foreach (var (k, v) in roles) Roles[k] = v;
@@ -195,12 +233,15 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         for (int i = 0; i < Index; i++)
         {
             var c = Lesson.Steps[i].Check;
-            bool gone = c is { Type: "place", As: { } role } && (!Roles.TryGetValue(role, out var id) || !doc.Parts.ContainsKey(id))
-                     || c.Type == "join" && !JoinMade(doc, c);
+            bool gone = c is { Type: "place" or "mesh", As: { } role } && (!Roles.TryGetValue(role, out var id) || !doc.Parts.ContainsKey(id))
+                     || c.Type == "join" && !JoinMade(doc, c)
+                     || c.Type == "mesh" && !MeshMade(doc, c)
+                     || c is { Type: "place", OnShaft: not null, As: { } r2 } && Roles.TryGetValue(r2, out var placed) && !OnShaftOk(doc, c, placed);
             if (!gone) continue;
             Index = i;
             _baseline = null;
             _baselineLinks = null;
+        _baselineMeshes = null;
             Nudge = null;
             foreach (var later in Lesson.Steps.Skip(i).Select(s => s.Check.As).OfType<string>()) Roles.Remove(later);
             return;
@@ -213,6 +254,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         Nudge = null;
         _baseline = null;
         _baselineLinks = null;
+        _baselineMeshes = null;
         Index++;
         if (Index >= Lesson.Steps.Count) { Index = Lesson.Steps.Count - 1; Finished = true; }
     }
@@ -292,11 +334,17 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
     /// <summary>The ropes and pipes there were when the step was first looked at: only a link made since is nudged about.</summary>
     private HashSet<string>? _baselineLinks;
 
+    /// <summary>The meshes there were when the step was first looked at ("a+b"): only a mesh made since is nudged about.</summary>
+    private HashSet<string>? _baselineMeshes;
+
+    private static string MeshKey(MeshSpec m) => $"{m.A}+{m.B}";
+
     /// <summary>A step has just been shown (after any settle command): what is on the bench now is not the player's doing, so it is not nudged about.</summary>
     public void Rebase(EditorDocument doc)
     {
         _baseline = doc.Parts.ToDictionary(kv => kv.Key, kv => Signature(kv.Value));
         _baselineLinks = Links(doc).Select(l => l.Id).ToHashSet();
+        _baselineMeshes = doc.Meshes.Select(MeshKey).ToHashSet();
         Nudge = null;
     }
 
@@ -325,6 +373,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         Nudge = null;
         if (Finished || Current is not { } step) return (false, [], null);
         if (step.Check.Type == "join") return CheckJoin(doc, step);
+        if (step.Check.Type == "mesh") return CheckMesh(doc, step);
         if (step.Check.Type != "place") return (false, [], null);
         var c = step.Check;
         var bound = Roles.Values.ToHashSet();
@@ -338,7 +387,9 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         bool KindOk(PartSpec x) => (c.Kind is null || x.Kind == c.Kind) && ShapeOk(x);
         bool CategoryOk(PartSpec x) => c.Category is null || CategoryOf(x)?.Equals(c.Category, StringComparison.OrdinalIgnoreCase) == true;
         bool SizeOk(PartSpec x) => c.Radius is not { } want || Math.Abs(x.Number("radius", 0) - want) < 1e-6;
-        var candidates = pool.Where(x => KindOk(x) && CategoryOk(x) && SizeOk(x)).ToList();
+        bool GearOk(PartSpec x) => TeethOk(c, x) && CatalogueOk(c, x);
+        bool ShaftOk(PartSpec x) => OnShaftOk(doc, c, x.Id);
+        var candidates = pool.Where(x => KindOk(x) && CategoryOk(x) && SizeOk(x) && GearOk(x) && ShaftOk(x)).ToList();
         var target = TargetAt(doc);
 
         if (c.Part is { } r && (!Roles.TryGetValue(r, out var gone) || !doc.Parts.ContainsKey(gone)))
@@ -368,7 +419,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         if (changed.Count == 0) return (false, [], null);
 
         // the part that came nearest to counting is the one to talk about: right kind and material but off, then the wrong size, then the wrong material, then the wrong part
-        int Rank(PartSpec x) => !KindOk(x) ? 3 : !CategoryOk(x) ? 2 : !SizeOk(x) ? 1 : 0;
+        int Rank(PartSpec x) => !KindOk(x) ? 3 : !CategoryOk(x) ? 2 : !SizeOk(x) || !GearOk(x) || !ShaftOk(x) ? 1 : 0;
         var about = changed.OrderBy(Rank).ThenBy(x => target is { } t ? Distance(x.At, t) : 0).First();
         string used = PartName(about), asked = c.Shape ?? KindName(c.Kind ?? about.Kind);
         string matName = materials.TryGet(about.Material, out var mat) ? mat.Name.ToLowerInvariant() : about.Material;
@@ -382,6 +433,10 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         else if (!SizeOk(about))
             Nudge = $"That {used} is {N(Math.Round(about.Number("radius", 0) * 100, 1))} cm in radius, but this lesson uses the {N(Math.Round(c.Radius!.Value * 100, 1))} cm one. "
                   + $"Take it away, pick the right size in the box under the parts list and place it again.";
+        else if (!GearOk(about))
+            Nudge = GearNudge(c, about) + " Take it away, pick the right size in the box under the parts list and place it again.";
+        else if (!ShaftOk(about))
+            Nudge = $"That {used} is not on the {c.OnShaft}'s axle. Take it away, select the {c.OnShaft} and press Put a gear on this shaft.";
         else if (target is { } tg)
         {
             var d = new Vec3(tg.X - about.At.X, tg.Y - about.At.Y, tg.Z - about.At.Z);
@@ -392,6 +447,79 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
             Nudge = $"Not on the green {KindName(step.Target!.Kind)} yet: that {used} is {N(Math.Round(Distance(about.At, tg), 2))} m from it, and it has to be within {N(step.Target.Within)} m. "
                   + (moves.Count > 0 ? $"Move it {string.Join(" and ", moves)}." : "Move it a little closer.");
         }
+        return (false, [], Nudge);
+    }
+
+    /// <summary>Whether a part has the teeth a check asks for (any, when it names none).</summary>
+    private static bool TeethOk(LessonCheck c, PartSpec x) => c.Teeth is not { } want || Math.Abs(x.Number("teeth", 0) - want) < 1e-6;
+
+    /// <summary>Whether a part is the catalogue part a check asks for (any, when it names none).</summary>
+    private static bool CatalogueOk(LessonCheck c, PartSpec x) =>
+        c.Catalogue is null || x.Props.GetValueOrDefault("catalogue") is SSymbol cat && cat.Name == c.Catalogue;
+
+    /// <summary>Whether a part shares an axle with the part a check's (on-shaft ROLE) names (true when it names none).</summary>
+    private bool OnShaftOk(EditorDocument doc, LessonCheck c, string id) =>
+        c.OnShaft is not { } role || Roles.TryGetValue(role, out var on) && on != id && ShaftSlots.AxleMates(doc, on).Contains(id);
+
+    /// <summary>Why a gear isn't the one asked for: its teeth, or which catalogue part it is.</summary>
+    private static string GearNudge(LessonCheck c, PartSpec x)
+    {
+        double teeth = x.Number("teeth", 0);
+        if (!TeethOk(c, x))
+            return teeth > 0 ? $"That gear has {N(teeth)} teeth, but this step needs the one with {N(c.Teeth!.Value)}."
+                             : $"That {PartName(x)} has no teeth, but this step needs a gear with {N(c.Teeth!.Value)}.";
+        string what = x.Props.GetValueOrDefault("catalogue") is SSymbol cat ? cat.Name : PartName(x);
+        return c.Catalogue is { } want ? $"That is the {what}, but this step needs the {want}." : $"That {PartName(x)} is not the part this step needs.";
+    }
+
+    // --------------------------------------------------------- meshes
+
+    /// <summary>A gear in a person's words: "the crank gear" for one the lesson knows, else "a new gear".</summary>
+    private string GearNamed(EditorDocument doc, string id) =>
+        Roles.FirstOrDefault(kv => kv.Value == id).Key is { } role ? $"the {role} gear" : doc.Parts.TryGetValue(id, out var p) ? $"a new {PartName(p)}" : id;
+
+    /// <summary>Whether the mesh a step asks for is in the design: its remembered gear meshed with the one it names (either way round).</summary>
+    private bool MeshMade(EditorDocument doc, LessonCheck c) =>
+        c.With is { } w && c.As is { } a && Roles.TryGetValue(w, out var wid) && Roles.TryGetValue(a, out var aid)
+        && doc.Meshes.Any(m => m.A == wid && m.B == aid || m.A == aid && m.B == wid);
+
+    /// <summary>
+    /// A "mesh" step: a gear not yet known to the lesson, meshed with the remembered one (the inspector's "Add a meshing gear", or the
+    /// Gear mesh tool), with the teeth the step asks for. When it is there the step is done and its then-lines run ({id} the new gear).
+    /// Only a mesh made since the step began is nudged about (a gear placed but not meshed yet is the mouse tool's first command, not a
+    /// mistake): meshed with the wrong gear, or the wrong size of gear.
+    /// </summary>
+    private (bool Done, IReadOnlyList<string> Settle, string? Reason) CheckMesh(EditorDocument doc, LessonStep step)
+    {
+        var c = step.Check;
+        _baselineMeshes ??= doc.Meshes.Select(MeshKey).ToHashSet();
+        if (c.With is not { } withRole || !Roles.TryGetValue(withRole, out var w) || !doc.Parts.ContainsKey(w))
+        {
+            Nudge = $"The {c.With} gear is not on the bench any more. Undo your last change, or press Start over.";
+            return (false, [], Nudge);
+        }
+        var bound = Roles.Values.ToHashSet();
+        bool Fits(PartSpec x) => (c.Kind is null || x.Kind == c.Kind) && TeethOk(c, x) && CatalogueOk(c, x)
+                                 && (c.Category is null || materials.TryGet(x.Material, out var m) && m.Category.ToString().Equals(c.Category, StringComparison.OrdinalIgnoreCase));
+        var partners = doc.Meshes.Where(m => m.A == w || m.B == w).Select(m => m.A == w ? m.B : m.A)
+                                 .Where(id => !bound.Contains(id) && doc.Parts.ContainsKey(id)).Select(id => doc.Parts[id]).ToList();
+        if (partners.FirstOrDefault(Fits) is { } got)
+        {
+            if (c.As is { } name) Roles[name] = got.Id;
+            IReadOnlyList<string> settle = [.. c.Then.Select(t => t.Replace("{id}", got.Id))];
+            Advance();
+            return (true, settle, null);
+        }
+        var fresh = doc.Meshes.Where(m => !_baselineMeshes.Contains(MeshKey(m))).ToList();
+        if (fresh.Count == 0) return (false, [], null);
+        var made = fresh[^1];
+        string again = $"Undo it (Ctrl+Z), select the {withRole} gear and press Add a meshing gear.";
+        if (made.A != w && made.B != w)
+            Nudge = $"That meshes {GearNamed(doc, made.A)} with {GearNamed(doc, made.B)}, but this step's gear meshes with the {withRole} gear. {again}";
+        else if (doc.Parts.TryGetValue(made.A == w ? made.B : made.A, out var other) && !bound.Contains(other.Id))
+            Nudge = GearNudge(c, other) + $" Undo it (Ctrl+Z), pick the right size on the gear's card and press Add a meshing gear again.";
+        else
+            Nudge = $"That meshes the {withRole} gear with one the lesson already has. {again}";
         return (false, [], Nudge);
     }
 
@@ -495,7 +623,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
                 Failure = LastTilt is { } t ? $"Not balanced yet: the beam leaned {t:0.#}° (it has to stay within {c.WithinDeg:0.#}°)."
                                             : "The test didn't see the beam.";
                 return false;
-            case "lifted" or "rolled" or "level":
+            case "lifted" or "rolled" or "level" or "turned":
                 return OutcomeOk(step, doc);
         }
         return false;
@@ -519,6 +647,13 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
                 double want = doc is not null ? RollingSpeed(doc, id) : 0;
                 ok = move is not null && Math.Abs(move.TopSpeed - want) <= c.Within && move.Across >= (c.Far ?? 0);
                 plain = $"The {role} went at most {N(Math.Round(move?.TopSpeed ?? 0, 2))} m/s and ended {N(Math.Round(move?.Across ?? 0, 1))} m from where it began; rolling down from there should give {N(Math.Round(want, 2))} m/s (within {N(c.Within)}) and at least {N(c.Far ?? 0)} m.";
+                break;
+            }
+            case "turned":
+            {
+                double rpm = Math.Abs(facts.TurnOf(id)?.EndRpm ?? 0);
+                ok = facts.TurnOf(id) is not null && Math.Abs(rpm - (c.Rpm ?? 0)) <= c.Within;
+                plain = $"The {role} gear was turning at {N(Math.Round(rpm, 1))} rpm at the end, and it should have been {N(c.Rpm ?? 0)} rpm.";
                 break;
             }
             default:
@@ -590,6 +725,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
                 "material" => materials.TryGet(doc.Parts[id].Material, out var mat) ? mat.Name.ToLowerInvariant() : doc.Parts[id].Material,
                 "litres" => $"{N(Math.Round(doc.Parts[id].Number("water", 0) * 1000, 1))} litres",
                 "level" => $"{N(Math.Round(doc.Parts[id].Number("water", 0) / doc.Parts[id].Number("area", 0.05) * 100, 1))} cm",
+                "rpm" => LastFacts?.TurnOf(id) is { } turn ? $"{N(Math.Round(Math.Abs(turn.EndRpm)))} rpm" : "?",
                 _ => m.Value,
             };
         });
@@ -600,12 +736,12 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
     {
         string Metres(double v) => $"{N(Math.Round(v, 2))} m";
         var check = Current?.Check ?? Lesson.Steps[^1].Check;
-        var outcome = Lesson.Steps.Select(s => s.Check).LastOrDefault(c => c.Type is "lifted" or "rolled" or "level") ?? check;
+        var outcome = Lesson.Steps.Select(s => s.Check).LastOrDefault(c => c.Type is "lifted" or "rolled" or "level" or "turned") ?? check;
         string? partId = outcome.Part is { } role && Roles.TryGetValue(role, out var pid) ? pid : null;
         switch (name)
         {
             case "hoist": return Lesson.Steps.Select(s => s.Check).FirstOrDefault(c => c.Type == "join" && c.Hoist > 0) is { } j ? Metres(j.Hoist) : "?";
-            case "expect": return Metres(outcome.About ?? 0);
+            case "expect": return outcome.Type == "turned" ? $"{N(outcome.Rpm ?? 0)} rpm" : Metres(outcome.About ?? 0);
             case "rise": return LastFacts?.RiseOf(partId ?? "") is { } rise ? Metres(rise.Metres) : "?";
             case "accel": return $"{Acceleration(doc).ToString("0.00", CultureInfo.InvariantCulture)} m/s²";
             case "drop" when Roles.TryGetValue("ball", out var ball) && doc.Parts.TryGetValue(ball, out var bp): return Metres(bp.At.Y - bp.Number("radius", 0.05));
