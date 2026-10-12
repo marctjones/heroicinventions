@@ -469,6 +469,7 @@ public partial class BuildMode
                 b.Pressed += () => ChoosePreset(key, n);
                 _cardPresets.AddChild(b);
             }
+            LightLessonButtons();   // a lesson step's size button (BuildMode.Lessons.cs)
         }
         _cardMadeOf.Visible = _cardSwatches.Visible = placing;
         if (placing)

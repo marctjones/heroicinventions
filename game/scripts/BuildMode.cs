@@ -424,6 +424,11 @@ public partial class BuildMode : Node3D
             case "lesson-leave":
                 LeaveLesson();
                 return ScriptedInput.Step.Next;
+            case "lesson-menu":   // prints the Lessons menu as it would open: each row, a heading as "== text"
+                FillLessonMenu();
+                GD.Print("[Lesson] menu: " + string.Join(" | ", Enumerable.Range(0, _lessonMenu.ItemCount)
+                    .Select(i => _lessonMenu.IsItemSeparator(i) ? "== " + _lessonMenu.GetItemText(i) : _lessonMenu.GetItemText(i))));
+                return ScriptedInput.Step.Next;
             case "show-all":   // "show-all on|off": the full list or the starter set
                 SetShowAll(w.Length < 2 || w[1] != "off");
                 return ScriptedInput.Step.Next;
@@ -1236,6 +1241,7 @@ public partial class BuildMode : Node3D
         AddGearOnButton(part);   // a windmill's or a wheel's (building plan, phase 2): BuildMode.Shaft.cs
         AddMeshWithButton(part);   // a wheel's (phase 3): BuildMode.Mesh.cs
         AddStageButton(part);   // a windmill's or a wheel's: both in one click (phase 4): BuildMode.Stage.cs
+        LightLessonButtons();   // the lesson step's button, if it is one of these (BuildMode.Lessons.cs)
         var buttons = new HBoxContainer();
         if (MachineDef.TurnableKinds.Contains(part.Kind))
         {

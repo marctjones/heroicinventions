@@ -46,16 +46,22 @@ public partial class BuildMode
     }
 
     /// <summary>Every lesson shipped in game/lessons, in file order.</summary>
-    private static List<Lesson> AllLessons()
+    private static List<Lesson> AllLessons() => [.. LessonFiles().Select(f => f.Lesson)];
+
+    /// <summary>Every lesson shipped in game/lessons with its file's name, in file order.</summary>
+    private static List<(string File, Lesson Lesson)> LessonFiles()
     {
-        var lessons = new List<Lesson>();
+        var lessons = new List<(string, Lesson)>();
         using var dir = DirAccess.Open("res://lessons");
         if (dir is null) return lessons;
-        foreach (var f in dir.GetFiles().Where(f => f.EndsWith(".lesson")).OrderBy(f => f))
-            try { lessons.Add(Lesson.Parse(Godot.FileAccess.GetFileAsString($"res://lessons/{f}"))); }
+        foreach (var f in dir.GetFiles().Where(f => f.EndsWith(".lesson")).OrderBy(f => f, StringComparer.Ordinal))
+            try { lessons.Add((f, Lesson.Parse(Godot.FileAccess.GetFileAsString($"res://lessons/{f}")))); }
             catch (FormatException e) { GD.Print($"[Lesson] {f}: {e.Message}"); }
         return lessons;
     }
+
+    /// <summary>The first lesson file of the tutorial series (docs/plans/tutorial-plan.md): the menu's "Build five machines" heading goes before it.</summary>
+    private const string SeriesFrom = "05";
 
     private void BuildLessonUi(CanvasLayer layer, HBoxContainer actions)
     {
@@ -110,10 +116,16 @@ public partial class BuildMode
     private void FillLessonMenu()
     {
         _lessonMenu.Clear();
-        var lessons = AllLessons();
+        var lessons = LessonFiles();
         int i = 0;
-        foreach (var l in lessons)
+        bool series = false;
+        foreach (var (file, l) in lessons)
         {
+            if (!series && string.CompareOrdinal(file, SeriesFrom) >= 0)
+            {
+                series = true;
+                _lessonMenu.AddSeparator("Build five machines");   // the four basics above, the tutorial's machines below
+            }
             var saved = LoadProgress(l.Id);
             _lessonMenu.AddItem(saved is { } p && p.Index > 0 ? $"{l.Title}: carry on at step {p.Index + 1}" : l.Title, i);
             _lessonMenu.SetItemMetadata(_lessonMenu.ItemCount - 1, $"resume:{l.Id}");
@@ -281,7 +293,9 @@ public partial class BuildMode
         _lessonNudgeShown = run.Nudge;
         _lessonNote.Modulate = why is null ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 0.6f, 0.5f);
         _lessonCheckAgain.Visible = step.Check.IsOutcome && run.Failure is not null;
-        if (fresh && step.Variant is { } size && step.Highlight is { } entry) _variantChosen[EntryKeyOf(entry)] = size;   // the card offers the size the lesson uses
+        if (fresh && step.Variant is { } size) _variantChosen[EntryKeyOf(size)] = size;   // the card offers the size the lesson uses (from the list or a button)
+        if (fresh && step.Select is { } role && run.Roles.TryGetValue(role, out var sel) && doc.Parts.ContainsKey(sel) && _selectedId != sel && _placingPaletteId is null)
+            Select(sel);   // its inspector has the step's button
         SetLessonHighlight(step.Highlight);
         PlaceLessonTarget();
         if (fresh)
@@ -312,10 +326,46 @@ public partial class BuildMode
     {
         _lessonHighlight = highlight;
         // a part that is not among the starter parts (the pulley) is only in the full list
-        if (highlight is not (null or "test") && !highlight.StartsWith("part:") && !StarterKeys.Contains(highlight) && !_showAll) SetShowAll(true);
+        if (highlight is not (null or "test") && !highlight.StartsWith("part:") && !highlight.StartsWith("button:") && !StarterKeys.Contains(highlight) && !_showAll) SetShowAll(true);
         HighlightPaletteEntry(highlight);
-        _testButton.Modulate = highlight == "test" ? new Color(0.55f, 1.3f, 0.55f) : Colors.White;
+        _testButton.Modulate = highlight == "test" ? LitButton : Colors.White;
+        LightLessonButtons();
         RefreshHighlights();
+    }
+
+    private static readonly Color LitButton = new(0.55f, 1.3f, 0.55f);
+    private static readonly string[] PartButtons = ["gear_on", "mesh_with", "add_stage"];
+    private string? _lessonButtonLit;   // "mesh_with:PART" lit now, for the log
+
+    /// <summary>
+    /// The step's button lit (tutorial plan, gap 1): "Put a gear on this shaft", "Add a meshing gear" or "Add a stage" in the selected
+    /// part's inspector (only the step's (select ROLE) part's, when it names one), or a size button on the card. The inspector and the card
+    /// are rebuilt as the selection and the entry change, so this runs again after each (RebuildInspector, ShowCard).
+    /// </summary>
+    private void LightLessonButtons()
+    {
+        string? want = _lesson is { Finished: false } run ? run.Current?.Button : null;
+        string? forId = _lesson?.Current?.Select is { } role && _lesson.Roles.TryGetValue(role, out var id) ? id : null;
+        string? lit = null;
+        foreach (var b in Descendants(_inspector).OfType<Button>())
+        {
+            if (PartButtons.FirstOrDefault(k => b.HasMeta(k)) is not { } kind) continue;
+            string part = b.GetMeta(kind).AsString();
+            bool on = want == kind && (forId is null || part == forId);
+            b.Modulate = on ? LitButton : Colors.White;
+            if (!on) continue;
+            lit = $"{kind}:{part}";
+            var scroller = _inspector.GetParent<ScrollContainer>();
+            Callable.From(() => { if (IsInstanceValid(b) && b.IsInsideTree()) scroller.EnsureControlVisible(b); }).CallDeferred();   // in sight, as the step's words say
+        }
+        foreach (var b in _cardPresets.GetChildren().OfType<Button>().Where(b => b.HasMeta("preset")))
+        {
+            bool on = want == "preset:" + b.GetMeta("preset").AsString();
+            b.Modulate = on ? LitButton : b.ButtonPressed ? new Color(1.15f, 1.15f, 0.8f) : Colors.White;
+            if (on) lit = want;
+        }
+        if (lit != _lessonButtonLit && lit is not null) GD.Print($"[Lesson] step {_lesson!.Index + 1} lit button {lit}");
+        _lessonButtonLit = lit;
     }
 
     private void HighlightPaletteEntry(string? key)
@@ -325,9 +375,11 @@ public partial class BuildMode
                 _paletteList.SetItemCustomBgColor(i, key is not null && _paletteList.GetItemMetadata(i).AsString() == key ? LitColor : new Color(0, 0, 0, 0));
     }
 
-    /// <summary>The part a step asks to be moved ("part:light"), lit in the scene.</summary>
+    /// <summary>The part a step asks to be moved ("part:light"), or to be selected while it isn't ((select crank)), lit in the scene.</summary>
     private string? LessonPartId =>
-        _lesson is { } run && _lessonHighlight is { } h && h.StartsWith("part:") && run.Roles.TryGetValue(h[5..], out var id) ? id : null;
+        _lesson is not { } run ? null
+        : _lessonHighlight is { } h && h.StartsWith("part:") && run.Roles.TryGetValue(h[5..], out var id) ? id
+        : !run.Finished && run.Current?.Select is { } role && run.Roles.TryGetValue(role, out var sel) && sel != _selectedId ? sel : null;
 
     private void ClearLessonTarget()
     {

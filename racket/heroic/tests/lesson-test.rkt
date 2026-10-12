@@ -256,3 +256,54 @@
     (check-true (< (+ t-dry 0.9) t (+ t-dry 1.4)) (format "the test ended a second after the water stopped: ~a s" t))
     (check-true (ormap (λ (l) (string-contains? l "step 5 done: level")) out) "the lesson's check passes")
     (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished water") (string-contains? l "10 litres more water, 20 cm deep"))) out) "the lesson says it is done")))
+
+;; ---------------------------------------------------------------------------------------------
+;; "Build five machines" (docs/plans/tutorial-plan.md), after the four basics in the Lessons menu.
+
+;; the end speed of a wheel in the Test's facts line ("turns wheel_4=29.8188 peak=29.8188 rpm=60.0"), or #f
+(define (rpm-of out wheel)
+  (define facts (facts-line out))
+  (and facts (let ([m (regexp-match (pregexp (string-append "turns " (regexp-quote wheel) "=-?[0-9.]+ peak=[0-9.]+ rpm=(-?[0-9.]+)")) facts)])
+               (and m (string->number (cadr m))))))
+
+;; ---- Lesson 5: crank and gears
+;; Worked by hand (game/lessons/05-gears.lesson): module-5 gears, pitch radii 0.18 / 0.045 / 0.09 m, so "Add a meshing gear" puts
+;; the 18 0.225 m from the 72 and the 36 0.135 m from the 18. The crank turns the 72 at 30 rpm: the 18 at 30 x 72/18 = 120 rpm the
+;; other way, the 36 at 120 x 18/36 = 60 rpm the crank's way, 72:36 = 2:1. In the Test's 30 s, 15, 60 and 30 turns less the crank's
+;; 0.36 s start (5 N.m on the bronze 72's 0.575 kg.m2): 14.91, 59.64, 29.82 (the lesson's header cites this trace).
+;; Played by the mouse words alone: the palette's Post and Gear (the card's 72 picked by the lesson), clicks on the targets, the
+;; inspector's "Add a meshing gear" (a real click on the lit button) for the 18 and the 36, and Test.
+(define gears-playthrough
+  (string-append "wait 30; lesson-menu; lesson gears; wait 5; "
+                 "palette-click post; wait 5; click-at 0 0 0; wait 5; "            ; step 1: the 1 m post (the card's first size)
+                 "palette-click gear; wait 5; click-at 0 1.0 0; wait 5; log; "     ; step 2: the 72 the card offers, on the post's top; the lesson fits the crank
+                 "mesh-with 18; wait 10; "                                         ; step 3: the crank is selected by the lesson; its lit button, an 18
+                 "select wheel_3; wait 5; mesh-with 36; wait 10; log; "            ; step 4: the 18's button, a 36 on its far side
+                 "test; wait-test; wait 5; quit"))                                  ; step 5: Test, 30 s
+
+(test-case "Lesson 5 plays through by the mouse: a crank turns three gears and the last runs at 60 rpm, 2:1"
+  (when (godot-available?)
+    (define out (run-editor gears-playthrough #:seconds 120))
+    (check-true (ormap (λ (l) (string-contains? l "[Lesson] menu: Lesson 1: the see-saw | Lesson 2: the pulley | Lesson 3: the ramp and the ball | Lesson 4: water from tank to tank | == Build five machines | Lesson 5: crank and gears")) out)
+                "the menu: the four basics, the heading, then lesson 5")
+    (check-equal? (steps-done out 5) '(1 2 3 4 5) "every step completes")
+    (check-true (ormap (λ (l) (string-contains? l "(wheel involute_gear_m5_72_2 #:at (0 1.18 0) #:catalogue involute-gear-m5-72")) out) "the card offered the 72")
+    (check-true (ormap (λ (l) (string-contains? l "step 2 done: set on its target (move involute_gear_m5_72_2 (0 1.19 0)) ; (set involute_gear_m5_72_2 #:drive-rpm 30) ; (set involute_gear_m5_72_2 #:drive-torque 5)")) out)
+                "the 72 is set on 1.19 m and made a crank")
+    (check-true (ormap (λ (l) (regexp-match? #px"state: .*selected=involute_gear_m5_72_2 .*involute_gear_m5_72_2@\\(0 1.19 0\\)" l)) out) "the lesson selected the crank for step 3")
+    (check-true (ormap (λ (l) (string-contains? l "[Lesson] step 3 lit button mesh_with:involute_gear_m5_72_2")) out) "the crank's Add a meshing gear is lit")
+    (check-true (ormap (λ (l) (string-contains? l "[Lesson] step 4 lit button mesh_with:wheel_3")) out) "then the 18's")
+    (check-true (ormap (λ (l) (string-contains? l "mesh: involute_gear_m5_72_2, wheel_3: centre distance 0.225 m (pitch radii 0.18 + 0.045), they stand 0.225 m apart: on it")) out) "the 18 on its circle")
+    (check-true (ormap (λ (l) (string-contains? l "mesh: wheel_3, wheel_4: centre distance 0.135 m (pitch radii 0.045 + 0.09), they stand 0.135 m apart: on it")) out) "the 36 on its circle")
+    (check-true (ormap (λ (l) (string-contains? l "[BuildMode] train: involute_gear_m5_72_2 -> wheel_3, ratio 4:1 (1 mesh)")) out) "the live ratio after the 18: 4:1")
+    (check-true (ormap (λ (l) (string-contains? l "[BuildMode] train: involute_gear_m5_72_2 -> wheel_4, ratio 2:1 (2 meshes)")) out) "and after the 36: 2:1")
+    ;; the Test: the 36 at 60 rpm (within 2), the 18 at 120 the other way, the crank at its 30; and the turns
+    (check-= (rpm-of out "wheel_4") 60 2 (format "the 36 at 60 rpm: ~a" (facts-line out)))
+    (check-= (rpm-of out "wheel_3") -120 2 "the 18 at 120 rpm, the other way")
+    (check-= (rpm-of out "involute_gear_m5_72_2") 30 0.5 "the crank at 30 rpm")
+    (check-= (fact-of out "turns wheel_4" 'value) 29.82 0.05 "the 36 turned 29.82 times (30 less the crank's start)")
+    (check-= (fact-of out "turns wheel_3" 'value) -59.64 0.1 "the 18 59.64 times, the other way")
+    (check-false (ormap (λ (l) (string-contains? l "spinning at Jolt's limit")) out) "nothing near the engine's spin limit")
+    (check-true (ormap (λ (l) (string-contains? l "step 5 done: turned")) out) "the lesson's check passes")
+    (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished gears") (string-contains? l "The small gear turned at 120 rpm and the last gear at 60 rpm"))) out)
+                "the lesson says it is done, with the traced speeds")))
