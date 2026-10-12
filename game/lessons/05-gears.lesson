@@ -14,9 +14,11 @@
 ;;     half of that at full speed, 0.09 of a turn; the others keep step with it, 4 × and 2 × that: 14.91, 59.64 and 29.82 turns.
 ;;   120 rpm is far under the engine's 3,000 rpm limit. The driven gears are turned at their speed by the crank (a hand-turned
 ;;   train of light gears: they don't slow it), so the ratio is exact.
-;; Traced (this rig built through build mode's mouse words, then Test, 2026-10-12): "turns involute_gear_m5_72_2=14.9078 rpm=30.0
-;; | turns wheel_3=-59.6384 rpm=-120.0 | turns wheel_4=29.8188 rpm=60.0", t=30.01 by=limit. The Test's check: the 36 ends at
-;; 60 rpm, within 2; the done text quotes the 18's and the 36's traced speeds.
+;; Traced (2026-10-12: this rig built by build mode's mouse words and Tested before the steps were written, then this lesson
+;; played through, headless by racket/heroic/tests/lesson-test.rkt and windowed by tools/lessons-gui.sh, the same facts each time):
+;; "t=30.01 by=limit | turns involute_gear_m5_72_2=14.9078 rpm=30.0 | turns wheel_3=-59.6384 rpm=-120.0 | turns wheel_4=29.8188
+;; rpm=60.0"; the Test's masses 34.872 kg (the 72), 2.124 kg, 8.66 kg. The Test's check: the 36 ends at 60 rpm, within 2; the done
+;; text quotes the 18's and the 36's traced speeds. No spin-limit warning.
 ;;
 ;; Geometry: a 1 m post (its card's first size) at the middle; the 72's centre 1.19 m up (its teeth reach 0.185 m, so they clear the
 ;; post's top by 5 mm; the ghost clicked on the post's top stands at 1.18, and the lesson sets it on 1.19). All three gears turn about
@@ -24,7 +26,7 @@
 
 (lesson gears
   (title "Lesson 5: crank and gears")
-  (view 0 0.2 2.4 0.15 0.85 0)
+  (view 0 0.15 2.6 0.2 1.1 0)
 
   (step
     (text "Gears need something to stand on. Pick Post in the parts list (it is lit up), then click on the green post in the scene. The card's first size, 1 m tall, is the right one.")
