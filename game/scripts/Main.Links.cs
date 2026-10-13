@@ -168,6 +168,7 @@ public partial class Main : ScriptedInput.IJoinStep
     }
 
     private PickList? _pickList;
+    private bool _pickOverlap, _pickListUsed;   // a join click crossed more than one part's box; the list was offered (the hint says it can be, #247)
     private IReadOnlyList<(PickHit Hit, MachineView View, string Part)> _listed = [];
     private Vector2 _joinRightAt;
     /// <summary>Where the last join click landed, and the first pick it was made on top of, so a second click on the spot (or a right-click) can offer the parts there and replace that pick (#225).</summary>
@@ -177,7 +178,7 @@ public partial class Main : ScriptedInput.IJoinStep
     /// <summary>The parts whose pick boxes the ray through <paramref name="screen"/> crosses, with their views. The generator and the bank, which the view draws no body for, get a small box at their place (<see cref="PickBoxes.SimPartSide"/>).</summary>
     private List<(PickHit Hit, MachineView View, string Part)> PartsUnder(Vector3 from, Vector3 dir)
     {
-        var crossed = new List<(PickHit, MachineView, string)>();
+        var crossed = new List<(PickHit, MachineView, string)>();   // (a generator's can hides its rotor: PickBoxes.HidesWhatIsInside)
         foreach (var v in _views)
             foreach (var part in v.Runtime.Def.Parts)
             {
@@ -190,7 +191,7 @@ public partial class Main : ScriptedInput.IJoinStep
                 if (box is { } bb && RayHits(from, dir, bb.Grow(0.05f), out float t))
                 {
                     var g = bb.Grow(0.05f);
-                    crossed.Add((new PickHit($"{v.Name}.{part.Id}", new PickBox(g.Position.X, g.Position.Y, g.Position.Z, g.End.X, g.End.Y, g.End.Z), t), v, part.Id));
+                    crossed.Add((new PickHit($"{v.Name}.{part.Id}", new PickBox(g.Position.X, g.Position.Y, g.Position.Z, g.End.X, g.End.Y, g.End.Z), t, Opaque: PickBoxes.HidesWhatIsInside(part.Kind) && !(v.GeneratorAxis(part.Id) is { } axle && PickBoxes.EntersByBack(new PickBox(g.Position.X, g.Position.Y, g.Position.Z, g.End.X, g.End.Y, g.End.Z), from.X, from.Y, from.Z, dir.X, dir.Y, dir.Z, axle.X, axle.Y, axle.Z))), v, part.Id));
                 }
             }
         return crossed;
@@ -220,6 +221,7 @@ public partial class Main : ScriptedInput.IJoinStep
         var dir = _camera.ProjectRayNormal(screen);
         var under = PartsUnder(from, dir);
         var ordered = PickBoxes.List(under.Select(u => u.Hit));
+        if (under.Count > 1) _pickOverlap = true;
         if (under.Count > 1)   // say which boxes it crossed, nearest first
             GD.Print($"[links] the click crossed {under.Count} parts' boxes, nearest first: {string.Join(", ", ordered.Select(c => $"{c.Name} ({c.T:F1} m)"))}");
         if (PickBoxes.Choose(under.Select(u => u.Hit)) is not { } chosen) { GD.Print($"[links] nothing there to join (at {screen}, looking along {dir} from {from})"); _lastJoinClick = null; _lastPicked = null; return; }
@@ -229,6 +231,7 @@ public partial class Main : ScriptedInput.IJoinStep
         if (under.Count > 1 && (offerList || again))
         {
             var firstBefore = again ? _lastJoinClick!.Value.FirstBefore : _firstPick;
+            _pickListUsed = true;
             _listed = ordered.Select(h => under.First(u => u.Hit.Name == h.Name)).ToList();
             GD.Print($"[links] pick list at ({screen.X:F0} {screen.Y:F0}): {string.Join(", ", _listed.Select((u, i) => $"{i + 1} {u.Hit.Name}"))}");
             _listFirstBefore = firstBefore;
@@ -343,14 +346,6 @@ public partial class Main : ScriptedInput.IJoinStep
             if (bits.Length is < 2 or > 3 || !_byName.TryGetValue(bits[0], out var target)) { Fail($"no machine part '{w[1]}' to click"); return ScriptedInput.Step.Next; }
             if (!_joining) { Fail($"{w[0]}: joining is not on (press the Join machines button first)"); return ScriptedInput.Step.Next; }
             if (target.LinkPoint(bits[1], bits.Length == 3 ? bits[2] : null) is not { } at) { Fail($"{w[1]} has no point to click"); return ScriptedInput.Step.Next; }
-            // a generator is clicked on its can's flank (0.19 m to the side on the screen, inside the can's 0.22 m radius), where the player sees iron:
-            // its centre is where the rotor's wheel lies under the can, and the rotor's smaller box wins there (#247)
-            if (target.Runtime.Def.Part(bits[1]) is { Kind: "generator" })
-            {
-                var camRight = _camera.GlobalBasis.X;
-                float away = target.LinkPoint(target.Runtime.GeneratorShaft(bits[1]), null) is { } rotorAt ? (at - rotorAt).Dot(camRight) : 0;   // the side that is further from the rotor
-                at += camRight * (away < 0 ? -0.19f : 0.19f);
-            }
             var screen = GetViewport().GetScreenTransform() * _camera.UnprojectPosition(at);
             bool shown = !_camera.IsPositionBehind(at) && GetViewport().GetVisibleRect().HasPoint(screen);
             GD.Print($"[links] {(right ? "right-click" : "click")} {w[1]} at ({at.X:F2} {at.Y:F2} {at.Z:F2}) drawn at screen ({screen.X:F0} {screen.Y:F0}){(shown ? "" : ": NOT ON SCREEN")}");

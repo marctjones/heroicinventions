@@ -36,6 +36,9 @@ public static class WorldLinkGestures
                 throw new InvalidOperationException($"{a} and {b} are already joined by a pipe");
             return new LinkSpec(world.NextLinkId("pipe"), "pipe", a, b) { Conductance = 1e-3 };
         }
+        // a click on a generator, whose motor is all the player sees, is a click on the shaft it sits on (#247): its rotor
+        if (pa.Kind == "generator" && Turning.Contains(pb.Kind) && RotorOf(machineOf, a, pa) is { } rotorA) (a, pa) = (rotorA, PartOf(machineOf, rotorA));
+        else if (pb.Kind == "generator" && Turning.Contains(pa.Kind) && RotorOf(machineOf, b, pb) is { } rotorB) (b, pb) = (rotorB, PartOf(machineOf, rotorB));
         if (Turning.Contains(pa.Kind) && Turning.Contains(pb.Kind))
         {
             var (sa, sb) = (a with { Port = null }, b with { Port = null });
@@ -52,8 +55,12 @@ public static class WorldLinkGestures
             return new LinkSpec(world.NextLinkId("wire"), "wire", gen, bank);
         }
         throw new InvalidOperationException(
-            $"{a.Label}'s {pa.Id} is a {pa.Kind} and {b.Label}'s {pb.Id} a {pb.Kind}: a pipe joins two tanks' ports, a shaft two things turning on axles, a wire a generator to a battery bank");
+            $"{a.Label}'s {pa.Id} is a {pa.Kind} and {b.Label}'s {pb.Id} a {pb.Kind}: a pipe joins two tanks' ports, a shaft two things turning on axles (a generator is its rotor's shaft), a wire a generator to a battery bank");
     }
+
+    /// <summary>The turning part a generator sits on (its <c>#:on</c>), as a shaft's end; null if it names none.</summary>
+    private static LinkEnd? RotorOf(Func<string, MachineDef?> machineOf, LinkEnd generator, PartSpec part) =>
+        part.Symbol("on", "") is { Length: > 0 } on && machineOf(generator.Label)?.Part(on) is { } rotor && Turning.Contains(rotor.Kind) ? new LinkEnd(generator.Label, on) : null;
 
     private static PartSpec PartOf(Func<string, MachineDef?> machineOf, LinkEnd e) =>
         (machineOf(e.Label) ?? throw new InvalidOperationException($"no machine is placed as {e.Label}")).Part(e.Part)

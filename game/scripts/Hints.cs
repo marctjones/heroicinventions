@@ -30,7 +30,8 @@ public partial class Hints : PanelContainer
                                         bool RoverDriven = false, bool LogOpened = false, bool SpeedOrSleepUsed = false,
                                         bool GoalsOpen = false, bool Joining = false, int Links = 0, int Machines = 0,
                                         bool SleepPaused = false, bool SleepLive = false, bool BankCold = false, bool BankWarm = false,
-                                        bool PausedSleepSeen = false, bool GoalsOpened = false, bool JoinUsed = false, bool LiveSleepSeen = false, bool BankWarmSeen = false);
+                                        bool PausedSleepSeen = false, bool GoalsOpened = false, bool JoinUsed = false, bool LiveSleepSeen = false, bool BankWarmSeen = false,
+                                        bool PickOverlap = false, bool PickListUsed = false);
 
     private sealed record Hint(string Id, string Text, double After, Func<State, bool> When, Func<State, bool> Done, double Lifetime = 0);
 
@@ -51,6 +52,10 @@ public partial class Hints : PanelContainer
             s => !s.InBuildMode && s.MachinesWatched >= 2 && !s.InRover, s => s.InBuildMode),
         new("place", "New here? Press Lessons (top left) to build a see-saw step by step. Or drag a part from the list into the scene; Ctrl+Z undoes.", 5,
             s => s.InBuildMode && s.PartsInDesign == 0 && !s.LessonStarted, s => s.PartsInDesign > 0 || s.LessonStarted),
+
+        // the join tool (#247): a click that crossed more than one part's box picked one; the list of them is a second click or a right-click away
+        new("pick-list", "That click had other parts under it. Click the same spot again, or right-click, to choose from a list of them.", 2,
+            s => s.Joining && s.PickOverlap && !s.PickListUsed, s => s.PickListUsed, Lifetime: 40),
 
         // the rover game (#98): tools, never the route
         // a sleep over two hours (SleepControl.LiveLimit, 7,200 s) runs with the physics engine paused; a paused sleep is over in seconds, so this waits for the wake

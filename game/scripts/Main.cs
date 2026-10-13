@@ -761,7 +761,8 @@ public partial class Main : Node3D
                                                  GoalsOpen: _goalsPanel?.Visible ?? false, Joining: _joining, Links: _world?.Links.Count ?? 0, Machines: _views.Count,
                                                  SleepPaused: _sleep.Active && !_sleep.Live && _views.Any(v => v.JoltDriven), SleepLive: _sleep.Live,
                                                  BankCold: AllBanks().Any(b => !b.Bank.InRange && b.Bank.Temperature < b.Bank.MinChargeC),
-                                                 BankWarm: AllBanks().Any(b => b.Bank.InRange)));
+                                                 BankWarm: AllBanks().Any(b => b.Bank.InRange),
+                                                 PickOverlap: _pickOverlap, PickListUsed: _pickListUsed));
         layer.AddChild(_hints);
     }
 

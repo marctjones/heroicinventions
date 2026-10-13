@@ -61,9 +61,9 @@ steps=(
   # drive to the motor: turn right to face it, drive, turn left to face +x, drive the last metres
   "hold right 3.15; wait 10; hold up 14; wait 10; hold up 13; wait 10; hold left 0.65; wait 20; hold up 2; wait 20; rover; key home; wait 20; hold shift+up 0.5; wait 20; $(shot 11-at-motor)"
   # 5b: joining stays on across the drive, so the pinion is still the first pick; a view of the motor (the open-loop drive ends a few metres
-  # from route-gui.sh's, the build's spot 1.5 m off its, so the camera is aimed as the director aims it), click the rotor (the shaft), then
-  # the generator; a view of the bank, click it (the wire); Escape; the camera back on the rover
-  "look 200 15 13 233.8 -51.5 135; wait 20; joinclick motors.rotor; wait 10; $(shot 12-shaft-joined); joinclick motors.motor; wait 10; look 200 15 12 254.5 -44.2 137.9; wait 20; joinclick battery-bank.bank; wait 10; key escape; wait 10; $(shot 13-joined); follow; key home; wait 20"
+  # from route-gui.sh's, the build's spot 1.5 m off its, so the camera is aimed as the director aims it), click the motor (the shaft: a click on the can is a shaft to the rotor it sits on, #247), then
+  # the motor again (the wire's first end); a view of the bank, click it (the wire); Escape; the camera back on the rover
+  "look 200 15 13 233.8 -51.5 135; wait 20; joinclick motors.motor; wait 10; $(shot 12-shaft-joined); joinclick motors.motor; wait 10; look 200 15 12 254.5 -44.2 137.9; wait 20; joinclick battery-bank.bank; wait 10; key escape; wait 10; $(shot 13-joined); follow; key home; wait 20"
   # 6: Sleep until..., the pre-dawn wake, Sleep (the left panel has the Edit built-1 button now, so the rows are 32 px lower; picking the wake shows its estimate, which pushes Sleep down to y 510)
   "$(click 126 238); wait 30; $(click 137 289); wait 20; $(click 140 339); wait 20; $(shot 14-sleep-panel)"
   "$(click 43 510); wait 120; $(shot 15-sleeping)"

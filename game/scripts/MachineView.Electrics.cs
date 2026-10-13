@@ -30,6 +30,10 @@ public partial class MachineView
 
     private readonly List<BankView> _bankViews = [];
     private readonly List<GeneratorView> _generatorViews = [];
+    private readonly Dictionary<string, Vector3> _generatorAxes = [];   // a generator's axle, in this view's own frame
+
+    /// <summary>The axle a generator's can is drawn along (the dial faces -axis), in world space; null for a part that is not a generator here.</summary>
+    public Vector3? GeneratorAxis(string partId) => _generatorAxes.TryGetValue(partId, out var a) ? GlobalBasis * a : null;
     private readonly List<GeneratorLoad> _generatorLoads = [];
     private double _generatorSeen;
 
@@ -92,6 +96,7 @@ public partial class MachineView
                 Undamped(body);   // the generator is its drag: nothing else slows the rotor
                 _generatorLoads.Add(new GeneratorLoad { Gen = gen, Body = body, Axis = axis });
             }
+            _generatorAxes[id] = axis;
             var basis = new Basis(new Quaternion(Vector3.Up, axis));   // Y of the meshes along the axle
             // the motor can, an iron cylinder along the axle, its face toward -axis (where the dial is read)
             var can = Shapes.Cylinder(0.22f, 0.34f, Surface(part.Material));

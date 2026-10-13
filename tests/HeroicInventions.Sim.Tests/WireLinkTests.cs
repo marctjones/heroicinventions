@@ -87,6 +87,30 @@ public class WireLinkTests
     }
 
     /// <summary>
+    /// #247: the motor is all a player sees of a generator (the can hides its rotor), so a click on it, joined to a turning part, is a
+    /// shaft to the shaft it sits on, in either order; the wire to a bank is as before.
+    /// </summary>
+    [Fact]
+    public void AShaftToAGeneratorIsAShaftToTheRotorItSitsOn()
+    {
+        var world = WorldDef.Parse("(world w (place works found-electrics (at 0 0 0)) (place mill dry-mill (at 36 0 6)))", "w");
+        MachineDef? MachineOf(string label) => Load(world.Placements.First(p => p.Label == label).Machine);
+        string rotor = MachineOf("works")!.Part("motor")!.Symbol("on", "");
+        Assert.NotEqual("", rotor);
+        var gear = new LinkEnd("mill", "wheel");
+        var motor = new LinkEnd("works", "motor");
+        var a = WorldLinkGestures.Link(world, MachineOf, gear, motor);
+        Assert.Equal(("shaft", gear, new LinkEnd("works", rotor)), (a.Kind, a.From, a.To));
+        var b = WorldLinkGestures.Link(world, MachineOf, motor, gear);
+        Assert.Equal(("shaft", new LinkEnd("works", rotor), gear), (b.Kind, b.From, b.To));
+        // the rotor itself still joins as before (the pick list offers it)
+        var c = WorldLinkGestures.Link(world, MachineOf, gear, new LinkEnd("works", rotor));
+        Assert.Equal((a.Kind, a.From, a.To), (c.Kind, c.From, c.To));
+        // two generators, or a generator and a bank in its own machine, still make nothing
+        Assert.Throws<InvalidOperationException>(() => WorldLinkGestures.Link(world, MachineOf, motor, new LinkEnd("works", "bank")));
+    }
+
+    /// <summary>
     /// The wire carries what found-electrics' own wire carries: with the rotor at the train's settled speed the bank in the other machine
     /// is charged at 278.30 W, the same joules as the same generator charging its own bank, the record says wind, and the machine's own
     /// bank (which the motor would charge unwired) takes nothing.
