@@ -11,7 +11,7 @@
 ;;  - it fails loudly: a name no machine answers to, a part with no drawing, a malformed end and a join the rules refuse each print
 ;;    an error and end the run with exit code 1, even when a `quit` step follows;
 ;;  - #225: the click steps' errors (joinclick with joining off, joinlist with no list open, a bad argument): the clicks themselves need a
-;;    real window and are checked in route-gui-test.rkt (the pick rule: PickBoxesTests in the C# suite);
+;;    real window and are checked in route-mouse-test.rkt (the pick rule: PickBoxesTests in the C# suite);
 ;;  - #224: the Join machines button says "Join machines" in the rover game (the rover swallows J) and "Join machines (J)" in a machine
 ;;    run and in a world with no rover.
 ;; Skipped when Godot is not installed. About 20 s.

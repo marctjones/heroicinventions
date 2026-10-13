@@ -163,7 +163,7 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
                     l.Apply();
                 }
                 return Step.Next;
-            case "fps":   // cap the frame rate at N: `wait` counts frames and `hold` seconds, so a route's drive is only repeatable at one rate (tools/route-gui.sh)
+            case "fps":   // cap the frame rate at N: `wait` counts frames and `hold` seconds, so a route's drive is only repeatable at one rate (tools/route-mouse.sh)
                 Engine.MaxFps = (int)N(w, 1);
                 return Step.Continue;
             case "camera":

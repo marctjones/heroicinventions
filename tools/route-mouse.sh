@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # The fastest route played as a person, the windmill built by the mouse alone (building plan, phase 4's acceptance,
-# docs/plans/building-plan.md): tools/route-gui.sh with its typed `build (...)` lines replaced by palette clicks and buttons. The real
+# docs/plans/building-plan.md); it replaced tools/route-gui.sh (retired, #256), whose typed `build (...)` lines are palette clicks and buttons here. The real
 # window (tools/gui-check.sh --hidden, never takes focus), real mouse and key events through Godot's own input pipeline, in lonely-rover-e2e.
 #
 #   tools/route-mouse.sh [OUT_DIR]     # about 4 minutes of wall time; OUT_DIR gets the shots (a camera line before each), the trace, the saves and run.log
 #
 # What it does, in order (R = a real click or key; no `build (...)` line and no typed size anywhere):
-#   1  R  drive the rover from its start to 8 m south of where the windmill goes (route-gui.sh's drive, the same keys)
+#   1  R  drive the rover from its start to 8 m south of where the windmill goes (open-loop: timed key holds)
 #   2  R  press "Build a new machine"; "build palette-click post" (a click on the list's Post), "build preset post 10.6" (a click on the
 #         card's 10.6 m button), "build click-at 0.45 0 -1.45" (a click on the ground where the route's tower stands)
 #   3  R  "build palette-click windmill" (a click on Show all, then on the list's Windmill), "build click-at" the post's top: the sails' hub on
@@ -14,19 +14,19 @@
 #   4  R  "build add-stage" four times: each a click on the selected part's "Add a stage" (the windmill's, then each new pinion's): a 72 on
 #         its axle and an 18 meshing it, 72 drives 18 as the stage's lists start; the pinion selected after each, the pair framed
 #   5  R  Esc (nothing selected), the view of the finished train (shot 07: the label "windmill_2 -> wheel_10: 256:1"); press "Leave"
-#   6+ R  as route-gui.sh: Join machines and joinclick on the last pinion (wheel_10 here, pinion-e there), the rotor, the generator and the
+#   6+ R  Join machines and joinclick on the last pinion (wheel_10), the motor (the shaft to its rotor, #247), the motor again and the
 #         bank; "Sleep until...", pre-dawn, Sleep; 20x after the wake
-# The vault is lonely-rover-e2e's own, placed by the world round the found bank's crate (as in route-gui.sh; Phase 5, the vault by mouse,
+# The vault is lonely-rover-e2e's own, placed by the world round the found bank's crate (Phase 5, the vault by mouse,
 # is not asked for).
 # Predicted before the first run: "built-1: design post_1:post windmill_2:windmill wheel_3:wheel ... wheel_10:wheel; running 10 parts";
 # wheel_3..wheel_10 the 72s and 18s alternately at (0 0 -1.3), (0.225 0 -1.3), (0.225 0 -1.4), (0.45 0 -1.4), (0.45 0 -1.5), (0.675 0 -1.5),
 # (0.675 0 -1.6), (0.9 0 -1.6) from the hub, the route's wheel-a ... pinion-e (solve.steps:93-115) within 1 mm; arbors windmill_2+wheel_3,
 # wheel_4+wheel_5, wheel_6+wheel_7, wheel_8+wheel_9 and meshes wheel_3+wheel_4 ... wheel_9+wheel_10, as the route's; "train: windmill_2 ->
 # wheel_10, ratio 256:1 (4 meshes)"; the hub on the post's top (phase 1), so 5 cm higher than the route's typed (0 11 0) over the tower's
-# ground, give or take the ground under the click. The run as route-gui.sh's (docs/e2e-route.md, "The route played as a person"): the bank
+# ground, give or take the ground under the click. The run of docs/e2e-route.md, "The route played as a person"): the bank
 # full by the wake (54,800 s), the call at 55,484 to 55,495 s (03:00 on sol 2), a trace frame with bank.won 1 at 55,490 s and none before.
 # Observed (2026-10-11, two runs to the win; the last after the stage view was turned face on): as predicted. The build's spot (178.69,
-# 103.88) (the open-loop drive ends 1.5 m off route-gui.sh's recorded (180.12, 105.00); the spot is wherever the button opens it);
+# 103.88) (the open-loop drive ends 1.5 m off the automated route's (180.12, 105.00); the spot is wherever the button opens it);
 # post_1 #:size-y 10.6 at (179.05 -63.48 102.5); windmill_2 at (178.6 -52.43 103.95), the hub (-0.09 10.98 0.07) from the spot (the route
 # types (0 11 0)); wheel_3..wheel_10 exactly the route's offsets from the hub, 72/18 alternately; the saved world's arbors windmill_2 wheel_3,
 # wheel_4 wheel_5, wheel_6 wheel_7, wheel_8 wheel_9 and meshes wheel_3 wheel_4 ... wheel_9 wheel_10; "ratio 256:1 (4 meshes)"; joined: shaft
@@ -61,7 +61,7 @@ steps=(
   # drive to the motor: turn right to face it, drive, turn left to face +x, drive the last metres
   "hold right 3.15; wait 10; hold up 14; wait 10; hold up 13; wait 10; hold left 0.65; wait 20; hold up 2; wait 20; rover; key home; wait 20; hold shift+up 0.5; wait 20; $(shot 11-at-motor)"
   # 5b: joining stays on across the drive, so the pinion is still the first pick; a view of the motor (the open-loop drive ends a few metres
-  # from route-gui.sh's, the build's spot 1.5 m off its, so the camera is aimed as the director aims it), click the motor (the shaft: a click on the can is a shaft to the rotor it sits on, #247), then
+  # from the automated route's, the build's spot 1.5 m off its, so the camera is aimed as the director aims it), click the motor (the shaft: a click on the can is a shaft to the rotor it sits on, #247), then
   # the motor again (the wire's first end); a view of the bank, click it (the wire); Escape; the camera back on the rover
   "look 200 15 13 233.8 -51.5 135; wait 20; joinclick motors.motor; wait 10; $(shot 12-shaft-joined); joinclick motors.motor; wait 10; look 200 15 12 254.5 -44.2 137.9; wait 20; joinclick battery-bank.bank; wait 10; key escape; wait 10; $(shot 13-joined); follow; key home; wait 20"
   # 6: Sleep until..., the pre-dawn wake, Sleep (the left panel has the Edit built-1 button now, so the rows are 32 px lower; picking the wake shows its estimate, which pushes Sleep down to y 510)

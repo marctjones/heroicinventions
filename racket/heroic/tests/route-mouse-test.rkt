@@ -1,47 +1,49 @@
 #lang racket/base
-;; Issue #218: tools/route-gui.sh, the fastest route played through real mouse and key events in a real (hidden) window, and the win read
-;; from its trace. Needs a macOS window server (tools/gui-check.sh opens the app with `open -g -j`), so it is OPT IN:
-;;     HEROIC_GUI_ROUTE=1 raco test racket/heroic/tests/route-gui-test.rkt        # about 3.5 minutes; takes no focus
+;; Issues #218, #256: tools/route-mouse.sh, the fastest route played through real mouse and key events in a real (hidden) window, the windmill built
+;; by the mouse alone, and the win read from its trace. (It replaced tools/route-gui.sh, whose open-loop drive had gone stale and whose
+;; windmill was typed.) Needs a macOS window server (tools/gui-check.sh opens the app with `open -g -j`), so it is OPT IN:
+;;     HEROIC_GUI_ROUTE=1 raco test racket/heroic/tests/route-mouse-test.rkt      # about 4 minutes; takes no focus
 ;; Without HEROIC_GUI_ROUTE (or without Godot) it is skipped, so the 20-minute suite does not need a window.
 ;;
-;; Predicted before the run (from e2e-route-test.rkt, the automated route, same world and wakes):
+;; Predicted before the run (tools/route-mouse.sh's header, e2e-route-test.rkt, the automated route, same world and wakes):
+;;  - the mouse-built train is the route's: "built-1: design post_1:post windmill_2:windmill wheel_3:wheel ... wheel_10:wheel; running 10 parts",
+;;    "train: windmill_2 -> wheel_10, ratio 256:1 (4 meshes)";
 ;;  - the found bank's cells 24.5 C, the rock 92 C, the vault's lid 37% open at the wake (54,800 s); the bank full by then (the sleep charges the
 ;;    motor at an estimate: it has never charged a warm bank), so `bank.charge` 25 in the first frame after it;
 ;;  - the call at the pass: the rover log's win line at 55,484 s (03:00, sol 2), a frame with bank.won 1 by 55,495 s, none before 55,484 s;
-;;  - #225: the real gesture makes both links. The click on the train's last pinion crosses the sails' box first and picks the smaller box
-;;    inside it, built-1.pinion-e; the click on the rotor's place crosses the motor can's box (0.44 m, #247) first and picks the smaller
-;;    rotor box inside it, so the shaft is made by a plain click; the plain click on the can's flank picks motors.motor (no pick list, no second
-;;    click); the click on the
-;;    bank crosses the crate's box first and picks the smaller, battery-bank.bank.
+;;  - #225, #247: the real gesture makes both links by plain clicks. The click on the train's last pinion crosses the windmill's box first and
+;;    picks the smaller box inside it, built-1.wheel_10; the click on the motor can picks motors.motor (the can is solid: it hides the rotor under
+;;    it) and a click on a generator joined to a turning part is a shaft to the rotor the generator sits on, so the shaft is made by a plain click;
+;;    the click on the bank crosses the crate's box first and picks the smaller, battery-bank.bank. No pick list is used.
 (require rackunit racket/list racket/string racket/port racket/file racket/system racket/runtime-path
          (only-in heroic/godothost godot-available?))
 
 (define-runtime-path here "../../..")
-(define script (build-path here "tools" "route-gui.sh"))
+(define script (build-path here "tools" "route-mouse.sh"))
 
 (define (frames path)   ; (list (t (field value) ...) ...), one frame to a line
   (if (file-exists? path) (call-with-input-file path (λ (in) (for/list ([f (in-port read in)]) f))) '()))
 (define (at f key) (cadr (assq key (cdr f))))
 
 (when (and (godot-available?) (getenv "HEROIC_GUI_ROUTE") (file-exists? script))
-  (define out (make-temporary-file "route-gui~a" 'directory))
+  (define out (make-temporary-file "route-mouse~a" 'directory))
   (define summary (with-output-to-string (λ () (system* (path->string script) (path->string out)))))
   (define log (file->string (build-path out "run.log")))
   (define (has? rx) (regexp-match? rx log))
   (define bank (frames (build-path out "route.battery-bank")))
   (define vault (frames (build-path out "route.vault")))
 
-  (test-case "the route is played: drive, build mode by its button, the palette's post, the build, Leave"
-    (check-true (has? #rx"\\[build\\] new machine built-1 at \\(180\\.[0-9]+ -[0-9.]+ 10[45]\\.[0-9]+\\)") "the windmill's place is the automated route's (180, 105) to a metre")
-    (check-true (has? #rx"\\[BuildMode\\] > \\(post post_1 #:at") "the post was placed by a palette click")
-    (check-true (has? #rx"\\[build\\] built-1: design post_1:post sails:windmill wheel-a:wheel pinion-b:wheel .* pinion-e:wheel; running 10 parts") "the train is built")
+  (test-case "the route is played: drive, build mode by its button, the windmill built by the mouse alone, Leave"
+    (check-true (has? #rx"\\[build\\] new machine built-1 at \\(17[0-9]\\.[0-9]+ -[0-9.]+ 10[0-9]\\.[0-9]+\\)") "the build opens where the open-loop drive ends, a few metres from the automated route's (180, 105)")
+    (check-true (has? #rx"\\[build\\] built-1: design post_1:post windmill_2:windmill wheel_3:wheel .* wheel_10:wheel; running 10 parts") "the train is built")
+    (check-true (has? #rx"train: windmill_2 -> wheel_10, ratio 256:1 \\(4 meshes\\)") "four stages, 72 to 18, 256:1")
     (check-false (has? #rx"BuildMode\\] error") "no command was refused"))
 
-  (test-case "the real gesture makes both links: the smaller box wins, the generator and the bank have boxes, the list is there for overlaps"
-    (check-true (has? #rx"the click crossed [0-9]+ parts' boxes, nearest first: built-1.sails") "the click on pinion-e crosses the sails' box first")
-    (check-true (has? #rx"built-1.pinion-e lies inside built-1.sails's box and is the smaller: it takes the click"))
-    (check-true (has? #rx"motors.rotor lies inside motors.motor's box and is the smaller: it takes the click") "the rotor's click crosses the can's box first and picks the smaller rotor")
-    (check-true (has? #rx"\\[links\\] joined: shaft shaft-1 from built-1.pinion-e to motors.rotor") "the shaft, by clicks")
+  (test-case "the real gesture makes both links by plain clicks: the smaller box wins, the motor's can is solid, the bank is inside its crate"
+    (check-true (has? #rx"the click crossed [0-9]+ parts' boxes, nearest first: built-1.windmill_2") "the click on wheel_10 crosses the windmill's box first")
+    (check-true (has? #rx"built-1.wheel_10 lies inside built-1.windmill_2's box and is the smaller: it takes the click"))
+    (check-true (has? #rx"\\[links\\] joined: shaft shaft-1 from built-1.wheel_10 to motors.rotor") "the shaft, by a click on the motor (its rotor is the shaft's end)")
+    (check-false (has? #rx"motors.rotor lies inside motors.motor's box") "the can hides the rotor: no click picked it")
     (check-false (has? #rx"pick list at|chosen from the list") "both links were made by plain clicks: no pick list was needed")
     (check-true (has? #rx"battery-bank.bank lies inside battery-bank.crate's box and is the smaller: it takes the click"))
     (check-true (has? #rx"\\[links\\] joined: wire wire-1 from motors.motor to battery-bank.bank") "the wire, by clicks")
@@ -70,4 +72,4 @@
     (check-true (regexp-match? #rx"sol 2 03:00 t=5548[4-9]\\.[0-9]s win: The call went out from bank on sol 2 at 03:00" rover-log))
     (check-true (has? #rx"\\[frontend\\] ending: bank sol 2 at 03:00, 25.00 of 25.00 Wh at [0-9.]+ C, sources 1"))
     (check-true (has? #rx"\\[frontend\\] ending source wind: 25.000 Wh"))
-    (printf "ROUTE-GUI: shots and trace in ~a\n" out)))
+    (printf "ROUTE-MOUSE: shots and trace in ~a\n" out)))
