@@ -306,9 +306,34 @@ public partial class BuildMode
         _lessonShownStep = run.Index;
     }
 
+    private float _lessonShift;   // how far right the lesson panel stands to keep clear of the part's card, px
+
+    /// <summary>
+    /// The lesson panel moved right of the part's card while the card is up (the card stands by the parts list, under the panel's left
+    /// end): both read, as far as the right-hand panel leaves room; back to the middle when the card goes.
+    /// </summary>
+    private void KeepLessonPanelClear()
+    {
+        if (!_lessonPanel.Visible) return;
+        var panel = _lessonPanel.GetGlobalRect();
+        float left = panel.Position.X - _lessonShift, right = panel.End.X - _lessonShift;   // where it stands unshifted
+        float want = 0;
+        if (_card.Visible)
+        {
+            var card = _card.GetGlobalRect();
+            if (card.End.X > left && card.Position.Y < panel.End.Y)
+                want = Mathf.Min(card.End.X + 8 - left, Mathf.Max(0, _rightPanel.GetGlobalRect().Position.X - 8 - right));
+        }
+        if (Mathf.IsEqualApprox(want, _lessonShift)) return;
+        _lessonShift = want;
+        _lessonPanel.OffsetLeft = -300 + want;
+        _lessonPanel.OffsetRight = 300 + want;
+    }
+
     /// <summary>Called each frame: the lesson pressing Test itself for its final check.</summary>
     private void LessonProcess(double delta)
     {
+        KeepLessonPanelClear();
         if (_lessonAutoTestIn is not { } left) return;
         left -= delta;
         if (left > 0) { _lessonAutoTestIn = left; return; }

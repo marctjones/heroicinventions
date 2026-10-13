@@ -1414,8 +1414,17 @@ public partial class MachineView : Node3D
         }
 
         // small wheels on z axles stand on a clockmaker's plate, unless they are a driven
-        // train's (#113), working machinery that stands on posts like any other axle
+        // train's (#113), working machinery that stands on posts like any other axle. A plate is
+        // clockwork's case: about as tall as the wheels on it are wide. Small gears high up (the
+        // tutorial's 18 and 36 beside a 72 on a 1 m post) would hang on a tall dark board reaching
+        // down to the ground, which reads as a mystery board, not a plate: they stand on posts too.
         var small = groups.Where(g => g.Radius < 0.1f && Mathf.Abs(g.Axis.Z) > 0.999f && !g.Driven).ToList();
+        if (small.Count > 0)
+        {
+            float span = small.Max(g => g.Back.X + g.Radius) - small.Min(g => g.Back.X - g.Radius);
+            float height = small.Max(g => g.Back.Y + g.Radius);
+            if (height > 3 * Mathf.Max(span, 0.1f)) small.Clear();
+        }
         if (small.Count > 0)
         {
             _building = small[0].Id;   // the plate is shared: the first small wheel owns it

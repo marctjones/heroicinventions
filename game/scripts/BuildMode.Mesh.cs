@@ -182,8 +182,7 @@ public partial class BuildMode
     {
         if (_meshRing is not { } r || _ghost is not { Visible: true }) return;
         if (!_session.Document.Parts.ContainsKey(r.Anchor)) { CancelPlacing(); return; }
-        string id = $"wheel_{_serial++}";
-        while (_session.Document.HasName(id)) id = $"wheel_{_serial++}";
+        string id = NewPartId("wheel", paletteId, _placeMaterial ?? UsualMaterial("gear"));   // in a lesson, its role ("second")
         var at = _ghost.Position;
         bool onRing = _ghostOnRing;
         float angle = _ringAngle;

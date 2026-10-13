@@ -116,8 +116,7 @@ public partial class BuildMode
     {
         if (_shaft is not { } s || _ghost is not { Visible: true }) return;
         if (!_session.Document.Parts.ContainsKey(s.Anchor)) { CancelPlacing(); return; }
-        string id = $"wheel_{_serial++}";
-        while (_session.Document.HasName(id)) id = $"wheel_{_serial++}";
+        string id = NewPartId("wheel", paletteId, _placeMaterial ?? UsualMaterial("gear"));   // in a lesson, its role
         var at = _ghost.Position;
         var rel = at - V(s.Point);
         float along = rel.Dot(V(s.Behind));

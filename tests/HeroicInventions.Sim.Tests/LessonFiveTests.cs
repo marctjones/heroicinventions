@@ -113,6 +113,22 @@ public class LessonFiveTests
     }
 
     [Fact]
+    public void ANewPartIsNamedByTheRoleItWouldTakeWhenItWouldCount()
+    {
+        var s = NewSession();
+        var run = new LessonRunner(Gears(), Materials);
+        PartSpec Gear(int teeth) => PartTemplates.Create(CatalogueReader.Parse(Catalogue).First(e => e.Id == $"involute-gear-m5-{teeth}"), "probe", new Vec3(0, 0, 0), "bronze");
+        Assert.Equal("post", run.RoleFor(PartTemplates.Create("post", "probe", new Vec3(0, 0, 0), "oak")));
+        Assert.Null(run.RoleFor(PartTemplates.Create("block", "probe", new Vec3(0, 0, 0), "oak")));   // not what the step counts
+        Do(s, run, "(post post #:at (0 0 0) #:material oak)");
+        Assert.Null(run.RoleFor(Gear(36)));   // the step wants the 72
+        Assert.Equal("crank", run.RoleFor(Gear(72)));
+        Do(s, run, "(wheel crank #:at (0 1.18 0) #:catalogue involute-gear-m5-72 #:material bronze)");
+        Assert.Equal("crank", run.Roles["crank"]);
+        Assert.Equal("second", run.RoleFor(Gear(18)));   // a mesh step names its gear too
+    }
+
+    [Fact]
     public void ALostMeshTakesTheLessonBackToItsStep()
     {
         var s = NewSession();

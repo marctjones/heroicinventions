@@ -1050,6 +1050,7 @@ public partial class BuildMode : Node3D
         UpdateCandidates();
         UpdatePortLabels();
         var lit = _candidates.Select(c => c.PartId).ToHashSet();
+        ShowPartNames();
         foreach (var id in _session.Document.Parts.Keys)
         {
             var overlay = id == _selectedId ? SelectedOverlay : _linkPicks.Contains(id) ? PickedOverlay : id == _hoverId ? HoverOverlay
@@ -1057,10 +1058,24 @@ public partial class BuildMode : Node3D
                 : lit.Contains(id) ? CandidateOverlay
                 : _link is { } tool && tool is not (LinkGestures.Kind.Rope or LinkGestures.Kind.Joint) && LinkTakes(tool, id) ? CandidateOverlay
                 : id == LessonPartId ? LessonPartOverlay : null;
+            // in a lesson only the selected part's name is shown: the names of gears meshed side by side pile up over them, and the
+            // lesson's words and the train's ratio label already say which is which (BuildMode.Lessons.cs)
             foreach (var root in NodesOf(id))
                 foreach (var g in Descendants(root).OfType<GeometryInstance3D>())
                     if (g is not Label3D) g.MaterialOverlay = overlay;
         }
+    }
+
+    /// <summary>
+    /// In a lesson only the selected part's name is shown: the names of gears meshed side by side pile up over them, and the lesson's
+    /// words and the train's ratio label already say which is which. A label belongs to the part its "part_id" says (an axle's label
+    /// is drawn after the parts, with its first wheel's id).
+    /// </summary>
+    private void ShowPartNames()
+    {
+        if (_preview is null) return;
+        foreach (var label in Descendants(_preview).OfType<Label3D>())
+            if (label.HasMeta("part_id")) label.Visible = _lesson is null || label.GetMeta("part_id").AsString() == _selectedId;
     }
 
     private static StandardMaterial3D Overlay(Color c) => new()
@@ -2013,11 +2028,10 @@ public partial class BuildMode : Node3D
                 + (clear > 0 ? $"the sails' disc clears the post by {F(clear)} m" : $"the sails' disc crosses the post ({F(clear)} m)"));
         }
         var item = _palette.First(p => p.Id == paletteId);
-        string id = $"{paletteId.Replace('-', '_')}_{_serial++}";
-        while (_session.Document.Parts.ContainsKey(id)) id = $"{paletteId.Replace('-', '_')}_{_serial++}";
         string head = item.Catalogue is { } entry ? entry.PartKind : item.PrimitiveKind!;
         string catalogueArg = item.Catalogue is not null ? $" #:catalogue {paletteId}" : "";
         string key = EntryKeyOf(paletteId);
+        string id = NewPartId(key.Replace('-', '_'), paletteId, _placeMaterial ?? UsualMaterial(key));   // "gear_2" by its entry, not its size; in a lesson, its role
         var at = _ghost.Position + new Vector3(0, Lift(key), 0);
         string extra = string.Concat(ExtraProps(key).Select(p => $" #:{p.Key} {F(p.Value)}"));
         if (RunCommand($"({head} {id} #:at {Xyz(at)}{catalogueArg} #:material {_placeMaterial ?? UsualMaterial(key)}{extra})"))
@@ -2025,6 +2039,23 @@ public partial class BuildMode : Node3D
             TrySnapAllPorts(id);
             if (!keepPlacing) { CancelPlacing(); Select(id); }
         }
+    }
+
+    /// <summary>
+    /// A new part's id: the name the lesson's step would remember it by when it would count ("crank", BuildMode.Lessons.cs), so its label
+    /// and the train's ratio read in the lesson's words; else <paramref name="baseName"/>_N (the palette's entry, "gear_2", "post_1").
+    /// </summary>
+    private string NewPartId(string baseName, string paletteId, string material)
+    {
+        if (_lesson is not null && _palette.FirstOrDefault(p => p.Id == paletteId) is { Id: not null } item)
+        {
+            var probe = item.Catalogue is { } entry ? PartTemplates.Create(entry, "probe", new Vec3(0, 0, 0), material)
+                                                    : PartTemplates.Create(item.PrimitiveKind!, "probe", new Vec3(0, 0, 0), material);
+            if (_lesson.RoleFor(probe) is { } role && !_session.Document.HasName(role)) return role;
+        }
+        string id = $"{baseName}_{_serial++}";
+        while (_session.Document.HasName(id)) id = $"{baseName}_{_serial++}";
+        return id;
     }
 
     // -------------------------------------------------------- edit actions

@@ -42,7 +42,7 @@
                  "palette block; click-at -0.2 0.42 0; wait 5; "           ; step 2: granite (the block's own material)
                  "palette block; click-at 0.2 0.42 0; wait 5; "            ; step 3: oak (the lesson picks it on the card)
                  "test; wait 5; wait-test; "                               ; step 4: the granite end goes down
-                 "drag-to block_3 0.72 0.42 0; wait 5; wait-test; wait 5; " ; step 5, then the lesson's own run (step 6)
+                 "drag-to light 0.72 0.42 0; wait 5; wait-test; wait 5; " ; step 5, then the lesson's own run (step 6)
                  "log"))
 
 (test-case "Lesson 1 plays through: every step completes and the lesson's own run finds the beam balanced"
@@ -53,13 +53,13 @@
       (check-true (ormap (λ (l) (regexp-match? (pregexp (format "\\[Lesson\\] step ~a done" n)) l)) done)
                   (format "step ~a completes" n)))
     ;; steps 1-3 and 5 set a close placement exactly on its target
-    (check-true (ormap (λ (l) (string-contains? l "(move block_3 (0.75 0.4625 0))")) out) "the oak block is set on 0.75 m")
+    (check-true (ormap (λ (l) (string-contains? l "(move light (0.75 0.4625 0))")) out) "the oak block is set on 0.75 m")
     ;; step 4's Test: the granite end went down to the stop, as worked out
     (define tip (findf (λ (l) (string-contains? l "test seen at step 4")) out))
     (check-true (and tip #t) "the first Test is seen at step 4")
-    (check-true (> (number-after tip #px"lever_1 most ([0-9.]+)") 15) (format "the beam tipped to its stop: ~a" tip))
-    (check-true (string-contains? tip "block_2=2.7kg") "the sim's granite block weighs 2.7 kg")
-    (check-true (string-contains? tip "block_3=0.72kg") "the sim's oak block weighs 0.72 kg")
+    (check-true (> (number-after tip #px"beam most ([0-9.]+)") 15) (format "the beam tipped to its stop: ~a" tip))
+    (check-true (string-contains? tip "heavy=2.7kg") "the sim's granite block weighs 2.7 kg")
+    (check-true (string-contains? tip "light=0.72kg") "the sim's oak block weighs 0.72 kg")
     (check-true (ormap (λ (l) (string-contains? l "The beam tipped 18° down on the left, on the granite block's side.")) out)
                 "Test says what happened in a sentence")
     ;; step 6: the lesson ran the machine and the traced tilt stayed within 3°
@@ -85,7 +85,7 @@
     (define again (run "wait 30; lesson-resume see-saw; wait 5; log"))
     (delete-directory/files lessons #:must-exist? #f)
     (check-true (ormap (λ (l) (string-contains? l "[Lesson] started see-saw at step 3")) again) "it carries on at step 3")
-    (check-true (ormap (λ (l) (regexp-match? #px"state: .*lever_1@\\(0 0.4 0\\).*block_2@\\(-0.2 0.463 0\\)" l)) again)
+    (check-true (ormap (λ (l) (regexp-match? #px"state: .*beam@\\(0 0.4 0\\).*heavy@\\(-0.2 0.463 0\\)" l)) again)
                 "with the beam and the granite block back where they were")))
 
 ;; #180: a placement that doesn't count says why, in the lesson panel's words. At step 2 (a granite
@@ -96,7 +96,7 @@
   (string-append "wait 30; lesson see-saw; wait 5; "
                  "palette lever; click-at 0 0 0; wait 5; "                              ; step 1 done: the beam
                  "palette ball; click-at -0.2 0.42 0; wait 5; "                           ; the wrong part, by the palette
-                 "log; cmd (remove ball_2); wait 3; "
+                 "log; cmd (remove ball_1); wait 3; "
                  "cmd (block w #:at (-0.2 0.47 0) #:material oak); wait 5; "             ; the wrong material
                  "cmd (remove w); wait 3; "
                  "palette block; click-at -0.5 0.42 0; wait 5; "                          ; off the target, by the palette
@@ -128,7 +128,7 @@
              #:when (ormap (λ (l) (regexp-match? (pregexp (format "\\[Lesson\\] step ~a done" k)) l)) out))
     k))
 
-;; the number after "key=" in the facts line of the Test, or #f; `part` is the "rise block_3" etc.
+;; the number after "key=" in the facts line of the Test, or #f; `part` is the "rise light" etc.
 (define (fact-of out part key)
   (define facts (findf (λ (l) (string-contains? l "[BuildMode] facts: ")) out))
   (and facts
@@ -152,7 +152,7 @@
                  "palette pulley; click-at 0 1.0 0; wait 5; "              ; step 2: the 10 cm pulley the card offers, in oak
                  "palette block; click-at 0.1 0 0; wait 5; "               ; step 3: oak, on the ground to the right
                  "palette block; click-at -0.1 0 0; wait 5; "              ; step 4: granite, to the left
-                 "palette rope; click-part block_4; click-part block_3; wait 5; "   ; step 5: stone, then wood; the lesson threads it
+                 "palette rope; click-part heavy; click-part light; wait 5; "   ; step 5: stone, then wood; the lesson threads it
                  "log; test; wait-test; wait 5; "                          ; step 6: Test, and the lesson reads its facts
                  "lesson-leave; lesson-resume pulley; wait 5; log; quit"))
 
@@ -160,15 +160,15 @@
   (when (godot-available?)
     (define out (run-editor pulley-playthrough #:seconds 60))
     (check-equal? (steps-done out 6) '(1 2 3 4 5 6) "every step completes")
-    (check-true (ormap (λ (l) (string-contains? l "(set post_1 #:size-x 0.06)")) out) "the post is made slim")
-    (check-true (ormap (λ (l) (string-contains? l "(move block_4 (-0.1 0.6 0))")) out) "the stone is hung 0.55 m up")
-    (check-true (ormap (λ (l) (string-contains? l "(rope rope-1 #:from (block_4 0 0.05 0) #:to (block_3 0 0.05 0) #:length 1.7561 #:over ((-0.1 1.1 0)")) out)
+    (check-true (ormap (λ (l) (string-contains? l "(set post #:size-x 0.06)")) out) "the post is made slim")
+    (check-true (ormap (λ (l) (string-contains? l "(move heavy (-0.1 0.6 0))")) out) "the stone is hung 0.55 m up")
+    (check-true (ormap (λ (l) (string-contains? l "(rope rope-1 #:from (heavy 0 0.05 0) #:to (light 0 0.05 0) #:length 1.7561 #:over ((-0.1 1.1 0)")) out)
                 "the rope runs over the pulley, 1.7561 m of it")
     ;; the Test: the wood rose 0.55 m (within 0.08), the stone fell 0.55 m, the pulley turned 0.875 of a turn, the stone landed at 2.50 m/s
-    (check-= (fact-of out "rise block_3" 'value) 0.55 0.08 (format "the wood rose 0.55 m: ~a" (facts-line out)))
-    (check-= (fact-of out "rise block_4" 'value) -0.55 0.01 "the stone fell 0.55 m")
-    (check-= (fact-of out "turns pulley_10cm_2" 'value) (/ 0.55 (* 2 pi 0.1)) 0.06 "the pulley turned 0.875 of a turn")
-    (check-= (fact-of out "rise block_4" 'top) (sqrt (* 2 (/ (* 9.81 (- 2.7 0.72)) (+ 2.7 0.72)) 0.55)) 0.15 "the stone landed at 2.50 m/s")
+    (check-= (fact-of out "rise light" 'value) 0.55 0.08 (format "the wood rose 0.55 m: ~a" (facts-line out)))
+    (check-= (fact-of out "rise heavy" 'value) -0.55 0.01 "the stone fell 0.55 m")
+    (check-= (fact-of out "turns pulley" 'value) (/ 0.55 (* 2 pi 0.1)) 0.06 "the pulley turned 0.875 of a turn")
+    (check-= (fact-of out "rise heavy" 'top) (sqrt (* 2 (/ (* 9.81 (- 2.7 0.72)) (+ 2.7 0.72)) 0.55)) 0.15 "the stone landed at 2.50 m/s")
     (check-true (ormap (λ (l) (string-contains? l "step 6 done: lifted")) out) "the lesson's check passes")
     (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished pulley") (string-contains? l "5.68 m/s²") (string-contains? l "The wood rose 0.55 m"))) out)
                 "the lesson says it is done, with the worked acceleration")
@@ -186,11 +186,11 @@
   (string-append "wait 30; lesson pulley; wait 5; "
                  "palette post; click-at 0 0 0; wait 5; "
                  "palette pulley-5cm; click-at 0 1.0 0; wait 5; "          ; the wrong size (the card's choice is changed by hand)
-                 "cmd (remove pulley_5cm_2); wait 3; "
+                 "cmd (remove pulley_1); wait 3; "
                  "palette pulley-10cm; click-at 0.02 1.0 0; wait 5; "     ; (a click on the same pixel as before sends no mouse move, so the ghost wouldn't follow)
                  "palette block; click-at 0.1 0 0; wait 5; "
                  "palette block; click-at -0.1 0 0; wait 5; "
-                 "palette rope; click-part pulley_10cm_3; click-part block_5; wait 5; "     ; rope: pulley to stone
+                 "palette rope; click-part pulley; click-part heavy; wait 5; "     ; rope: pulley to stone
                  "quit"))
 
 (test-case "Lesson 2 says why a pulley or a rope didn't count"
@@ -219,14 +219,14 @@
   (when (godot-available?)
     (define out (run-editor ramp-playthrough #:seconds 90))
     (check-equal? (steps-done out 3) '(1 2 3) "every step completes")
-    (check-true (ormap (λ (l) (string-contains? l "(move ball_2 (0 0.3063 -0.8497))")) out) "the ball is set 0.9 m up the slope")
+    (check-true (ormap (λ (l) (string-contains? l "(move ball (0 0.3063 -0.8497))")) out) "the ball is set 0.9 m up the slope")
     (define v (sqrt (* (/ 10 7) 9.81 (- 0.3063 0.05))))
     (check-= v 1.895 0.001 "the worked speed")
-    (check-= (fact-of out "rise ball_2" 'top) v 0.15 (format "the ball's fastest speed: ~a" (facts-line out)))
-    (check-true (< (fact-of out "rise ball_2" 'top) (sqrt (* 2 9.81 (- 0.3063 0.05)))) "slower than a sliding block")
-    (check-true (< (/ (fact-of out "rise ball_2" 'top) 0.05) 47.1) "under the engine's spin cap, 47.1 rad/s")
-    (check-true (> (fact-of out "rise ball_2" 'across) 1) "it rolled on")
-    (check-= (fact-of out "rise ball_2" 'value) (- (- 0.3063 0.05)) 0.005 "it came down 0.2563 m")
+    (check-= (fact-of out "rise ball" 'top) v 0.15 (format "the ball's fastest speed: ~a" (facts-line out)))
+    (check-true (< (fact-of out "rise ball" 'top) (sqrt (* 2 9.81 (- 0.3063 0.05)))) "slower than a sliding block")
+    (check-true (< (/ (fact-of out "rise ball" 'top) 0.05) 47.1) "under the engine's spin cap, 47.1 rad/s")
+    (check-true (> (fact-of out "rise ball" 'across) 1) "it rolled on")
+    (check-= (fact-of out "rise ball" 'value) (- (- 0.3063 0.05)) 0.005 "it came down 0.2563 m")
     (check-true (ormap (λ (l) (string-contains? l "step 3 done: rolled")) out) "the lesson's check passes")
     (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished ramp") (string-contains? l "worked out beforehand"))) out) "the lesson says it is done")))
 
@@ -239,19 +239,19 @@
                  "palette post; click-at 0 0 0; wait 5; "                  ; step 1: the post
                  "palette tank; click-at 0 1.0 0; wait 5; "                ; step 2: the upper tank, on it (10 litres)
                  "palette tank; click-at 0.8 0 0; wait 5; "                ; step 3: the lower, poured out by the lesson
-                 "click-port tank_2.outlet; click-port tank_3.inlet; wait 5; "   ; step 4: the pipe, by clicking a dot on each
+                 "click-port upper.outlet; click-port lower.inlet; wait 5; "   ; step 4: the pipe, by clicking a dot on each
                  "log; test; wait-test; wait 5; quit"))                   ; step 5: Test
 
 (test-case "Lesson 4 plays through: all ten litres run down into the lower tank, the Test ending when the upper is dry"
   (when (godot-available?)
     (define out (run-editor water-playthrough #:seconds 90))
     (check-equal? (steps-done out 5) '(1 2 3 4 5) "every step completes")
-    (check-true (ormap (λ (l) (string-contains? l "(set tank_3 #:water 0)")) out) "the lower tank is poured out")
+    (check-true (ormap (λ (l) (string-contains? l "(set lower #:water 0)")) out) "the lower tank is poured out")
     (define t-dry (/ (log 1.5) 0.04))
     (check-= t-dry 10.14 0.005 "the worked time to run dry")
     (define facts (facts-line out))
-    (check-= (fact-of out "water tank_2" 'value) -10 0.05 (format "the upper tank lost its 10 litres: ~a" facts))
-    (check-= (fact-of out "water tank_3" 'value) 10 0.05 "the lower tank gained them")
+    (check-= (fact-of out "water upper" 'value) -10 0.05 (format "the upper tank lost its 10 litres: ~a" facts))
+    (check-= (fact-of out "water lower" 'value) 10 0.05 "the lower tank gained them")
     (define t (string->number (cadr (regexp-match #px"t=([0-9.]+) by=settled" facts))))
     (check-true (< (+ t-dry 0.9) t (+ t-dry 1.4)) (format "the test ended a second after the water stopped: ~a s" t))
     (check-true (ormap (λ (l) (string-contains? l "step 5 done: level")) out) "the lesson's check passes")
@@ -278,7 +278,7 @@
                  "palette-click post; wait 5; click-at 0 0 0; wait 5; "            ; step 1: the 1 m post (the card's first size)
                  "palette-click gear; wait 5; click-at 0 1.0 0; wait 5; log; "     ; step 2: the 72 the card offers, on the post's top; the lesson fits the crank
                  "mesh-with 18; wait 10; "                                         ; step 3: the crank is selected by the lesson; its lit button, an 18
-                 "select wheel_3; wait 5; mesh-with 36; wait 10; log; "            ; step 4: the 18's button, a 36 on its far side
+                 "select second; wait 5; mesh-with 36; wait 10; log; "            ; step 4: the 18's button, a 36 on its far side
                  "test; wait-test; wait 5; quit"))                                  ; step 5: Test, 30 s
 
 (test-case "Lesson 5 plays through by the mouse: a crank turns three gears and the last runs at 60 rpm, 2:1"
@@ -287,22 +287,22 @@
     (check-true (ormap (λ (l) (string-contains? l "[Lesson] menu: Lesson 1: the see-saw | Lesson 2: the pulley | Lesson 3: the ramp and the ball | Lesson 4: water from tank to tank | == Build five machines | Lesson 5: crank and gears")) out)
                 "the menu: the four basics, the heading, then lesson 5")
     (check-equal? (steps-done out 5) '(1 2 3 4 5) "every step completes")
-    (check-true (ormap (λ (l) (string-contains? l "(wheel involute_gear_m5_72_2 #:at (0 1.18 0) #:catalogue involute-gear-m5-72")) out) "the card offered the 72")
-    (check-true (ormap (λ (l) (string-contains? l "step 2 done: set on its target (move involute_gear_m5_72_2 (0 1.19 0)) ; (set involute_gear_m5_72_2 #:drive-rpm 30) ; (set involute_gear_m5_72_2 #:drive-torque 5)")) out)
+    (check-true (ormap (λ (l) (string-contains? l "(wheel crank #:at (0 1.18 0) #:catalogue involute-gear-m5-72")) out) "the card offered the 72")
+    (check-true (ormap (λ (l) (string-contains? l "step 2 done: set on its target (move crank (0 1.19 0)) ; (set crank #:drive-rpm 30) ; (set crank #:drive-torque 5)")) out)
                 "the 72 is set on 1.19 m and made a crank")
-    (check-true (ormap (λ (l) (regexp-match? #px"state: .*selected=involute_gear_m5_72_2 .*involute_gear_m5_72_2@\\(0 1.19 0\\)" l)) out) "the lesson selected the crank for step 3")
-    (check-true (ormap (λ (l) (string-contains? l "[Lesson] step 3 lit button mesh_with:involute_gear_m5_72_2")) out) "the crank's Add a meshing gear is lit")
-    (check-true (ormap (λ (l) (string-contains? l "[Lesson] step 4 lit button mesh_with:wheel_3")) out) "then the 18's")
-    (check-true (ormap (λ (l) (string-contains? l "mesh: involute_gear_m5_72_2, wheel_3: centre distance 0.225 m (pitch radii 0.18 + 0.045), they stand 0.225 m apart: on it")) out) "the 18 on its circle")
-    (check-true (ormap (λ (l) (string-contains? l "mesh: wheel_3, wheel_4: centre distance 0.135 m (pitch radii 0.045 + 0.09), they stand 0.135 m apart: on it")) out) "the 36 on its circle")
-    (check-true (ormap (λ (l) (string-contains? l "[BuildMode] train: involute_gear_m5_72_2 -> wheel_3, ratio 4:1 (1 mesh)")) out) "the live ratio after the 18: 4:1")
-    (check-true (ormap (λ (l) (string-contains? l "[BuildMode] train: involute_gear_m5_72_2 -> wheel_4, ratio 2:1 (2 meshes)")) out) "and after the 36: 2:1")
+    (check-true (ormap (λ (l) (regexp-match? #px"state: .*selected=crank .*crank@\\(0 1.19 0\\)" l)) out) "the lesson selected the crank for step 3")
+    (check-true (ormap (λ (l) (string-contains? l "[Lesson] step 3 lit button mesh_with:crank")) out) "the crank's Add a meshing gear is lit")
+    (check-true (ormap (λ (l) (string-contains? l "[Lesson] step 4 lit button mesh_with:second")) out) "then the 18's")
+    (check-true (ormap (λ (l) (string-contains? l "mesh: crank, second: centre distance 0.225 m (pitch radii 0.18 + 0.045), they stand 0.225 m apart: on it")) out) "the 18 on its circle")
+    (check-true (ormap (λ (l) (string-contains? l "mesh: second, third: centre distance 0.135 m (pitch radii 0.045 + 0.09), they stand 0.135 m apart: on it")) out) "the 36 on its circle")
+    (check-true (ormap (λ (l) (string-contains? l "[BuildMode] train: crank -> second, ratio 4:1 (1 mesh)")) out) "the live ratio after the 18: 4:1")
+    (check-true (ormap (λ (l) (string-contains? l "[BuildMode] train: crank -> third, ratio 2:1 (2 meshes)")) out) "and after the 36: 2:1")
     ;; the Test: the 36 at 60 rpm (within 2), the 18 at 120 the other way, the crank at its 30; and the turns
-    (check-= (rpm-of out "wheel_4") 60 2 (format "the 36 at 60 rpm: ~a" (facts-line out)))
-    (check-= (rpm-of out "wheel_3") -120 2 "the 18 at 120 rpm, the other way")
-    (check-= (rpm-of out "involute_gear_m5_72_2") 30 0.5 "the crank at 30 rpm")
-    (check-= (fact-of out "turns wheel_4" 'value) 29.82 0.05 "the 36 turned 29.82 times (30 less the crank's start)")
-    (check-= (fact-of out "turns wheel_3" 'value) -59.64 0.1 "the 18 59.64 times, the other way")
+    (check-= (rpm-of out "third") 60 2 (format "the 36 at 60 rpm: ~a" (facts-line out)))
+    (check-= (rpm-of out "second") -120 2 "the 18 at 120 rpm, the other way")
+    (check-= (rpm-of out "crank") 30 0.5 "the crank at 30 rpm")
+    (check-= (fact-of out "turns third" 'value) 29.82 0.05 "the 36 turned 29.82 times (30 less the crank's start)")
+    (check-= (fact-of out "turns second" 'value) -59.64 0.1 "the 18 59.64 times, the other way")
     (check-false (ormap (λ (l) (string-contains? l "spinning at Jolt's limit")) out) "nothing near the engine's spin limit")
     (check-true (ormap (λ (l) (string-contains? l "step 5 done: turned")) out) "the lesson's check passes")
     (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished gears") (string-contains? l "The small gear turned at 120 rpm and the last gear at 60 rpm"))) out)

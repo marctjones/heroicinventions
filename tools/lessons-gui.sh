@@ -7,7 +7,7 @@
 #
 # Shots, one a step: 01 the lit Post and the green post; 02 the lit Gear, its card's 72 and the green gear over the post; 03 the crank
 # selected and its lit "Add a meshing gear"; 04 the 18's ghost on the green circle; 05 the 18 selected and its lit button; 06 the 36's
-# ghost on its circle; 07 the three gears and the live ratio's label "... -> wheel_4: 2:1"; 08 the lit Test it; 09 the Test's sentence
+# ghost on its circle; 07 the three gears and the live ratio's label "crank -> third: 2:1" (the parts are named by their lesson roles); 08 the lit Test it; 09 the Test's sentence
 # and the lesson's done text.
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"

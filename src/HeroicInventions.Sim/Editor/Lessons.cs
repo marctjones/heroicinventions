@@ -450,6 +450,21 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         return (false, [], Nudge);
     }
 
+    /// <summary>
+    /// The name the current step would remember a new part by, when that part would count (its kind, shape, size, teeth, catalogue part
+    /// and material: not where it is), so the editor can give it that id as it is placed ("crank", not "gear_2"): what a person reads on
+    /// its label and on the train's ratio ("crank -> third: 2:1"). Null when the step remembers nothing new, already knows that name, or
+    /// the part would not count. Naming it so never changes what counts: the check still decides.
+    /// </summary>
+    public string? RoleFor(PartSpec part)
+    {
+        if (Finished || Current?.Check is not { Type: "place" or "mesh", As: { } role, Part: null } c || Roles.ContainsKey(role)) return null;
+        bool shape = c.Shape is null || part.Props.GetValueOrDefault("shape") is SSymbol sh && sh.Name == c.Shape;
+        bool category = c.Category is null || materials.TryGet(part.Material, out var m) && m.Category.ToString().Equals(c.Category, StringComparison.OrdinalIgnoreCase);
+        bool size = c.Radius is not { } want || Math.Abs(part.Number("radius", 0) - want) < 1e-6;
+        return (c.Kind is null || part.Kind == c.Kind) && shape && category && size && TeethOk(c, part) && CatalogueOk(c, part) ? role : null;
+    }
+
     /// <summary>Whether a part has the teeth a check asks for (any, when it names none).</summary>
     private static bool TeethOk(LessonCheck c, PartSpec x) => c.Teeth is not { } want || Math.Abs(x.Number("teeth", 0) - want) < 1e-6;
 

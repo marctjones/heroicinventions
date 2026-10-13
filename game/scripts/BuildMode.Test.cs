@@ -193,12 +193,14 @@ public partial class BuildMode
         }
     }
 
-    /// <summary>A wheel as a person would name it: "bronze pulley", "oak drum", "waterwheel".</summary>
+    /// <summary>A wheel as a person would name it: "bronze pulley", "bronze gear", "oak drum", "waterwheel".</summary>
     private string WheelName(string id)
     {
         var part = _session.Document.Parts[id];
-        string shape = part.Props.GetValueOrDefault("catalogue") is SSymbol c ? System.Text.RegularExpressions.Regex.Replace(c.Name, @"-\d.*$", "") : part.Kind;
+        // its entry in the parts list, as a person picked it ("gear", "pulley", "cart wheel"), not its catalogue size ("involute-gear-m5-72")
+        string shape = part.Props.GetValueOrDefault("catalogue") is SSymbol c ? EntryKeyOf(c.Name).Replace('-', ' ') : part.Kind;
         string material = _materials.TryGet(part.Material, out var m) ? m.Name.ToLowerInvariant() : part.Material;
+        if (part.Kind == "wheel" && shape == "gear" && part.Number("teeth", 0) is > 0 and var teeth) return $"{material} {teeth:0}-tooth gear";   // three gears told apart
         return part.Kind == "wheel" ? $"{material} {shape}" : shape;
     }
 
