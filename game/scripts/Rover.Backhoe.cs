@@ -292,7 +292,7 @@ public sealed partial class Rover
         WorkedGround.Scooped? took = null;
         string? inTheWay = null;
         bool done = work.Around(() => { took = work.Scoop(at.X, at.Z, room); if (took is not null) work.Settle(GroundGravity); },
-                                raised => BodyAt(raised) is { } name && (inTheWay = name) is not null);
+                                raised => BodyAt(work, raised) is { } name && (inTheWay = name) is not null);
         TickProfile.Stop("backhoe-scoop", t);
         if (!done) { Refuse($"Dug nothing: the soil found no way to settle round the {inTheWay}"); return; }
         if (took is not { } scooped) { Refuse($"Dug nothing: {soil.Material} under the teeth is too hard for the backhoe"); return; }
@@ -317,7 +317,7 @@ public sealed partial class Rover
         double? landed = null;
         string? inTheWay = null;
         bool done = work.Around(() => { landed = work.Pour(at.X, at.Z, m3, _carriedSoil); if (landed is not null) work.Settle(GroundGravity); },
-                                raised => BodyAt(raised) is { } name && (inTheWay = name) is not null);
+                                raised => BodyAt(work, raised) is { } name && (inTheWay = name) is not null);
         TickProfile.Stop("backhoe-pour", t);
         if (!done) { Refuse($"Kept {Carried:0.00} m³: the soil found no way to settle round the {inTheWay}"); return; }
         if (landed is null)
@@ -336,26 +336,82 @@ public sealed partial class Rover
     private const float BodySlack = 0.03f, BodyClearance = 0.05f;
 
     /// <summary>
+    /// The gap between a node that rose and a neighbour is asked about (#257) from 0.5 to <see cref="GapReach"/> of the way to the
+    /// neighbour (the node's own column covers the first half), where the surface rises by <see cref="GapRise"/> m or more. Both are
+    /// tuned against what must still be allowed: a box that reaches the neighbour's centre touches a block's face where the ground
+    /// beside the block does not rise under it (a bucket half over a block was refused: DirtEnergyEval), and a rise of a micron, as a
+    /// slide's thin skirt makes, is not a lift (Jolt lets a resting body sink 0.02 m: 0.01 stalled the director's road, 0.02 builds it).
+    /// </summary>
+    private const double GapReach = 0.95, GapRise = 0.02;
+
+    /// <summary>
     /// The name of a loose body (a rigid body, frozen or not, the rover's own chassis and wheels too) that the ground, risen at
     /// this node, would reach: a column a fine cell across over it, from just under its old height to a little over its new one.
     /// Null if there is none. (#72: the rover may move soil anywhere, but not lift or push a load with it.) The rover's own wheels
     /// count (road plan, 2026-10-10): a heap tipped beside a wheel stops at it, as against a crate, so spoil never rises through a
     /// wheel and buries it (a wheel's centre under a height map never comes back out).
+    /// Between nodes (#257): the surface is a triangle from node to node, so a node that rose also lifts the ground over the next
+    /// node's own column (which did not rise and was not asked), and a body smaller than a cell standing there is lifted by it (a
+    /// 6 cm cube, by 0.17 to 0.24 m). The gap toward each of the eight neighbours is asked about too (<see cref="GapReach"/>,
+    /// <see cref="GapRise"/>) at the height the surface has in the middle of it. A neighbour that rose as well is looked at once,
+    /// from the lower index. The rover's own bodies are not asked in the gaps: its wheels (spheres 0.3 m across, wider than a cell)
+    /// are always met by a node's own column, and the road it cuts is built on that.
     /// </summary>
-    private string? BodyAt(WorkedGround.Raised r)
+    public string? BodyAt(WorkedGround work, WorkedGround.Raised r)
     {
         if (!IsInsideTree()) return null;
-        var space = GetWorld3D().DirectSpaceState;
-        var exclude = new Godot.Collections.Array<Rid>();
-        float cell = (float)WorkedGround.FineCell;
-        float lo = (float)r.Before - BodySlack, hi = (float)r.After + BodyClearance;
+        if (BodyIn(r.X, r.Z, WorkedGround.FineCell, WorkedGround.FineCell, r.Before, r.After, ownBodies: true) is { } own) return own;
+        int nx = work.Nx, i = r.Node % nx, j = r.Node / nx;
+        double cell = WorkedGround.FineCell, mid = (0.5 + GapReach) / 2, span = (GapReach - 0.5) * cell;
+        for (int dj = -1; dj <= 1; dj++)
+            for (int di = -1; di <= 1; di++)
+            {
+                int ni = i + di, nj = j + dj;
+                if ((di == 0 && dj == 0) || ni < 0 || nj < 0 || ni >= nx || nj >= work.Nz) continue;
+                int n = ni + nj * nx;
+                double nBefore = work.HeightBefore(n), nAfter = work.Fine.Heights[n];
+                if (nAfter > nBefore + 1e-6 && n < r.Node) continue;   // both rose: the lower index asks about the pair
+                // the surface in the middle of the span, on the line between the two nodes; the span's box is long along an axis the neighbour differs on, a cell across the others
+                double before = (1 - mid) * r.Before + mid * nBefore, after = (1 - mid) * r.After + mid * nAfter;
+                if (after - before < GapRise) continue;
+                if (BodyIn(r.X + di * mid * cell, r.Z + dj * mid * cell, di == 0 ? cell : span, dj == 0 ? cell : span, before, after, ownBodies: false) is { } near) return near;
+            }
+        return null;
+    }
+
+    /// <summary>The name of a rigid body in the column <paramref name="sx"/> x <paramref name="sz"/> m round (x, z), from <paramref name="before"/> up to <paramref name="after"/> (less the slack and plus the clearance); null if none. The rover's own bodies count only if <paramref name="ownBodies"/>.</summary>
+    private string? BodyIn(double x, double z, double sx, double sz, double before, double after, bool ownBodies)
+    {
+        float lo = (float)Math.Min(before, after) - BodySlack, hi = (float)Math.Max(before, after) + BodyClearance;   // (a neighbour that was dug lowers the surface between)
         var query = new PhysicsShapeQueryParameters3D
         {
-            Shape = new BoxShape3D { Size = new Vector3(cell, hi - lo, cell) }, CollideWithAreas = false, CollideWithBodies = true, Exclude = exclude,
-            Transform = new Transform3D(Basis.Identity, new Vector3((float)r.X, (lo + hi) / 2, (float)r.Z)),
+            Shape = new BoxShape3D { Size = new Vector3((float)sx, hi - lo, (float)sz) }, CollideWithAreas = false, CollideWithBodies = true,
+            Transform = new Transform3D(Basis.Identity, new Vector3((float)x, (lo + hi) / 2, (float)z)),
         };
-        foreach (var hit in space.IntersectShape(query, 32))
-            if (hit["collider"].AsGodotObject() is RigidBody3D body) return body.Name;   // frozen too: it would be shoved when let go
+        return FirstRigidBody(query, ownBodies)?.Name;   // frozen too: it would be shoved when let go
+    }
+
+    /// <summary>
+    /// The first rigid body a query meets. A page holds 32 results and a height map answers once a triangle, so the ground alone can
+    /// fill one and hide a wheel (#257): whatever else answers is left out of the next ask, until a page holds nothing new.
+    /// </summary>
+    private RigidBody3D? FirstRigidBody(PhysicsShapeQueryParameters3D query, bool ownBodies)
+    {
+        var exclude = new Godot.Collections.Array<Rid>();
+        var space = GetWorld3D().DirectSpaceState;
+        for (int round = 0; round < 16; round++)
+        {
+            query.Exclude = exclude;
+            var hits = space.IntersectShape(query, 32);
+            bool more = false;
+            foreach (var hit in hits)
+            {
+                var other = hit["collider"].AsGodotObject();
+                if (other is RigidBody3D body && (ownBodies || !IsAncestorOf(body))) return body;
+                if (other is CollisionObject3D o && !exclude.Contains(o.GetRid())) { exclude.Add(o.GetRid()); more = true; }
+            }
+            if (hits.Count < 32 || !more) return null;
+        }
         return null;
     }
 

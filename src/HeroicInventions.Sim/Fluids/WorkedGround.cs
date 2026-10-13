@@ -284,6 +284,11 @@ public sealed class WorkedGround
         return surface;
     }
 
+    private double[]? _before;
+
+    /// <summary>A node's height before the change <see cref="Try"/> is judging (while <c>allow</c> runs; otherwise its height now): with <see cref="Raised"/>, what a check between two nodes needs of a neighbour that did not rise.</summary>
+    public double HeightBefore(int node) => _before is { } b ? b[node] : Fine.Heights[node];
+
     /// <summary>A node a change to the ground raised: where it is (m), and its height before and after.</summary>
     public readonly record struct Raised(int Node, double X, double Z, double Before, double After);
 
@@ -297,6 +302,7 @@ public sealed class WorkedGround
     public bool Try(Action change, Func<IReadOnlyList<Raised>, bool> allow)
     {
         var heights = (double[])Fine.Heights.Clone();
+        _before = heights;
         var loose = (bool[])Fine.Loose.Clone();
         var soil = (int[])Fine.Soil.Clone();
         var (dug, dumped, version) = (Dug, Dumped, Fine.Version);
@@ -304,7 +310,10 @@ public sealed class WorkedGround
         var raised = new List<Raised>();
         for (int k = 0; k < heights.Length; k++)
             if (Fine.Heights[k] > heights[k] + 1e-6) raised.Add(new Raised(k, NodeX(k % Nx), NodeZ(k / Nx), heights[k], Fine.Heights[k]));
-        if (raised.Count == 0 || allow(raised)) return true;
+        bool kept;
+        try { kept = raised.Count == 0 || allow(raised); }
+        finally { _before = null; }
+        if (kept) return true;
         Array.Copy(heights, Fine.Heights, heights.Length);
         Array.Copy(loose, Fine.Loose, loose.Length);
         Array.Copy(soil, Fine.Soil, soil.Length);

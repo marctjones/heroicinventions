@@ -38,26 +38,28 @@ public partial class RoverDigEval : Node3D
     public override void _Ready()
     {
         PhysicsServer3D.AreaSetParam(GetViewport().FindWorld3D().Space, PhysicsServer3D.AreaParameter.Gravity, (float)RoverSpec.EarthGravity);
-        if (OS.GetEnvironment("HEROIC_ONLY") != "ramp")
+        string only = OS.GetEnvironment("HEROIC_ONLY");
+        if (only != "ramp" && only != "gaps")
         foreach (int deg in new[] { 30, 31, 35, 41, 43, 45 })
         {
             int d = deg;
             _runs.Add(($"slope-{d}", () => Slope(d)));
             if (d is 30 or 35) _runs.Add(($"plane-{d}", () => Plane(d)));
         }
-        if (OS.GetEnvironment("HEROIC_ONLY") != "ramp")
+        if (only is not ("ramp" or "gaps"))
             foreach (int deg in new[] { 29, 31 })
             {
                 int d = deg;
                 _runs.Add(($"rest-{d}", () => FromRest(d)));
             }
-        if (OS.GetEnvironment("HEROIC_ONLY") == "ramp") _runs.Clear();
+        if (only is "ramp" or "gaps") _runs.Clear();
         else
         {
             _runs.Add(("trench", Trench));
             _runs.Add(("bank", Bank));
         }
-        _runs.Add(("ramp", Ramp));
+        if (only != "ramp") _runs.AddRange([("cap", Cap), ("between-wheels", BetweenWheels), ("between-nodes", BetweenNodes)]);   // #257
+        if (only != "gaps") _runs.Add(("ramp", Ramp));
         NextRun();
     }
 
@@ -348,5 +350,148 @@ public partial class RoverDigEval : Node3D
             }
         foreach (var s in Drive(-3.5, "after", 15, stopAtX: 3.0)) yield return s;
         Profile("ramp");
+    }
+
+    // ---- #257: what BodyAt sees ---------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The 32-result cap. A height map answers once per triangle, so a query that meets a lot of ground can fill its 32 places with
+    /// ground and never reach the rover's own wheel. Here the column over a wheel's node is crowded with 300 more static pieces of
+    /// ground (a wheel's sphere is one body among them); the old single query, cut at 32, finds no rigid body, BodyAt names the wheel.
+    /// </summary>
+    private IEnumerable<int> Cap()
+    {
+        Stand(0, 0, 270);
+        yield return Secs(1.5);
+        var work = _terrain.WorkAt(0, 0)!;
+        var wheel = _rover.Wheels[0];
+        var p = wheel.GlobalPosition;
+        float ground = (float)work.HeightAt(p.X, p.Z);
+        for (int n = 0; n < 300; n++)
+        {
+            var slab = new StaticBody3D { CollisionLayer = 1, CollisionMask = 0 };
+            slab.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(0.02f, 0.02f, 0.02f) } });
+            slab.Position = new Vector3(p.X + (n % 6 - 2.5f) * 0.03f, ground + 0.01f + (n / 36) * 0.01f, p.Z + (n / 6 % 6 - 2.5f) * 0.03f);
+            _world!.AddChild(slab);
+        }
+        yield return 3;
+        var node = work.Fine.Heights.Length > 0 ? (int)Math.Round((p.X - work.MinX) / WorkedGround.FineCell) + (int)Math.Round((p.Z - work.MinZ) / WorkedGround.FineCell) * work.Nx : 0;
+        var r = new WorkedGround.Raised(node, work.NodeX(node % work.Nx), work.NodeZ(node / work.Nx), ground, ground + 0.1);
+        // the old query, as BodyAt asked it before #257
+        var query = new PhysicsShapeQueryParameters3D
+        {
+            Shape = new BoxShape3D { Size = new Vector3(0.25f, 0.18f, 0.25f) }, CollideWithAreas = false, CollideWithBodies = true,
+            Transform = new Transform3D(Basis.Identity, new Vector3((float)r.X, ground + 0.035f, (float)r.Z)),
+        };
+        var hits = GetWorld3D().DirectSpaceState.IntersectShape(query, 32);
+        Say("old-query-results", hits.Count);
+        Say("old-query-rigid-bodies", hits.Count(h => h["collider"].AsGodotObject() is RigidBody3D));
+        Say("wheel-in-column", Math.Abs(p.X - r.X) < 0.125 && Math.Abs(p.Z - r.Z) < 0.125 ? 1 : 0);
+        Say("body-at", _rover.BodyAt(work, r) ?? "none");
+        Say("wheel-name", wheel.Name.ToString());
+    }
+
+    /// <summary>
+    /// Soil rising between the wheels. A bucketful (0.2 m3) is tipped at each of a grid of places round the rover's six wheels
+    /// (0.1 m apart over 2.8 m x 2.4 m), with the soil going round the bodies as in the game (<see cref="WorkedGround.Around"/>, BodyAt);
+    /// each is measured and then put back. The bump is how far the ground came up into a wheel: the highest the ground stands above a sphere's underside
+    /// (over a 1 cm grid across each wheel), less what it did at rest. A wheel resting on the ground is lifted by exactly that.
+    /// </summary>
+    private static readonly int Buckets = int.TryParse(OS.GetEnvironment("HEROIC_BUCKETS"), out var nb) ? nb : 1;
+    private static readonly double Step = double.TryParse(OS.GetEnvironment("HEROIC_STEP"), out var st) ? st : 0.1;
+    private IEnumerable<int> BetweenWheels()
+    {
+        Stand(0, 0, 270);
+        yield return Secs(1.5);
+        var work = _terrain.WorkAt(0, 0)!;
+        // the wheels are spheres of RoverSpec.WheelRadius: ground higher than a sphere's underside at a point is ground inside the wheel
+        var wheels = _rover.Wheels.Select(w => w.GlobalPosition).ToList();
+        double Inside(double[]? _ = null)
+        {
+            double worstIn = double.NegativeInfinity, r = RoverSpec.WheelRadius;
+            foreach (var c in wheels)
+                for (double x = c.X - r; x <= c.X + r + 1e-9; x += 0.01)
+                    for (double z = c.Z - r; z <= c.Z + r + 1e-9; z += 0.01)
+                    {
+                        double d2 = (x - c.X) * (x - c.X) + (z - c.Z) * (z - c.Z);
+                        if (d2 >= r * r) continue;
+                        worstIn = Math.Max(worstIn, work.HeightAt(x, z) - (c.Y - Math.Sqrt(r * r - d2)));
+                    }
+            return worstIn;
+        }
+        double resting = Inside();
+        Say("resting-penetration", resting);
+        var (h0, l0, s0) = ((double[])work.Fine.Heights.Clone(), (bool[])work.Fine.Loose.Clone(), (int[])work.Fine.Soil.Clone());
+        double worst = 0, worstX = 0, worstZ = 0; int pours = 0, refused = 0, bumped = 0;
+        for (double dx = -1.4; dx <= 1.401; dx += Step)
+            for (double dz = -1.2; dz <= 1.201; dz += Step)
+            {
+                pours++;
+                for (int b = 0; b < Buckets; b++)
+                    if (!work.Around(() => { if (work.Pour(dx, dz, 0.2, 0) is not null) work.Settle(RoverSpec.EarthGravity); }, r => _rover.BodyAt(work, r) is not null)) refused++;
+                double bump = Inside() - resting;
+                if (bump > 0.0005) bumped++;
+                if (bump > worst) (worst, worstX, worstZ) = (bump, dx, dz);
+                Array.Copy(h0, work.Fine.Heights, h0.Length); Array.Copy(l0, work.Fine.Loose, l0.Length); Array.Copy(s0, work.Fine.Soil, s0.Length);
+                work.Fine.Touch();
+            }
+        Say("pours", pours); Say("refused", refused); Say("pours-with-bump-over-half-mm", bumped);
+        Say("worst-bump", worst); Say("worst-bump-at", $"{F(worstX)} {F(worstZ)}");
+        Say("wheel-positions", string.Join(";", _rover.Wheels.Select(w => $"{w.GlobalPosition.X:0.000},{w.GlobalPosition.Z:0.000}")));
+    }
+
+    /// <summary>
+    /// Soil rising in the gap between two nodes. A column is a fine cell (0.25 m) across, centred on a node that rose, so ground that
+    /// rises over the next node's own column (which did not rise and was not asked) can reach a body there: a surface is a triangle
+    /// between nodes. A 6 cm cube (frozen, a loose body like a crate) stands on flat ground a quarter of a cell short of the next node:
+    /// one at the axis gap (0.75 cell along), one at the corner gap (0.75, 0.75) and one 0.625 along and 0.3 across. A bucketful
+    /// (0.2 m3) is tipped at each of a grid of places 5 cm apart over 1.8 m x 1.8 m round it, the soil going round the bodies as in
+    /// the game; the bump is how far the ground came up into the cube (the highest the ground stands over its footprint, its
+    /// underside being on ground at 0), and each tip is put back.
+    /// </summary>
+    private IEnumerable<int> BetweenNodes()
+    {
+        Stand(8, 8, 270);
+        var work = _terrain.WorkAt(0, 0)!;
+        int i0 = (int)Math.Round((-3 - work.MinX) / WorkedGround.FineCell), j0 = (int)Math.Round((-3 - work.MinZ) / WorkedGround.FineCell);
+        var crates = new List<(string Name, double X, double Z)>();
+        foreach (var (name, fx, fz, ox, oz) in new[] { ("axis", 0.75, 0.0, 0, 0), ("corner", 0.75, 0.75, 12, 0), ("oblique", 0.625, 0.3, 0, 12) })
+            crates.Add((name, work.NodeX(i0 + ox) + fx * WorkedGround.FineCell, work.NodeZ(j0 + oz) + fz * WorkedGround.FineCell));
+        const float Side = 0.06f;
+        foreach (var c in crates)
+        {
+            var crate = new RigidBody3D { Name = "Crate-" + c.Name, Freeze = true, FreezeMode = RigidBody3D.FreezeModeEnum.Static, Mass = 1, CollisionLayer = 1, CollisionMask = 1 };
+            crate.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(Side, Side, Side) } });
+            crate.Position = new Vector3((float)c.X, Side / 2, (float)c.Z);
+            _world!.AddChild(crate);
+        }
+        yield return Secs(1);
+        var (h0, l0, s0) = ((double[])work.Fine.Heights.Clone(), (bool[])work.Fine.Loose.Clone(), (int[])work.Fine.Soil.Clone());
+        foreach (var (name, cx, cz) in crates)
+        {
+            double Rise()
+            {
+                double top = 0;
+                for (double x = cx - Side / 2; x <= cx + Side / 2 + 1e-9; x += 0.01)
+                    for (double z = cz - Side / 2; z <= cz + Side / 2 + 1e-9; z += 0.01)
+                        top = Math.Max(top, work.HeightAt(x, z));
+                return top;
+            }
+            double worst = 0, wx = 0, wz = 0; int pours = 0, bumped = 0;
+            for (double dx = -0.9; dx <= 0.901; dx += 0.05)
+                for (double dz = -0.9; dz <= 0.901; dz += 0.05)
+                {
+                    pours++;
+                    for (int b = 0; b < Buckets; b++)
+                        work.Around(() => { if (work.Pour(cx + dx, cz + dz, 0.2, 0) is not null) work.Settle(RoverSpec.EarthGravity); }, r => _rover.BodyAt(work, r) is not null);
+                    double bump = Rise();
+                    if (bump > 0.0005) bumped++;
+                    if (bump > worst) (worst, wx, wz) = (bump, dx, dz);
+                    Array.Copy(h0, work.Fine.Heights, h0.Length); Array.Copy(l0, work.Fine.Loose, l0.Length); Array.Copy(s0, work.Fine.Soil, s0.Length);
+                    work.Fine.Touch();
+                }
+            Say($"{name}.pours", pours); Say($"{name}.pours-with-bump-over-half-mm", bumped);
+            Say($"{name}.worst-bump", worst); Say($"{name}.worst-bump-at", $"{F(wx)} {F(wz)}");
+        }
     }
 }

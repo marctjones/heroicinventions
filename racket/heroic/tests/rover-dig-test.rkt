@@ -74,6 +74,23 @@
     (check-= (v "ramp.after.on-top") 1 0)
     (check-= (v "ramp.after.rescues") 0 0))
 
+  ;; #257: what BodyAt sees. Worked before the run: a height map answers once per triangle, so 300 pieces of ground in a wheel's
+  ;; column fill the 32 places of a page (measured: 32 results, no rigid body) and the old BodyAt, asking once, named nothing.
+  ;; The ground a node raises by dz lifts the surface over the next node's column by (1 - s) dz at s of the way there, so a 6 cm
+  ;; cube a quarter of a cell short of the next node (s = 0.75) sees a quarter of the node's rise, 0.35 m x 0.25 = 9 cm, from a
+  ;; heap of 0.2 m3 on ten nodes. Measured with the old BodyAt (own column only), over 1,369 tips round each cube: the ground came up
+  ;; into the cube by 0.167 m (axis gap), 0.189 m (corner gap), 0.235 m (0.625 along, 0.3 across), in 999 / 856 / 851 of the tips;
+  ;; with the gaps asked about (those rising by 0.02 m or more, Jolt's own sink): at most 0.025 / 0.021 / 0.030 m, the rest of the rise
+  ;; being under the 2 cm the engine lets a resting body sink; the wheels (spheres of 0.15 m, larger than a cell) were never touched, either way.
+  (test-case "BodyAt finds a wheel behind 32 results of ground, and no soil rises into the gap between two nodes (#257)"
+    (check-= (v "cap.old-query-results") 32 0 "the old query's page is full")
+    (check-= (v "cap.old-query-rigid-bodies") 0 0 "and has no rigid body in it: the old BodyAt saw nothing")
+    (check-equal? (v "cap.body-at") "Wheel0" "asking again without the ground names the wheel")
+    (check-= (v "between-wheels.worst-bump") 0 1e-4 "no ground comes up into a wheel")
+    (for ([gap '("axis" "corner" "oblique")])
+      (check-true (< (v (format "between-nodes.~a.worst-bump" gap)) 0.035) (format "the ~a gap: the cube is lifted by under 3.5 cm, not the 0.17 to 0.24 m of spoil" gap)))
+    (check-true (< (v "between-nodes.corner.pours-with-bump-over-half-mm") 400) "and in fewer tips than before (856)"))
+
   ;; ---- the opening's rubble ----
   (define dir (make-temporary-file "opening-dig~a" 'directory))
   (define trace (path->string (build-path dir "t")))
