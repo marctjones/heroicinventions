@@ -977,4 +977,4 @@ Frames (`docs/art/ground-259/`, this branch, hidden, `camera` printed in the run
 
 #### Tests and suites
 
-`dotnet test tests/HeroicInventions.Sim.Tests`: 1513 passed, 6 skipped (the six above), 1519 in all; before this slice 1508 passed, so the slice adds the five live tests and the six skipped. `racket racket/build.rkt`: no drift (`git status` shows no generated file changed). The director's solve (`lonely-rover-opening`, `solve.steps`, headless at 30 fps) still wins: "sol 3 03:00 win: The call went out from bank on sol 3 at 03:00. The game is won." RACKETRESULT
+`dotnet test tests/HeroicInventions.Sim.Tests`: 1513 passed, 6 skipped (the six above), 1519 in all; before this slice 1508 passed, so the slice adds the five live tests and the six skipped. `racket racket/build.rkt`: no drift (`git status` shows no generated file changed). The director's solve (`lonely-rover-opening`, `solve.steps`, headless at 30 fps) still wins: "sol 3 03:00 win: The call went out from bank on sol 3 at 03:00. The game is won." `raco make racket/heroic/main.rkt && raco test racket/heroic/tests`: 457 tests passed, none failed.
