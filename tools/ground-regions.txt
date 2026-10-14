@@ -1,0 +1,42 @@
+# Rectangles on the 1280x800 frames of tools/ground-check.sh, for tools/legibility.py --regions (docs/art-direction.md 12.23).
+# The cameras are those of 12.16 (shot with `rover place`, then `look YAW PITCH 14`); every rectangle lies inside x 260-960, clear of the panels.
+#   region CAMERA NAME x0 y0 x1 y1     mean luminance, hue and saturation of the rectangle
+#   pair CAMERA A B                    two of its regions: the luminance gap and the colour distance (bytes)
+# The ground's own marks (the 1 m grid, contours, soil patterns) are inside the rectangles: they are part of the baseline.
+# flat: the opening's basalt floor, noon at 180 140; the plain's regolith far beyond the crater's rim; the rover's body
+region flat floor 300 560 560 780
+region flat far 300 10 900 120
+region flat rover 600 395 650 435
+pair flat floor far
+pair flat floor rover
+# rimbase: the rim's foot, basalt to bedrock, 14 degrees (warm tint)
+region rimbase near 300 560 560 780
+region rimbase beyond 300 40 900 200
+pair rimbase near beyond
+# ice: the cold north wall's foot (warm tint over ice-cemented soil)
+region ice near 300 560 560 780
+region ice beyond 300 40 900 200
+pair ice near beyond
+# silica: the pale bay in the west wall, between two bands of basalt sand
+region silica far-basalt 300 100 900 220
+region silica silica 300 470 900 540
+region silica near-basalt 300 600 900 780
+pair silica far-basalt silica
+pair silica silica near-basalt
+# steep: bedrock 24-27 degrees (amber) and beyond 30 (red)
+region steep red 300 30 900 200
+region steep amber 300 600 560 780
+region steep rover 600 390 680 460
+pair steep red amber
+# rubbleface: the slide's rubble face at (252.5, 137.9): red where over 30 degrees, the low ground beside it
+region rubbleface red 260 80 400 340
+region rubbleface low 260 600 360 780
+pair rubbleface red low
+# contact: where bedrock meets the regolith on the rim at (305, 360)
+region contact regolith 450 20 900 160
+region contact bedrock 300 640 520 780
+pair contact regolith bedrock
+# pit: two buckets dug on the rubble: the heap, and the red wall of the pit
+region pit heap 330 450 500 570
+region pit red 260 120 420 300
+pair pit heap red

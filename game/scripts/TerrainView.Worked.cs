@@ -1,5 +1,6 @@
 using Godot;
 using HeroicInventions.Sim.Fluids;
+using HeroicInventions.Sim.Game;
 
 namespace HeroicInventions;
 
@@ -91,7 +92,7 @@ public partial class TerrainView
                 p.Indices[t++] = b; p.Indices[t++] = d; p.Indices[t++] = c;
             }
         var material = new ShaderMaterial { Shader = _groundMaterial!.Shader };
-        foreach (var name in new[] { "interval", "origin", "size", "cells", "wet", "pattern_a", "pattern_b", "grade_deg", "tint_warm", "tint_amber", "tint_red" })
+        foreach (var name in new[] { "interval", "origin", "size", "cells", "wet", "pattern_a", "pattern_b", "grade_deg", "tint_warm", "tint_amber", "tint_red" }.Concat(CueUniforms))
             material.SetShaderParameter(name, _groundMaterial.GetShaderParameter(name));
         material.SetShaderParameter("patch", 1f);
         p.Mesh = new ArrayMesh();
@@ -120,10 +121,8 @@ public partial class TerrainView
                 var dz = new Vector3(0, (float)(h[i + j1 * nx] - h[i + j0 * nx]), (j1 - j0) * (float)f.Cell);
                 var normal = dz.Cross(dx).Normalized();
                 float shade = HillShade(normal);
-                // how far it has been dug (dark, 0.2 m for full) or heaped (pale, 0.1 m), and spoil that has slumped a little paler than the ground
-                double delta = h[k] - w.Original[k];
-                double tint = delta < 0 ? Math.Max(delta / 0.2, -1) * 0.9 : Math.Min(delta / 0.1, 1);
-                if (f.Loose[k]) tint = Math.Max(tint, 0.25);
+                // how far it has been dug (dark, 0.2 m for full) or heaped (pale, 0.1 m), and spoil that has slumped a little paler than the ground (GroundCues.PatchTint)
+                double tint = GroundCues.PatchTint(h[k] - w.Original[k], f.Loose[k]);
                 p.Normals[k] = normal;
                 double sx = Math.Max(Math.Abs(h[k] - h[i0 + j * nx]), Math.Abs(h[i1 + j * nx] - h[k])) / f.Cell;
                 double sz = Math.Max(Math.Abs(h[k] - h[i + j0 * nx]), Math.Abs(h[i + j1 * nx] - h[k])) / f.Cell;

@@ -837,3 +837,144 @@ The rover stands out from the ground as it did, within 2.5 of luminance everywhe
 - Basalt and silica sand share the sand pattern, as a geologic map would; they differ by colour (and touch along only 29 cell edges).
 - Loose ground the slide or a gang tipped keeps its soil's mark; only the rover's own digging takes the spoil's rings. Say if heaps everywhere should take the rings.
 - The pattern size (0.6 m on the ground, 16 px on the map) and strength are one number each in `SoilPatterns.cs` and the ground shader.
+
+
+### 12.23 Dark means light: the ground colour rule, its one home and its baseline (#259, #241, 2026-10-14)
+
+The owner answered 12.16's question with (b): the fixed soil patches are what confuses (12.17). The plan for the whole fix is `docs/plans/ground-colour-plan.md` (milestone 16, "Ground you can read", issues #259 to #266); this section is its written rule (1.1 to 1.6 of the plan), the one place the numbers live, and the **baseline** measured on today's ground before any slice changes a colour. **Nothing on screen changed in #259**: the constants moved, at their values, into `GroundCues`, and a before/after frame set proves it (below). Legibility over realism (the physics is untouched: colour fields carry none); allow, don't forbid (poor strategies stay available; the rule is about how ground is drawn, not what can be done to it).
+
+#### The rule (plan 1.1)
+
+**Dark means light: ground is darker only where less light falls on it (a slope turned from the map light, a shadow, dusk and night, standing water). What the ground is (its soil) and what has been done to it (dug, heaped, loose) change its hue and marks, inside one band of lightness. Warnings (the slope against the rover's 30 degree limit) change hue, never lightness.**
+
+#### Lightness bands (plan 1.2; mean luminance 0-255, `tools/legibility.py`: 0.2126 R + 0.7152 G + 0.0722 B)
+
+| Band | Drawn (Sim test) | Measured noon | Measured midnight |
+|---|---|---|---|
+| Every soil's base colour | 70 to 150 (at most 2.2:1) | 70 to 160 | 35 to 100 |
+| Disturbance (loose, dug, heaped, scoured, deposited) | base x0.80 to x1.20 | same | same ratio |
+| Hillshade | x0.68 to x1.12 (kept) | | the 16% unlit share keeps it above 0.16 of lit |
+| Sun shadow | about x0.78 (kept) | | none at night |
+| Wet ground | x0.6 -> x0.75, glossy | | |
+| Warning: slope tint | x1.0 to x1.2 of untinted, all three bands the same | | same ratio |
+
+The floor stays 67 (under the band's 70) until the owner agrees to the direct rover-vs-ring gate (plan 5.1); with it the floor can rise to about 80 (#265).
+
+#### Base colours per ground type (plan 1.3)
+
+Slice 2 (#260; the owner chose 2026-10-10: keep the softened contrast, separate bedrock from regolith by hue, no other soil moves). Only bedrock changes; its luminance stays inside the pinned band (99 to 100.5, `SoilLookTests`).
+
+| Ground | Where | Table hex | Drawn hex (85% sat) | Drawn lum | Hue / sat | Pattern (12.22) |
+|---|---|---|---|---|---|---|
+| basalt sand | crater floor, apron | `#474141` kept | `#474242` | 67 | 0 / 0.07 | stipple |
+| bedrock | wall and rim | **`#6A6356`** (is `#755C4D`) | `#6A6459` | 100.5 | **40 / 0.16 olive-grey** (is 23 / 0.29) | jointed blocks |
+| regolith | plain outside the rim | `#8A5A3C` kept | `#8A6148` | 104 | 23 / 0.48 rust | dashes |
+| sublimed regolith | weak rim section, rubble | `#BD7347` kept | `#BD7E59` | 137 | 22 / 0.53 | triangles |
+| ice-cemented | cold north wall | `#83726F` kept | `#837572` | 120 drawn, 158 measured | 9 / 0.13 | pale blue flecks |
+| silica sand | the pale bay | `#B6AC93` kept | `#B6AE98` | 174 drawn, 168 measured | 43 / 0.16 | stipple |
+| spoil (dug or heaped) | worked patches, road heaps | the soil's own x0.8-1.2 | | | the soil's | rings and dots |
+| road | cut floor of a worked patch | the soil's own; the lip line marks the edges | | | | |
+| wet | any | the soil's x0.75, roughness 0.25 | | | | |
+
+Bedrock moves 36 bytes from regolith (it is 4 apart in luminance and the same hue today) and 54 from basalt sand; its luminance moves 1. The recommended full table (#265, owner-gated: all six inside 80-150 drawn, floor lifted to 80, ice moved to a cold blue-grey) is in the plan, 1.3. The machine-world soils (sand lum 203, loam 92, clay 124) are outside the band at the top; an optional last slice (#266).
+
+#### When darker, when lighter (plan 1.4)
+
+1. **Slope against the map light** (`TerrainView.MapLight`, `HillShade`): x0.68 away to x1.12 facing. Kept. The only effect allowed to darken by more than 20% in daylight.
+2. **Sun and time of day** (`SkyLook.cs`, 12.18): shadows about x0.78; dusk and night 0.49 to 0.63 of noon. Kept. Night stays "clearly dim".
+3. **Wet**: x0.6 -> **x0.75**, glossy (roughness 0.25).
+4. **Soil type**: hue, saturation, pattern; luminance 70 to 150 drawn. Two soils that touch must pass 1.5.
+5. **Disturbance** (hue kept, pattern changed, luminance x0.80 to x1.20): loose +18% -> **+12%** (patch tint floor 0.25 of a +20% scale); scoured / dug up to 45% -> **up to 20%** (patch `lit * (1 + 0.55 * worked)` -> **0.20**; the lip line and rings carry "dug"); deposited / heaped 60% toward cream -> **20%** (patch 0.45 -> **0.20**; clods and rings carry "heaped"); road: nothing new.
+6. **Warnings**: hue and saturation only (1.6).
+7. **Lines and marks** (contours, grid, patterns): unchanged.
+
+#### Neighbour contrast (plan 1.5)
+
+- **Rover (or machine) vs any ground it can stand on:** >= 50 by `legibility.py` sep where valid, and **>= 40 by the direct measure** (rover body mean luminance against a ring of ground round it, 12.22) at noon, **>= 25 at midnight**. The six reference machines' sd/sep must not get worse.
+- **Two grounds that touch, day (noon):** luminance gap >= 25, or colour distance >= 35 bytes with different patterns.
+- **Night (midnight):** gap >= 12, or colour distance >= 18 bytes with different patterns (hue and pattern are what survive; #246 is answered that way, not by a brighter night).
+- **Disturbance vs its own soil:** within x0.8 to x1.2 and marked (lip, rings, clods); the mark is the cue.
+- **Warning vs the same ground untinted:** luminance ratio 1.0 to 1.2; saturation at least doubled or hue moved >= 10 degrees.
+
+#### Warnings: hue, never darkness (plan 1.6)
+
+Today `lit = mix(lit, band, grip)` (grip up to 0.6) plus `band * grip * 0.12` of emission: x1.66 on the dark floor, and red `#E5362A` (lum 90) is darker than amber `#F5B82E` (187), so "too steep" reads dirtier than "steep". The rule (#261): after the mix, rescale to the untinted luminance times a fixed 1.15 (one shader line: `lit_after *= clamp(l0 * 1.15 / l1, 0.5, 2.0)`); the emission term keeps the same scale. All three bands sit at one lightness and differ by hue (warm 26, amber 42, red 4 degrees). `SlopeWarm/Amber/Red` stay the HUD's and the map's swatch colours. Optional (3b, owner's call): a diagonal hatch on the red band so "cannot climb" survives night and colour-blindness.
+
+#### The one home: `GroundCues` (`src/HeroicInventions.Sim/Game/GroundCues.cs`, next to `SoilLook`)
+
+Every number that darkens or lightens drawn ground is a constant there, and nowhere else. `TerrainView` (the cell colour texture, the hillshade, the worked patch's tint in `TerrainView.Worked.cs`) calls its functions; the ground shader reads the rest as uniforms (`SetCues`, copied to each worked patch's material). All at today's values:
+
+| Cue | Constant | Today | Slice that moves it |
+|---|---|---|---|
+| Hillshade, raw | `HillShadeBase`, `HillShadeGain`: `0.45 + 0.55 n.L` | 0.45, 0.55 | kept |
+| Hillshade, lifted | `HillShadeLow`, `HillShadeHigh` | 0.68, 1.12 | kept |
+| Unlit share (emission) | `UnlitShare` | 0.16 | kept |
+| Loose cell | `Loose` (toward white) | 0.18 | #263 -> 0.12 |
+| Scoured cell | `Scoured` (darker, at `ChangeFullDepth` 5 cm; `ChangeThreshold` 2 mm) | 0.45 | #263 -> 0.20 |
+| Deposited cell | `Deposited` (toward `Cream` (0.98, 0.95, 0.85)) | 0.6 | #263 -> 0.20 |
+| Patch dug | `PatchDug` (shader `lit * (1 + PatchDug * worked)`); `PatchDugDepth` 0.2 m, `PatchDugScale` 0.9 | 0.55 | #263 -> 0.20 |
+| Patch heaped | `PatchHeaped` (shader, toward cream); `PatchHeapedHeight` 0.1 m | 0.45 | #263 -> 0.20 |
+| Patch loose floor | `PatchLooseFloor` | 0.25 | #263 |
+| Wet | `Wet` (darker), `WetRoughness` | 0.4, 0.25 | owner's call (plan 5.4): 0.25 |
+| Slope tint strength | `TintGripWarm`, `TintGripAmber`, `TintGripRed`; `TintEmission` | 0.38, 0.5, 0.6; 0.12 | #261 (rule, not constants) |
+
+Not moved, on purpose: the navigation map's own shader (`NavMap.cs`: its own hillshade 0.5 to 1.2 and tint grips 0.55/0.7/0.85, a flat map's look, not the ground) is the map's, not the ground's; the key and map read `SoilLook.Drawn` as before. The tint rule's `TintLift` (1.15) does not exist yet: #261 adds it with the rule.
+
+**Tests** (`tests/HeroicInventions.Sim.Tests/GroundCuesTests.cs`; plan 3A). Live, passing at today's values: the hillshade's band and a flat slope's factor by hand (1.0152), wet in a visible but modest band, the cell cues' formulas (loose, scour, deposit by hand), the worked patch's tint from dug to heaped, the tint's mix by grip. Skipped, each naming the slice that makes it pass (and each shown to fail today, for the stated reason, with the skip removed): `EverySoilsDrawnLuminanceLiesInTheBand` (#265: the floor is 67 and silica 174), `BedrockAndRegolithDifferInHueByAtLeastFifteenDegrees` and `SoilsThatMeetOnTheMapAreToldApartByTheRule` (#260: bedrock and regolith are 24 bytes apart), `NoDisturbanceLeavesTheBand` and `OnlyLightDarkensBeyondTheBand` (#263: loose is x1.5 on the dark floor, scour 45%), `TheSlopeTintsAreOneLightnessOnTheGround` (#261: grey 100 tints to 124 and more). The existing `SoilLookTests` are untouched (slice 2 and slice 8 edit them, as the plan says).
+
+#### The tools
+
+- `tools/legibility.py` gains `--region NAME x0 y0 x1 y1` (mean luminance, hue and saturation of a rectangle; repeatable) and `--pair A B` (the luminance gap and the colour distance, Euclidean in bytes, of two regions); `--regions FILE CAMERA` reads a camera's rectangles and pairs from a file. Without them the old sd/sep line prints as before.
+- `tools/ground-regions.txt`: the rectangles per camera and the pairs, on 1280x800 hidden frames (clear of the panels).
+- `tools/ground-check.sh OUTDIR`: eight cameras: `flat` (`rover place 180 140 270`), `rimbase` and `ice` (the pivots recorded in 12.18), `rubbleface` (252.5, 137.9) and `pit` (two buckets dug there; 12.19), `contact` (305, 360; 12.22) from the earlier sections, and two chosen here, `silica` at (-224, 71) (the bay's foot, azimuth 162.5) and `steep` at (0, 352) (the wall's amber to red, 24 to over 30 degrees); each `look YAW 35 14`, in `lonely-rover-opening` at noon, 16:30 and midnight (`HEROIC_SET="scene time H; scene clock-rate 0"`), hidden (`tools/gui-check.sh --hidden`, never takes focus), one launch a camera (a `look` stops the camera following a later `rover place`), the `camera` line printed each time into `OUTDIR/TIME.log`, shots `OUTDIR/TIME-CAMERA.png`, then the table below. `--table` as the second argument prints the table again from shots already there; `GROUND_CHECK_TIMES="noon"` shoots only some times. About 4 minutes for all 24 frames.
+
+#### Baseline (main before #259; the table the later slices are measured against)
+
+Mean luminance (0-255), hue (degrees) and saturation of each rectangle, noon / 16:30 / midnight. Not a clean per-soil swatch: the rectangles hold the 1 m grid, contours, patterns, the slope tint near the rover and the hillshade, which is what the player sees. `rover` is the body's rectangle (deck, shadow and wheels), a crude stand-in until the direct rover-vs-ring gate (plan 5.1) is built. The midnight hues of the dark ground (about 240) are the night fill's blue.
+
+| Camera | Region | Noon L / hue / sat | 16:30 L / hue / sat | Midnight L / hue / sat |
+|---|---|---|---|---|
+| flat | floor | 66.2 / 14 / 0.19 | 42.1 / 12 / 0.23 | 31.9 / 239 / 0.23 |
+| flat | far | 120.1 / 25 / 0.54 | 90.0 / 23 / 0.61 | 75.0 / 20 / 0.47 |
+| flat | rover | 85.0 / 249 / 0.06 | 64.6 / 14 / 0.14 | 35.2 / 223 / 0.58 |
+| rimbase | near | 116.6 / 25 / 0.56 | 84.8 / 23 / 0.62 | 72.8 / 20 / 0.49 |
+| rimbase | beyond | 121.4 / 26 / 0.53 | 85.1 / 23 / 0.59 | 76.5 / 19 / 0.45 |
+| ice | near | 127.3 / 26 / 0.53 | 91.4 / 23 / 0.61 | 75.9 / 19 / 0.46 |
+| ice | beyond | 142.1 / 25 / 0.42 | 105.9 / 22 / 0.52 | 86.6 / 13 / 0.34 |
+| silica | far-basalt | 67.0 / 14 / 0.19 | 35.1 / 2 / 0.16 | 32.8 / 240 / 0.22 |
+| silica | silica | 114.2 / 24 / 0.52 | 72.2 / 21 / 0.58 | 67.6 / 17 / 0.42 |
+| silica | near-basalt | 69.1 / 14 / 0.20 | 36.7 / 6 / 0.17 | 33.8 / 237 / 0.23 |
+| steep | red | 88.5 / 8 / 0.71 | 60.3 / 6 / 0.76 | 56.3 / 2 / 0.68 |
+| steep | amber | 127.5 / 34 / 0.70 | 90.3 / 32 / 0.76 | 85.9 / 33 / 0.67 |
+| steep | rover | 84.7 / 243 / 0.08 | 32.5 / 335 / 0.14 | 27.5 / 226 / 0.57 |
+| rubbleface | red | 123.8 / 12 / 0.43 | 97.2 / 10 / 0.50 | 80.7 / 353 / 0.38 |
+| rubbleface | low | 136.8 / 44 / 0.37 | 108.4 / 41 / 0.41 | 96.4 / 56 / 0.21 |
+| contact | regolith | 106.0 / 23 / 0.53 | 70.5 / 20 / 0.59 | 55.2 / 13 / 0.36 |
+| contact | bedrock | 100.1 / 22 / 0.42 | 65.7 / 20 / 0.49 | 50.7 / 353 / 0.19 |
+| pit | heap | 153.3 / 60 / 0.17 | 132.0 / 82 / 0.13 | 122.2 / 160 / 0.19 |
+| pit | red | 129.3 / 17 / 0.39 | 103.1 / 15 / 0.45 | 85.9 / 358 / 0.29 |
+
+| Camera | Pair | Noon gap / colour distance | 16:30 | Midnight |
+|---|---|---|---|---|
+| flat | floor / far | 53.9 / 100.9 | 47.9 / 92.8 | 43.1 / 80.8 |
+| flat | floor / rover | 18.8 / 37.2 | 22.5 / 38.7 | 3.3 / 22.1 |
+| rimbase | near / beyond | 4.9 / 8.5 | 0.3 / 3.6 | 3.8 / 7.1 |
+| ice | near / beyond | 14.8 / 29.3 | 14.5 / 26.3 | 10.7 / 22.1 |
+| silica | far-basalt / silica | 47.2 / 89.4 | 37.1 / 72.3 | 34.9 / 66.4 |
+| silica | silica / near-basalt | 45.1 / 85.9 | 35.4 / 69.8 | 33.8 / 65.0 |
+| steep | red / amber | 39.0 / 54.0 | 30.1 / 42.1 | 29.6 / 41.2 |
+| rubbleface | red / low | 13.0 / 31.8 | 11.2 / 32.3 | 15.7 / 31.3 |
+| contact | regolith / bedrock | 5.9 / 18.1 | 4.8 / 15.5 | 4.5 / 12.8 |
+| pit | heap / red | 23.9 / 45.2 | 28.8 / 57.6 | 36.3 / 63.2 |
+
+What it shows, for the slices to come: the floor and the soil beyond it are 54 / 48 / 43 apart (noon / 16:30 / midnight) and read apart; **bedrock and regolith at the contact are 6 / 5 / 4 apart in luminance and 18 / 16 / 13 bytes of colour** (the slice 2 target is 35 bytes); the red slope tint is darker than the amber it borders at all three times (the gap is 39 / 30 / 30, 1.6's problem); the pit's heap against its red wall is the only touching pair near 25 at noon; the rover's body against the floor is 19 / 23 / 3 (midnight: the dark deck on the dark floor). The silica band reads 114 / 72 / 68 here because the rectangle is warm-tinted (untinted it is 168).
+
+#### Nothing on screen changed (before = main, after = this branch)
+
+Both sets are 24 frames from the same script (`tools/ground-check.sh`, hidden, main's code via `git stash` of `game/scripts`, rebuilt, then this branch's). Per-region mean luminance of every rectangle in `ground-regions.txt` (19 regions, 57 measurements over the 24 frames), before against after: **the largest difference is 1.70** (midnight `flat`, region `far`, the horizon band), and the same code run twice (this branch, midnight, twice) differs by exactly the same 1.70 in that rectangle (405 pixels of it differ between the two runs of the same code, none in the floor rectangle; and 1.31 in `pit`): it is the wind's streaks and the dig's debris, which are not repeatable (2 to 67,000 pixels differ per frame, bars and flecks, and rocks and dust in the pit). The next largest is 0.37 (16:30 `pit`); 22 of the 24 frames differ by under 0.2 in every region and 13 by 0.01 or less. Of the 57 rows of the table, the "after" run differs from the baseline by 0.3 or less in 56 (the 57th is the 1.7) and by at most 1 degree of hue. Fourteen shader uniforms (`shade_low` ... `tint_emission`) replaced the shader's own literals at identical float values, and the cell colour texture is computed by the same sums as before (`GroundCues.Cell` against Godot's `Lightened`, `Darkened`, `Lerp`).
+
+Frames (`docs/art/ground-259/`, this branch, hidden, `camera` printed in the run's logs): `noon-flat.png`, `midnight-flat.png`, `noon-steep.png`, `midnight-steep.png`; the whole 24-frame sets are regenerated by `tools/ground-check.sh`.
+
+#### Tests and suites
+
+`dotnet test tests/HeroicInventions.Sim.Tests`: 1513 passed, 6 skipped (the six above), 1519 in all; before this slice 1508 passed, so the slice adds the five live tests and the six skipped. `racket racket/build.rkt`: no drift (`git status` shows no generated file changed). The director's solve (`lonely-rover-opening`, `solve.steps`, headless at 30 fps) still wins: "sol 3 03:00 win: The call went out from bank on sol 3 at 03:00. The game is won." RACKETRESULT

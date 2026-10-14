@@ -242,11 +242,10 @@ public partial class TerrainView : Node3D
             {
                 int k = i + j * nx;
                 var (c, roughness) = _soilLook[_ground.Soil[k]];
-                if (_ground.Loose[k]) c = c.Lightened(0.18f);   // spoil and slumped ground: loose, paler (#44)
-                // ground the water has cut away shows darker and wetter, ground it has laid down paler (#53); a 5 cm change at full strength
-                double m = _ground.Heights[k] - _startHeights[k];
-                if (Math.Abs(m) > 0.002)
-                    c = m < 0 ? c.Darkened(Mathf.Clamp((float)(-m / 0.05), 0, 0.45f)) : c.Lerp(new Color(0.98f, 0.95f, 0.85f), Mathf.Clamp((float)(m / 0.05), 0, 0.6f));
+                // spoil and slumped ground: loose, paler (#44); ground the water has cut away shows darker, ground it has laid down paler (#53):
+                // all of it GroundCues.Cell (the constants are in one place, #259)
+                var (cr, cg, cb) = GroundCues.Cell((c.R, c.G, c.B), _ground.Loose[k], _ground.Heights[k] - _startHeights[k]);
+                c = new Color(cr, cg, cb, c.A);
                 _colours[0][k] = c.R; _colours[1][k] = c.G; _colours[2][k] = c.B; _colours[3][k] = roughness;
                 SoilPatterns.Put(SoilLook.PatternOf(_ground, k), _patternA, _patternB, k);
                 _vertices[k] = Centre(i, j);
@@ -342,7 +341,7 @@ public partial class TerrainView : Node3D
     public static readonly Vector3 MapLight = new Vector3(0.55f, 0.8f, 0.4f).Normalized();
     /// <summary>The cosine of a slope whose steepest neighbour-to-neighbour grades along x and z are tx and tz (what the tint reads, in COLOR.b).</summary>
     public static float Cosine(double tx, double tz) => (float)(1 / Math.Sqrt(1 + tx * tx + tz * tz));
-    public static float HillShade(Vector3 normal) => 0.45f + 0.55f * Mathf.Max(0, normal.Dot(MapLight));
+    public static float HillShade(Vector3 normal) => GroundCues.HillShade(normal.Dot(MapLight));
 
     private static bool _roverGlobal;
     private static readonly Vector3 NoRover = new(1e7f, 0, 1e7f);
@@ -382,6 +381,29 @@ public partial class TerrainView : Node3D
     /// legible at any distance. Lines fall every <see cref="ContourInterval"/> metres of height, every fifth one
     /// heavier, their width fixed on screen, and the fine ones fade where they would crowd into a smudge.
     /// </summary>
+    /// <summary>The names of the ground shader's cue uniforms (a worked patch's material copies them from the map's).</summary>
+    private static readonly string[] CueUniforms = ["shade_low", "shade_high", "shade_base", "shade_gain", "unlit_share", "wet_dark", "wet_roughness", "patch_dug", "patch_heaped", "cream",
+        "grip_warm", "grip_amber", "grip_red", "tint_emission"];
+
+    /// <summary>Hands the shader every darkening and lightening constant, from <see cref="GroundCues"/>, the one home of them (#259).</summary>
+    private static void SetCues(ShaderMaterial mat)
+    {
+        mat.SetShaderParameter("shade_low", GroundCues.HillShadeLow);
+        mat.SetShaderParameter("shade_high", GroundCues.HillShadeHigh);
+        mat.SetShaderParameter("shade_base", GroundCues.HillShadeBase);
+        mat.SetShaderParameter("shade_gain", GroundCues.HillShadeGain);
+        mat.SetShaderParameter("unlit_share", GroundCues.UnlitShare);
+        mat.SetShaderParameter("wet_dark", GroundCues.Wet);
+        mat.SetShaderParameter("wet_roughness", GroundCues.WetRoughness);
+        mat.SetShaderParameter("patch_dug", GroundCues.PatchDug);
+        mat.SetShaderParameter("patch_heaped", GroundCues.PatchHeaped);
+        mat.SetShaderParameter("cream", new Vector3(GroundCues.Cream.R, GroundCues.Cream.G, GroundCues.Cream.B));
+        mat.SetShaderParameter("grip_warm", GroundCues.TintGripWarm);
+        mat.SetShaderParameter("grip_amber", GroundCues.TintGripAmber);
+        mat.SetShaderParameter("grip_red", GroundCues.TintGripRed);
+        mat.SetShaderParameter("tint_emission", GroundCues.TintEmission);
+    }
+
     private ShaderMaterial GroundMaterial()
     {
         _groundShader ??= new Shader
@@ -405,6 +427,21 @@ public partial class TerrainView : Node3D
                 uniform vec3 tint_warm : source_color = vec3(1.0, 0.6, 0.3);
                 uniform vec3 tint_amber : source_color = vec3(1.0, 0.7, 0.1);
                 uniform vec3 tint_red : source_color = vec3(1.0, 0.15, 0.1);
+                // what darkens and lightens the ground, set from GroundCues (src/HeroicInventions.Sim/Game/GroundCues.cs; docs/art-direction.md 12.23)
+                uniform float shade_low;   // the hillshade's lift: 0.45..1 becomes shade_low..shade_high
+                uniform float shade_high;
+                uniform float shade_base;
+                uniform float shade_gain;
+                uniform float unlit_share;   // the share of the lit colour the ground always gives off
+                uniform float wet_dark;      // wet ground
+                uniform float wet_roughness;
+                uniform float patch_dug;     // a worked patch's dug and heaped tint
+                uniform float patch_heaped;
+                uniform vec3 cream;          // what heaps tend to
+                uniform float grip_warm;     // the slope tint's strength
+                uniform float grip_amber;
+                uniform float grip_red;
+                uniform float tint_emission;
                 varying float height;
                 varying vec2 at;
                 varying vec2 spot;     // world x, z
@@ -432,14 +469,14 @@ public partial class TerrainView : Node3D
                     vec4 cell = texture(cells, at);
                     // wet ground darker and glossy, as wet sand is: water seeping shows before it pools
                     float damp = texture(wet, at).r;
-                    vec3 soil = cell.rgb * (1.0 - 0.4 * damp);
+                    vec3 soil = cell.rgb * (1.0 - wet_dark * damp);
                     vec3 lit = soil;
                     // how far a patch's node has been dug (to -1) or heaped (to 1): applied after the slope tint below, so a pit
                     // in steep rubble still reads darker than the rubble round it (12.19; before, the red tint covered it)
                     float worked = patch > 0.5 ? (COLOR.g - 0.5) * 2.0 : 0.0;
                     // COLOR.r: the hillshade, from the fixed map light. Lifted (0.45 to 1 becomes 0.68 to 1.12) so slopes facing
-                    // away still stand apart, and partly unlit (emission below) so they read at night too.
-                    float shade = mix(0.68, 1.12, clamp((COLOR.r - 0.45) / 0.55, 0.0, 1.0));
+                    // away still stand apart, and partly unlit (emission below) so they read at night too. All the constants are GroundCues'.
+                    float shade = mix(shade_low, shade_high, clamp((COLOR.r - shade_base) / shade_gain, 0.0, 1.0));
                     float away = distance(spot, rover_pos.xz);
                     float eye = length(VERTEX);   // from the camera: marks fade out at a distance (from a far view they only crowd)
                     // the slope against the rover's limit: none under 15 degrees (grade - 15), warm to 25, amber to the limit, red beyond it
@@ -448,7 +485,7 @@ public partial class TerrainView : Node3D
                     float s_amber = smoothstep(grade_deg - 6.5, grade_deg - 3.5, slope);
                     float s_red = smoothstep(grade_deg - 1.5, grade_deg + 1.5, slope);
                     vec3 band = mix(mix(tint_warm, tint_amber, s_amber), tint_red, s_red);
-                    float grip = s_on * mix(mix(0.38, 0.5, s_amber), 0.6, s_red) * (1.0 - smoothstep(30.0, 60.0, away)) * (1.0 - smoothstep(150.0, 350.0, eye));
+                    float grip = s_on * mix(mix(grip_warm, grip_amber, s_amber), grip_red, s_red) * (1.0 - smoothstep(30.0, 60.0, away)) * (1.0 - smoothstep(150.0, 350.0, eye));
                     // fine contours every half metre, and the metre grid draped on the ground; both pale, so they show on dark soil
                     float near = (1.0 - smoothstep(12.0, 30.0, away)) * (1.0 - smoothstep(40.0, 110.0, eye));
                     float h2 = height * 2.0;
@@ -462,7 +499,7 @@ public partial class TerrainView : Node3D
                     lit = mix(lit, band, grip);
                     lit = mix(lit, pale, marks);
                     if (patch > 0.5) {
-                        lit = worked < 0.0 ? lit * (1.0 + 0.55 * worked) : mix(lit, vec3(0.98, 0.95, 0.85), 0.45 * worked);
+                        lit = worked < 0.0 ? lit * (1.0 + patch_dug * worked) : mix(lit, cream, patch_heaped * worked);
                         // turned soil (12.19): clods, an 8 cm speckle on dug and heaped ground and none on ground the rover has not
                         // touched; faded out where it would shimmer (a clod under about two pixels)
                         float clod = fract(sin(dot(floor(spot * 12.5), vec2(12.9898, 78.233))) * 43758.5453);
@@ -490,8 +527,8 @@ public partial class TerrainView : Node3D
                     lit *= mix(1.0, mix(1.75, 0.6, smoothstep(0.07, 0.11, ground_l)), 0.85 * pm.x);
                     lit = mix(lit, lit * vec3(1.35, 1.5, 1.85) + vec3(0.0, 0.01, 0.03), 0.9 * pm.y);
                     ALBEDO = lit * shade * (1.0 - 0.16 * fine - 0.32 * heavy);
-                    EMISSION = lit * shade * 0.16 * (1.0 - 0.16 * fine - 0.32 * heavy) + band * grip * 0.12 + pale * marks * 0.12 * (1.0 - dark_soil);
-                    ROUGHNESS = mix(cell.a, 0.25, damp);
+                    EMISSION = lit * shade * unlit_share * (1.0 - 0.16 * fine - 0.32 * heavy) + band * grip * tint_emission + pale * marks * 0.12 * (1.0 - dark_soil);
+                    ROUGHNESS = mix(cell.a, wet_roughness, damp);
                     SPECULAR = 0.5 * (1.0 - ROUGHNESS);
                 }
                 """.Replace("SOIL_PATTERNS", SoilPatterns.Glsl),
@@ -502,6 +539,7 @@ public partial class TerrainView : Node3D
         mat.SetShaderParameter("tint_warm", SlopeWarm);
         mat.SetShaderParameter("tint_amber", SlopeAmber);
         mat.SetShaderParameter("tint_red", SlopeRed);
+        SetCues(mat);
         mat.SetShaderParameter("origin", new Vector2((float)_ground.X0, (float)_ground.Z0));
         mat.SetShaderParameter("size", new Vector2((float)_ground.Width, (float)_ground.Depth));
         _wetBytes = null;
