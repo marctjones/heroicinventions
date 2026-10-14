@@ -229,4 +229,95 @@ public partial class BuildMode
         _inputScript.PressKey("enter");
         return End($"typed {text} into {id}'s field");
     }
+
+    // ---------------------------------------------------------------- the size handle
+
+    private HSlider? _sizeSlider;
+    private Label? _sizeLabel;
+    private Dictionary<Node3D, Transform3D>? _sizeFrom;   // the room's drawn nodes as they were when the slider started to move them
+
+    /// <summary>
+    /// The inspector's size handle for a selected room: a slider, 0.3 to 4 m a side, and the card's three sizes under it. The room's drawn nodes
+    /// are scaled about the middle of its floor while the slider moves (exact: the box is a cube about that point; the floor stays where it
+    /// is, the room grows upward); letting go, or a click on a size, is one (begin (set ID #:size-x V) (set ID #:size-y V) (set ID #:size-z V)),
+    /// so one Ctrl+Z takes it back. The three number fields stay for a room that is not a cube.
+    /// </summary>
+    private void AddSizeRow(string id, PartSpec part)
+    {
+        if (part.Kind != "enclosure") return;
+        double now = Math.Max(part.Number("size-x", 2), Math.Max(part.Number("size-y", 2), part.Number("size-z", 2)));
+        var label = new Label { Text = SizeText(id, part), AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        var slider = new HSlider
+        {
+            MinValue = 0.3, MaxValue = 4, Step = 0.05, Name = "SizeSlider", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(180, 20),
+            TooltipText = "How big the room is, a side in metres: its floor stays where it is and it grows upward. The three numbers below set each side on its own.",
+        };
+        slider.SetMeta("size_handle", id);
+        slider.AddThemeStyleboxOverride("slider", new StyleBoxFlat { BgColor = new Color(0.55f, 0.65f, 0.7f), ContentMarginTop = 3, ContentMarginBottom = 3 });
+        slider.AddThemeStyleboxOverride("grabber_area", new StyleBoxFlat { BgColor = new Color(0.3f, 0.85f, 0.4f), ContentMarginTop = 3, ContentMarginBottom = 3 });
+        slider.SetValueNoSignal(Math.Clamp(now, slider.MinValue, slider.MaxValue));
+        bool sliding = false;
+        slider.DragStarted += () => sliding = true;
+        slider.ValueChanged += v => { PreviewSize(id, v, label); if (!sliding) CommitSize(id, v); };
+        slider.DragEnded += _ => { sliding = false; CommitSize(id, slider.Value); };
+        _inspector.AddChild(new Label { Text = "Size (m a side)" });
+        _inspector.AddChild(slider);
+        var presets = new HFlowContainer();
+        foreach (var (text, tip, props) in Presets["enclosure"])
+        {
+            double v = props[0].Value;
+            var b = new Button { Text = text, TooltipText = tip, FocusMode = Control.FocusModeEnum.None };
+            b.SetMeta("size_preset", text);
+            b.Pressed += () => slider.Value = v;
+            presets.AddChild(b);
+        }
+        _inspector.AddChild(presets);
+        _inspector.AddChild(label);
+        _sizeSlider = slider;
+        _sizeLabel = label;
+    }
+
+    private string SizeText(string id, PartSpec part)
+    {
+        double x = part.Number("size-x", 2), y = part.Number("size-y", 2), z = part.Number("size-z", 2);
+        string sides = x == y && y == z ? $"{F(x)} m a side" : $"{F(x)} x {F(y)} x {F(z)} m";
+        var floor = RoomSlots.FloorOf(_session.Document, id);
+        if (floor is not { } f || GroundHeight is null) return sides;
+        float d = Depth(f.Y, f.CentreX, f.CentreZ);
+        return Mathf.Abs(d) < 0.01f ? $"{sides}, floor on the ground" : $"{sides}, floor {F(d)} m below the ground";
+    }
+
+    /// <summary>The room's nodes scaled (from where they were) to a cube of <paramref name="v"/> metres about the middle of its floor.</summary>
+    private void PreviewSize(string id, double v, Label label)
+    {
+        if (!_session.Document.Parts.TryGetValue(id, out var part)) return;
+        var nodes = NodesOf(id).ToList();
+        _sizeFrom ??= nodes.ToDictionary(n => n, n => n.GlobalTransform);
+        var c = new Vector3((float)part.At.X, (float)part.At.Y, (float)part.At.Z);
+        var k = new Vector3((float)(v / part.Number("size-x", 2)), (float)(v / part.Number("size-y", 2)), (float)(v / part.Number("size-z", 2)));
+        var scale = new Transform3D(Basis.FromScale(k), c - c * k);
+        foreach (var (n, was) in _sizeFrom) if (IsInstanceValid(n) && !_sizeFrom.Keys.Any(o => o != n && o.IsAncestorOf(n))) n.GlobalTransform = scale * was;
+        label.Text = $"{F(v)} m a side";
+        _status.Text = $"{id}: {F(v)} m a side";
+    }
+
+    private void CommitSize(string id, double v)
+    {
+        _sizeFrom = null;
+        if (!_session.Document.Parts.TryGetValue(id, out var part)) return;
+        if (part.Number("size-x", 2) == v && part.Number("size-y", 2) == v && part.Number("size-z", 2) == v) { RebuildInspector(); return; }
+        if (!RunCommand($"(begin (set {id} #:size-x {F(v)}) (set {id} #:size-y {F(v)}) (set {id} #:size-z {F(v)}))")) return;
+        GD.Print($"[BuildMode] size: {id} {SizeText(id, _session.Document.Parts[id])}");
+        RebuildInspector();
+    }
+
+    /// <summary>"size V": the selected room's size handle moved to V metres a side.</summary>
+    private ScriptedInput.Step SizeStep(string[] w)
+    {
+        if (_selectedId is not { } id || _session.Document.Parts.GetValueOrDefault(id) is not { Kind: "enclosure" })
+        { GD.Print($"[BuildMode] size: select a room first (selected: {_selectedId ?? "none"})"); return ScriptedInput.Step.Next; }
+        if (_sizeSlider is not { } slider || !IsInstanceValid(slider) || !slider.HasMeta("size_handle") || slider.GetMeta("size_handle").AsString() != id) return ScriptedInput.Step.Again;   // the inspector is built a frame after the selection
+        slider.Value = Math.Clamp(double.Parse(w[1], System.Globalization.CultureInfo.InvariantCulture), slider.MinValue, slider.MaxValue);
+        return ScriptedInput.Step.Next;
+    }
 }

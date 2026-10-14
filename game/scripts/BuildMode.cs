@@ -443,6 +443,8 @@ public partial class BuildMode : Node3D
             case "hover-at":   // "hover-at X Y Z [alt]": the mouse moved to wherever that world point is drawn, no click (a placing ghost follows it)
                 _inputScript!.Mouse(GetViewport().GetScreenTransform() * _camera.UnprojectPosition(ScriptPoint(w, 1)), alt: w.Length > 4 && w[4] == "alt");
                 return ScriptedInput.Step.Next;
+            case "size":   // "size V": the selected room's size handle at V metres a side (the slider's value set, as a Page key sets a depth); a cube
+                return SizeStep(w);
             case "choose":   // "choose KEY TEXT": the same for a list ("choose wall none"): a real click on the list, the entry taken by the arrow keys and Enter
                 return FieldStep(w);
             case "field":   // "field KEY VALUE": a real click on the selected part's number field KEY (the numbers list opened first if folded), the value typed as keys, Enter
@@ -1155,6 +1157,7 @@ public partial class BuildMode : Node3D
         }
         _inspector.AddChild(posRow);
         AddDepthRow(id, part);
+        AddSizeRow(id, part);
 
         _inspector.AddChild(new Label { Text = "Made of" });
         var swatches = new HFlowContainer();

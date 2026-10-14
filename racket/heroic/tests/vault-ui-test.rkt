@@ -30,6 +30,11 @@
 ;; the first time). `build choose wall none` and `build choose wall regolith` take the room's Wall list to none and back (the inspector's list, a real click
 ;; and the arrow keys): (set enclosure_1 #:wall #f), (set enclosure_1 #:insulation 2), (set enclosure_1 #:wall regolith), (set enclosure_1 #:insulation 0).
 ;; These are the night's numbers of tools/vault-mouse.sh, typed into the inspector's own fields, never into a command.
+;;
+;; Case 6 (commit 6: the size handle, BuildMode.Room.cs). The room 0.5 m a side, 1.50 m down, selected; `build size 1` moves the inspector's
+;; Size slider to 1 m, which is ONE edit, (begin (set enclosure_1 #:size-x 1) (set enclosure_1 #:size-y 1) (set enclosure_1 #:size-z 1)), logged
+;; "size: enclosure_1 1 m a side, floor 1.4x-1.5x m below the ground" (1.497 observed; the floor stays: it grows upward); `build size 0.5` is the same edit back at 0.5.
+;; The bank, whose crate's middle (1.35 m down) is in the 1 m room as in the 0.5 m one, stays joined: no "left" line.
 ;; Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list
          racket/runtime-path
@@ -71,6 +76,13 @@
               "build select enclosure_1; build palette heat-store; build put -0.12 0; wait 5; "
               "build palette heat-bin; build put 0.12 0; wait 5; build log; wait 30; quit")))))
   (define all2 (string-join lines2 "\n"))
+  (define lines3
+    (run `(("HEROIC_INPUT" .
+            ,(string-append
+              "wait 360; build new 254.5 137.9; wait 60; build palette enclosure; build preset enclosure 0.5; build put 0 0; wait 5; "
+              "key shift+pagedown; wait 5; key shift+pagedown; wait 5; key shift+pagedown; wait 5; "
+              "build select enclosure_1; build size 1; wait 5; build size 0.5; wait 5; build log; wait 30; quit")))))
+  (define all3 (string-join lines3 "\n"))
   (define all (string-join lines "\n"))
 
   (test-case "case 1: the 0.5 m preset, a room put down by `build put`, sunk by Shift+Page Down to the bank"
@@ -116,4 +128,13 @@
     (for ([f '("open: typed 1 into heat_bin_3" "mass: typed 40 into heat_store_2" "temperature: typed -55 into enclosure_1" "ground: typed -55 into enclosure_1"
                "pressure: typed 610 into enclosure_1" "temperature: typed 200 into heat_store_2")])
       (check-true (and (index-of-line (regexp (string-append "^\\[BuildMode\\] field " (regexp-quote f) "'s field")) lines) #t) f)))
-)
+
+
+  (test-case "case 6: the size handle is one edit each way, the floor stays, the bank stays joined"
+    (define sets (for/list ([l lines3] #:when (regexp-match? #rx"^\\[BuildMode\\] > \\(begin \\(set enclosure_1 #:size-x" l)) (cadr (regexp-match #rx"> (.*)$" l))))
+    (check-equal? sets '("(begin (set enclosure_1 #:size-x 1) (set enclosure_1 #:size-y 1) (set enclosure_1 #:size-z 1))"
+                         "(begin (set enclosure_1 #:size-x 0.5) (set enclosure_1 #:size-y 0.5) (set enclosure_1 #:size-z 0.5))") all3)
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] size: enclosure_1 1 m a side, floor 1\\.[45][0-9]* m below the ground" lines3) #t) all3)
+    (check-true (and (index-of-line #rx"^\\[BuildMode\\] size: enclosure_1 0\\.5 m a side, floor 1\\.[45][0-9]* m below the ground" lines3) #t) all3)
+    (check-false (index-of-line #rx"battery-bank.cells left" lines3) all3)
+    (check-true (and (index-of-line #rx"state: .*parts=enclosure_1@\\(254.5 -44.4 137.9\\)" lines3) #t) "the floor did not move")))
