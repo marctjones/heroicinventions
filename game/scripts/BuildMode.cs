@@ -538,7 +538,7 @@ public partial class BuildMode : Node3D
                 return ScriptedInput.Step.Continue;
             }
             case "log":
-                GD.Print($"[BuildMode] state: px={F(1 / GetViewport().GetScreenTransform().Scale.X)} selected={_selectedId ?? "none"} placing={_placingPaletteId ?? "none"} link={_link?.ToString() ?? "none"} testing={Testing} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})" + (p.Props.GetValueOrDefault("heading-deg") is SNumber h ? $"^{F(h.Value)}" : "")))} meshes={MeshesField()} arbors={string.Join(",", _session.Document.Arbors.Select(a => string.Join("+", a.Parts)))}");
+                GD.Print($"[BuildMode] state: px={F(1 / GetViewport().GetScreenTransform().Scale.X)} selected={_selectedId ?? "none"} placing={_placingPaletteId ?? "none"} room={_room ?? "none"} link={_link?.ToString() ?? "none"} testing={Testing} parts={string.Join(",", _session.Document.Parts.Values.Select(p => $"{p.Id}@({F(p.At.X)} {F(p.At.Y)} {F(p.At.Z)})" + (p.Props.GetValueOrDefault("heading-deg") is SNumber h ? $"^{F(h.Value)}" : "")))} meshes={MeshesField()} arbors={string.Join(",", _session.Document.Arbors.Select(a => string.Join("+", a.Parts)))}");
                 return ScriptedInput.Step.Continue;
             case "focus":
                 if (w[1] == "console") _consoleInput.GrabFocus(); else GetViewport().GuiReleaseFocus();
@@ -559,8 +559,12 @@ public partial class BuildMode : Node3D
         float x = _scriptOrigin.X + float.Parse(w[1], inv), z = _scriptOrigin.Z + float.Parse(w[2], inv);
         var at = new Vector3(x, GroundHeight is { } ground ? (float)ground(x, z) : _scriptOrigin.Y, z);
         _ghostOnPost = null; _ghostOnShaft = false; _ghostOnRing = false;
-        _ghost.Visible = true;
-        _ghost.Position = Snap(new Vector3(at.X, at.Y - _ghostBottom, at.Z));
+        if (!PutOnRoomFloor(at.X, at.Z))
+        {
+            LeaveRoomFloor();
+            _ghost.Visible = true;
+            _ghost.Position = Snap(new Vector3(at.X, at.Y - _ghostBottom, at.Z));
+        }
         PlaceGhost(id, keepPlacing: false);
         return ScriptedInput.Step.Next;
     }
@@ -1204,7 +1208,10 @@ public partial class BuildMode : Node3D
                     .Where(k => k != id).Distinct().OrderBy(k => k).ToList();
                 var sym2 = ((SSymbol)value).Name;
                 pick.AddItem(sym2 == "?" ? "(choose one)" : sym2);
-                foreach (var t in targets.Where(t => t != sym2)) pick.AddItem(t);
+                // the room's own candidates first (phase 5): what a bin could hold, a strip sense or drive, then every other part as before
+                var near = RoomSlots.RoomOf(doc, id) is { } room && room != id ? RoomSlots.Candidates(doc, room, key).Where(t => t != id && t != sym2).ToList() : [];
+                foreach (var t in near) pick.AddItem(t);
+                foreach (var t in targets.Where(t => t != sym2 && !near.Contains(t))) pick.AddItem(t);
                 pick.ItemSelected += index => { if (index > 0) RunCommand($"(set {id} #:{key} {pick.GetItemText((int)index)})"); };
                 row.AddChild(pick);
             }
@@ -1836,7 +1843,9 @@ public partial class BuildMode : Node3D
         var at = _ghost?.Position;
         var shaft = key == _placingKey ? _shaft : null;   // a new size on the card keeps a gear on its shaft (phase 2)
         var ring = key == _placingKey ? _meshRing : null;   // or on its pitch circle (phase 3), the circle's size the new gear's
+        var room = key == _placingKey ? _room : null;       // or in its room (phase 5)
         CancelPlacing();
+        _room = room;
         CancelLink();
         _shaft = shaft;
         _meshRing = ring;
@@ -1859,6 +1868,9 @@ public partial class BuildMode : Node3D
         _ghost = null;
         _shaft = null;
         HideAxle();
+        _room = null;
+        _ghostInRoom = false;
+        HideRoomFloor();
         _meshRing = null;
         HideRing();
         _placingPaletteId = null;
@@ -1966,6 +1978,8 @@ public partial class BuildMode : Node3D
         _ghostOnRing = false;
         if (_meshRing is { } ring) { MoveGhostOnRing(screen, ring, free); return; }   // a gear meshing with a wheel (phase 3), Alt frees it in the plane
         if (_shaft is { } shaft && !free) { MoveGhostOnShaft(screen, shaft); return; }   // a gear on a shaft (phase 2), Alt frees it
+        if (_room is { } room && !free && MoveGhostInRoom(screen, room)) return;   // a part in a selected room rides its floor (phase 5), Alt frees it
+        LeaveRoomFloor();
         if (_placingKey == "windmill" && !free && PostUnder(screen) is { } post)
         {
             // the sails' ghost on a post (building plan, phase 1): the post under the windshaft behind the sails, where the route's train
@@ -2054,8 +2068,13 @@ public partial class BuildMode : Node3D
         string id = NewPartId(key.Replace('-', '_'), paletteId, _placeMaterial ?? UsualMaterial(key));   // "gear_2" by its entry, not its size; in a lesson, its role
         var at = _ghost.Position + new Vector3(0, Lift(key), 0);
         string extra = string.Concat(ExtraProps(key).Select(p => $" #:{p.Key} {F(p.Value)}"));
-        if (RunCommand($"({head} {id} #:at {Xyz(at)}{catalogueArg} #:material {_placeMaterial ?? UsualMaterial(key)}{extra})"))
+        string command = $"({head} {id} #:at {Xyz(at)}{catalogueArg} #:material {_placeMaterial ?? UsualMaterial(key)}{extra})";
+        bool inRoom = _ghostInRoom && _room is { } r0 && _session.Document.Parts.ContainsKey(r0);
+        if (_ghostInRoom && !inRoom) { _room = null; LeaveRoomFloor(); return; }   // the room went while it was being placed in: the free ghost on the next move
+        if (inRoom && item.Catalogue is null) command = RoomCommand(command, head, id, _room!);
+        if (RunCommand(command))
         {
+            if (inRoom) FlushRoomLog(); else _pendingRoomLog = [];
             TrySnapAllPorts(id);
             if (!keepPlacing) { CancelPlacing(); Select(id); }
         }

@@ -107,7 +107,7 @@ public class RoomSlotsTests
     {
         var s = Session(Room, Rock, "(heat-bin heat_bin_3 #:at (254.62 -44.4 137.9) #:holds heat_store_2)");
         var plan = RoomSlots.Defaults(s.Document, "enclosure_1", Probe("bimetal"));
-        Assert.Equal([("senses", "enclosure_1"), ("drives", "heat_bin_3")], plan.Chosen.OrderBy(c => c.Key == "drives" ? 1 : 0).ToList());
+        Assert.Equal([("senses", "enclosure_1"), ("drives", "heat_bin_3")], plan.Chosen);
         Assert.Equal(["enclosure_1", "heat_store_2"], RoomSlots.Candidates(s.Document, "enclosure_1", "senses"));   // the room first
         string command = RoomSlots.Command("(bimetal bimetal_4 #:at (254.31 -44.4 137.9))", "bimetal_4", plan);
         s.Execute(command);

@@ -383,6 +383,7 @@ public partial class BuildMode
         _placeMaterial = LessonMaterialFor(key) ?? UsualMaterial(key);
         _placingKey = key;
         StartPlacing(VariantOf(key));
+        SetRoomForPlacing();   // a part goes on the floor of the selected room, or of the room that holds the selected part (phase 5)
         ShowCard(key);
     }
 

@@ -27,7 +27,7 @@ public static class RoomSlots
     public static readonly IReadOnlyList<string> HeatedKinds = ["boiler", "tank", "enclosure", "crucible", "pond", "stirling", "envelope", "heat-store", "melter"];
 
     /// <summary>The references that are filled in by default, as the part keeps them: key.</summary>
-    public static readonly IReadOnlyList<string> Keys = ["holds", "drives", "senses", "onto"];
+    public static readonly IReadOnlyList<string> Keys = ["holds", "senses", "drives", "onto"];
 
     /// <summary>The room the player is building in: the selected enclosure, else the innermost enclosure holding the selected part; null if none.</summary>
     public static string? RoomOf(EditorDocument doc, string? selected)
