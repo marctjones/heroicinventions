@@ -118,26 +118,11 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
                 return Step.Next;
             }
             case "type":   // text into whatever has the keyboard (a text field): "type scene.elapsed"; spaces are kept, so it takes the rest of the line
-            {
-                foreach (char ch in string.Join(' ', w[1..]))
-                {
-                    var key = new InputEventKey { Pressed = true, Unicode = ch, Keycode = ch is >= 'a' and <= 'z' ? (Key)(ch - 32) : (Key)ch };
-                    Input.ParseInputEvent(key);
-                    var released = (InputEventKey)key.Duplicate();
-                    released.Pressed = false;
-                    Input.ParseInputEvent(released);
-                }
+                TypeText(string.Join(' ', w[1..]));
                 return Step.Next;
-            }
             case "key":
-            {
-                var ev = KeyEvent(w[1]);
-                Input.ParseInputEvent(ev);
-                var up = (InputEventKey)ev.Duplicate();
-                up.Pressed = false;
-                Input.ParseInputEvent(up);
+                PressKey(w[1]);
                 return Step.Next;
-            }
             case "hold":
             {
                 var ev = KeyEvent(w[1]);
@@ -206,6 +191,29 @@ public sealed class ScriptedInput(string tag, string script, Node owner, Func<Or
                 default: ev.Keycode = OS.FindKeycodeFromString(part); break;
             }
         return ev;
+    }
+
+    /// <summary>Types <paramref name="text"/> as key events into whatever has the keyboard, a character at a time, as the "type" word does.</summary>
+    public void TypeText(string text)
+    {
+        foreach (char ch in text)
+        {
+            var key = new InputEventKey { Pressed = true, Unicode = ch, Keycode = ch is >= 'a' and <= 'z' ? (Key)(ch - 32) : (Key)ch };
+            Input.ParseInputEvent(key);
+            var released = (InputEventKey)key.Duplicate();
+            released.Pressed = false;
+            Input.ParseInputEvent(released);
+        }
+    }
+
+    /// <summary>Presses and releases one key ("enter", "shift+pagedown"), as the "key" word does.</summary>
+    public void PressKey(string spec)
+    {
+        var ev = KeyEvent(spec);
+        Input.ParseInputEvent(ev);
+        var up = (InputEventKey)ev.Duplicate();
+        up.Pressed = false;
+        Input.ParseInputEvent(up);
     }
 
     /// <summary>Moves the mouse to <paramref name="at"/>, then presses or releases <paramref name="button"/> there if one is given.</summary>

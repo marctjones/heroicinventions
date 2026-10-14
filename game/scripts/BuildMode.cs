@@ -443,6 +443,8 @@ public partial class BuildMode : Node3D
             case "hover-at":   // "hover-at X Y Z [alt]": the mouse moved to wherever that world point is drawn, no click (a placing ghost follows it)
                 _inputScript!.Mouse(GetViewport().GetScreenTransform() * _camera.UnprojectPosition(ScriptPoint(w, 1)), alt: w.Length > 4 && w[4] == "alt");
                 return ScriptedInput.Step.Next;
+            case "field":   // "field KEY VALUE": a real click on the selected part's number field KEY (the numbers list opened first if folded), the value typed as keys, Enter
+                return FieldStep(w);
             case "put":   // "put X Z": the placing ghost put down where a click at that world point (the build's spot added) would land it, no camera, then placed as the click does
                 return PutStep(w);
             case "palette-click":   // "palette-click NAME": a real click on the entry in the list (a click on "Show all" first when the starter list hasn't it)
@@ -1159,6 +1161,7 @@ public partial class BuildMode : Node3D
 
         // the part's own numbers, folded away until asked for: a newcomer needs where and what, not bearing-drag
         var numbers = new Button { Text = _showNumbers ? "Hide its numbers ▾" : "Show all its numbers ▸", Flat = true, Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.None };
+        numbers.SetMeta("numbers", true);
         numbers.Pressed += () => { _showNumbers = !_showNumbers; RebuildInspector(); };
         _inspector.AddChild(numbers);
         foreach (var (key, value) in part.Props.OrderBy(p => p.Key))
@@ -1333,8 +1336,12 @@ public partial class BuildMode : Node3D
     private static LineEdit NumberField(double value, Action<string> commit)
     {
         var field = new LineEdit { Text = F(value), CustomMinimumSize = new Vector2(70, 0), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-        field.TextSubmitted += text => commit(text);
-        field.FocusExited += () => { if (field.Text != F(value)) commit(field.Text); };
+        // Enter commits; so does leaving the field with a changed text, but not again when the inspector is rebuilt round the field
+        // after Enter (the freed field loses focus with the old value still to compare), which ran the same (set ...) twice
+        bool submitted = false;
+        field.TextChanged += _ => submitted = false;
+        field.TextSubmitted += text => { submitted = true; commit(text); };
+        field.FocusExited += () => { if (!submitted && field.Text != F(value)) commit(field.Text); };
         return field;
     }
 

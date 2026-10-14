@@ -22,6 +22,12 @@
 ;; #:drives heat_bin_3)), and its two log lines. `build log` says room=enclosure_1 while a part is being placed and none after.
 ;; Case 4: a second store beside the first (put -0.12 0) makes the bin's holds ambiguous: the bin is the bare (heat-bin heat_bin_4 ...),
 ;; the log says "heat_bin_4 holds stays blank, it could name heat_store_2 or heat_store_3", and no (set heat_bin_4 #:holds ...) is run.
+;;
+;; Case 5 (commit 4: `build field KEY VALUE`, a real click on the part's number field, the value as key events, Enter): with the bin
+;; selected `build field open 1`, the store `mass 40`, the room `temperature -55`, `ground -55`, `pressure 610`, the store `temperature 200`:
+;; each logs "field KEY: typed V into ID's field" and runs exactly one (set ID #:KEY V) (a rebuild of the inspector round the field must not
+;; commit it a second time), in that order; the last `build log` shows the bin open (a real click on "Show all its numbers" opened the list
+;; the first time). These are the night's numbers of tools/vault-mouse.sh, typed into the inspector's own fields, never into a command.
 ;; Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list
          racket/runtime-path
@@ -49,7 +55,10 @@
               "key shift+pagedown; wait 5; key shift+pagedown; wait 5; key shift+pagedown; wait 5; build log; "
               "build palette heat-store; build log; build put 0.12 0; wait 5; "
               "build palette heat-bin; build put 0.12 0; wait 5; "
-              "build palette bimetal; build put -0.19 0; wait 5; build log; wait 30; quit")))))
+              "build palette bimetal; build put -0.19 0; wait 5; build log; "
+              "build select heat_bin_3; build field open 1; build select heat_store_2; build field mass 40; "
+              "build select enclosure_1; build field temperature -55; build field ground -55; build field pressure 610; "
+              "build select heat_store_2; build field temperature 200; wait 5; build log; wait 30; quit")))))
   (define lines2
     (run `(("HEROIC_INPUT" .
             ,(string-append
@@ -89,4 +98,15 @@
     (check-true (and (index-of-line #rx"^\\[BuildMode\\] > \\(heat-bin heat_bin_4 #:at" lines2) #t) all2)
     (check-true (and (index-of-line #rx"in enclosure_1: heat_bin_4 holds stays blank, it could name heat_store_2 or heat_store_3" lines2) #t) all2)
     (check-false (index-of-line #rx"set heat_bin_4 #:holds" lines2) all2)
-    (check-false (index-of-line #rx"^\\[BuildMode\\] > \\(begin \\(heat-bin" lines2) all2)))
+    (check-false (index-of-line #rx"^\\[BuildMode\\] > \\(begin \\(heat-bin" lines2) all2))
+
+  (test-case "case 5: `build field` types the night's numbers into the inspector's fields, each committed once, in order"
+    (define sets (for/list ([l lines] #:when (regexp-match? #rx"^\\[BuildMode\\] > \\(set (heat_bin_3|heat_store_2|enclosure_1) #:(open|mass|temperature|ground|pressure) " l))
+                   (cadr (regexp-match #rx"> (.*)$" l))))
+    (check-equal? sets '("(set heat_bin_3 #:open 1)" "(set heat_store_2 #:mass 40)" "(set enclosure_1 #:temperature -55)"
+                         "(set enclosure_1 #:ground -55)" "(set enclosure_1 #:pressure 610)" "(set heat_store_2 #:temperature 200)")
+                  all)
+    (for ([f '("open: typed 1 into heat_bin_3" "mass: typed 40 into heat_store_2" "temperature: typed -55 into enclosure_1" "ground: typed -55 into enclosure_1"
+               "pressure: typed 610 into enclosure_1" "temperature: typed 200 into heat_store_2")])
+      (check-true (and (index-of-line (regexp (string-append "^\\[BuildMode\\] field " (regexp-quote f) "'s field")) lines) #t) f)))
+)

@@ -137,4 +137,52 @@ public partial class BuildMode
         PutGhostOnFloor(floor, x, z);
         return true;
     }
+
+    private int _fieldTries, _fieldPhase;
+
+    /// <summary>
+    /// "field KEY VALUE" (a world's script, "build field open 1"): with a part selected, the number field of its KEY typed into as a person
+    /// does. A real click on "Show all its numbers" first if the list is folded, the row scrolled into view, a real click on its field,
+    /// everything in it selected, VALUE typed as key events, Enter. The same (set ID #:KEY V) the field commits. Works for a number and for
+    /// an optional number that is not set (#f). It takes a few frames (the inspector is laid out and rebuilt between them).
+    /// </summary>
+    private ScriptedInput.Step FieldStep(string[] w)
+    {
+        string key = w[1], text = w[2];
+        ScriptedInput.Step End(string why)
+        {
+            if (why != "") GD.Print($"[BuildMode] field {key}: {why}");
+            _fieldTries = _fieldPhase = 0;
+            return ScriptedInput.Step.Next;
+        }
+        if (_selectedId is not { } id || !_session.Document.Parts.ContainsKey(id)) return End("select a part first");
+        if (++_fieldTries > 240) return End($"gave up after {_fieldTries} frames (phase {_fieldPhase}) on {id}");
+        void ClickOn(Control c)
+        {
+            var at = GetViewport().GetScreenTransform() * c.GetGlobalRect().GetCenter();
+            _inputScript!.Mouse(at);
+            _inputScript.Mouse(at, MouseButton.Left, true);
+            _inputScript.Mouse(at, MouseButton.Left, false);
+        }
+        var scroll = _inspector.GetParent<ScrollContainer>();
+        if (!_showNumbers)
+        {
+            var show = Descendants(_inspector).OfType<Button>().FirstOrDefault(b => b.HasMeta("numbers"));
+            if (show is null || show.Size.X < 1) return ScriptedInput.Step.Again;
+            if (_fieldPhase == 0) { scroll.EnsureControlVisible(show); _fieldPhase = 1; return ScriptedInput.Step.Again; }
+            if (_fieldPhase == 1) { ClickOn(show); _fieldPhase = 2; }
+            return ScriptedInput.Step.Again;   // the click is handled next frame and the inspector rebuilt
+        }
+        var row = Descendants(_inspector).OfType<HBoxContainer>().FirstOrDefault(r => r.GetChildCount() > 1 && r.GetChild(0) is Label l && l.Text == key);
+        if (row is null) return _fieldTries > 20 ? End($"{id} has no number {key} in its list") : ScriptedInput.Step.Again;
+        if (row.GetChild(1) is not LineEdit field) return End($"{id}'s {key} is not a number field (a list or a switch)");
+        if (field.Size.X < 1) return ScriptedInput.Step.Again;
+        if (_fieldPhase <= 2) { scroll.EnsureControlVisible(field); _fieldPhase = 3; return ScriptedInput.Step.Again; }
+        if (_fieldPhase == 3) { ClickOn(field); _fieldPhase = 4; return ScriptedInput.Step.Again; }
+        if (!field.HasFocus()) return ScriptedInput.Step.Again;
+        field.SelectAll();
+        _inputScript!.TypeText(text);
+        _inputScript.PressKey("enter");
+        return End($"typed {text} into {id}'s field");
+    }
 }
