@@ -443,6 +443,8 @@ public partial class BuildMode : Node3D
             case "hover-at":   // "hover-at X Y Z [alt]": the mouse moved to wherever that world point is drawn, no click (a placing ghost follows it)
                 _inputScript!.Mouse(GetViewport().GetScreenTransform() * _camera.UnprojectPosition(ScriptPoint(w, 1)), alt: w.Length > 4 && w[4] == "alt");
                 return ScriptedInput.Step.Next;
+            case "put":   // "put X Z": the placing ghost put down where a click at that world point (the build's spot added) would land it, no camera, then placed as the click does
+                return PutStep(w);
             case "palette-click":   // "palette-click NAME": a real click on the entry in the list (a click on "Show all" first when the starter list hasn't it)
             {
                 string key = EntryKeyOf(w[1]);
@@ -543,6 +545,24 @@ public partial class BuildMode : Node3D
                 return ScriptedInput.Step.Continue;
         }
         return null;
+    }
+
+    /// <summary>
+    /// "put X Z": what a click at the world point (X, Z) from the build's spot does to the placing ghost, without the camera (so it works
+    /// headless, where projected pixels are nonsense): the ghost set on the ground there, snapped as the free ghost is, then
+    /// <see cref="PlaceGhost"/> by the same path as a click. (Building phase 5, #254; BuildMode.Room.cs adds a selected room's floor.)
+    /// </summary>
+    private ScriptedInput.Step PutStep(string[] w)
+    {
+        if (_placingPaletteId is not { } id || _ghost is null) { GD.Print("[BuildMode] put: nothing is being placed (build palette NAME first)"); return ScriptedInput.Step.Next; }
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        float x = _scriptOrigin.X + float.Parse(w[1], inv), z = _scriptOrigin.Z + float.Parse(w[2], inv);
+        var at = new Vector3(x, GroundHeight is { } ground ? (float)ground(x, z) : _scriptOrigin.Y, z);
+        _ghostOnPost = null; _ghostOnShaft = false; _ghostOnRing = false;
+        _ghost.Visible = true;
+        _ghost.Position = Snap(new Vector3(at.X, at.Y - _ghostBottom, at.Z));
+        PlaceGhost(id, keepPlacing: false);
+        return ScriptedInput.Step.Next;
     }
 
     /// <summary>A scripted click on whatever is drawn at <paramref name="world"/>.</summary>

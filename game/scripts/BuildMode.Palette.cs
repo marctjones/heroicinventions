@@ -192,6 +192,13 @@ public partial class BuildMode
             ("3 m", "A 3 m post, 30 cm square", [("size-x", 0.3), ("size-y", 3.0), ("size-z", 0.3)]),
             ("10.6 m", "A windmill's tower, 60 cm square: the 10 m sails, their hub on its top, clear the ground by about a metre", [("size-x", 0.6), ("size-y", 10.6), ("size-z", 0.6)]),
         ],
+        // a room, a cube: the usual 2 m, a 1 m store room, and the tight 0.5 m vault round the found bank's crate (building phase 5, #254)
+        ["enclosure"] =
+        [
+            ("2 m", "A room 2 m a side: the usual size", [("size-x", 2.0), ("size-y", 2.0), ("size-z", 2.0)]),
+            ("1 m", "A room 1 m a side", [("size-x", 1.0), ("size-y", 1.0), ("size-z", 1.0)]),
+            ("0.5 m", "A tight vault, 0.5 m a side: the size round the found bank's crate", [("size-x", 0.5), ("size-y", 0.5), ("size-z", 0.5)]),
+        ],
     };
 
     private readonly Dictionary<string, int> _presetChosen = [];
