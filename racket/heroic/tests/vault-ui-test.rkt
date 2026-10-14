@@ -27,7 +27,9 @@
 ;; selected `build field open 1`, the store `mass 40`, the room `temperature -55`, `ground -55`, `pressure 610`, the store `temperature 200`:
 ;; each logs "field KEY: typed V into ID's field" and runs exactly one (set ID #:KEY V) (a rebuild of the inspector round the field must not
 ;; commit it a second time), in that order; the last `build log` shows the bin open (a real click on "Show all its numbers" opened the list
-;; the first time). These are the night's numbers of tools/vault-mouse.sh, typed into the inspector's own fields, never into a command.
+;; the first time). `build choose wall none` and `build choose wall regolith` take the room's Wall list to none and back (the inspector's list, a real click
+;; and the arrow keys): (set enclosure_1 #:wall #f), (set enclosure_1 #:insulation 2), (set enclosure_1 #:wall regolith), (set enclosure_1 #:insulation 0).
+;; These are the night's numbers of tools/vault-mouse.sh, typed into the inspector's own fields, never into a command.
 ;; Skipped when Godot is not installed.
 (require rackunit racket/system racket/port racket/string racket/list
          racket/runtime-path
@@ -58,6 +60,7 @@
               "build palette bimetal; build put -0.19 0; wait 5; build log; "
               "build select heat_bin_3; build field open 1; build select heat_store_2; build field mass 40; "
               "build select enclosure_1; build field temperature -55; build field ground -55; build field pressure 610; "
+              "build choose wall none; build choose wall regolith; "
               "build select heat_store_2; build field temperature 200; wait 5; build log; wait 30; quit")))))
   (define lines2
     (run `(("HEROIC_INPUT" .
@@ -106,6 +109,10 @@
     (check-equal? sets '("(set heat_bin_3 #:open 1)" "(set heat_store_2 #:mass 40)" "(set enclosure_1 #:temperature -55)"
                          "(set enclosure_1 #:ground -55)" "(set enclosure_1 #:pressure 610)" "(set heat_store_2 #:temperature 200)")
                   all)
+    ;; `build choose KEY TEXT`: a real click on the Wall list and the entry by the arrow keys and Enter: none, then regolith; WallChanged puts the
+    ;; room's 2 W/K back and takes it off again. (tools/vault-mouse.sh needs it: a live edit carries the soil's temperatures, see its header.)
+    (define wall-lines (for/list ([l lines] #:when (regexp-match? #rx"^\\[BuildMode\\] > \\(set enclosure_1 #:(wall|insulation) " l)) (cadr (regexp-match #rx"> (.*)$" l))))
+    (check-equal? wall-lines '("(set enclosure_1 #:wall #f)" "(set enclosure_1 #:insulation 2)" "(set enclosure_1 #:wall regolith)" "(set enclosure_1 #:insulation 0)") all)
     (for ([f '("open: typed 1 into heat_bin_3" "mass: typed 40 into heat_store_2" "temperature: typed -55 into enclosure_1" "ground: typed -55 into enclosure_1"
                "pressure: typed 610 into enclosure_1" "temperature: typed 200 into heat_store_2")])
       (check-true (and (index-of-line (regexp (string-append "^\\[BuildMode\\] field " (regexp-quote f) "'s field")) lines) #t) f)))

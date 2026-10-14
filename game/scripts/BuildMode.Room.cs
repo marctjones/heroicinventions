@@ -18,7 +18,7 @@ public partial class BuildMode
 {
     private string? _room;           // the room the placing part goes into, while it does (set when the entry starts)
     private bool _ghostInRoom;       // whether the ghost stands on that room's floor now (not Alt-freed, not outside its footprint)
-    private MeshInstance3D? _roomFloor;
+    private Node3D? _roomFloor;   // the drawn floor slab and the room's twelve edges
 
     private static readonly StandardMaterial3D RoomGhostOverlay = new()
     {
@@ -75,7 +75,10 @@ public partial class BuildMode
         HideRoomFloor();
     }
 
-    /// <summary>The room's floor as a thin green slab, drawn over everything (it is under the soil).</summary>
+    /// <summary>
+    /// The room's floor as a thin green slab and its box as twelve green edges, drawn over everything (the room is under the soil, so
+    /// this is how the floor, and the box a part must stand inside, are seen).
+    /// </summary>
     private void DrawRoomFloor(RoomSlots.Floor floor)
     {
         HideRoomFloor();
@@ -84,14 +87,33 @@ public partial class BuildMode
             AlbedoColor = new Color(0.3f, 1f, 0.35f, 0.35f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, NoDepthTest = true,
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha, CullMode = BaseMaterial3D.CullModeEnum.Disabled,
         };
-        _roomFloor = new MeshInstance3D
+        var edge = new StandardMaterial3D
         {
-            Name = "RoomFloor",
+            AlbedoColor = new Color(0.3f, 1f, 0.35f, 0.9f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, NoDepthTest = true,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+        };
+        _roomFloor = new Node3D { Name = "RoomFloor" };
+        _roomFloor.AddChild(new MeshInstance3D
+        {
             Mesh = new BoxMesh { Size = new Vector3((float)floor.HalfX * 2, 0.004f, (float)floor.HalfZ * 2) },
             MaterialOverride = mat,
             Position = new Vector3((float)floor.CentreX, (float)floor.Y + 0.002f, (float)floor.CentreZ),
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-        };
+        });
+        float hx = (float)floor.HalfX, hz = (float)floor.HalfZ, h = (float)(_session.Document.Parts[floor.Room].Number("size-y", 2));
+        var c = new Vector3((float)floor.CentreX, (float)floor.Y, (float)floor.CentreZ);
+        Vector3 P(int sx, int sy, int sz) => c + new Vector3(sx * hx, sy * h, sz * hz);
+        foreach (var (a, b) in new[]
+        {
+            (P(-1, 0, -1), P(1, 0, -1)), (P(1, 0, -1), P(1, 0, 1)), (P(1, 0, 1), P(-1, 0, 1)), (P(-1, 0, 1), P(-1, 0, -1)),
+            (P(-1, 1, -1), P(1, 1, -1)), (P(1, 1, -1), P(1, 1, 1)), (P(1, 1, 1), P(-1, 1, 1)), (P(-1, 1, 1), P(-1, 1, -1)),
+            (P(-1, 0, -1), P(-1, 1, -1)), (P(1, 0, -1), P(1, 1, -1)), (P(1, 0, 1), P(1, 1, 1)), (P(-1, 0, 1), P(-1, 1, 1)),
+        })
+        {
+            var rod = Shapes.Rod(a, b, 0.006f, edge);
+            rod.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+            _roomFloor.AddChild(rod);
+        }
         AddChild(_roomFloor);
     }
 
@@ -148,7 +170,8 @@ public partial class BuildMode
     /// </summary>
     private ScriptedInput.Step FieldStep(string[] w)
     {
-        string key = w[1], text = w[2];
+        string key = w[1], text = string.Join(' ', w.Skip(2));
+        bool choose = w[0] == "choose";
         ScriptedInput.Step End(string why)
         {
             if (why != "") GD.Print($"[BuildMode] field {key}: {why}");
@@ -175,6 +198,27 @@ public partial class BuildMode
         }
         var row = Descendants(_inspector).OfType<HBoxContainer>().FirstOrDefault(r => r.GetChildCount() > 1 && r.GetChild(0) is Label l && l.Text == key);
         if (row is null) return _fieldTries > 20 ? End($"{id} has no number {key} in its list") : ScriptedInput.Step.Again;
+        if (choose)
+        {
+            // "choose KEY TEXT": the row's list (the wall's materials, a part's choices): a real click opens it, the arrow keys and Enter take the entry
+            if (row.GetChild(1) is not OptionButton pick) return End($"{id}'s {key} is not a list");
+            int want = Enumerable.Range(0, pick.ItemCount).FirstOrDefault(i => pick.GetItemText(i) == text, -1);
+            if (want < 0) return End($"{id}'s {key} list has no {text}");
+            if (pick.Size.X < 1) return ScriptedInput.Step.Again;
+            if (_fieldPhase <= 2) { scroll.EnsureControlVisible(pick); _fieldPhase = 3; return ScriptedInput.Step.Again; }
+            if (_fieldPhase == 3) { ClickOn(pick); _fieldPhase = 4; return ScriptedInput.Step.Again; }
+            if (!pick.GetPopup().Visible) return ScriptedInput.Step.Again;
+            // one arrow key a frame until the popup's highlight is on the entry (it starts on the selected one, or on none), then Enter
+            int at = pick.GetPopup().GetFocusedItem();
+            if (at != want)
+            {
+                if (_fieldPhase < 100) _fieldPhase++;
+                _inputScript!.PressKey(at < 0 || want > at ? "down" : "up");
+                return ScriptedInput.Step.Again;
+            }
+            _inputScript!.PressKey("enter");
+            return End($"chose {text} in {id}'s list");
+        }
         if (row.GetChild(1) is not LineEdit field) return End($"{id}'s {key} is not a number field (a list or a switch)");
         if (field.Size.X < 1) return ScriptedInput.Step.Again;
         if (_fieldPhase <= 2) { scroll.EnsureControlVisible(field); _fieldPhase = 3; return ScriptedInput.Step.Again; }

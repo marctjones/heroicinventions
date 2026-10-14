@@ -443,6 +443,8 @@ public partial class BuildMode : Node3D
             case "hover-at":   // "hover-at X Y Z [alt]": the mouse moved to wherever that world point is drawn, no click (a placing ghost follows it)
                 _inputScript!.Mouse(GetViewport().GetScreenTransform() * _camera.UnprojectPosition(ScriptPoint(w, 1)), alt: w.Length > 4 && w[4] == "alt");
                 return ScriptedInput.Step.Next;
+            case "choose":   // "choose KEY TEXT": the same for a list ("choose wall none"): a real click on the list, the entry taken by the arrow keys and Enter
+                return FieldStep(w);
             case "field":   // "field KEY VALUE": a real click on the selected part's number field KEY (the numbers list opened first if folded), the value typed as keys, Enter
                 return FieldStep(w);
             case "put":   // "put X Z": the placing ghost put down where a click at that world point (the build's spot added) would land it, no camera, then placed as the click does
