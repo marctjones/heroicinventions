@@ -67,7 +67,7 @@ public class SoilLookTests
     {
         // table (materials.rktd) -> drawn, each by hand as in the class header
         AssertHex("#8A6148", DrawnHex("regolith"));
-        AssertHex("#756053", DrawnHex("bedrock"));
+        AssertHex("#6A6459", DrawnHex("bedrock"));
         AssertHex("#474242", DrawnHex("basalt-sand"));
         AssertHex("#BD7E59", DrawnHex("sublimed-regolith"));
         // ice, table #83726F = (131, 114, 111): value 131, saturation 20/131 = 0.1527, drawn 0.1298, so the lowest is 131 - 131 x 0.1298 = 114.0
@@ -87,15 +87,15 @@ public class SoilLookTests
         Assert.InRange(lum["silica-sand"], 165, 175);
         Assert.InRange(lum["ice-cemented-regolith"], 115, 125);
         Assert.True(lum.Values.Max() / lum.Values.Min() < 2.7, $"{lum.Values.Max() / lum.Values.Min():0.00} to 1");
-        // bedrock and regolith were left as they were (the crater's rim and wall; one is not the other's neighbour in brightness, only in hue)
-        Assert.InRange(lum["bedrock"], 99, 100.5); Assert.InRange(lum["regolith"], 103.5, 104.5); Assert.InRange(lum["sublimed-regolith"], 136, 137.5);
+        // bedrock moved only in hue (#260: 99.5 to 100.5, olive-grey #6A6459; 100.52 by hand, so the pin is 100.6); regolith left as it was
+        Assert.InRange(lum["bedrock"], 99, 100.6); Assert.InRange(lum["regolith"], 103.5, 104.5); Assert.InRange(lum["sublimed-regolith"], 136, 137.5);
     }
 
     [Fact]
     public void SoilsThatMeetOnTheMapStayApart()
     {
         // Every pair of soils that touch on the victoria map (4-neighbours), from the table's drawn colours: each pair differs by 30 or more in
-        // luminance or by 20 or more bytes of colour (bedrock and regolith are 5 apart in luminance, the same hue, and differ in how grey they are:
+        // luminance or by 20 or more bytes of colour (bedrock and regolith are 3 apart in luminance, and since #260 36 bytes and 16 degrees of hue apart, GroundCuesTests;
         // left as they were), and the floor (basalt sand) stays 30 under the wall and 50 under the pale soils.
         var t = Victoria();
         var pairs = new HashSet<(string, string)>();

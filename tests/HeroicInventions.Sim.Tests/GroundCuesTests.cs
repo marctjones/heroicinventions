@@ -17,7 +17,6 @@ namespace HeroicInventions.Sim.Tests;
 /// </summary>
 public class GroundCuesTests
 {
-    private const string Bedrock = "#260: bedrock told from regolith by hue (the table's bedrock moves to #6A6356)";
     private const string Warnings = "#261: warnings by hue, not lightness (the luminance-preserving tint)";
     private const string Disturbance = "#263: disturbance inside the band (the cue constants move to 12.23's values)";
     private const string Retable = "#265: the soils in one band of lightness (the owner-gated re-table, floor lifted to 80)";
@@ -128,7 +127,7 @@ public class GroundCuesTests
         Assert.True(lum.Values.Max() / lum.Values.Min() <= 2.2, $"{lum.Values.Max() / lum.Values.Min():0.00} to 1");
     }
 
-    [Fact(Skip = Bedrock)]
+    [Fact]
     public void BedrockAndRegolithDifferInHueByAtLeastFifteenDegrees()
     {
         // 12.23 1.3: bedrock drawn #6A6459, olive-grey (hue 40, saturation 0.16), against the regolith's rust (hue 23, 0.48); its luminance stays
@@ -140,7 +139,7 @@ public class GroundCuesTests
         Assert.True(Distance(bedrock, regolith) >= 35, $"{Distance(bedrock, regolith):0} bytes");
     }
 
-    [Fact(Skip = Bedrock)]
+    [Fact]
     public void SoilsThatMeetOnTheMapAreToldApartByTheRule()
     {
         // 12.23 1.5, day: two grounds that touch differ by 25 or more in luminance, or by 35 or more bytes of colour with different patterns

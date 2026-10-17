@@ -867,7 +867,7 @@ Slice 2 (#260; the owner chose 2026-10-10: keep the softened contrast, separate 
 | Ground | Where | Table hex | Drawn hex (85% sat) | Drawn lum | Hue / sat | Pattern (12.22) |
 |---|---|---|---|---|---|---|
 | basalt sand | crater floor, apron | `#474141` kept | `#474242` | 67 | 0 / 0.07 | stipple |
-| bedrock | wall and rim | **`#6A6356`** (is `#755C4D`) | `#6A6459` | 100.5 | **40 / 0.16 olive-grey** (is 23 / 0.29) | jointed blocks |
+| bedrock | wall and rim | **`#6A6356`** (was `#755C4D`) | `#6A6459` | 100.5 | **40 / 0.16 olive-grey** (was 23 / 0.29) | jointed blocks |
 | regolith | plain outside the rim | `#8A5A3C` kept | `#8A6148` | 104 | 23 / 0.48 rust | dashes |
 | sublimed regolith | weak rim section, rubble | `#BD7347` kept | `#BD7E59` | 137 | 22 / 0.53 | triangles |
 | ice-cemented | cold north wall | `#83726F` kept | `#837572` | 120 drawn, 158 measured | 9 / 0.13 | pale blue flecks |
@@ -876,7 +876,7 @@ Slice 2 (#260; the owner chose 2026-10-10: keep the softened contrast, separate 
 | road | cut floor of a worked patch | the soil's own; the lip line marks the edges | | | | |
 | wet | any | the soil's x0.75, roughness 0.25 | | | | |
 
-Bedrock moves 36 bytes from regolith (it is 4 apart in luminance and the same hue today) and 54 from basalt sand; its luminance moves 1. The recommended full table (#265, owner-gated: all six inside 80-150 drawn, floor lifted to 80, ice moved to a cold blue-grey) is in the plan, 1.3. The machine-world soils (sand lum 203, loam 92, clay 124) are outside the band at the top; an optional last slice (#266).
+Bedrock moves 36 bytes from regolith (it was 4 apart in luminance and the same hue) and 54 from basalt sand; its luminance moves 1. Landed in #260 (below). The recommended full table (#265, owner-gated: all six inside 80-150 drawn, floor lifted to 80, ice moved to a cold blue-grey) is in the plan, 1.3. The machine-world soils (sand lum 203, loam 92, clay 124) are outside the band at the top; an optional last slice (#266).
 
 #### When darker, when lighter (plan 1.4)
 
@@ -978,3 +978,27 @@ Frames (`docs/art/ground-259/`, this branch, hidden, `camera` printed in the run
 #### Tests and suites
 
 `dotnet test tests/HeroicInventions.Sim.Tests`: 1513 passed, 6 skipped (the six above), 1519 in all; before this slice 1508 passed, so the slice adds the five live tests and the six skipped. `racket racket/build.rkt`: no drift (`git status` shows no generated file changed). The director's solve (`lonely-rover-opening`, `solve.steps`, headless at 30 fps) still wins: "sol 3 03:00 win: The call went out from bank on sol 3 at 03:00. The game is won." `raco make racket/heroic/main.rkt && raco test racket/heroic/tests`: 457 tests passed, none failed.
+
+#### Slice 2 (#260): bedrock told from regolith by hue, before and after
+
+Change: bedrock's table hex `#755C4D` -> `#6A6356` in `racket/heroic/materials.rktd` (`materials.json` regenerated, no other generated file moved); nothing else. Worked by hand before running (SoilLook's 85% saturation): drawn `#756053` -> `#6A6459` (106, 100, 89), luminance 99.5 -> 100.52, hue 23 -> 39 (60 x 11/17), saturation 0.29 -> 0.16; against regolith's drawn `#8A6148` (138, 97, 72: luminance 103.9, hue 22.7): colour distance sqrt(32^2 + 3^2 + 17^2) = 36.4 bytes (was 21.6), hue gap 16 degrees (was 0), luminance gap 3.4 (was 4.4). The Sim test reads the same: `BedrockAndRegolithDifferInHueByAtLeastFifteenDegrees` and `SoilsThatMeetOnTheMapAreToldApartByTheRule` are live and pass. `SoilLookTests` pins moved with it: the key's bedrock `#756053` -> `#6A6459`, and the luminance pin of 99 to 100.5 widened to 99 to 100.6 (the hand sum is 100.517, the plan's "100.5" rounded).
+
+**Frames** (`tools/ground-check.sh`, hidden, `lonely-rover-opening`, same cameras, before = main, after = this branch; `tools/ground-regions.txt` rectangles, which hold the grid, joint lines, hillshade and the slope's warm tint, so they read lower than the drawn colours): the contact (305, 360), regolith against bedrock:
+
+| Time | Luminance gap before -> after | Colour distance before -> after | Hue (bedrock) before -> after |
+|---|---|---|---|
+| noon | 5.9 -> 4.7 | 18.1 -> 26.5 | 22 -> 28 |
+| 16:30 | 4.8 -> 4.2 | 15.5 -> 22.3 | 20 -> 25 |
+| midnight | 4.4 -> 3.4 | 12.6 -> 17.9 | 353 -> 335 (the night fill's blue over a grey) |
+
+The wall's foot (295, -2.5; bedrock against the regolith below it; rectangles `300 200 900 330` and `300 650 900 780`): colour distance 53.2 / 53.3 / 49.2 -> 60.0 / 58.7 / 52.8 (noon / 16:30 / midnight), gap 26.5 / 25.9 / 24.2 -> 25.9 / 25.7 / 23.7 (it already passed on luminance; no worse).
+
+**Honest reading.** The drawn colours meet the target (36.4 bytes and 16 degrees, Sim test). On the frames the contact pair gains 8, 7 and 5 bytes but does not reach 35 (26.5 at noon: the rectangles hold the grid and joint lines, and the warm tint pulls both grounds toward amber), and **at midnight it measures 17.9 against the night rule's 18** (luminance gap 3.4 is under 12, so the colour distance with different patterns, jointed blocks against dashes, has to carry it; it misses by 0.1, inside the measure's noise of a few tenths). On the frame the two are plainly two grounds at noon (grey-olive blocks against rust dashes) and still two at midnight; the number sits on the line. A hex a little more olive passes the night rule on the same frames: table `#646555` (drawn lum about 100, hue 64) measured 29.9 at noon and **19.8 at midnight**; it is recorded here as the fallback, not taken, because the owner chose `#6A6356`. The owner's ruling (2026-10-17): land `#6A6356`; 17.9 against 18 at midnight is within the measure's noise. The other rectangles move by 0.1 to 1.0 of luminance and at most 1.5 bytes where bedrock is in them (rimbase, steep and rubbleface), nothing else.
+
+**Six references** (`tools/legibility.py`, hidden, 600 frames; sd / sep before -> after): antikythera 71 / -126 -> 71 / -127; roman-crane 47 / -72 -> same; newtons-cradle 44 / -86 -> same; water-wheels 36 / -63 -> same; mars-stirling 29 / +55 -> same; herons-fountain 49 / -91 -> same. The one point in antikythera's sep is run-to-run (its frames differ in pixels on identical code, as the earlier checks noted).
+
+**A/B trace** (`HEROIC_TRACE`, `HEROIC_TRACE_DT=10`, the director's solve in `lonely-rover-opening`, headless 30 fps, which digs, heaps and drives on regolith, basalt sand and bedrock; before = main, after = this branch, and after a second time): all eight trace files have the same line count, and the first 206 to 207 lines of each (every sample before sim t = 35,600 s) are **byte-identical** before and after. The last one to four samples of each file (sim t of 35,600 s and later) differ in the 5th or 6th digit of near-zero values (the bank's temperature 7.8e-06 against 1.7e-05 K); the same code run twice differs in exactly the same samples (before against after-2 and after against after-2 each differ in those lines only), so that is the time-warp's own jitter, not the colour. Both runs print "sol 3 03:00 win: The call went out from bank on sol 3 at 03:00. The game is won."
+
+Frames (`docs/art/ground-260/`, before left, after right, noon unless named, hidden): `contact-noon.png`, `contact-midnight.png` (305, 360), `wallfoot-noon.png` (295, -2.5).
+
+**Suites** (this branch, 2026-10-17): `dotnet test tests/HeroicInventions.Sim.Tests`: 1515 passed, 4 skipped, 1519 in all (before this slice 1513 and 6: the two bedrock tests are live). `racket racket/build.rkt`: no drift. `raco make racket/heroic/main.rkt && raco test racket/heroic/tests`: 457 passed (rover-dig-test's "a patch's redraw fits in a tick" failed once under the suite's load and passed alone, 5 of 5: the known timing flake). The director's solve (`lonely-rover-opening`, `solve.steps`, headless at 30 fps): every `expect` ok (the road 52 cycles, 4.53 m3 dug, 23 hauls), "sol 3 03:00 win: The call went out from bank on sol 3 at 03:00. The game is won.", ending 500.00 of 500.00 Wh at 39.7 C, the same as main's run the same day.
