@@ -73,20 +73,28 @@ public partial class MachineView
     /// <summary>For each Jolt body in a driven train: every member of its train, with its speed as a multiple of a common reference.</summary>
     private readonly Dictionary<RigidBody3D, (List<(IShaft Shaft, double Factor)> Train, double Factor)> _trainOf = [];
 
-    /// <summary>A part the sim turns, which can sit on an arbor and drive its wheels.</summary>
+    /// <summary>A part the sim turns, which can sit on an arbor and drive its wheels (a Stirling engine's crankshaft since #269).</summary>
     private bool IsSimTurned(string id) =>
-        Runtime.WaterWheels.ContainsKey(id) || Runtime.Windmills.ContainsKey(id) || Runtime.JetWheels.ContainsKey(id);
+        Runtime.WaterWheels.ContainsKey(id) || Runtime.Windmills.ContainsKey(id) || Runtime.JetWheels.ContainsKey(id) || Runtime.Stirlings.ContainsKey(id);
 
     private IShaft SimShaft(string id) =>
         Runtime.WaterWheels.TryGetValue(id, out var w) ? w
         : Runtime.Windmills.TryGetValue(id, out var m) ? m
+        : Runtime.Stirlings.TryGetValue(id, out var se) ? se
         : Runtime.JetWheels[id];
 
-    /// <summary>How far a sim-turned part has turned, rad forward, wrapped (each is kept within a turn).</summary>
+    /// <summary>How far a sim-turned part has turned, rad forward, wrapped (each is kept within a turn; the engine's angle is wrapped here).</summary>
     private double SimAngle(string id) =>
         Runtime.WaterWheels.TryGetValue(id, out var w) ? w.Angle
         : Runtime.Windmills.TryGetValue(id, out var m) ? m.Angle
+        : Runtime.Stirlings.TryGetValue(id, out var se) ? se.Angle % Math.Tau
         : Runtime.JetWheels[id].Angle;
+
+    /// <summary>
+    /// A Stirling engine's crankshaft (#269): the horizontal shaft its flywheel turns on, along X through the engine's foot raised
+    /// this far (<see cref="BuildStirlings"/> draws the flywheel there; its forward turn is a positive turn about +X).
+    /// </summary>
+    private const float StirlingShaftHeight = 0.3f;
 
     /// <summary>The Jolt wheel that leads an arbor: its first wheel, passing over a part the sim turns.</summary>
     private string ArborLead(ArborSpec arbor) => arbor.Parts.First(p => !IsSimTurned(p));
@@ -426,6 +434,16 @@ public partial class MachineView
         var part = Runtime.Def.Part(sim)!;
         var body = _bodiesById[lead];
         var (pivot, axis) = _hinges[body];
+        if (Runtime.Stirlings.ContainsKey(sim))
+        {
+            // a hot-air engine's crankshaft runs along X through its flywheel (StirlingShaftHeight over its foot), not along Z
+            if (Math.Abs(axis.X) < 0.99f)
+                throw new MachineFormatException($"{lead} turns about {axis}; on {sim}'s crankshaft it must turn about X, as the engine's flywheel does", at);
+            var crank = pivot - (V(part.At) + new Vector3(0, StirlingShaftHeight, 0));
+            if (new Vector2(crank.Y, crank.Z).Length() > 0.05f)
+                throw new MachineFormatException($"{lead} is {new Vector2(crank.Y, crank.Z).Length():F2} m off {sim}'s crankshaft (along X, {StirlingShaftHeight} m over the engine's foot); an arbor's wheels share one axle line", at);
+            return Math.Sign(axis.X);
+        }
         if (Math.Abs(axis.Z) < 0.99f)
             throw new MachineFormatException($"{lead} turns about {axis}; on {sim}'s axle it must turn about Z, as {sim} does", at);
         var off = pivot - V(part.At);

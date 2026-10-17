@@ -1543,7 +1543,7 @@ public sealed partial class MachineRuntime
     private void RegisterOperatorFields(MachineDef def)
     {
         // a wheel on another's arbor is turned by it, so only the arbor's lead has a motor (the view's rule: the first not turned by the sim)
-        bool SimTurned(string id) => _wheels.ContainsKey(id) || _windmills.ContainsKey(id) || _jetWheels.ContainsKey(id);
+        bool SimTurned(string id) => _wheels.ContainsKey(id) || _windmills.ContainsKey(id) || _jetWheels.ContainsKey(id) || _stirlings.ContainsKey(id);
         var rides = def.Arbors.SelectMany(a => a.Parts.Where(p => p != a.Parts.FirstOrDefault(q => !SimTurned(q)))).ToHashSet();
         foreach (var part in def.Parts.Where(p => p.Kind is "wheel" or "screw"))
         {
