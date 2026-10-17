@@ -48,7 +48,7 @@ A three-stage train DOES pass the cut-in at the palette windmill's 6 m/s (checke
 | | Doc | This route |
 |---|---|---|
 | Sols | "about 3 to 5" | The win is at 03:00 on sol 2 with a 25 Wh bank (a scenario number, #60). With the doc's 5 kWh the bank needs 5,000 / 90 = 55.6 hours of the windmill, and it is warm for charging about 10 hours a sol: about 5 to 6 sols, a little over the doc's 3 to 5 (the earlier route's 153 W gave 3 to 4: that windmill took the map's corridor and night wind; the palette windmill is a flat 6 m/s) |
-| Charge rate | Stirling 320 W at noon, windmill about 72 W | Windmill 90 W, flat (no night factor, no corridor). The Stirling is not in this test |
+| Charge rate | Stirling 204.5 W at the shaft at 12:39 (it said 320 W at noon until #220 measured it), windmill about 72 W | Windmill 90 W, flat (no night factor, no corridor). The Stirling is not in this test; built in the same world (`stirling-route-test.rkt`, #220) it gives 204.5 W at the shaft at 12:39 from a cold start and 163 W of charge at 1,602 rpm (the doc's old 320 W was Meridiani's sun) |
 | Night margin | bank +4.3 C at 03:00 (40 kg of rock at 200 C pushed in at 17:00 from a frozen start), "no margin to spare"; 35 kg fails | +24.5 C at 02:49 (a 4 m2 heliostat on the rock through the afternoon with the lid open), because the day's heat soaks into the walls while the sun is shining. The doc's own case is checked as well: the found bank pushed at 17:00 into a vault of another machine with 40 kg at 200 C is +4.28 C at 03:00 (`vault-zone-test.rkt`), night-heat's +4.3 |
 | Rock temperature | about 200 C, "a sol" | 224 C peak at sunset with the doc's 4 m2 and 5 hours of sun (92 C at 02:49). With a longer day nothing limits it; the game has no cap |
 | Bimetal | holds the bank near 38 C in a warm vault | The strip senses the vault's air (27 C at 02:49) and holds the lid 37% open; the bank 24.5 C; it never shuts it |
@@ -69,7 +69,7 @@ What a player cannot yet do, the issue it belongs to, and the stand-in used. "NE
 
 9. **A generator in another machine than its prime mover names its source `shaft`, and has no prime mover speed (new, from the salvaged motor).** `PrimeMoverOf` looks for the windmill or wheel inside the generator's own machine; across a world shaft link there is none, so the bank's record reads `shaft` where it read `wind`, and the concept achievement Gear up (a train of 100:1 or more) cannot read the prime mover's speed for the motor. A fix reads through the world's shaft links (`Electrics`, off-limits to this change). NEW.
 
-Not done: the doc's Stirling engine, a second sol (the rover re-heating the rock each sol), the rover's own vault digging, the boulder undermining, the join gesture itself, the overheating gate in this world (electrics-test.rkt and bimetal-night own it), and the full 5 kWh bank (the scenario scales it to 25 Wh; it would take 55.6 hours of this windmill).
+Not done: a winning run on the doc's Stirling engine (#232; built, joined and measured in `stirling-route-test.rkt`, #220, see `docs/plans/stirling-route-plan.md`), a second sol (the rover re-heating the rock each sol), the rover's own vault digging, the boulder undermining, the join gesture itself, the overheating gate in this world (electrics-test.rkt and bimetal-night own it), and the full 5 kWh bank (the scenario scales it to 25 Wh; it would take 55.6 hours of this windmill).
 
 ## The road and the bank dug free, in the director's solve (road plan, 2026-10-10)
 
@@ -187,3 +187,22 @@ The route's run: the win at 03:00 on sol 2 (`[log] sol 2 03:00 win: The call wen
 
 #226, found on the same run: the rover log wrote its session header and `The log begins on sol 1` line for every build command (24 times); it now writes them once per game session (`rover-log-file-test.rkt` builds three times and reads one header). A script that ends on `quit` still leaves the traces' last block unwritten (end on `HEROIC_QUIT_AFTER_SIM_SECONDS`).
 
+
+## The Stirling in the crater (#220)
+
+`racket/heroic/tests/stirling-route-test.rkt` (about 4 minutes, three runs at once), planned and worked before any route code in `docs/plans/stirling-route-plan.md`. In `lonely-rover-e2e`, by the game's build steps at (220, 126), 16.5 m from the motors crate: a Stirling engine (the build's template: a 1 m² receiver, K 14 W/K, 35% of Carnot, `#:load 0`) on a 1.5 m post, and ten 1 m² flat heliostats in two rows north of it (the far side from the sun). It is joined to the salvaged motor by `join built-1.eng motors.rotor` and the motor to the found bank by `join motors.motor battery-bank.bank`. Before #220 the gesture refused the first join (`a stirling and a wheel`); a Stirling is now a shaft-link end, as a windmill is (`WorldLinks.BuildShaft`, `WorldLinkGestures.Turning`; `StirlingShaftLinkTests`). The windmill's shaft link traced the same to the byte before and after.
+
+The crater's sun is not Meridiani's: latitude 31.2 N on day 172 is midwinter, so the noon sun is 35.9° up and the beam 351.9 W/m² (Meridiani's, where `mars-stirling.rkt` stands, 432.7), and the air follows the weather's daily curve (-28.8 °C at noon, not -63).
+
+| | Worked | Measured |
+|---|---|---|
+| On the aperture at noon | 2,866 W (351.9 × 0.85 × Σcos 9.582) | 2,866.4 W |
+| A: hot end given at its settled 98.75 °C, 12:01 | 98.75 °C, 794 W radiated, 1,784 W drawn, efficiency 0.120, **214.0 W at the shaft** | 98.71 °C, 793.6 W, 1,783.7 W, 0.1199, **213.9 W** |
+| A: the motor loaded (cells set to 25 °C, given) | 1,606 rpm, 1.27 N·m, 171 W of charge | 1,606 rpm, 1.268 N·m, 170.6 W (the bank's slope 170.4 W) |
+| B: built cold on its own 2 N·m load, a paused sleep to 12:39, then joined | 204.5 W at the shaft (the first afternoon's peak), 99.1 °C, 977 rpm on its load | **204.5 W**, 99.14 °C, 976.5 rpm |
+| B: after the join | 1,602 rpm, 164 W of charge, about 11 Wh by 2,700 s | 1,601 rpm, 163.2 W, 12.2 Wh |
+| C: the bank cold (open circuit) | nothing charged; the engine and rotor run up as √(2Pt/I) to Jolt's 3,000 rpm clamp in about 140 s | nothing charged; 3,001 rpm at 140 s, `spin-limit.hits` 1 |
+
+So the design doc's 320 W at noon is 204.5 W in the crater (214 W settled), and its "one gear stage" is not needed: the engine's power has no speed in it, so on a plain shaft the rotor settles where the motor's k (X - 157.08) X equals the engine's power, and the engine turns at the rotor's 1,600 rpm. `docs/lonely-rover.html` now says so.
+
+What the route does not show yet: a win. The found bank is -63 °C at noon on sol 1 and passes 0 °C near 19:00, after the 17:01 sunset, so a Stirling win is the 03:00 pass on sol 3 (#232). Two things in the model bear on that, for the owner (the plan's section 9): an unloaded Stirling has no free speed of its own (nothing but a load or Jolt's clamp stops it, so a paused sleep, which steps the engine but not the shafts, stores its work as speed), and a paused sleep holds a Stirling-linked motor at an estimate read from the engine's present speed, not its power.

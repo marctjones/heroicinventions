@@ -164,6 +164,20 @@ Placeholders: [A] Run A's `eng.shaft-power` at 12:01, [B] Run B's at 12:39, [cha
 - `docs/lonely-rover.html`, `docs/e2e-route.md`, `docs/conventions.md`
 - Done before the plan: `src/HeroicInventions.Sim/Machines/WorldLinks.cs`, `src/HeroicInventions.Sim/Editor/WorldLinkGestures.cs` (one line each, the lead's OK), `tests/HeroicInventions.Sim.Tests/StirlingShaftLinkTests.cs` (new). No physics change anywhere.
 
-## Measured
+## Measured (2026-10-17, `stirling-route-test.rkt`, headless Godot, Jolt 120 Hz)
 
-[M?] Filled in after the runs.
+Every planned check held on the first runs but one, which was the run's design, not the physics: Run B's timed `built-1:eng load 0` was first set for 2,350 s, and a setting is applied once a frame, while a paused sleep's frame covers many sim seconds, so it took effect *inside* the sleep. The engine then ran unloaded for 47 s to 2,121 rpm (worked from √(102² + 2·204.5·47/0.5): 2,110 rpm) and that flywheel energy went into the bank at the join (13.6 Wh at 2,690 s against the worked 11): a small, live case of section 9's question 2. Set at the wake (2,400 s) instead, the run matches.
+
+| | Worked | Measured |
+|---|---|---|
+| `eng.heat` at noon | 2,866 W | 2,866.4 W |
+| Run A, 12:01: hot end, radiated, drawn, efficiency | 98.75 °C, 794 W, 1,784 W, 0.120 | 98.71 °C, 793.6 W, 1,783.7 W, 0.1199 |
+| Run A, 12:01: **at the shaft** | **214.0 W** | **213.9 W** |
+| Run A: rotor, torque, charge | 1,606 rpm, 1.27 N·m, 171 W | 1,606 rpm, 1.268 N·m, 170.6 W (the bank's slope 170.4 W); `spin-limit.hits` 0 |
+| Run A at 12:07 | 212.7 W | 212.7 W (`shaft-1.power`) |
+| Run B, the wake at 12:38:55: **at the shaft**, hot end, aperture, air | **204.5 W**, 99.1 °C, 2,831 W, -25.5 °C | **204.5 W**, 99.14 °C, 2,831.0 W, -25.50 °C |
+| Run B, asleep on its 2 N·m load | 977 rpm | 976.5 rpm |
+| Run B after the join: rotor, charge, bank at the end | 1,602 rpm, 164 W, 11 ± 1.5 Wh | 1,601 rpm, 163.2 W, 12.2 Wh at 2,700 s |
+| Run C (cold bank): clamp, charge | 3,000 rpm by about 140 s, nothing | 3,001 rpm at 140 s, `spin-limit.hits` 1, nothing charged; the link carries 213 W into the clamp |
+
+Run B-live (everything watched, no sleep) was not run: Run B's agreement to 0.1 W with the worked transient, and Run A's with the worked balance, cover what it would check. The docs say **204.5 W at the shaft at 12:39 from a cold start** (214 W settled at noon), 163 W of charge, about 1.1 kWh a sol (worked, not measured) and about 5 sols for the 5 kWh bank on the Stirling alone.
