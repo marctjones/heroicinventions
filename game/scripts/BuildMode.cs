@@ -372,6 +372,7 @@ public partial class BuildMode : Node3D
     public Camera3D Camera => _camera;
 
     private bool _labelsStale = true;
+    private string? _labelsFor;   // the selection the names were last ranked for
 
     /// <summary>True once after the scene was redrawn or the selection changed: new labels are laid out at once, not a few ticks later with every name written over the next.</summary>
     public bool TakeLabelsStale()
@@ -956,6 +957,7 @@ public partial class BuildMode : Node3D
     /// </summary>
     private void Redraw()
     {
+        _labelsStale = true;   // every label is new: laid out at once (Main.Labels.cs, #268)
         if (!Live) _preview?.QueueFree();   // a live machine belongs to the world, not the editor
         _preview = null;
         foreach (var nodes in _fallbackVisuals.Values) foreach (var n in nodes) n.QueueFree();
@@ -1159,7 +1161,7 @@ public partial class BuildMode : Node3D
 
     private void RefreshHighlights()
     {
-        _labelsStale = true;   // a new selection ranks other names first (Main.Labels.cs)
+        if (_selectedId != _labelsFor) { _labelsFor = _selectedId; _labelsStale = true; }   // a new selection ranks other names first (Main.Labels.cs); a hover does not
         UpdateCandidates();
         UpdatePortLabels();
         var lit = _candidates.Select(c => c.PartId).ToHashSet();
@@ -1315,7 +1317,7 @@ public partial class BuildMode : Node3D
             else if (value is SBool)
             {
                 // An optional number that is not set (#f): type one to set it.
-                var field = new LineEdit { PlaceholderText = "not set: type a number", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(56, 0) };
+                var field = new LineEdit { PlaceholderText = "none: type a number", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(56, 0) };
                 field.AddThemeConstantOverride("minimum_character_width", 2);
                 field.TextSubmitted += text => { if (TryNumber(text, out double v)) RunCommand($"(set {id} #:{key} {F(v)})"); };
                 row.AddChild(field);
