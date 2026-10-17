@@ -13,14 +13,17 @@ namespace HeroicInventions.Sim.Editor;
 public sealed record CatalogueEntry(
     string Id,
     string Description,
-    string ShapeKind,   // gear | pulley | drum | treadwheel | noria | screw | catapult-frame
+    string ShapeKind,   // gear | pulley | drum | treadwheel | noria | disc-wheel | cart-wheel | screw | catapult-frame
     string MeshStem,
     double Volume,
     Vec3 Inertia,        // per unit density, about local x/y/z (see shape.rkt)
     IReadOnlyDictionary<string, SExpr> ShapeProps)
 {
-    /// <summary>Wheels ride on an axle and turn; screws lift; everything else is a fixed fixture — see shape.rkt's wheel-kinds.</summary>
-    private static readonly HashSet<string> WheelKinds = ["gear", "pulley", "drum", "treadwheel", "noria"];
+    /// <summary>
+    /// Wheels ride on an axle and turn; screws lift; everything else is a fixed fixture — see shape.rkt's wheel-kinds (the disc and
+    /// spoked wheels too: built as fixtures, a cart wheel put on a windlass's shaft as its handle couldn't turn).
+    /// </summary>
+    private static readonly HashSet<string> WheelKinds = ["gear", "pulley", "drum", "treadwheel", "noria", "disc-wheel", "cart-wheel"];
 
     /// <summary>The part clause kind (wheel/screw/fixture) this entry becomes when placed — see machine.rkt's shaped-part.</summary>
     public string PartKind => ShapeKind switch

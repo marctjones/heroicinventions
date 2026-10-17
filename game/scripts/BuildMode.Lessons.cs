@@ -294,6 +294,10 @@ public partial class BuildMode
         _lessonNote.Modulate = why is null ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 0.6f, 0.5f);
         _lessonCheckAgain.Visible = step.Check.IsOutcome && run.Failure is not null;
         if (fresh && step.Variant is { } size) _variantChosen[EntryKeyOf(size)] = size;   // the card offers the size the lesson uses (from the list or a button)
+        if (fresh && step.Button == "gear_on" && step.Variant is { } wheel) ChooseShaftKind(EntryKeyOf(wheel));   // and "Put a wheel on this shaft" puts that wheel on
+        if (fresh && step.Preset is { } label && step.Highlight is { } lit && Presets.TryGetValue(EntryKeyOf(lit), out var sizes)
+            && Array.FindIndex(sizes, p => p.Label == label) is var preset and >= 0)
+            _presetChosen[EntryKeyOf(lit)] = preset;   // the card's size button pressed for it (a 3 m post)
         if (fresh && step.Select is { } role && run.Roles.TryGetValue(role, out var sel) && doc.Parts.ContainsKey(sel) && _selectedId != sel && _placingPaletteId is null)
             Select(sel);   // its inspector has the step's button
         SetLessonHighlight(step.Highlight);
@@ -341,9 +345,9 @@ public partial class BuildMode
         if (_lesson?.Current?.Check.Type == "balanced" && !Testing) StartTest();
     }
 
-    /// <summary>The material a lesson step asks new parts from its lit entry to be made of, or null.</summary>
+    /// <summary>The material a lesson step asks new parts from its lit entry (or its lit button's variant: a drum put on a shaft) to be made of, or null.</summary>
     private string? LessonMaterialFor(string key) =>
-        _lesson?.Current is { Material: { } m, Highlight: { } h } && h == key ? m : null;
+        _lesson?.Current is { Material: { } m } step && (step.Highlight == key || step.Button is not null && step.Variant is { } v && EntryKeyOf(v) == key) ? m : null;
 
     // -------------------------------------------------------- highlights
 

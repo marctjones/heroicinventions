@@ -19,7 +19,13 @@ namespace HeroicInventions.Sim.Editor;
 ///   (check join (kind rope) (between heavy light) (over pulley) (hoist 0.55))   a rope tied between those two remembered parts; the lesson then
 ///                                                            threads it over the remembered pulley and hangs "heavy" 0.55 m up (#183)
 ///   (check join (kind pipe) (between upper lower))           a pipe between two remembered tanks (either way round)
-///   (check place ... (then "(set {id} #:water 0)"))          commands run once it counts, {id} the part (a slim post, an emptied tank)
+///   (check join (kind rope) (between drum load) (wind-on drum) (hang 0.3))   a rope tied between them; the lesson then ties it again wound
+///                                                            on the drum (#:wind-on), the load hung plumb from the drum's winding side
+///                                                            0.3 m up; with (over pulley), over the remembered pulley's top first
+///   (check join (kind arbor) (between wheel drum))           the two remembered wheels on one axle; (kind mesh) for two gears in mesh
+///   (check place ... (then "(set {id} #:water 0)"))          commands run once it counts, {id} the part (a slim post, an emptied tank);
+///                                                            on a join, the rope or pipe (an arbor's or a mesh's second part); {drum}
+///                                                            any part the lesson remembers ((then "(set {drum} #:drive-rpm 3)"))
 ///   (check lifted (part light) (about 0.55) (within 0.08))   after a Test: the part ended that high, plus or minus (the Test's facts)
 ///   (check rolled (part ball) (far 1.0) (within 0.15))       after a Test: the ball went at the speed rolling from where it began gives,
 ///                                                            sqrt(10/7 g h) plus or minus 0.15 m/s, and ended at least 1 m from the start
@@ -30,8 +36,8 @@ namespace HeroicInventions.Sim.Editor;
 ///   (check turned (part third) (rpm 60) (within 2))          after a Test: that wheel was turning at 60 rpm at the end, either way, plus or minus
 ///
 /// A step's (highlight ...) is a palette entry (post, gear), test, part:ROLE (that part lit in the scene), or a button:
-/// button:gear_on, button:mesh_with or button:add_stage (the selected part's inspector button, "Put a gear on this shaft", "Add a
-/// meshing gear", "Add a stage") and button:preset:LABEL (the part's card's size button, "button:preset:3 m" in quotes). A step's
+/// button:gear_on, button:mesh_with or button:add_stage (the selected part's inspector button, "Put a gear on this shaft" (with
+/// the step's (variant drum-30cm), the drum: "Put a drum on this shaft"), "Add a meshing gear", "Add a stage") and button:preset:LABEL (the part's card's size button, "button:preset:3 m" in quotes). A step's
 /// (select crank) selects that remembered part as the step begins (and lights it while it isn't), so its inspector shows the button;
 /// a lit button is the one for that part.
 ///
@@ -39,7 +45,7 @@ namespace HeroicInventions.Sim.Editor;
 /// from straight in front, so that nothing stands between the camera and the ground the blocks go on.
 /// A step may also say (fail "..."): what to tell the player when the Test's
 /// outcome check is not met. It may also say (variant pulley-10cm): the size the parts list's card
-/// offers for this step. A place check may name (shape pulley) and (radius
+/// offers for this step; and (preset "3 m"): the size button its card has pressed (a 3 m post, not the usual 1 m). A place check may name (shape pulley) and (radius
 /// 0.1) for a catalogue part of that shape and size.
 ///
 /// A target is either a point, (at X Y Z), or a place on a remembered beam:
@@ -102,7 +108,8 @@ public sealed record Lesson(string Id, string Title, IReadOnlyList<LessonStep> S
             Radius = Number("radius"),
             Between = c.Field("between") is { } bt ? (Sym(bt, 1), Sym(bt, 2)) : null,
             Over = Opt("over"),
-            Hoist = Number("hoist") ?? 0,
+            WindOn = Opt("wind-on"),
+            Hoist = Number("hoist") ?? Number("hang") ?? 0,
             About = Number("about"),
             Within = Number("within") ?? 0.1,
             Far = Number("far"),
@@ -118,6 +125,7 @@ public sealed record Lesson(string Id, string Title, IReadOnlyList<LessonStep> S
                               step.Field("material") is { } m ? Sym(m, 1) : null, target, check)
         {
             Variant = step.Field("variant") is { } v ? Sym(v, 1) : null,
+            Preset = step.Field("preset") is { } pr ? Sym(pr, 1) : null,
             Fail = Str(step.Field("fail")),
             Select = step.Field("select") is { } sel ? Sym(sel, 1) : null,
         };
@@ -136,6 +144,9 @@ public sealed record LessonStep(string Text, string? Highlight, string? Material
 {
     /// <summary>The catalogue size the parts list's card should offer for this step (pulley-10cm), or null.</summary>
     public string? Variant { get; init; }
+
+    /// <summary>The size button the lit entry's card should have pressed for this step ((preset "3 m"): a 3 m post), or null.</summary>
+    public string? Preset { get; init; }
 
     /// <summary>What to say, in the lesson's own words, when a Test's outcome is not the worked one (its numbers filled in); null for a plain statement of the numbers.</summary>
     public string? Fail { get; init; }
@@ -160,6 +171,11 @@ public sealed record LessonCheck(string Type, string? Kind, string? Category, st
     public double? Radius { get; init; }
     public (string A, string B)? Between { get; init; }
     public string? Over { get; init; }
+
+    /// <summary>A rope join's remembered drum the rope is tied again wound on ((wind-on drum)), or null.</summary>
+    public string? WindOn { get; init; }
+
+    /// <summary>How far above where it stood the lesson hangs a rope's load, metres ((hoist 0.55), or (hang 0.3) on a wound rope).</summary>
     public double Hoist { get; init; }
     public double? About { get; init; }
     public double Within { get; init; } = 0.1;
@@ -181,7 +197,10 @@ public sealed record LessonCheck(string Type, string? Kind, string? Category, st
     /// <summary>A "turned" check's speed at the end of the Test, rpm (either way round).</summary>
     public double? Rpm { get; init; }
 
-    /// <summary>Commands run once the step is done, "{id}" being the part that counted: ((then "(set {id} #:water 0)") pours a tank out, for one).</summary>
+    /// <summary>
+    /// Commands run once the step is done, "{id}" being the part that counted ((then "(set {id} #:water 0)") pours a tank out, for one;
+    /// on a join, the rope or pipe, or an arbor's or a mesh's second part), "{drum}" any part the lesson remembers by that name.
+    /// </summary>
     public IReadOnlyList<string> Then { get; init; } = [];
 
     /// <summary>A check on how a Test run came out: the lesson reads the run's facts, and the player presses Test (only "balanced" is run by the lesson itself).</summary>
@@ -353,7 +372,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
     private static string KindName(string kind) => kind == "lever" ? "beam" : kind == "tank" ? "water tank" : kind.Contains('-') ? kind[..kind.IndexOf('-')] : kind;
 
     /// <summary>A part's kind in a person's words: "pulley", "block", "water tank".</summary>
-    private static string PartName(PartSpec p) => p.Props.GetValueOrDefault("shape") is SSymbol shape ? shape.Name : KindName(p.Kind);
+    private static string PartName(PartSpec p) => p.Props.GetValueOrDefault("shape") is SSymbol shape ? shape.Name.Replace('-', ' ') : KindName(p.Kind);
 
     /// <summary>A part in a person's words: "pulley", "granite block", "water tank".</summary>
     private string Describe(PartSpec p) =>
@@ -411,7 +430,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         {
             if (c.As is { } name) Roles[name] = best.Part.Id;
             IReadOnlyList<string> settle = target is { } to && best.Off > 1e-4 ? [$"(move {best.Part.Id} ({N(to.X)} {N(to.Y)} {N(to.Z)}))"] : [];
-            settle = [.. settle, .. c.Then.Select(t => t.Replace("{id}", best.Part.Id))];
+            settle = [.. settle, .. ThenLines(c, best.Part.Id)];
             Advance();
             return (true, settle, null);
         }
@@ -436,7 +455,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         else if (!GearOk(about))
             Nudge = GearNudge(c, about) + " Take it away, pick the right size in the box under the parts list and place it again.";
         else if (!ShaftOk(about))
-            Nudge = $"That {used} is not on the {c.OnShaft}'s axle. Take it away, select the {c.OnShaft} and press Put a gear on this shaft.";
+            Nudge = $"That {used} is not on the {c.OnShaft}'s axle. Take it away, select the {c.OnShaft} and press Put a {ShaftSlots.Noun(about.Symbol("shape", "gear"))} on this shaft.";
         else if (target is { } tg)
         {
             var d = new Vec3(tg.X - about.At.X, tg.Y - about.At.Y, tg.Z - about.At.Z);
@@ -464,6 +483,11 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         bool size = c.Radius is not { } want || Math.Abs(part.Number("radius", 0) - want) < 1e-6;
         return (c.Kind is null || part.Kind == c.Kind) && shape && category && size && TeethOk(c, part) && CatalogueOk(c, part) ? role : null;
     }
+
+    /// <summary>A done step's then-lines: {id} the part (or link) that counted, {ROLE} the part the lesson remembers by that name.</summary>
+    private IEnumerable<string> ThenLines(LessonCheck c, string id) =>
+        c.Then.Select(t => System.Text.RegularExpressions.Regex.Replace(t.Replace("{id}", id), @"\{([a-z][a-z0-9-]*)\}",
+                                                                        m => Roles.TryGetValue(m.Groups[1].Value, out var part) ? part : m.Value));
 
     /// <summary>Whether a part has the teeth a check asks for (any, when it names none).</summary>
     private static bool TeethOk(LessonCheck c, PartSpec x) => c.Teeth is not { } want || Math.Abs(x.Number("teeth", 0) - want) < 1e-6;
@@ -521,7 +545,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         if (partners.FirstOrDefault(Fits) is { } got)
         {
             if (c.As is { } name) Roles[name] = got.Id;
-            IReadOnlyList<string> settle = [.. c.Then.Select(t => t.Replace("{id}", got.Id))];
+            IReadOnlyList<string> settle = [.. ThenLines(c, got.Id)];
             Advance();
             return (true, settle, null);
         }
@@ -542,14 +566,22 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
 
     private readonly record struct Link(string Id, string Kind, string A, string B);
 
+    /// <summary>The design's joins: ropes and pipes by their own ids; meshes ("a+b") and arbors (each wheel after an axle's first, "first+wheel").</summary>
     private static List<Link> Links(EditorDocument doc) =>
         [.. doc.Ropes.Select(r => new Link(r.Id, "rope", r.From.Part, r.To.Part)),
-         .. doc.Pipes.Values.Select(p => new Link(p.Id, "pipe", p.From.Part, p.To.Part))];
+         .. doc.Pipes.Values.Select(p => new Link(p.Id, "pipe", p.From.Part, p.To.Part)),
+         .. doc.Meshes.Select(m => new Link(MeshKey(m), "mesh", m.A, m.B)),
+         .. doc.Arbors.SelectMany(a => a.Parts.Skip(1).Select(p => new Link($"{a.Parts[0]}+{p}", "arbor", a.Parts[0], p)))];
+
+    /// <summary>Whether a join of a step's kind is between parts a and b, either way round; for an arbor, whether they turn on one axle at all.</summary>
+    private static bool Joins(EditorDocument doc, Link l, string kind, string a, string b) =>
+        l.Kind == kind && (l.A == a && l.B == b || l.A == b && l.B == a
+                           || kind == "arbor" && (l.A == a || l.B == a) && ShaftSlots.AxleMates(doc, a).Contains(b));
 
     /// <summary>Whether the join a step asks for is in the design between the parts it names (either way round).</summary>
     private bool JoinMade(EditorDocument doc, LessonCheck c) =>
         c.Between is { } pair && Roles.TryGetValue(pair.A, out var a) && Roles.TryGetValue(pair.B, out var b)
-        && Links(doc).Any(l => l.Kind == c.Kind && (l.A == a && l.B == b || l.A == b && l.B == a));
+        && Links(doc).Any(l => Joins(doc, l, c.Kind ?? "", a, b));
 
     private string Named(EditorDocument doc, string part) => doc.Parts.TryGetValue(part, out var p) ? $"the {Describe(p)}" : part;
 
@@ -564,9 +596,12 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
             return (false, [], Nudge);
         }
         var links = Links(doc);
-        if (links.FirstOrDefault(l => l.Kind == c.Kind && (l.A == a && l.B == b || l.A == b && l.B == a)) is { Id: not null } made)
+        if (links.FirstOrDefault(l => Joins(doc, l, c.Kind ?? "", a, b)) is { Id: not null } made)
         {
-            var settle = c.Kind == "rope" && c.Over is not null ? ThreadRope(doc, made, pair.A, pair.B, c) : [];
+            IReadOnlyList<string> settle = c.Kind != "rope" ? []
+                : c.WindOn is not null ? WindRope(doc, made, pair, c)
+                : c.Over is not null ? ThreadRope(doc, made, pair.A, pair.B, c) : [];
+            settle = [.. settle, .. ThenLines(c, made.Kind is "rope" or "pipe" ? made.Id : b)];
             Advance();
             return (true, settle, null);
         }
@@ -608,9 +643,74 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         ];
     }
 
+    /// <summary>
+    /// The rope the player tied between a drum and its load is taken off and tied again wound on the drum, (rope … #:wind-on drum), as the
+    /// engine's own windlasses and cranes are: it leaves the drum's rim on the side that turning the drum forward (+ about its axle, the
+    /// way a positive #:drive-rpm turns it) winds it on, and runs to the top of the load, hung <c>hang</c> above where it stood on the
+    /// ground. Without a pulley the load hangs plumb under that side of the rim, x = drum + r across the axle (the rope's path is then
+    /// straight down from the rim). With (over pulley) the rope goes from the drum to the pulley's near side, over its top (the five rim
+    /// points <see cref="ThreadRope"/> uses, here from the side facing the drum round to the far one) and down its far side to the load,
+    /// hung plumb under it; the pulley turns with the rope (#:turns). Cut to the length of that path: the tangent off the drum
+    /// (sqrt(d² − r²) across the axle, d from the drum's middle to the pulley's near side, and any run along the axle), 4 chords of
+    /// 2 r sin 22.5° round the pulley, and the drop. So the rope starts just taut. It keeps the material and thickness the player tied.
+    /// </summary>
+    private IReadOnlyList<string> WindRope(EditorDocument doc, Link made, (string A, string B) pair, LessonCheck c)
+    {
+        var drum = doc.Parts[Roles[c.WindOn!]];
+        var load = doc.Parts[Roles[pair.A == c.WindOn ? pair.B : pair.A]];
+        var tied = doc.Ropes.First(r => r.Id == made.Id);
+        double r = drum.Number("radius", 0.1);
+        double half = load.Kind == "ball" ? load.Number("radius", 0.05) : load.Number("size", 0.1) / 2;
+        double hangY = half + c.Hoist;
+        var axle = Unit(Neg(ShaftSlots.BehindWheel(drum)));
+        string over = "";
+        Vec3 hangs;
+        double length;
+        if (c.Over is { } pulleyRole && Roles.TryGetValue(pulleyRole, out var pid) && doc.Parts.TryGetValue(pid, out var pulley))
+        {
+            double rp = pulley.Number("radius", 0.1);
+            var p = pulley.At;
+            var across = Across(Unit(Neg(ShaftSlots.BehindWheel(pulley))));
+            var far = Dot(Minus(p, drum.At), across) >= 0 ? across : Neg(across);   // away from the drum
+            Vec3 Rim(double deg) => new(p.X + rp * Math.Cos(deg * Math.PI / 180) * far.X, p.Y + rp * Math.Sin(deg * Math.PI / 180), p.Z + rp * Math.Cos(deg * Math.PI / 180) * far.Z);
+            var rim = new double[] { 180, 135, 90, 45, 0 }.Select(Rim).ToList();
+            var d = Minus(rim[0], drum.At);
+            double along = Dot(d, axle), inPlane2 = Dot(d, d) - along * along;
+            double tangent = Math.Sqrt(Math.Max(0, inPlane2 - r * r) + along * along);
+            hangs = new Vec3(rim[^1].X, hangY, rim[^1].Z);
+            length = tangent + 4 * 2 * rp * Math.Sin(Math.PI / 8) + (p.Y - (hangY + half));
+            over = $" #:over ({string.Join(' ', rim.Select(q => $"({N(q.X)} {N(q.Y)} {N(q.Z)})"))}) #:turns {pulley.Id}";
+        }
+        else
+        {
+            var side = Across(axle);   // turning forward about the axle carries this side of the rim up
+            hangs = new Vec3(drum.At.X + r * side.X, hangY, drum.At.Z + r * side.Z);
+            length = drum.At.Y - (hangY + half);
+        }
+        return
+        [
+            $"(remove {made.Id})",
+            $"(move {load.Id} ({N(hangs.X)} {N(hangs.Y)} {N(hangs.Z)}))",
+            $"(rope {made.Id} #:from ({drum.Id} 0 0 0) #:to ({load.Id} 0 {N(half)} 0) #:length {N(length)} #:wind-on {drum.Id}{over} #:material {tied.Material} #:diameter {N(tied.Diameter)})",
+        ];
+    }
+
+    /// <summary>The level way across an axle that turning forward about it carries up: up × axle (an axle along +z: +x), or +x for an upright axle.</summary>
+    private static Vec3 Across(Vec3 axle)
+    {
+        var s = new Vec3(axle.Z, 0, -axle.X);
+        double n = Math.Sqrt(s.X * s.X + s.Z * s.Z);
+        return n < 1e-9 ? new Vec3(1, 0, 0) : new Vec3(s.X / n, 0, s.Z / n);
+    }
+
+    private static Vec3 Neg(Vec3 v) => new(-v.X, -v.Y, -v.Z);
+    private static Vec3 Minus(Vec3 a, Vec3 b) => new(a.X - b.X, a.Y - b.Y, a.Z - b.Z);
+    private static double Dot(Vec3 a, Vec3 b) => a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+    private static Vec3 Unit(Vec3 v) { double n = Math.Sqrt(Dot(v, v)); return n < 1e-12 ? v : new Vec3(v.X / n, v.Y / n, v.Z / n); }
+
     // --------------------------------------------------------- outcomes
 
-    /// <summary>What the last Test run saw (its facts), or null before any.</summary>
+    /// <summary>What the last Test run saw (its facts), or null before any; once the lesson is finished, the run that finished it.</summary>
     public TestFacts? LastFacts { get; private set; }
 
     /// <summary>
@@ -622,7 +722,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
     public bool OnTest(IReadOnlyDictionary<string, List<double>> tilts, IReadOnlyDictionary<string, double> masses, TestFacts? facts = null, EditorDocument? doc = null)
     {
         foreach (var (id, m) in masses) SimMasses[id] = m;
-        if (facts is not null) LastFacts = facts;
+        if (facts is not null && !Finished) LastFacts = facts;   // a finished lesson's words keep the numbers of the Test that finished it (the player tries one walker after)
         var beamRole = Current?.Check.Beam ?? Roles.Keys.FirstOrDefault(r => r == "beam");
         if (beamRole is not null && Roles.TryGetValue(beamRole, out var beamId) && tilts.TryGetValue(beamId, out var trace))
             LastTilt = trace.Select(Math.Abs).DefaultIfEmpty(0).Max();

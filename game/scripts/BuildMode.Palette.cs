@@ -346,7 +346,15 @@ public partial class BuildMode
         _paletteList.SetItemTooltip(i, e.Says);
         if (_thumbs.TryGetValue(e.Key, out var t)) _paletteList.SetItemIcon(i, t);
         else if (e.Key == "rope" && RopeIcon() is { } rope) _paletteList.SetItemIcon(i, rope);
+        else if (DisplayServer.GetName() != "headless") _paletteList.SetItemIcon(i, BlankThumb);   // its thumbnail's room kept while it renders
     }
+
+    /// <summary>
+    /// A clear picture the size of a thumbnail, held in a row until its own renders (one a frame, after the list is filled): a row
+    /// without an icon is shorter, and each picture that arrived pushed every row under it down, so a click on a row far down the list,
+    /// a person's or a script's palette-click, landed on the row above (found playing the windlass lesson: Winding drum took Treadwheel).
+    /// </summary>
+    private static readonly ImageTexture BlankThumb = ImageTexture.CreateFromImage(Image.CreateEmpty(PaletteThumbnails.Size, PaletteThumbnails.Size, false, Image.Format.Rgba8));
 
     /// <summary>The coiled-rope picture (drawn by the skins session), when it is there.</summary>
     private static Texture2D? RopeIcon()
@@ -448,7 +456,7 @@ public partial class BuildMode
         _cardJoins.Text = e.Joins;
         if (key == "windmill")   // the snap onto a post (building plan, phase 1), and how to get out of it
             _cardJoins.Text = (e.Joins + " Over a post it sits on the post's top, the post under its gears behind the sails; hold Alt to place it freely.").Trim();
-        if (key == "gear" && _shaft is { } shaft)   // a gear on a shaft (building plan, phase 2)
+        if (_shaft is { } shaft && key == _placingKey)   // a gear (or any wheel) on a shaft (building plan, phase 2; tutorial plan, gap 7)
             _cardJoins.Text = $"Going on {shaft.Anchor}'s shaft, joined on its axle: slide it along the line with the mouse. Pick its size below; hold Alt to place it freely (still joined).";
         _cardJoins.Visible = _cardJoins.Text != "";
         _cardPicture.Texture = _thumbs.GetValueOrDefault(key) ?? (key == "rope" ? RopeIcon() : null);

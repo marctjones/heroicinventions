@@ -116,4 +116,36 @@ public static class ShaftSlots
     }
 
     private static string Num(double v) => Math.Round(v, 6).ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// A wheel's shape (or its parts list entry) in the word "Put a … on this shaft" uses: a gear, a drum, a pulley, a wheel (the spoked
+    /// cart wheel), a solid wheel, a treadwheel.
+    /// </summary>
+    public static string Noun(string shape) => shape switch
+    {
+        "cart-wheel" => "wheel",
+        "disc-wheel" => "solid wheel",
+        "antikythera-gear" => "gear",
+        _ => shape.Replace('-', ' '),
+    };
+
+    /// <summary>The gap left between the faces of two wide wheels put on one axle (a cart wheel behind a windlass's drum), metres.</summary>
+    public const double Clearance = 0.05;
+
+    /// <summary>How far a wheel reaches along its own axle either side of its #:at: half a drum's #:length, half any other wheel's #:width (0 when it has neither).</summary>
+    public static double HalfLength(PartSpec part) =>
+        (part.Props.GetValueOrDefault("shape") is SSymbol { Name: "drum" } ? part.Number("length", 0) : part.Number("width", 0)) / 2;
+
+    /// <summary>
+    /// Where along <paramref name="s"/> a wheel reaching <paramref name="newHalf"/> either side of its middle goes by default (tutorial plan,
+    /// gap 7: "Put a wheel on this shaft"): <see cref="Shaft.DefaultT"/>, unless that puts it inside a wide wheel already on the axle (a
+    /// 0.6 m drum, a 1.2 m treadwheel), when it goes just clear of the hindmost one, <see cref="Clearance"/> between their faces. Module-5
+    /// gears (4 cm wide) never need it: two of them span 0.04 + 0.05 &lt; <see cref="Spacing"/>, so the route's train stands where it did.
+    /// </summary>
+    public static double ClearT(EditorDocument doc, Shaft s, double newHalf)
+    {
+        var faces = s.Mates.Select(m => doc.Parts.GetValueOrDefault(m)).Where(p => p is { Kind: "wheel" })
+                           .Select(p => Dot(Minus(p!.At, s.Point), s.Behind) + HalfLength(p)).ToList();
+        return faces.Count == 0 ? s.DefaultT : Math.Max(s.DefaultT, faces.Max() + newHalf + Clearance);
+    }
 }
