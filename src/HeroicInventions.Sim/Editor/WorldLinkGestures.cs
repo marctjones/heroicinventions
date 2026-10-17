@@ -12,8 +12,8 @@ namespace HeroicInventions.Sim.Editor;
 /// </summary>
 public static class WorldLinkGestures
 {
-    /// <summary>Parts a shaft can take: things that turn on an axle, in the sim (windmills, water and jet wheels) or the physics engine (wheels, screws).</summary>
-    public static readonly string[] Turning = ["windmill", "waterwheel", "jetwheel", "smokejack", "wheel", "screw"];
+    /// <summary>Parts a shaft can take: things that turn on an axle, in the sim (windmills, water and jet wheels, Stirling engines) or the physics engine (wheels, screws).</summary>
+    public static readonly string[] Turning = ["windmill", "waterwheel", "jetwheel", "smokejack", "stirling", "wheel", "screw"];
 
     public static string Prompt(LinkEnd? first) =>
         first is null ? "Join machines: click a tank's port, a turning part, a generator or a battery bank on one machine"

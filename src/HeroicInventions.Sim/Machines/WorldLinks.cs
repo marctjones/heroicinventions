@@ -390,6 +390,7 @@ public sealed class WorldLinks
             if (rt.Windmills.TryGetValue(end.Part, out var mill)) return mill;
             if (rt.WaterWheels.TryGetValue(end.Part, out var wheel)) return wheel;
             if (rt.JetWheels.TryGetValue(end.Part, out var jet)) return jet;
+            if (rt.Stirlings.TryGetValue(end.Part, out var engine)) return engine;   // #220: the Stirling route's engine turns the found motor
             throw new MachineFormatException(rt.Def.Part(end.Part) is { } p
                 ? $"link {spec.Id}: {end.Label}'s {end.Part} is a {p.Kind}, which doesn't turn on an axle a shaft can take"
                 : $"link {spec.Id}: {end.Label} has no part {end.Part}");
