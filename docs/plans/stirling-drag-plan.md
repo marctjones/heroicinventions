@@ -217,3 +217,43 @@ Worked balance `P_ind = loss(w_engine) + k_g (w_rotor - w_cut) w_rotor`, with w_
 With real losses that grow with the engine's speed, a plain shaft makes the engine run at the motor's 1,580 rpm, where it loses 43-49 W. A 4:1 stage lets it run at about 390 rpm, where it loses about 3 W. So the constraint is met by gearing the engine down (a player's build), not by the coefficients. The doc's original "one gear stage brings it to the generator's cut-in", which #220 found had no effect in the frictionless model, becomes worth building again.
 
 A player cannot build that stage today. `MachineView.Gears.IsSimTurned` leaves Stirlings out, so an engine on an arbor drives no Jolt gear, and the join gesture's link ratio is 1 (`(ratio N)` exists only in a save or world file). Making a Stirling drive gears on its arbor, as a windmill does, fills an omission like #220's link change, but it is outside this plan's files (`MachineView.Gears.cs` is unowned: the lead's call). This is for the lead and the owner before slice 1's numbers are fixed in the tests.
+
+## 7. The second pass (Fable, after the morning constraint), and slice 0
+
+Fable's second pass on #269, given the lead's constraint, kept the coefficients (0.068 N·m and 8.3e-6 N·m·s²; not fitted) and added the following. Slice 0 then made the gear stage of section 6 buildable.
+
+**The sol-2 morning, plain shaft (W, Option 1).** The drag at the cut-in is 42.9 W whatever the split: at the rated speed every split gives η_m.
+- The found motor can first load when the engine's power passes 42.9 W: about 07:56 quasi-steady, about 08:05 with the engine's 6 K thermal lag.
+- From rest the pair reaches the cut-in in 355 s at 48 W, or 93 s at 101 W.
+- Time-stepped with the generator loading: cut-in 07:59-08:05, the 25 Wh bank full 08:44-08:50 (the #232 plan's frictionless 07:49:41 and 08:29). At its 08:15 wake the bank holds about 3.7 Wh at 24 W, not 16.5 Wh at 51 W. #232's section 2 table and fallback are to be redone with these numbers.
+- After sunset the losses bring the pair from 286 rad/s to rest in 17 minutes (I/√(τ_f k)·atan(ω√(k/τ_f)) = 1,004 s), at rest by about 18:00, before the cells pass 0 °C at 19:27: no dump into the warming bank.
+- The rated speed moves the margin: rated 1,200 rpm gives 76 W of drag at the cut-in (loads from about 08:16), 1,800 rpm gives 27.5 W (from 07:46).
+
+**The tests whose lines move (Option 1):**
+- `machine-behavior-test.rkt:1356-1383`: `'indicated-power` against `(power K T tc)`; `'rpm` against the root of `(3 + τ_f + k ω²) ω = P`, 23.98/36.15/20.87 rad/s = 229.0/345.2/199.3 rpm.
+- `StirlingShaftLinkTests`: unloaded 84.0 ± 0.5 rad/s at 20 s, with work = kinetic + `LossHeat`; wired 160.66 rad/s, 0.411 N·m, 52.8 W.
+- `stirling-route-test.rkt`: run A `eng.indicated-power` 214.0 and `eng.shaft-power` 165.2, 1,583 rpm, 132 W; run B 911 rpm asleep, then 1,579 rpm, 124.6 W, 9.2 Wh; run C inverted to the free speed (2,577 ± 50 rpm at 200 s, 2,721 ± 40 at 400 s, `spin-limit.hits` 0).
+- `stirling-gear-test.rkt` (slice 0): with the losses, the 4:1 stage gives 168.7 W of charge at noon (section 6), against 132 W on a plain shaft.
+
+**StirlingLossTests also gets** (vi): `friction-torque 0` and `flow-loss 0` reproduce today's √(2Pt/I) (86.2 rad/s at 20 s), so the losses are numbers, not a formula change.
+
+**`stirling-sleep-test.rkt` (new, four runs at once, about 6 minutes):**
+- **D, the free speed under the clamp:** run C's shape. 2,721 ± 40 rpm at 400 s, `eng.free-rpm` 2,727-2,734, `spin-limit.hits` 0.
+- **E, watched against a paused sleep of the same span:** the bank warm, capacity 5,000 Wh; E-watched `waitsim 1300`, E-paused `waitsim 100; sleep until scene.elapsed above 1200 limit 1500 paused; waitsim 1300`. Predicted: 43.5 ± 1.5 Wh in both, equal within 1%; `motor.rpm` 1,583 ± 15 at every common row; `motor.held` 0 throughout E-paused; the log line `motor: turned through the sleep by built-1.eng` and no `Machines paused: … motor`; the hot ends equal within 0.1 K.
+- **F, joined with the bank cold through a paused sleep, then warmed:** at the wake 2,727 ± 50 rpm and no charge. Then the pair falls to 1,583 rpm within about 60 s and the bank holds 10.5 ± 1.5 Wh at 1,500 s (3.6 Wh of it the flywheels'). No `motor.rpm` frame above 2,800, and none at 0 after the wake.
+
+**Stand-in details:**
+- `MachineView.Electrics`' "sleeping, machines paused" label is false for a sleep-driven generator, which shows its real watts.
+- `Resume` from a mid-sleep save: `Main.LoadWorld` (:1267-1303) restores body velocities before `BeforePause` reads them. A test loads a mid-sleep save and asserts the stand-in's speed equals the save's rotor speed.
+
+**Slice 0, done before the losses (the lead, 2026-10-17):** a Stirling drives Jolt gears on its arbor, as a windmill does. Before it, the view failed to build an arbor holding an engine (`KeyNotFoundException: 'eng'` in `BuildArbors`); the engine turned alone at 462 rpm and its gears stood at 0. `MachineView.Gears.IsSimTurned`, `SimShaft` and `SimAngle` now count Stirlings. `SimSense` takes the engine's crankshaft along X through its flywheel, 0.3 m over its foot (`StirlingShaftHeight`), turning forward about +X. The sim's mirror of the rule (`MachineRuntime.RegisterOperatorFields`) counts them too.
+
+`stirling-gear-test.rkt`, frictionless, worked against measured:
+
+| | Worked | Measured |
+|---|---|---|
+| engine | 401.5 rpm | 400.9 rpm |
+| the 72 | at the engine's speed | 401.7 rpm |
+| the 18 | 4.000× the 72 | 1,606.8 rpm (4.000×) |
+| rotor | 1,606 rpm | 1,605.7 rpm |
+| charge | 171 W | 170.6 W |
