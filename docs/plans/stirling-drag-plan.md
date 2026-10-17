@@ -12,6 +12,37 @@ With the defaults the #220 engine runs free at **2,734 rpm at 214.3 W** (2,689 a
 
 For (b): a frozen Jolt body reads zero speed and drops impulses, so stepping a Jolt-to-Jolt shaft through a paused sleep is a no-op, and the windmill route's traces are predicted **byte-identical**. A shaft from a sim engine to a Jolt rotor needs a sim stand-in for the rotor, designed in section 2.
 
+## Decided 2026-10-17 (supersedes sections 1.1-1.3 and 1.5's coefficients)
+
+**The owner chose ONE drag term**: "our engine is a simplified simulation of the physics", with no literature hunt for coefficients. The loss torque on the engine's shaft is `k ω²` (power `k ω³`), one part property `#:drag` in N·m·s². Its default comes from a stated rule of thumb, not a measurement: **the template engine loses 20% of its indicated power at its rated 1,500 rpm under ten heliostats at the crater's noon.** A constant friction torque alone would give a free speed of 5x the rated speed (7,500 rpm), and a `c ω` drag alone √5x (3,350 rpm), both over Jolt's 3,000 rpm clamp. The `ω²` torque gives ∛5x.
+
+**The lead chose Option 2** (delegated by the owner): 0.35 of Carnot is the SHAFT's figure at the rated 1,500 rpm, because published fractions of Carnot are brake (shaft) measurements that already contain the engine's friction. Sources the lead gave:
+- the NASA GPU-3 at a 677 °C heater gas, 6.9 MPa and 1,500 rpm has a peak brake thermal efficiency of 26.4% (hydrogen) and 21.3% (helium) (Thieme et al., TRID 171585);
+- research engines reach about 50% of Carnot (the Pasco manual);
+- 20-50% (a 2011 study).
+
+So the indicated default becomes 0.35 / 0.80 = **0.4375**, and the shaft gives 0.35 at 1,500 rpm. Option 1 (0.35 as the gas cycle's, the shaft about 0.27 of Carnot at 1,500 rpm) is one constant away (`#:carnot-fraction 0.35`) if the owner flips it.
+
+Worked (W, 2026-10-17, before any run). The indicated power at noon is 214.3 × 1.25 = 267.9 W (the hot end's balance has no `f` in it, so Th stays 98.75 °C). So **k = 0.2 × 267.9 / 157.08³ = 1.38e-5 N·m·s²**, and the free speed is (P/k)^⅓ = 157.08 × ∛5 = **268.6 rad/s, 2,565 rpm** at noon: under the clamp at any power, since the ratio does not depend on P.
+
+| Case (P_ind) | plain shaft: rotor rpm, τ_g, to the motor, charge, drag | 4:1 stage: rotor rpm, charge, drag (engine rpm) |
+|---|---|---|
+| run A, noon, hot end given (267.9 W) | 1,601, 1.210 N·m, 202.8 W, **162.2 W**, 65.1 W | 1,630, **213.4 W**, 1.07 W (408) |
+| run B, 12:39 (255.6 W) | 1,595, 1.144, 191.2, **152.9 W**, 64.5 | 1,625, 203.6, 1.06 (406) |
+| 08:00 sol 2 (60.0 W) | 1,503, 0.039, 6.1, **4.9 W**, 53.9 | 1,531, **47.3 W**, 0.89 (383) |
+| 08:30 sol 2 (126.2 W) | 1,536, 0.428, 68.8, 55.0, 57.5 | 1,564, 100.2, 0.95 (391) |
+| 09:00 sol 2, time-stepped (162.5 W) | 1,553, 0.634, 103.1, 82.5, 59.4 | 1,581, 129.2, 0.98 (395) |
+
+**The morning constraint: the 4:1 stage meets it, a plain shaft does not.** On a plain shaft the engine loses most of its 08:00 power (54 of 60 W) to its own drag at the motor's 1,500 rpm; geared 4:1 it turns at about 383 rpm and loses under 1 W. The docs say so plainly.
+
+#220's run A moves from 170.6 W measured to 162.2 W of charge (5%) on a plain shaft.
+
+`mars-stirling` (three engines on 3 N·m loads): pinned at `#:carnot-fraction 0.35`, so its header's worked case stands. With the drag: 233.9 / 352.1 / 203.6 rpm and 73.5 / 110.6 / 64.0 W into the loads, against 234.6 / 354.3 / 204.0 rpm before. Taking the new 0.4375 default instead would make it 292 / 439 / 254 rpm.
+
+`StirlingShaftLinkTests` (the matched engine, 111.3 W): unloaded, the free speed is 200.4 rad/s; wired to a warm bank, the rotor settles at 1,528 rpm with 0.341 N·m, 54.6 W to the motor and 43.7 W of charge.
+
+The paused-sleep stand-in (section 2) is unchanged. The engine's free speed through a joined, open-circuit sleep is 2,565 rpm at noon's power: no runaway.
+
 ## 0. What the code does today (S/M)
 
 1. `StirlingEngine.Step`: `P = f(1 - Tc/Th)·K(Th - Tc)`, torque `P / max(w, 1)`, nothing else loads it; `ShaftPower` is `P`; 0.05 s substeps. Unloaded it runs up as sqrt(2Pt/I) (M: 950 rpm after 25 s; run C hit the clamp at 140 s).
