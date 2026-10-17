@@ -1,0 +1,81 @@
+;; Lesson 8: the mill, the fourth of "Build five machines" (docs/plans/tutorial-plan.md). Read by
+;; src/HeroicInventions.Sim/Editor/Lessons.cs; the format is described there.
+;;
+;; The numbers, worked by hand before writing the steps (build mode's workshop: Earth air at 20 C, 1.2041 kg/m³, a 6 m/s wind; the
+;; palette's windmill, sails 10 m from hub to tip and 1,500 kg, taking at best 0.3 of the wind with their tips at 2.5 times its speed;
+;; racket/machines/windmills.rkt; the catalogue's module-5 bronze gears, 8,800 kg/m³):
+;;   the sails' torque falls in a straight line with their speed: tau = tau* (2 - w / w*), tau* = 1/2 rho pi R² v² R x 0.3 / 2.5 =
+;;   8,171 N·m at w* = 2.5 v / R = 1.5 rad/s, so 16,342 N·m standing and nothing at 3.0 rad/s, free
+;;   the millstones, set by the lesson (#:load 11440), hold back 11,440 N·m: the sails settle where 8,171 (2 - w / 1.5) = 11,440,
+;;   w = 0.9 rad/s, 8.59 rpm; the last pinion at 256 x 0.9 = 230.4 rad/s = 2,200 rpm, under the engine's 3,000 rpm limit (unloaded,
+;;   256 x 3.0 = 768 rad/s would be past it)
+;;   what turns: the sails 1/3 x 1,500 x 10² = 50,000 kg·m² (MachineRuntime: slender sails from the hub), the gears reflected to the
+;;   sails' shaft by the square of their speed: a 72 is 0.575 kg·m² (6.534e-5 x 8,800), an 18 0.00221: 0.575 + 16 x 0.577 + 256 x 0.577
+;;   + 4,096 x 0.577 + 65,536 x 0.00221 = 2,667, so 52,667 kg·m² in all; the torque's slope, 8,171 / 1.5 = 5,447 N·m per rad/s, gives a time
+;;   constant 52,667 / 5,447 = 9.67 s: from rest w(t) = 0.9 (1 - e^(-t / 9.67))
+;;   at the Test's end, 30 s (a turning machine runs it all): w = 0.9 x (1 - e^(-3.103)) = 0.8596 rad/s, the sails at 8.21 rpm, the last
+;;   pinion at 256 x 0.8596 = 220.05 rad/s = 2,101.3 rpm; the sails' shaft has turned 0.9 x (30 - 9.67 x 0.955) = 18.69 rad, 2.9745 turns,
+;;   the last pinion 256 times as many: 761.5. The Test's checks: the last pinion 2,100 within 150 rpm, and 256 within 2 turns a turn.
+;;   The force at the pinion is the millstones' 11,440 / 256 = 44.7 N·m.
+;; Traced (2026-10-17: the rig typed into build mode and Tested before the steps were written, then this lesson played through by the
+;; mouse words, headless by racket/heroic/tests/lesson-test.rkt; the stages named by their roles as "Add a stage" builds them):
+;; "t=30.01 by=limit | turns wheel-a=2.9756 peak=2.9756 rpm=8.2 | ... | turns pinion-e=761.9428 peak=761.9428 rpm=2101.3": the ratio
+;; 761.9428 / 2.9756 = 256.06 (wheel-a is on the sails' arbor: the sails themselves have no body for the Test to read); the Test's masses
+;; 34.872 kg a 72, 2.124 kg an 18; the live ratio "sails -> pinion-e, ratio 256:1 (4 meshes)". No spin-limit warning.
+;;
+;; Geometry: the route's mill (game/routes/lonely-rover-opening/solve.steps): the 10.6 m tower (its card's third size) at (0.45 0 -1.45),
+;; under the gear train; the windmill's ghost over it sits with its hub on the tower's top, 0.45 m up, at (0 11.05 0), facing +z; "Add a
+;; stage" puts each 72 on the last shaft (1.3 m behind the hub, then 0.1 m further each time) and its 18 on the pitch circle at +x,
+;; 0.225 m across, and frames the pair from behind.
+
+(lesson mill
+  (title "Lesson 8: the mill")
+  (view 0.55 0.12 34 0 12 0)
+
+  (step
+    (text "A windmill turns slowly and with great force; a millstone or a dynamo wants to turn fast. Gears trade one for the other. First the mill's tower: pick Post in the parts list (it is lit up). The lesson has pressed 10.6 m on its card, the tower the sails need to clear the ground. Click on the green tower.")
+    (highlight post)
+    (preset "10.6 m")
+    (target (kind post) (at 0.45 0 -1.45) (within 0.6))
+    (check place (kind post) (as post)))
+
+  (step
+    (text "Now the sails. Pick Windmill (lit up; the lesson has opened Show all parts). Over the tower its ghost sits on the tower's top, the tower under its gears: click there. The lesson then sets millstones grinding on its shaft, holding the sails back with 11,440 newton-metres: a mill at work, as the route's mill would be with corn in it.")
+    (highlight windmill)
+    (material oak)
+    (target (kind windmill) (at 0 11.05 0) (within 0.3))
+    (check place (kind windmill) (as sails)
+           (then "(set {id} #:load 11440)")))
+
+  (step
+    (text "The first stage: a big wheel on the sails' shaft, turning a small pinion. The sails are selected: press Add a stage (lit, in the panel on the right; scroll down if you can't see it). Its sizes are already 72 drives 18: the pinion has a quarter of the wheel's teeth, so it turns 4 times as fast as the sails.")
+    (select sails)
+    (highlight button:add_stage)
+    (check stage (on sails) (as wheel-a pinion-b) (teeth 72 18)))
+
+  (step
+    (text "The pinion is selected now. Press Add a stage again: a second 72 on the pinion's shaft, turning another 18. Four times four: 16 times as fast as the sails. The label over the last gear says so.")
+    (select pinion-b)
+    (highlight button:add_stage)
+    (check stage (on pinion-b) (as wheel-b pinion-c) (teeth 72 18)))
+
+  (step
+    (text "And again: Add a stage on the new pinion. 4 × 4 × 4 = 64 times as fast.")
+    (select pinion-c)
+    (highlight button:add_stage)
+    (check stage (on pinion-c) (as wheel-c pinion-d) (teeth 72 18)))
+
+  (step
+    (text "The last stage: Add a stage once more. 4 × 4 × 4 × 4 = 256: the last pinion turns 256 times for each turn of the sails, the label's 256:1.")
+    (select pinion-d)
+    (highlight button:add_stage)
+    (check stage (on pinion-d) (as wheel-d pinion-e) (teeth 72 18)))
+
+  (step
+    (text "Press Test it (lit, top left) and watch for 30 seconds. The wind is 6 m/s. The sails start from rest and speed up until the wind's push and the millstones' 11,440 newton-metres balance, at 8.6 turns a minute. They are heavy, 1,500 kg spread out to 10 m, so they take a while: about 10 seconds to reach two-thirds of that. The last pinion turns 256 times as fast: it nears 2,200 turns a minute, and at the Test's end should be at about 2,100.")
+    (highlight test)
+    (fail "The last pinion was turning at {pinion-e.rpm} at the end, not the 2,100 rpm it should, or it didn't turn 256 times for each turn of the sails ({ratio}). Are all four stages there, each a 72 driving an 18, each on the last pinion's shaft? Press Test it again after you have changed it.")
+    (check turned (part pinion-e) (rpm 2100) (within 150))
+    (check ratio (part wheel-a) (to pinion-e) (is 256) (within 2)))
+
+  (done "The last pinion ended at {pinion-e.rpm}, and over the Test it turned {ratio} times for each turn of the sails: four stages of 72 driving 18, 4 × 4 × 4 × 4. Every turn of the sails is 256 turns of the pinion, but its force is 256 times less: the millstones' 11,440 newton-metres would be only 45 at the pinion. Fast and weak is what a dynamo wants. The next lesson puts one there."))

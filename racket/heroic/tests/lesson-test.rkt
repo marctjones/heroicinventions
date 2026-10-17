@@ -397,3 +397,81 @@
     (define finished (filter (λ (l) (string-contains? l "[Lesson] finished crane")) out))
     (check-true (and (pair? finished) (andmap (λ (l) (string-contains? l "The stone rose 0.94 m")) finished))
                 "the done text keeps the two walkers' rise after the one-walker Test")))
+
+;; the numbers of "gen ID ..." in the facts line, as an assoc of key -> number ("since" #f when never), or #f
+(define (gen-of out id)
+  (define facts (facts-line out))
+  (define m (and facts (regexp-match (pregexp (string-append "gen " (regexp-quote id) " rpm=([0-9.]+) watts=([0-9.]+) delivered=([0-9.]+) most=([0-9.]+) wh=([0-9.]+) since=([0-9.]+|never)")) facts)))
+  (and m (map cons '(rpm watts delivered most wh since) (map string->number (cdr m)))))
+
+;; ---- Lesson 8: the mill
+;; Worked by hand (game/lessons/08-mill.lesson): the workshop's 6 m/s wind on the palette's 10 m sails, tau = 8,171 (2 - w / 1.5) N.m;
+;; the millstones hold 11,440, so the sails settle at 0.9 rad/s; 50,000 + 2,667 kg.m2 reflected through the gears, a time constant 9.67 s;
+;; at 30 s the sails at 0.8596 rad/s (8.21 rpm), the last pinion at 256 x that, 2,101.3 rpm; the sails' shaft turned 2.9745 times.
+;; Played by the mouse words: the palette's Post (its card's 10.6 m pressed by the lesson), Windmill on the tower's top, the lit "Add a
+;; stage" four times (each stage named by the lesson's roles as it is built), and Test.
+(define mill-playthrough
+  (string-append "wait 30; lesson mill; wait 5; "
+                 "palette-click post; wait 5; click-at 0.45 0 -1.45; wait 5; "       ; step 1: the tower
+                 "palette-click windmill; wait 5; click-at 0.45 10.6 -1.45; wait 5; " ; step 2: the sails on its top, the millstones set
+                 "add-stage; wait 10; add-stage; wait 10; add-stage; wait 10; add-stage; wait 10; log; "   ; steps 3-6
+                 "test; wait-test; wait 5; quit"))                                    ; step 7: Test, 30 s
+
+(test-case "Lesson 8 plays through by the mouse: four stages, 256:1, the last pinion at 2,100 rpm under the millstones"
+  (when (godot-available?)
+    (define out (run-editor mill-playthrough #:seconds 150))
+    (check-equal? (steps-done out 7) '(1 2 3 4 5 6 7) "every step completes")
+    (check-true (ormap (λ (l) (string-contains? l "(post post #:at (0.45 0 -1.45) #:material oak #:size-x 0.6 #:size-y 10.6 #:size-z 0.6)")) out) "the card's 10.6 m")
+    (check-true (ormap (λ (l) (string-contains? l "(windmill sails #:at (0 11.05 -0) #:material oak)")) out) "the sails on the tower's top, in oak")
+    (check-true (ormap (λ (l) (string-contains? l "step 2 done: set on its target (set sails #:load 11440)")) out) "the millstones")
+    (for ([w '("wheel-a" "wheel-b" "wheel-c" "wheel-d")] [p '("pinion-b" "pinion-c" "pinion-d" "pinion-e")] [n '(3 4 5 6)])
+      (check-true (ormap (λ (l) (and (string-contains? l (format "(wheel ~a " w)) (string-contains? l (format "(wheel ~a " p)))) out)
+                  (format "stage ~a: ~a and ~a, named as built" (- n 2) w p))
+      (check-true (ormap (λ (l) (string-contains? l (format "[Lesson] step ~a lit button add_stage:" n))) out) (format "step ~a's Add a stage lit" n)))
+    (check-true (ormap (λ (l) (string-contains? l "[BuildMode] train: sails -> pinion-e, ratio 256:1 (4 meshes)")) out) "the live ratio, in the lesson's words")
+    (check-= (rpm-of out "pinion-e") 2101.3 2 (format "the last pinion at 2,101.3 rpm: ~a" (facts-line out)))
+    (check-= (fact-of out "turns wheel-a" 'value) 2.9745 0.01 "the sails' shaft turned 2.9745 times")
+    (check-= (/ (fact-of out "turns pinion-e" 'value) (fact-of out "turns wheel-a" 'value)) 256 0.5 "256 turns of the pinion a turn of the sails")
+    (check-false (ormap (λ (l) (string-contains? l "spinning at Jolt's limit")) out) "nothing near the engine's spin limit")
+    (check-true (ormap (λ (l) (string-contains? l "step 7 done: turned, ratio")) out) "both of the Test's checks pass")
+    (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished mill") (string-contains? l "The last pinion ended at 2101 rpm, and over the Test it turned 256 times"))) out)
+                "the lesson says it is done, with the traced speed and ratio")))
+
+;; ---- Lesson 9: mill to generator
+;; Worked by hand (game/lessons/09-generator.lesson): no millstones, three stages (64:1); the generator cuts in at 1,500 rpm, the sails
+;; then at 2.454 rad/s, reached at 15.70 s (time constant 9.21 s); past it it holds the sails back, and at 30 s its rotor is at 1,750.2
+;; rpm putting 440.2 W into the bank (its cells in the heat store at 20 C, inside 0-45 C).
+;; Played by the mouse words: Post, Windmill, three Add a stage, the last pinion's "Put a generator on this shaft" (the lesson picked
+;; Generator in the Which list), Heat store and Battery bank on the ground (the step's own view), and Test.
+(define generator-playthrough
+  (string-append "wait 30; lesson generator; wait 5; "
+                 "palette-click post; wait 5; click-at 0.45 0 -1.45; wait 5; "
+                 "palette-click windmill; wait 5; click-at 0.45 10.6 -1.45; wait 5; "
+                 "add-stage; wait 10; add-stage; wait 10; add-stage; wait 10; "         ; steps 3-5
+                 "gear-on generator; wait 10; "                                       ; step 6: the generator on pinion-d's shaft
+                 "palette-click heat-store; wait 5; click-at 2.5 0 -3; wait 5; "      ; step 7: the cells' store
+                 "palette-click battery-bank; wait 5; click-at 3.5 0 -3; wait 5; log; "   ; step 8: the bank, in it, charged by the generator
+                 "test; wait-test; wait 5; quit"))                                    ; step 9: Test
+
+(test-case "Lesson 9 plays through by the mouse: the generator on the last pinion charges the bank at 440 W at 1,750 rpm"
+  (when (godot-available?)
+    (define out (run-editor generator-playthrough #:seconds 170))
+    (check-equal? (steps-done out 9) '(1 2 3 4 5 6 7 8 9) "every step completes")
+    (check-true (ormap (λ (l) (string-contains? l "[Lesson] step 6 lit button gear_on:pinion-d")) out) "the pinion's Put a generator on this shaft is lit")
+    (check-true (ormap (λ (l) (string-contains? l "[BuildMode] generator on pinion-d's shaft: placing generator, the ghost 0.24 m behind pinion-d")) out)
+                "the can starts clear of the pinion: 0.02 + 0.17 + 0.05")
+    (check-true (ormap (λ (l) (string-contains? l "(begin (generator generator #:at (0.675 11.05 -1.74) #:material iron) (set generator #:on pinion-d))")) out)
+                "one edit: the generator turned by the pinion")
+    (check-true (ormap (λ (l) (string-contains? l "step 8 done: set on its target (set bank #:in cells) ; (set generator #:charges bank)")) out) "the bank in the store, charged by the generator")
+    (check-true (ormap (λ (l) (string-contains? l "[BuildMode] train: sails -> pinion-d, ratio 64:1 (3 meshes)")) out) "64:1")
+    (define gen (gen-of out "generator"))
+    (check-true (and gen #t) (format "the Test saw the generator: ~a" (facts-line out)))
+    (check-= (cdr (assq 'rpm gen)) 1750.2 2 "its rotor at 1,750.2 rpm")
+    (check-= (cdr (assq 'delivered gen)) 440.2 3 "440 W into the bank")
+    (check-= (cdr (assq 'since gen)) 15.70 0.1 "charging from 15.70 s, when the rotor passed 1,500 rpm")
+    (check-= (abs (rpm-of out "pinion-d")) 1750.2 2 "the last pinion at the generator's speed")
+    (check-true (ormap (λ (l) (string-contains? l "The generator charged the bank at 440 W at the end, its rotor at 1,750 rpm (from 15.7 s).")) out) "the Test says so in a sentence")
+    (check-false (ormap (λ (l) (string-contains? l "spinning at Jolt's limit")) out) "nothing near the engine's spin limit")
+    (check-true (ormap (λ (l) (string-contains? l "step 9 done: charging, turned")) out) "both of the Test's checks pass")
+    (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished generator") (string-contains? l "The generator ended at 1750 rpm, charging the battery at 440 W."))) out)
+                "the lesson says it is done, with the traced numbers")))

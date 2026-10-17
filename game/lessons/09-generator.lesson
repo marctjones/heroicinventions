@@ -1,0 +1,99 @@
+;; Lesson 9: mill to generator, the last of "Build five machines" (docs/plans/tutorial-plan.md). Read by
+;; src/HeroicInventions.Sim/Editor/Lessons.cs; the format is described there.
+;;
+;; The numbers, worked by hand before writing the steps (the workshop's 6 m/s wind and the palette's windmill, as lesson 8: tau =
+;; 8,171 (2 - w / 1.5) N·m, free at 3.0 rad/s; the palette's generator, Electrics/Generator.cs: nothing below 1,500 rpm, 12 N·m at its
+;; rated 2,500, a straight line between, k = 12 / (261.8 - 157.08) = 0.11459 N·m per rad/s, 80% of the shaft's power to the bank):
+;;   no millstones; three stages, 72 driving 18: 4³ = 64; what turns, reflected to the sails: 50,000 + 0.575 + 16 x 0.577 + 256 x 0.577
+;;   + 4,096 x 0.00221 = 50,167 kg·m², a time constant 50,167 / 5,447 = 9.21 s while the generator takes nothing
+;;   unloaded the sails would run to 3.0 rad/s (28.6 rpm) and the generator to 64 x 3.0 = 192 rad/s (1,833 rpm); it cuts in at 157.08
+;;   rad/s, the sails at 2.454 rad/s: from rest w = 3.0 (1 - e^(-t / 9.21)) reaches that at t = 9.21 x ln(3.0 / 0.546) = 15.70 s
+;;   past the cut-in the generator holds the sails back with 64 x 0.11459 x (64 w - 157.08) = 469.4 w - 1,152 N·m: they settle where
+;;   16,342 - 5,447 w = 469.4 w - 1,152, w = 2.9567 rad/s, the generator at 189.23 rad/s = 1,807 rpm, 0.11459 x 32.15 = 3.684 N·m,
+;;   3.684 x 189.23 = 697 W off the shaft, 557.6 W into the bank; the slope is now 5,447 + 469.4, a time constant 50,167 / 5,917 = 8.48 s
+;;   at the Test's end: w = 2.9567 - (2.9567 - 2.454) e^(-(30 - 15.70) / 8.48) = 2.8637 rad/s, the generator at 64 x 2.8637 = 183.28 rad/s
+;;   = 1,750.2 rpm, 0.11459 x 26.20 = 3.002 N·m, 3.002 x 183.28 x 0.8 = 440.2 W into the bank. The bank takes charge only between 0 and
+;;   45 C: its cells are in the heat store, at the workshop's 20 C. The Test's checks: 440 within 120 W, the pinion 1,750 within 120 rpm.
+;; Traced (2026-10-17: the rig typed into build mode and Tested before the steps were written, then this lesson played through by the
+;; mouse words, headless by racket/heroic/tests/lesson-test.rkt): "t=30.01 by=limit | turns wheel-a=10.0827 ... rpm=27.4 | ... | turns
+;; pinion-d=-645.2210 peak=645.2210 rpm=-1750.2 | gen generator rpm=1750.2 watts=440.3 delivered=440.3 most=440.3 wh=1.072 since=15.69";
+;; without the generator the same train ended at 1,763.1 rpm (64 x 3.0 (1 - e^(-30 / 9.21)) = 1,762.9). The charge began at 15.69 s (worked
+;; 15.70). No spin-limit warning.
+;;
+;; Geometry: the tower, the sails and the stages as lesson 8, three of them. "Put a generator on this shaft" (the Which list's Generator)
+;; holds the motor's can on the last pinion's shaft just clear of it (ShaftSlots.ClearT: 0.02 + 0.17 + 0.05 = 0.24 m behind, at
+;; (0.675 11.05 -1.74)), #:on the pinion; a click on the gears themselves would land on the sails' box (21 m up). The heat store and the
+;; bank go on the ground behind the tower, (2.5 0 -3) and (3.5 0 -3), the step's own view looking at them; the Test's view is at the
+;; gears and the generator's dial, the wire running down to the bank.
+
+(lesson generator
+  (title "Lesson 9: mill to generator")
+  (view 0.55 0.12 34 0 12 0)
+
+  (step
+    (text "The last machine makes electricity: the mill turns a generator, and the generator charges a battery. The tower first: pick Post (lit up). The lesson has pressed 10.6 m on its card. Click on the green tower.")
+    (highlight post)
+    (preset "10.6 m")
+    (target (kind post) (at 0.45 0 -1.45) (within 0.6))
+    (check place (kind post) (as post)))
+
+  (step
+    (text "The sails: pick Windmill (lit up) and click on the tower's top, where its ghost sits. No millstones this time: the generator is the load.")
+    (highlight windmill)
+    (material oak)
+    (target (kind windmill) (at 0 11.05 0) (within 0.3))
+    (check place (kind windmill) (as sails)))
+
+  (step
+    (text "A generator gives nothing until its shaft turns at 1,500 turns a minute, and in this wind the sails turn at most 28: the gears must make up the difference, more than 50 times. The sails are selected: press Add a stage (lit), 72 drives 18, 4 times.")
+    (select sails)
+    (highlight button:add_stage)
+    (check stage (on sails) (as wheel-a pinion-b) (teeth 72 18)))
+
+  (step
+    (text "Add a stage again, on the new pinion: 16 times.")
+    (select pinion-b)
+    (highlight button:add_stage)
+    (check stage (on pinion-b) (as wheel-b pinion-c) (teeth 72 18)))
+
+  (step
+    (text "And once more: 64 times. Three stages are enough: four would spin the generator faster than it can stand.")
+    (select pinion-c)
+    (highlight button:add_stage)
+    (check stage (on pinion-c) (as wheel-c pinion-d) (teeth 72 18)))
+
+  (step
+    (text "Now the generator, a salvaged motor, on the last pinion's shaft. The pinion is selected, and the lesson has picked Generator in the Which list on the right: press Put a generator on this shaft (lit). Its ghost waits on the pinion's shaft just behind it, on the green one: click there. The pinion turns the generator's shaft.")
+    (select pinion-d)
+    (highlight button:gear_on)
+    (variant generator)
+    (material iron)
+    (target (kind generator) (at 0.675 11.05 -1.74) (within 0.3))
+    (check place (kind generator) (as generator)
+           (then "(set {id} #:on {pinion-d})")))
+
+  (step
+    (text "Down to the ground for the battery. A battery's cells only take charge between 0 and 45 degrees, so they live in a heat store, a box of stone that keeps their warmth. Pick Heat store (lit up) and click on the green store behind the tower.")
+    (view 3.6 0.35 9 3 0.6 -3)
+    (highlight heat-store)
+    (material granite)
+    (target (kind heat-store) (at 2.5 0 -3) (within 0.5))
+    (check place (kind heat-store) (as cells)))
+
+  (step
+    (text "And the battery itself beside it: pick Battery bank (lit up) and click on the green bank. The lesson puts its cells in the store and runs the generator's wire to it.")
+    (highlight battery-bank)
+    (target (kind battery-bank) (at 3.5 0 -3) (within 0.5))
+    (check place (kind battery-bank) (as bank)
+           (then "(set {id} #:in {cells})")
+           (then "(set {generator} #:charges {id})")))
+
+  (step
+    (text "Press Test it (lit, top left) and watch the generator up by the gears: its needle and its label. The sails speed up from rest; until the generator's shaft reaches 1,500 turns a minute it charges nothing, and the sails turn freely. Past it the generator pushes back harder the faster it goes, and the sails settle where their push and the generator's balance: the generator near 1,800 turns a minute, giving the battery over 500 watts. In the Test's 30 seconds it gets most of the way: about 1,750 turns a minute and 440 watts.")
+    (view 3.9 0.2 4 0.6 11 -1.6)
+    (highlight test)
+    (fail "The generator was charging the bank at {generator.watts} at the end, its shaft at {pinion-d.rpm}, not the 440 W and 1,750 rpm it should. Under 1,500 turns a minute a generator charges nothing: are all three stages there, 72 driving 18, and is the generator on the last pinion's shaft? Is the bank's wire run from the generator? Press Test it again after you have changed it.")
+    (check charging (part generator) (watts 440) (within 120))
+    (check turned (part pinion-d) (rpm 1750) (within 120)))
+
+  (done "The generator ended at {pinion-d.rpm}, charging the battery at {generator.watts}. The wind turned the sails, three stages of gears made 64 turns of each one, and the generator turned that into electricity, as much as the sails could give at that speed: the faster it goes, the harder it holds back, until the two balance. That is the whole route to a working power plant, built by hand: the Lonely Rover's windmill is the same machine."))
