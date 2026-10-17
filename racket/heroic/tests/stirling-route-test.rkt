@@ -28,6 +28,9 @@
 ;;              the wake, then the joins: the power at noon EARNED from a cold start. The engine's power has no speed in it, so warming
 ;;              on its own load is exactly the watched thermal history; the load keeps it from storing its work as speed in the sleep.
 ;;  C (gate)    A with the bank cold: the motor is an open circuit, nothing is charged, and the engine and rotor run to Jolt's clamp.
+;; The engine's machine (built-1) keeps its own clock from its build, about 4 s into the world; the sun and the air are the world's. At 20x
+;; the same run gives the same power for the same hot end, but the ten mirror commands land a frame apart (a 20x frame is 1/6 s), so the
+;; engine starts with part of its heat and its hot end runs 0.9 K low for minutes: these runs are at 1x.
 ;; Skipped when Godot is not installed.
 (require rackunit racket/list racket/string racket/system racket/port racket/file racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -145,6 +148,7 @@
     (define end (last (hash-ref B 'bank)))
     (printf "STIRLING B: rotor ~a rpm, charge ~a W; the bank ~a Wh at ~a s, the cells ~a C\n"
             (at (last (hash-ref B 'motor)) 'motor.rpm) (at (last (hash-ref B 'links)) 'wire-1.power) (at end 'bank.charge) (car end) (at end 'cells.temperature))
+    ;; the plan worked 11 +- 1.5 Wh; 164 W x about 270 s of charging (the join near 2,400 s, the cut-in 25 s later, the run's end at 2,700) is 12.3 Wh
     (check-= (at end 'bank.charge) 12 1.5 "Wh after about 270 s of charging (the cut-in 25 s after the join)")
     (check-true (< 0 (at end 'cells.temperature) 45)))
 
