@@ -3,7 +3,7 @@
 # --hidden, never takes focus), real clicks through Godot's own input pipeline, a camera line before each shot. Each lesson in its own
 # run with a fresh lesson folder in OUT_DIR, so the player's own progress (user://lessons) is left alone.
 #
-#   tools/lessons-gui.sh [OUT_DIR] [LESSON ...]   # LESSON: gears, windlass, crane (default: all three); a minute and a half or two each
+#   tools/lessons-gui.sh [OUT_DIR] [LESSON ...]   # LESSON: gears, windlass, crane, mill, generator (default: all); about two minutes each
 #
 # Shots are named as docs/art/tutorial keeps them, NN-lesson-SS-what.png, and each lesson's log is OUT_DIR/NN-lesson-run.log.
 #   Lesson 5, gears: 01 the lit Post and the green post; 02 the lit Gear, its card's 72 and the green gear over the post; 03 the crank
@@ -16,12 +16,18 @@
 #   Lesson 7, crane: 01 the lit Treadwheel and the green wheel; 02 "Put a drum on this shaft" lit and the drum's ghost clear of the wheel;
 #   03 the green jib post; 04 the pulley's ghost on the post's top; 05 the stone; 06 the rope over the pulley, the stone hung; 07 testing;
 #   08 the Test's sentence and done text.
+#   Lesson 8, mill: 01 the lit Post, its card's 10.6 m, the green tower; 02 the windmill's ghost on the tower's top; 03 the sails selected
+#   and their lit "Add a stage"; 04 the first stage, framed; 05 four stages and the label "sails -> pinion-e: 256:1"; 06 testing; 07 the
+#   Test's sentence and done text.
+#   Lesson 9, generator: 01 the tower; 02 the sails; 03 three stages, 64:1; 04 the generator's ghost on the last pinion's shaft ("Put a
+#   generator on this shaft" lit, Generator in its Which list); 05 the heat store on the ground (the step's own view); 06 the bank beside
+#   it; 07 charging, the generator's dial and label (the Test step's view); 08 the Test's sentence and done text.
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 out="${1:-${TMPDIR:-/tmp}/lessons-gui}"
 [ $# -gt 0 ] && shift
 lessons=("$@")
-[ ${#lessons[@]} -eq 0 ] && lessons=(gears windlass crane)
+[ ${#lessons[@]} -eq 0 ] && lessons=(gears windlass crane mill generator)
 mkdir -p "$out"
 
 play() {
@@ -58,6 +64,23 @@ play() {
       "palette-click block; wait 10; hover-at -4.45 0 -1.25; wait 10; click-at -4.45 0 -1.25; wait 20; key escape; wait 10; $(shot 05-the-stone)"
       "palette-click rope; wait 10; click-part drum; wait 10; click-part stone; wait 20; key escape; wait 20; $(shot 06-the-rope-over-the-pulley)"
       "test; wait 600; $(shot 07-testing); wait-test; wait 30; log; $(shot 08-the-test-and-done); quit") ;;
+    08-mill) steps=(
+      "wait 60; lesson mill; wait 30; palette-click post; wait 10; hover-at 0.8 0 -1.0; wait 20; $(shot 01-the-tower)"
+      "click-at 0.45 0 -1.45; wait 20"
+      "palette-click windmill; wait 10; hover-at 0.45 10.6 -1.45; wait 20; $(shot 02-the-sails-on-the-tower); click-at 0.45 10.6 -1.45; wait 20"
+      "$(shot 03-the-sails-and-add-a-stage)"
+      "add-stage; wait 30; $(shot 04-the-first-stage)"
+      "add-stage; wait 30; add-stage; wait 30; add-stage; wait 30; $(shot 05-four-stages-256-to-1)"
+      "test; wait 900; $(shot 06-testing); wait-test; wait 30; log; $(shot 07-the-test-and-done); quit") ;;
+    09-generator) steps=(
+      "wait 60; lesson generator; wait 30; palette-click post; wait 10; hover-at 0.8 0 -1.0; wait 20; $(shot 01-the-tower)"
+      "click-at 0.45 0 -1.45; wait 20"
+      "palette-click windmill; wait 10; hover-at 0.45 10.6 -1.45; wait 20; $(shot 02-the-sails-on-the-tower); click-at 0.45 10.6 -1.45; wait 20"
+      "add-stage; wait 30; add-stage; wait 30; add-stage; wait 30; $(shot 03-three-stages-64-to-1)"
+      "gear-on generator hover; wait 10; hover-at 0.675 11.05 -1.6; wait 5; hover-at 0.675 11.05 -1.74; wait 20; $(shot 04-the-generator-on-the-pinion-s-shaft); click-at 0.675 11.05 -1.74; wait 20"
+      "palette-click heat-store; wait 10; hover-at 2.5 0 -3; wait 20; $(shot 05-the-heat-store); click-at 2.5 0 -3; wait 20"
+      "palette-click battery-bank; wait 10; hover-at 3.5 0 -3; wait 20; $(shot 06-the-bank); click-at 3.5 0 -3; wait 20; key escape; wait 10"
+      "test; wait 2100; $(shot 07-charging); wait-test; wait 30; log; $(shot 08-the-test-and-done); quit") ;;
   esac
   mkdir -p "$out/lessons-$prefix"
   local script
@@ -71,6 +94,8 @@ for lesson in "${lessons[@]}"; do
     gears) play 05-gears ;;
     windlass) play 06-windlass ;;
     crane) play 07-crane ;;
-    *) echo "no lesson $lesson (gears, windlass, crane)" >&2; exit 2 ;;
+    mill) play 08-mill ;;
+    generator) play 09-generator ;;
+    *) echo "no lesson $lesson (gears, windlass, crane, mill, generator)" >&2; exit 2 ;;
   esac
 done
