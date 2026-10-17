@@ -14,11 +14,12 @@
 ;;   one walker: 687 against 993 runs the wheel back, (687 − 993) / 1,192 = −0.257 rad/s²: the stone sinks at 0.3 × 0.257 = 0.077 m/s²
 ;;   and reaches the ground, 0.3 m down, in sqrt(2 × 0.3 / 0.077) = 2.8 s; there it rests, the walker too weak to lift it.
 ;; Traced (2026-10-17: the rig typed into build mode and Tested before the steps were written, then this lesson played through by the
-;; mouse words, headless by racket/heroic/tests/lesson-test.rkt): two walkers "t=30.01 by=limit | rise stone=0.9350 peak=0.9350
-;; low=-0.0020 ... | turns treadwheel=0.5319 ... | turns pulley=-0.7673 ... | rope rope-1 max=3343.13 strength=18849.56 broke=no"; the
-;; Test's masses treadwheel 424.16, drum 265.785, pulley 96.593, stone 337.5 kg. One walker (the done text's experiment, drive torque
-;; 687 typed into the treadwheel's field, Test again): "t=8.92 by=settled | rise stone=-0.3000 peak=0.0000 low=-0.3000 ... | turns
-;; treadwheel=-0.1547 peak=0.1978 rpm=0.0". The rope, the Rope tool's 2 cm hemp, holds 18,850 N against the 3,343 it carried at most.
+;; mouse words, headless by racket/heroic/tests/lesson-test.rkt; the lines below from that play-through as the lesson stands, the jib
+;; at x = -4): two walkers "t=30.01 by=limit | rise stone=0.9350 peak=0.9350 low=-0.0020 ... | turns treadwheel=0.5318 ... | turns
+;; pulley=-0.7682 ... | rope rope-1 max=3343.13 strength=18849.56 broke=no"; the Test's masses treadwheel 424.16, drum 265.785, pulley
+;; 96.593, stone 337.5 kg. One walker (the done text's experiment, 687 typed into the treadwheel's drive-torque field, Test again):
+;; "t=8.92 by=settled | rise stone=-0.3000 peak=0.0000 low=-0.3000 ... | turns treadwheel=-0.1549 peak=0.1980 rpm=0.0 | ... rope
+;; rope-1 max=3296.58". The rope, the Rope tool's 2 cm hemp, holds 18,850 N against the 3,343 it carried at most.
 ;; (The engine counts the wheel's turns at 0.532, 6% over the 0.5 of 1 rpm for 30 s, while the stone rose as 1 rpm winds; the lesson
 ;; checks the stone's own height and quotes no speed.)
 ;;
