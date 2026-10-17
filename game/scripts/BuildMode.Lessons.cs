@@ -253,7 +253,7 @@ public partial class BuildMode
     {
         if (_lesson is null) return;
         int before = _lesson.Index;
-        string? outcome = _lesson.Current?.Check is { IsOutcome: true } oc ? oc.Type : null;
+        string? outcome = _lesson.Current is { Check.IsOutcome: true } os ? string.Join(", ", os.Checks.Select(c => c.Type)) : null;
         bool done = _lesson.OnTest(result.Tilts, result.Masses, result.Facts, _session.Document);
         string tilts = string.Join(" ", result.Tilts.Select(kv => $"{kv.Key} most {kv.Value.Select(Math.Abs).DefaultIfEmpty(0).Max():0.###}° end {kv.Value.LastOrDefault():0.###}°"));
         GD.Print($"[Lesson] test seen at step {before + 1}: {tilts}; masses {string.Join(" ", result.Masses.Select(kv => $"{kv.Key}={kv.Value:0.###}kg"))}");
@@ -300,6 +300,12 @@ public partial class BuildMode
             _presetChosen[EntryKeyOf(lit)] = preset;   // the card's size button pressed for it (a 3 m post)
         if (fresh && step.Select is { } role && run.Roles.TryGetValue(role, out var sel) && doc.Parts.ContainsKey(sel) && _selectedId != sel && _placingPaletteId is null)
             Select(sel);   // its inspector has the step's button
+        if (fresh && step.View is { } v)
+        {
+            // the step's own view (the ground under an 11 m gear train, for the parts that go there), as the lesson's is set at its start
+            (_orbit.Pivot, _orbit.Distance, _orbit.Yaw, _orbit.Pitch) = (new Vector3((float)v.Pivot.X, (float)v.Pivot.Y, (float)v.Pivot.Z), (float)v.Distance, (float)v.Yaw, (float)v.Pitch);
+            _orbit.Apply();
+        }
         SetLessonHighlight(step.Highlight);
         PlaceLessonTarget();
         if (fresh)

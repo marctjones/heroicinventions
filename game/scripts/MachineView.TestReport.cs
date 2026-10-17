@@ -7,7 +7,7 @@ namespace HeroicInventions;
 /// <summary>
 /// What build mode's "Test it" reads off a running copy of the design each
 /// tick (#182): the loose bodies' height and speed, how far each wheel on
-/// an axle turned, each tank's water, each rope's pull. The numbers go to
+/// an axle turned, each tank's water, each rope's pull, each generator's speed and charge. The numbers go to
 /// <see cref="TestRecorder"/>, which keeps the facts and decides when the
 /// run has seen enough.
 /// </summary>
@@ -54,6 +54,8 @@ public partial class MachineView
             }
         }
         var ropes = _ropes.ToDictionary(r => r.Spec.Id, r => new RopeSample(r.Tension, r.Strength, r.Stretch, r.Broken, r.Released));
-        return new TestTick(dt, bodies, Runtime.Tanks.ToDictionary(kv => kv.Key, kv => kv.Value.WaterVolume), ropes);
+        // each generator as the sim ran it this tick (its loads on the rotor's body are this view's, GeneratorLoad): what it offered, what the bank took
+        var generators = Runtime.Generators.ToDictionary(kv => kv.Key, kv => new GeneratorSample(kv.Value.Rpm, kv.Value.Power, kv.Value.Delivered, kv.Value.Torque));
+        return new TestTick(dt, bodies, Runtime.Tanks.ToDictionary(kv => kv.Key, kv => kv.Value.WaterVolume), ropes) { Generators = generators };
     }
 }

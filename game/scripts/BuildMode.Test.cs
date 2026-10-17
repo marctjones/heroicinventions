@@ -156,6 +156,7 @@ public partial class BuildMode
         sentences.AddRange(TurnSentences(facts));
         sentences.AddRange(TestReport.WaterSentences(facts));
         sentences.AddRange(TestReport.RopeSentences(facts));
+        sentences.AddRange(TestReport.GeneratorSentences(facts, id => view.Runtime.Generators.TryGetValue(id, out var g) ? g.CutInRpm : 1500));
         string sentence = sentences.Count > 0 ? string.Join(" ", sentences) : "Nothing moved: everything stayed where it was built.";
         var result = new TestResult(sentence, _testTilts.ToDictionary(kv => kv.Key, kv => kv.Value.ToList()), masses, _testTime) { Facts = facts };
         _recorder = null;

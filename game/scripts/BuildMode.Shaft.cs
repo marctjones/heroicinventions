@@ -25,11 +25,14 @@ public partial class BuildMode
     private string _shaftKey = "gear";  // the parts list entry the button puts on a shaft: the "Which:" list's pick (gap 7)
     private float _shaftDefaultT;       // where it goes by default, clear of any wide wheel already on the axle
 
-    /// <summary>The wheels the "Which:" list offers, the parts list's own entries: every catalogue wheel, the usual ones first.</summary>
+    /// <summary>
+    /// What the "Which:" list offers, the parts list's own entries: every catalogue wheel, the usual ones first, and a generator (tutorial
+    /// plan, slice C: its motor turned by the gear it is put behind, #:on that gear; a click on the gears themselves lands on the sails' box).
+    /// </summary>
     private List<string> ShaftKinds()
     {
-        string[] first = ["gear", "drum", "pulley", "cart-wheel", "disc-wheel", "treadwheel"];
-        return [.. _entries.Where(e => e.Variants.Count > 0 && e.Variants.All(v => _palette.FirstOrDefault(p => p.Id == v).Catalogue?.PartKind == "wheel"))
+        string[] first = ["gear", "drum", "pulley", "cart-wheel", "disc-wheel", "treadwheel", "generator"];
+        return [.. _entries.Where(e => e.Variants.Count > 0 && e.Variants.All(v => _palette.FirstOrDefault(p => p.Id == v).Catalogue?.PartKind == "wheel") || e.Key == "generator")
                            .OrderBy(e => Array.IndexOf(first, e.Key) is var i and >= 0 ? i : first.Length).ThenBy(e => e.Label).Select(e => e.Key)];
     }
 
@@ -85,7 +88,8 @@ public partial class BuildMode
 
     /// <summary>How far the wheel the button would put on reaches along its axle either side of its middle: the card's size of the picked entry.</summary>
     private double NewWheelHalf() =>
-        _palette.FirstOrDefault(p => p.Id == VariantOf(_shaftKey)).Catalogue is { } entry
+        _shaftKey == "generator" ? ShaftSlots.GeneratorHalfLength
+        : _palette.FirstOrDefault(p => p.Id == VariantOf(_shaftKey)).Catalogue is { } entry
             ? ShaftSlots.HalfLength(PartTemplates.Create(entry, "probe", new Vec3(0, 0, 0), "oak")) : 0;
 
     /// <summary>The button pressed: placing a gear starts (the card's size), its ghost on the axle at the default spot.</summary>
@@ -164,7 +168,8 @@ public partial class BuildMode
         if (_shaft is not { } s || _ghost is not { Visible: true }) return;
         if (!_session.Document.Parts.ContainsKey(s.Anchor)) { CancelPlacing(); return; }
         string material = _placeMaterial ?? UsualMaterial(_placingKey ?? "gear");
-        string id = NewPartId("wheel", paletteId, material);   // in a lesson, its role
+        bool generator = _placingKey == "generator";
+        string id = NewPartId(generator ? "generator" : "wheel", paletteId, material);   // in a lesson, its role
         var at = _ghost.Position;
         var rel = at - V(s.Point);
         float along = rel.Dot(V(s.Behind));
@@ -174,14 +179,21 @@ public partial class BuildMode
         _lessonChecking = true;
         try
         {
-            placed = RunCommand($"(wheel {id} #:at {Xyz(at)} #:catalogue {paletteId} #:material {material})");
-            if (placed) foreach (var (key, value) in s.WheelProps) RunCommand($"(set {id} #:{key} {value})");
-            placed = placed && RunCommand($"(arbor {s.Partner} {id})");   // the axle's lead, for a wheel already on one (ShaftSlots.PartnerOf)
+            if (generator)
+                // a generator is turned by the gear it goes behind (#:on), not keyed to an arbor: one edit, one undo
+                placed = RunCommand($"(begin (generator {id} #:at {Xyz(at)} #:material {material}) (set {id} #:on {s.Anchor}))");
+            else
+            {
+                placed = RunCommand($"(wheel {id} #:at {Xyz(at)} #:catalogue {paletteId} #:material {material})");
+                if (placed) foreach (var (key, value) in s.WheelProps) RunCommand($"(set {id} #:{key} {value})");
+                placed = placed && RunCommand($"(arbor {s.Partner} {id})");   // the axle's lead, for a wheel already on one (ShaftSlots.PartnerOf)
+            }
         }
         finally { _lessonChecking = checking; }
         LessonCheck();
         if (!placed) return;
-        GD.Print($"[BuildMode] {ShaftSlots.Noun(_placingKey ?? "gear")} on {s.Anchor}'s shaft: {id} ({paletteId}) at {Xyz(at)}, {F(along)} m behind {s.Anchor} along its axle, on {s.Partner}'s arbor"
+        GD.Print($"[BuildMode] {ShaftSlots.Noun(_placingKey ?? "gear")} on {s.Anchor}'s shaft: {id} ({paletteId}) at {Xyz(at)}, {F(along)} m behind {s.Anchor} along its axle, "
+            + (generator ? $"turned by {s.Anchor} (#:on)" : $"on {s.Partner}'s arbor")
             + (_ghostOnShaft ? $" (the default spot {F(_shaftDefaultT)} m)" : $", placed freely (Alt): {F(off)} m off the axle line"));
         string anchor = s.Anchor;
         if (keepPlacing && ShaftSlots.Of(_session.Document, anchor) is { } next)

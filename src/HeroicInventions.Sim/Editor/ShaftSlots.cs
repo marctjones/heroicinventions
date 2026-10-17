@@ -129,6 +129,12 @@ public static class ShaftSlots
         _ => shape.Replace('-', ' '),
     };
 
+    /// <summary>
+    /// How far a generator's motor can reaches along the shaft it is put on either side of its middle: the view draws it 0.34 m long
+    /// (MachineView.Electrics), so "Put a generator on this shaft" starts it clear of the gear it turns with.
+    /// </summary>
+    public const double GeneratorHalfLength = 0.17;
+
     /// <summary>The gap left between the faces of two wide wheels put on one axle (a cart wheel behind a windlass's drum), metres.</summary>
     public const double Clearance = 0.05;
 

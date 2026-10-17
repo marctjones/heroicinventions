@@ -65,12 +65,23 @@ public partial class BuildMode
         var wheel = _palette.FirstOrDefault(p => p.Id == _stageWheel).Catalogue;
         var pinion = _palette.FirstOrDefault(p => p.Id == _stagePinion).Catalogue;
         if (wheel is null || pinion is null) { GD.Print($"[BuildMode] stage: no gear {(wheel is null ? _stageWheel : _stagePinion)} in the catalogue"); return; }
-        string w = $"wheel_{_serial++}";
-        while (_session.Document.HasName(w)) w = $"wheel_{_serial++}";
-        string p = $"wheel_{_serial++}";
-        while (_session.Document.HasName(p) || p == w) p = $"wheel_{_serial++}";
+        string w, p;
+        // in a lesson, the names its stage step would remember them by (wheel-a, pinion-b), so labels and the ratio read in its words
+        if (_lesson?.StageRolesFor(_session.Document, id, PartTemplates.Create(wheel, "probe", new Vec3(0, 0, 0), "bronze"), PartTemplates.Create(pinion, "probe", new Vec3(0, 0, 0), "bronze")) is { } roles
+            && !_session.Document.HasName(roles.Wheel) && !_session.Document.HasName(roles.Pinion))
+            (w, p) = roles;
+        else
+        {
+            w = $"wheel_{_serial++}";
+            while (_session.Document.HasName(w)) w = $"wheel_{_serial++}";
+            p = $"wheel_{_serial++}";
+            while (_session.Document.HasName(p) || p == w) p = $"wheel_{_serial++}";
+        }
         if (StageSlots.Plan(_session.Document, id, wheel, pinion, w, p, UsualMaterial("gear")) is not { } stage) return;
+        int? lessonStep = _lesson?.Index;
         if (!RunCommand(stage.Command)) return;
+        // a lesson step that begins with a view of its own (the ground, for the parts that go there) keeps it: no framing of the pair
+        bool lessonView = _lesson is { } run && run.Index != lessonStep && run.Current?.View is not null;
         _stagesAdded++;
         var d = new Vector3((float)(stage.PinionAt.X - stage.WheelAt.X), (float)(stage.PinionAt.Y - stage.WheelAt.Y), (float)(stage.PinionAt.Z - stage.WheelAt.Z));
         var anchorAt = _session.Document.Parts[id].At;
@@ -79,6 +90,7 @@ public partial class BuildMode
             + $"{p} ({_stagePinion}) at {Xyz(V(stage.PinionAt))}, {Xyz(d)} from {w}, meshing it (centre distance {F(stage.CentreDistance)} m); one undo takes the stage back");
         MeshNote(w, p);
         Select(p);
+        if (lessonView) { _status.Text = WithRatio($"A stage on {id}: {w} on its axle, {p} meshing it. Ctrl+Z takes it back"); return; }
         Frame([w, p]);
         // and from behind, a little to the side, so both gears are seen face on (edge on the pinion hides its wheel): the orbit's camera
         // stands at pivot + (sin yaw, cos yaw) x distance, so yaw = the axle's way back, turned 20 degrees

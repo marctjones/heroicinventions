@@ -34,6 +34,11 @@ namespace HeroicInventions.Sim.Editor;
 ///                                                            catalogue part; (on-shaft drum) asks for it on the same axle as "drum")
 ///   (check mesh (with crank) (teeth 18) (as second))         a new gear meshed with the remembered "crank" (either way round), remembered as "second"
 ///   (check turned (part third) (rpm 60) (within 2))          after a Test: that wheel was turning at 60 rpm at the end, either way, plus or minus
+///   (check stage (on sails) (as wheel-a pinion-b) (teeth 72 18))   a new wheel of 72 teeth on the sails' axle meshed with a new pinion of 18
+///                                                            ("Add a stage": one edit), remembered as "wheel-a" and "pinion-b"
+///   (check charging (part generator) (watts 440) (within 120))   after a Test: the bank was taking 440 W from that generator at the end
+///   (check ratio (part wheel-a) (to pinion-e) (is 256) (within 2))   after a Test: pinion-e turned 256 times for each turn of wheel-a
+///   A step may hold several outcome checks, (check turned ...) (check ratio ...): one Test must meet them all.
 ///
 /// A step's (highlight ...) is a palette entry (post, gear), test, part:ROLE (that part lit in the scene), or a button:
 /// button:gear_on, button:mesh_with or button:add_stage (the selected part's inspector button, "Put a gear on this shaft" (with
@@ -63,7 +68,9 @@ namespace HeroicInventions.Sim.Editor;
 /// {tilt} (the last test's largest lean, degrees). Also: {hoist}, {rise} (how
 /// far the part of the step's check rose), {accel} (m/s²), {drop}, {speed}, {slide}, {top}, {across} (a ball's
 /// worked and measured numbers), {moved}, {reached}, {empties}, {upper.litres},
-/// {lower.litres} and {lower.level} (water), {third.rpm} (how fast that wheel was turning at the end of the last Test, either way).
+/// {lower.litres} and {lower.level} (water), {third.rpm} (how fast that wheel was turning at the end of the last Test, either way),
+/// {generator.watts} (what the bank took from it at the end), {watts} (the same for the lesson's charging check's generator) and {ratio}
+/// (the lesson's ratio check's, traced). A step may say (view YAW PITCH DISTANCE X Y Z): the camera goes there as the step begins.
 /// (done "...") is what the lesson says once its last step is done.
 /// </summary>
 public sealed record Lesson(string Id, string Title, IReadOnlyList<LessonStep> Steps, string Done)
@@ -98,11 +105,29 @@ public sealed record Lesson(string Id, string Title, IReadOnlyList<LessonStep> S
                                       t.Field("along") is { } al ? Num(al, 1) : 0, t.Field("up") is { } up ? Num(up, 1) : 0,
                                       balance, t.Field("within") is { } w ? Num(w, 1) : 0.15);
         }
-        var c = step.Field("check") ?? throw new FormatException("a step needs a (check ...)");
+        var checks = step.Fields("check").Select(ParseCheck).ToList();
+        if (checks.Count == 0) throw new FormatException("a step needs a (check ...)");
+        if (checks.Skip(1).Any(x => !x.IsOutcome) || checks.Count > 1 && !checks[0].IsOutcome)
+            throw new FormatException("only a Test's outcome checks go several to a step");
+        return new LessonStep(text, step.Field("highlight") is { } h ? Sym(h, 1) : null,
+                              step.Field("material") is { } m ? Sym(m, 1) : null, target, checks[0])
+        {
+            Also = checks.Skip(1).ToList(),
+            Variant = step.Field("variant") is { } v ? Sym(v, 1) : null,
+            Preset = step.Field("preset") is { } pr ? Sym(pr, 1) : null,
+            Fail = Str(step.Field("fail")),
+            Select = step.Field("select") is { } sel ? Sym(sel, 1) : null,
+            View = step.Field("view") is { } vw && vw.Items.Count >= 7 ? new LessonView(Num(vw, 1), Num(vw, 2), Num(vw, 3), new Vec3(Num(vw, 4), Num(vw, 5), Num(vw, 6))) : null,
+        };
+    }
+
+    private static LessonCheck ParseCheck(SList c)
+    {
         string Opt(string name) => c.Field(name) is { } f ? Sym(f, 1) : null!;
         double? Number(string name) => c.Field(name) is { } f ? Num(f, 1) : null;
-        var check = new LessonCheck(Sym(c, 1), Opt("kind"), Opt("category"), Opt("as"), Opt("part"), Opt("beam"),
-                                    c.Field("within-deg") is { } wd ? Num(wd, 1) : 3)
+        double? Second(string name) => c.Field(name) is { } f && f.Items.Count > 2 ? Num(f, 2) : null;
+        return new LessonCheck(Sym(c, 1), Opt("kind"), Opt("category"), Opt("as"), Opt("part"), Opt("beam"),
+                               c.Field("within-deg") is { } wd ? Num(wd, 1) : 3)
         {
             Shape = Opt("shape"),
             Radius = Number("radius"),
@@ -119,15 +144,13 @@ public sealed record Lesson(string Id, string Title, IReadOnlyList<LessonStep> S
             OnShaft = Opt("on-shaft"),
             With = Opt("with"),
             Rpm = Number("rpm"),
+            On = Opt("on"),
+            As2 = c.Field("as") is { } a2 && a2.Items.Count > 2 ? Sym(a2, 2) : null,
+            Teeth2 = Second("teeth"),
+            Watts = Number("watts"),
+            To = Opt("to"),
+            Is = Number("is"),
             Then = c.Fields("then").Select(t => Str(t) ?? "").Where(t => t != "").ToList(),
-        };
-        return new LessonStep(text, step.Field("highlight") is { } h ? Sym(h, 1) : null,
-                              step.Field("material") is { } m ? Sym(m, 1) : null, target, check)
-        {
-            Variant = step.Field("variant") is { } v ? Sym(v, 1) : null,
-            Preset = step.Field("preset") is { } pr ? Sym(pr, 1) : null,
-            Fail = Str(step.Field("fail")),
-            Select = step.Field("select") is { } sel ? Sym(sel, 1) : null,
         };
     }
 
@@ -154,6 +177,15 @@ public sealed record LessonStep(string Text, string? Highlight, string? Material
     /// <summary>The remembered part the step selects as it begins (its inspector has the step's button), or null.</summary>
     public string? Select { get; init; }
 
+    /// <summary>More outcome checks the same Test must meet (a step's second and later (check ...) forms): all of them, or the step isn't done.</summary>
+    public IReadOnlyList<LessonCheck> Also { get; init; } = [];
+
+    /// <summary>Every check of the step: its own, then <see cref="Also"/>.</summary>
+    public IEnumerable<LessonCheck> Checks => Also.Prepend(Check);
+
+    /// <summary>Where the camera goes as the step begins ((view YAW PITCH DISTANCE X Y Z), as the lesson's own), or null to leave it.</summary>
+    public LessonView? View { get; init; }
+
     /// <summary>The inspector or card button the step lights ("mesh_with", "gear_on", "add_stage", "preset:3 m"), from (highlight button:...); null for none.</summary>
     public string? Button => Highlight is { } h && h.StartsWith("button:", StringComparison.Ordinal) ? h["button:".Length..] : null;
 }
@@ -162,7 +194,8 @@ public sealed record LessonStep(string Text, string? Highlight, string? Material
 public sealed record LessonTarget(string Kind, Vec3? At, string? On, double Along, double Up, (string Heavy, string Light)? Balance, double Within);
 
 /// <summary>
-/// What completes a step: "place", "mesh", "join", "test", or one of the checks of a Test's outcome, "balanced", "lifted", "rolled", "level" and "turned"
+/// What completes a step: "place", "mesh", "stage", "join", "test", or one of the checks of a Test's outcome, "balanced", "lifted", "rolled",
+/// "level", "turned", "charging" and "ratio"
 /// (see <see cref="Lesson"/>).
 /// </summary>
 public sealed record LessonCheck(string Type, string? Kind, string? Category, string? As, string? Part, string? Beam, double WithinDeg)
@@ -197,6 +230,22 @@ public sealed record LessonCheck(string Type, string? Kind, string? Category, st
     /// <summary>A "turned" check's speed at the end of the Test, rpm (either way round).</summary>
     public double? Rpm { get; init; }
 
+    /// <summary>A "stage" check's remembered part whose axle the stage's wheel goes on (the sails, or the last stage's pinion).</summary>
+    public string? On { get; init; }
+
+    /// <summary>A "stage" check's second name, the pinion's ((as wheel-a pinion-b)): <see cref="LessonCheck.As"/> is the wheel's.</summary>
+    public string? As2 { get; init; }
+
+    /// <summary>A "stage" check's pinion teeth ((teeth 72 18)): <see cref="Teeth"/> is the wheel's.</summary>
+    public double? Teeth2 { get; init; }
+
+    /// <summary>A "charging" check's watts the bank takes at the end of the Test.</summary>
+    public double? Watts { get; init; }
+
+    /// <summary>A "ratio" check's other wheel ((part wheel-a) (to pinion-e)) and how many times it turned for each turn of the first ((is 256)).</summary>
+    public string? To { get; init; }
+    public double? Is { get; init; }
+
     /// <summary>
     /// Commands run once the step is done, "{id}" being the part that counted ((then "(set {id} #:water 0)") pours a tank out, for one;
     /// on a join, the rope or pipe, or an arbor's or a mesh's second part), "{drum}" any part the lesson remembers by that name.
@@ -204,7 +253,7 @@ public sealed record LessonCheck(string Type, string? Kind, string? Category, st
     public IReadOnlyList<string> Then { get; init; } = [];
 
     /// <summary>A check on how a Test run came out: the lesson reads the run's facts, and the player presses Test (only "balanced" is run by the lesson itself).</summary>
-    public bool IsOutcome => Type is "balanced" or "lifted" or "rolled" or "level" or "turned";
+    public bool IsOutcome => Type is "balanced" or "lifted" or "rolled" or "level" or "turned" or "charging" or "ratio";
 }
 
 /// <summary>
@@ -255,6 +304,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
             bool gone = c is { Type: "place" or "mesh", As: { } role } && (!Roles.TryGetValue(role, out var id) || !doc.Parts.ContainsKey(id))
                      || c.Type == "join" && !JoinMade(doc, c)
                      || c.Type == "mesh" && !MeshMade(doc, c)
+                     || c.Type == "stage" && !StageMade(doc, c)
                      || c is { Type: "place", OnShaft: not null, As: { } r2 } && Roles.TryGetValue(r2, out var placed) && !OnShaftOk(doc, c, placed);
             if (!gone) continue;
             Index = i;
@@ -262,7 +312,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
             _baselineLinks = null;
         _baselineMeshes = null;
             Nudge = null;
-            foreach (var later in Lesson.Steps.Skip(i).Select(s => s.Check.As).OfType<string>()) Roles.Remove(later);
+            foreach (var later in Lesson.Steps.Skip(i).SelectMany(s => new[] { s.Check.As, s.Check.As2 }).OfType<string>()) Roles.Remove(later);
             return;
         }
     }
@@ -393,6 +443,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         if (Finished || Current is not { } step) return (false, [], null);
         if (step.Check.Type == "join") return CheckJoin(doc, step);
         if (step.Check.Type == "mesh") return CheckMesh(doc, step);
+        if (step.Check.Type == "stage") return CheckStage(doc, step);
         if (step.Check.Type != "place") return (false, [], null);
         var c = step.Check;
         var bound = Roles.Values.ToHashSet();
@@ -560,6 +611,74 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         else
             Nudge = $"That meshes the {withRole} gear with one the lesson already has. {again}";
         return (false, [], Nudge);
+    }
+
+    // --------------------------------------------------------- stages
+
+    /// <summary>Whether a teeth count is the one asked (any, when none is).</summary>
+    private static bool TeethIs(PartSpec p, double? want) => want is not { } w || Math.Abs(p.Number("teeth", 0) - w) < 1e-6;
+
+    /// <summary>Whether the stage a step asks for is in the design: its remembered wheel on the (on) part's axle, meshed with its remembered pinion.</summary>
+    private bool StageMade(EditorDocument doc, LessonCheck c) =>
+        c.On is { } on && Roles.TryGetValue(on, out var onId) && c.As is { } a && c.As2 is { } b && Roles.TryGetValue(a, out var w) && Roles.TryGetValue(b, out var p)
+        && doc.Parts.ContainsKey(w) && doc.Parts.ContainsKey(p) && ShaftSlots.AxleMates(doc, onId).Contains(w)
+        && doc.Meshes.Any(m => m.A == w && m.B == p || m.A == p && m.B == w);
+
+    /// <summary>
+    /// A "stage" step (tutorial plan, gap 2: (check stage (on sails) (as wheel-a pinion-b) (teeth 72 18))): a wheel not yet known to the
+    /// lesson on the (on) part's axle, meshed with a pinion not yet known either, with the teeth asked: the inspector's "Add a stage", one
+    /// (begin ...) edit (or "Put a gear on this shaft" and "Add a meshing gear" one after the other: the mesh completes it). Both are
+    /// remembered at once, the wheel by the first name and the pinion by the second; the then-lines' {id} is the pinion. A stage made since
+    /// the step began that doesn't count is said: off the axle, or the wrong sizes.
+    /// </summary>
+    private (bool Done, IReadOnlyList<string> Settle, string? Reason) CheckStage(EditorDocument doc, LessonStep step)
+    {
+        var c = step.Check;
+        _baselineMeshes ??= doc.Meshes.Select(MeshKey).ToHashSet();
+        if (c.On is not { } onRole || !Roles.TryGetValue(onRole, out var on) || !doc.Parts.ContainsKey(on))
+        {
+            Nudge = $"The {c.On} is not on the bench any more. Undo your last change, or press Start over.";
+            return (false, [], Nudge);
+        }
+        var bound = Roles.Values.ToHashSet();
+        var axle = ShaftSlots.AxleMates(doc, on);
+        foreach (var m in doc.Meshes)
+            foreach (var (w, p) in new[] { (m.A, m.B), (m.B, m.A) })
+            {
+                if (bound.Contains(w) || bound.Contains(p) || !axle.Contains(w) || !doc.Parts.TryGetValue(w, out var wheel) || !doc.Parts.TryGetValue(p, out var pinion)
+                    || !TeethIs(wheel, c.Teeth) || !TeethIs(pinion, c.Teeth2)) continue;
+                if (c.As is { } a) Roles[a] = w;
+                if (c.As2 is { } b) Roles[b] = p;
+                IReadOnlyList<string> settle = [.. ThenLines(c, p)];
+                Advance();
+                return (true, settle, null);
+            }
+        var fresh = doc.Meshes.Where(m => !_baselineMeshes.Contains(MeshKey(m))).ToList();
+        if (fresh.Count == 0) return (false, [], null);
+        var made = fresh[^1];
+        string Sizes(PartSpec w, PartSpec p) => $"{N(w.Number("teeth", 0))} drives {N(p.Number("teeth", 0))}";
+        string asked = c.Teeth is { } wt && c.Teeth2 is { } pt ? $"{N(wt)} drives {N(pt)}" : "";
+        var (mw, mp) = axle.Contains(made.A) ? (made.A, made.B) : (made.B, made.A);
+        if (!axle.Contains(mw))
+            Nudge = $"That stage is not on the {onRole}'s axle. Undo it (Ctrl+Z), select the {onRole} and press Add a stage.";
+        else if (doc.Parts.TryGetValue(mw, out var gw) && doc.Parts.TryGetValue(mp, out var gp) && (!TeethIs(gw, c.Teeth) || !TeethIs(gp, c.Teeth2)))
+            Nudge = $"That stage is {Sizes(gw, gp)}, but this step's is {asked}. Undo it (Ctrl+Z), pick {asked.Replace(" drives ", " and ")} under Add a stage and press it again.";
+        else
+            Nudge = $"That meshes gears the lesson already has. Undo it (Ctrl+Z), select the {onRole} and press Add a stage.";
+        return (false, [], Nudge);
+    }
+
+    /// <summary>
+    /// The names the current "stage" step would remember a stage by, when one of these sizes put on <paramref name="anchor"/>'s axle would
+    /// count: the wheel's and the pinion's ("wheel-a", "pinion-b"), so "Add a stage" can give the two gears those ids as it builds them and
+    /// the live ratio reads "sails -> pinion-e: 256:1". Null when the step isn't a stage on that axle, the sizes are not the step's, or the
+    /// names are taken. Naming them so never changes what counts.
+    /// </summary>
+    public (string Wheel, string Pinion)? StageRolesFor(EditorDocument doc, string anchor, PartSpec wheel, PartSpec pinion)
+    {
+        if (Finished || Current?.Check is not { Type: "stage", On: { } on, As: { } a, As2: { } b } c || Roles.ContainsKey(a) || Roles.ContainsKey(b)) return null;
+        if (!Roles.TryGetValue(on, out var onId) || !ShaftSlots.AxleMates(doc, onId).Contains(anchor)) return null;
+        return TeethIs(wheel, c.Teeth) && TeethIs(pinion, c.Teeth2) ? (a, b) : null;
     }
 
     // --------------------------------------------------------- joins
@@ -738,18 +857,27 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
                 Failure = LastTilt is { } t ? $"Not balanced yet: the beam leaned {t:0.#}° (it has to stay within {c.WithinDeg:0.#}°)."
                                             : "The test didn't see the beam.";
                 return false;
-            case "lifted" or "rolled" or "level" or "turned":
+            case "lifted" or "rolled" or "level" or "turned" or "charging" or "ratio":
                 return OutcomeOk(step, doc);
         }
         return false;
     }
 
+    /// <summary>A Test's outcome against every check of the step: all met, the step is done; else the step's fail text, or the first unmet check in plain words.</summary>
     private bool OutcomeOk(LessonStep step, EditorDocument? doc)
     {
-        var c = step.Check;
-        if (LastFacts is not { } facts || c.Part is not { } role || !Roles.TryGetValue(role, out var id)) { Failure = "The test didn't see the part."; return false; }
+        string? first = null;
+        foreach (var c in step.Checks)
+            if (!OutcomeMet(c, doc, out var plain)) first ??= plain;
+        if (first is null) { Advance(); return true; }
+        Failure = step.Fail is { } fail && doc is not null ? Fill(fail, doc) : first;
+        return false;
+    }
+
+    private bool OutcomeMet(LessonCheck c, EditorDocument? doc, out string plain)
+    {
+        if (LastFacts is not { } facts || c.Part is not { } role || !Roles.TryGetValue(role, out var id)) { plain = "The test didn't see the part."; return false; }
         bool ok;
-        string plain;
         switch (c.Type)
         {
             case "lifted":
@@ -771,15 +899,33 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
                 plain = $"The {role} gear was turning at {N(Math.Round(rpm, 1))} rpm at the end, and it should have been {N(c.Rpm ?? 0)} rpm.";
                 break;
             }
+            case "charging":
+            {
+                var gen = facts.GeneratorOf(id);
+                ok = gen is not null && Math.Abs(gen.EndDelivered - (c.Watts ?? 0)) <= c.Within;
+                plain = gen is null ? $"The test didn't see the {role} charge anything."
+                      : $"The {role} was charging the bank at {N(Math.Round(gen.EndDelivered))} W at the end, its rotor at {N(Math.Round(gen.EndRpm))} rpm, and it should have been {N(c.Watts ?? 0)} W.";
+                break;
+            }
+            case "ratio":
+            {
+                double? ratio = RatioOf(facts, c);
+                ok = ratio is { } r && Math.Abs(r - (c.Is ?? 0)) <= c.Within;
+                plain = $"The {c.To} turned {N(Math.Round(ratio ?? 0, 1))} times for each turn of the {role}, and it should have been {N(c.Is ?? 0)}.";
+                break;
+            }
             default:
                 ok = facts.TankOf(id) is { } tank && Math.Abs(tank.EndLitres - (c.Litres ?? 0)) <= c.Within;
                 plain = $"The {role} tank ended with {N(Math.Round(facts.TankOf(id)?.EndLitres ?? 0, 1))} litres, and it should have {N(c.Litres ?? 0)}.";
                 break;
         }
-        if (ok) { Advance(); return true; }
-        Failure = step.Fail is { } fail && doc is not null ? Fill(fail, doc) : plain;
-        return false;
+        return ok;
     }
+
+    /// <summary>How many times a "ratio" check's (to) wheel turned for each turn of its (part), from the Test's traced turns (either way round), or null.</summary>
+    private double? RatioOf(TestFacts facts, LessonCheck c) =>
+        c.Part is { } a && c.To is { } b && Roles.TryGetValue(a, out var aid) && Roles.TryGetValue(b, out var bid)
+        && facts.TurnOf(aid) is { Turns: var ta } && Math.Abs(ta) > 1e-9 && facts.TurnOf(bid) is { Turns: var tb } ? Math.Abs(tb / ta) : null;
 
     // --------------------------------------------------------- numbers worked from the design
 
@@ -841,6 +987,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
                 "litres" => $"{N(Math.Round(doc.Parts[id].Number("water", 0) * 1000, 1))} litres",
                 "level" => $"{N(Math.Round(doc.Parts[id].Number("water", 0) / doc.Parts[id].Number("area", 0.05) * 100, 1))} cm",
                 "rpm" => LastFacts?.TurnOf(id) is { } turn ? $"{N(Math.Round(Math.Abs(turn.EndRpm)))} rpm" : "?",
+                "watts" => LastFacts?.GeneratorOf(id) is { } gen ? $"{N(Math.Round(gen.EndDelivered))} W" : "?",
                 _ => m.Value,
             };
         });
@@ -851,12 +998,24 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
     {
         string Metres(double v) => $"{N(Math.Round(v, 2))} m";
         var check = Current?.Check ?? Lesson.Steps[^1].Check;
-        var outcome = Lesson.Steps.Select(s => s.Check).LastOrDefault(c => c.Type is "lifted" or "rolled" or "level" or "turned") ?? check;
+        var outcome = Lesson.Steps.Select(s => s.Check).LastOrDefault(c => c.Type is "lifted" or "rolled" or "level" or "turned" or "charging" or "ratio") ?? check;
         string? partId = outcome.Part is { } role && Roles.TryGetValue(role, out var pid) ? pid : null;
         switch (name)
         {
             case "hoist": return Lesson.Steps.Select(s => s.Check).FirstOrDefault(c => c.Type == "join" && c.Hoist > 0) is { } j ? Metres(j.Hoist) : "?";
-            case "expect": return outcome.Type == "turned" ? $"{N(outcome.Rpm ?? 0)} rpm" : Metres(outcome.About ?? 0);
+            case "expect": return outcome.Type switch
+            {
+                "turned" => $"{N(outcome.Rpm ?? 0)} rpm",
+                "charging" => $"{N(outcome.Watts ?? 0)} W",
+                "ratio" => N(outcome.Is ?? 0),
+                _ => Metres(outcome.About ?? 0),
+            };
+            case "ratio":
+                return Lesson.Steps.SelectMany(s => s.Checks).FirstOrDefault(c => c.Type == "ratio") is { } rc && LastFacts is { } rf && RatioOf(rf, rc) is { } ratio
+                    ? N(Math.Round(ratio, ratio < 10 ? 1 : 0)) : "?";
+            case "watts":
+                return Lesson.Steps.SelectMany(s => s.Checks).FirstOrDefault(c => c.Type == "charging") is { Part: { } gr } && Roles.TryGetValue(gr, out var gid)
+                       && LastFacts?.GeneratorOf(gid) is { } g ? $"{N(Math.Round(g.EndDelivered))} W" : "?";
             case "rise": return LastFacts?.RiseOf(partId ?? "") is { } rise ? Metres(rise.Metres) : "?";
             case "accel": return $"{Acceleration(doc).ToString("0.00", CultureInfo.InvariantCulture)} m/s²";
             case "drop" when Roles.TryGetValue("ball", out var ball) && doc.Parts.TryGetValue(ball, out var bp): return Metres(bp.At.Y - bp.Number("radius", 0.05));

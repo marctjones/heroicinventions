@@ -12,11 +12,21 @@ public readonly record struct BodySample(double Y, double LinearSpeed, double An
 /// <summary>A rope in one tick: the pull it carried, how much it can carry, how far its path ran past its length (negative: slack), and whether it has gone.</summary>
 public readonly record struct RopeSample(double Tension, double Strength, double Stretch, bool Broken, bool Released);
 
+/// <summary>
+/// A generator in one tick (tutorial plan, gap 5): its rotor's speed (rpm), the charge it offers (W, efficiency × torque × speed), what the
+/// bank took of it (W: nothing when the bank is cold, hot or full) and the torque it loads its shaft with (N·m).
+/// </summary>
+public readonly record struct GeneratorSample(double Rpm, double Watts, double Delivered, double Torque);
+
 /// <summary>Everything the recorder reads off a running design in one tick; ids are the editor's part, tank and rope ids.</summary>
 public sealed record TestTick(double Dt,
                               IReadOnlyDictionary<string, BodySample> Bodies,
                               IReadOnlyDictionary<string, double> TankVolumes,
-                              IReadOnlyDictionary<string, RopeSample> Ropes);
+                              IReadOnlyDictionary<string, RopeSample> Ropes)
+{
+    /// <summary>Each generator's tick, by its part id.</summary>
+    public IReadOnlyDictionary<string, GeneratorSample> Generators { get; init; } = new Dictionary<string, GeneratorSample>();
+}
 
 /// <summary>
 /// A body that ended higher (positive) or lower than it began, and the highest and lowest it got, metres; how far it ended from
@@ -36,6 +46,12 @@ public sealed record TankChange(string Id, double StartLitres, double EndLitres)
 /// <summary>Water that ran from one tank to another: only said when exactly one tank lost water and exactly one gained it.</summary>
 public sealed record WaterMove(string From, string To, double Litres);
 
+/// <summary>
+/// A generator over the run: its rotor's speed, the charge it offered and what the bank took at the end (rpm, W, W), the most the bank
+/// took (W), the energy it took (J), and when the bank first took charge (s into the run; null if it never did).
+/// </summary>
+public sealed record GeneratorFact(string Id, double EndRpm, double EndWatts, double EndDelivered, double MostDelivered, double Joules, double? Since);
+
 /// <summary>A rope over the run: the most it carried, what it could carry, and whether it broke, let go, or ended slack after having been taut.</summary>
 public sealed record RopeFact(string Id, double MaxTension, double Strength, bool Broke, double? BrokeAt, bool Released, bool WentSlack);
 
@@ -49,6 +65,11 @@ public sealed record TestFacts(double Seconds, string EndedBy,
                                IReadOnlyList<RopeFact> Ropes)
 {
     public static readonly TestFacts Empty = new(0, "stopped", [], [], [], [], []);
+
+    /// <summary>What each generator did (tutorial plan, gap 5: lesson 9's charging check).</summary>
+    public IReadOnlyList<GeneratorFact> Generators { get; init; } = [];
+
+    public GeneratorFact? GeneratorOf(string part) => Generators.FirstOrDefault(g => g.Id == part);
 
     public PartRise? RiseOf(string part) => Rises.FirstOrDefault(r => r.Id == part);
     public WheelTurn? TurnOf(string wheel) => Turns.FirstOrDefault(t => t.Id == wheel);
@@ -106,6 +127,13 @@ public sealed class TestRecorder
         public double? BrokeAt;
     }
     private readonly Dictionary<string, RopeTrack> _ropes = [];
+    private sealed class GeneratorTrack
+    {
+        public GeneratorSample End;
+        public double Most, Joules;
+        public double? Since;
+    }
+    private readonly Dictionary<string, GeneratorTrack> _generators = [];
 
     private double _quiet;
 
@@ -164,6 +192,15 @@ public sealed class TestRecorder
             if (r.Broken && !t.Broke) { t.Broke = true; t.BrokeAt = Time; quiet = false; }
             if (r.Released && !t.Released) { t.Released = true; quiet = false; }
         }
+        foreach (var (id, g) in tick.Generators)
+        {
+            if (!_generators.TryGetValue(id, out var t)) _generators[id] = t = new GeneratorTrack();
+            t.End = g;
+            t.Most = Math.Max(t.Most, g.Delivered);
+            t.Joules += g.Delivered * tick.Dt;
+            if (g.Delivered > 0 && t.Since is null) t.Since = Time;
+            if (g.Delivered > 0) quiet = false;
+        }
         _quiet = quiet ? _quiet + tick.Dt : 0;
     }
 
@@ -184,7 +221,8 @@ public sealed class TestRecorder
         var moves = losers.Count == 1 && gainers.Count == 1
             ? new List<WaterMove> { new(losers[0].Id, gainers[0].Id, Math.Min(-losers[0].Litres, gainers[0].Litres)) }
             : [];
-        return new TestFacts(Time, EndedBy, rises, turns, tanks, moves, ropes);
+        var generators = _generators.Select(kv => new GeneratorFact(kv.Key, kv.Value.End.Rpm, kv.Value.End.Watts, kv.Value.End.Delivered, kv.Value.Most, kv.Value.Joules, kv.Value.Since)).ToList();
+        return new TestFacts(Time, EndedBy, rises, turns, tanks, moves, ropes) { Generators = generators };
     }
 }
 
@@ -254,6 +292,27 @@ public static class TestReport
         }
     }
 
+    /// <summary>
+    /// "The generator charged the bank at 440 W at the end, its rotor at 1,750 rpm (from 15.7 s)." / "The generator charged nothing: its
+    /// rotor reached only 1,200 rpm, under the 1,500 it needs." / "... the bank took none of it". <paramref name="cutInRpm"/> is the
+    /// generator's own cut-in, for the sentence's "under".
+    /// </summary>
+    public static IEnumerable<string> GeneratorSentences(TestFacts facts, Func<string, double> cutInRpm)
+    {
+        foreach (var g in facts.Generators)
+        {
+            string rotor = $"its rotor at {N(g.EndRpm, "#,0")} rpm";
+            if (g.EndDelivered > 0)
+                yield return $"The {g.Id} charged the bank at {N(g.EndDelivered, "#,0")} W at the end, {rotor}{(g.Since is { } s ? $" (from {N(s, "0.0")} s)" : "")}.";
+            else if (g.EndWatts > 0)
+                yield return $"The {g.Id} offered {N(g.EndWatts, "#,0")} W at the end, {rotor}, but the bank took none of it (too cold, too hot or full).";
+            else if (g.MostDelivered > 0)
+                yield return $"The {g.Id} charged the bank for a while, then stopped: {rotor} at the end, under the {N(cutInRpm(g.Id), "#,0")} it needs.";
+            else
+                yield return $"The {g.Id} charged nothing: {rotor} at the end, under the {N(cutInRpm(g.Id), "#,0")} it needs.";
+        }
+    }
+
     /// <summary>The numbers in one line a script can read: "t=12.3 by=settled | rise b=0.55 | turns pul=0.875 | water tank_1=-14.98 | rope r max=11.2 broke=no".</summary>
     public static string DataLine(TestFacts f)
     {
@@ -263,6 +322,7 @@ public static class TestReport
         parts.AddRange(f.Turns.Select(t => $"turns {t.Id}={N(t.Turns, "0.0000")} peak={N(t.PeakTurns, "0.0000")} rpm={N(t.EndRpm, "0.0")}"));
         parts.AddRange(f.Tanks.Where(t => Math.Abs(t.Litres) >= 0.0005).Select(t => $"water {t.Id}={N(t.Litres, "0.000")} L"));
         parts.AddRange(f.Ropes.Select(r => $"rope {r.Id} max={N(r.MaxTension, "0.00")} strength={N(r.Strength, "0.00")} broke={(r.Broke ? "yes" : "no")} slack={(r.WentSlack ? "yes" : "no")}"));
+        parts.AddRange(f.Generators.Select(g => $"gen {g.Id} rpm={N(g.EndRpm, "0.0")} watts={N(g.EndWatts, "0.0")} delivered={N(g.EndDelivered, "0.0")} most={N(g.MostDelivered, "0.0")} wh={N(g.Joules / 3600, "0.000")} since={(g.Since is { } s ? N(s, "0.00") : "never")}"));
         return string.Join(" | ", parts);
     }
 }
