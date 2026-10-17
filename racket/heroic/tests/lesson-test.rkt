@@ -307,3 +307,93 @@
     (check-true (ormap (λ (l) (string-contains? l "step 5 done: turned")) out) "the lesson's check passes")
     (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished gears") (string-contains? l "The small gear turned at 120 rpm and the last gear at 60 rpm"))) out)
                 "the lesson says it is done, with the traced speeds")))
+
+;; the number after "rise PART=" in a facts line, or #f
+(define (rise-in facts part)
+  (and facts (let ([m (regexp-match (pregexp (string-append "rise " (regexp-quote part) "=(-?[0-9.]+)")) facts)])
+               (and m (string->number (cadr m))))))
+
+;; ---- Lesson 6: the windlass
+;; Worked by hand (game/lessons/06-windlass.lesson): a 10 cm granite block, 2.7 kg, hung from a 15 cm drum turned at 3 rpm (0.31416
+;; rad/s) by a hand on a 1.2 m wheel on the drum's axle: the rope winds in 0.15 x 0.31416 = 0.04712 m/s, 1.4137 m in the Test's 30 s,
+;; less a millimetre for the 0.04 s start (40 N.m against the block's 3.97): 1.413 m. The hand at the wheel's rim needs 3.97 / 0.6 =
+;; 6.6 N, a quarter of the block's 26.5 N. The rope: 3.22 - (0.35 + 0.05) = 2.82 m, the block hung 0.3 m up under the drum's +x side.
+;; Played by the mouse words: the palette's Post (the lesson has pressed its card's 3 m), the drum clicked on the post's top, the
+;; drum's lit "Put a wheel on this shaft" (the lesson picked Wheel in its Which list; the card's 120 cm), Block, the Rope tool's two
+;; clicks, and Test.
+(define windlass-playthrough
+  (string-append "wait 30; lesson windlass; wait 5; "
+                 "palette-click post; wait 5; click-at 0 0 0; wait 5; "              ; step 1: the 3 m post, slimmed by the lesson
+                 "palette-click drum; wait 5; click-at 0 3.0 0; wait 5; "            ; step 2: the drum on its top, set on 3.22
+                 "gear-on cart-wheel-120cm; wait 10; log; "                          ; step 3: the drum's button, the wheel at its default spot
+                 "palette-click block; wait 5; click-at 0.15 0 0; wait 5; "          ; step 4: the block under the drum's edge
+                 "palette-click rope; wait 5; click-part drum; click-part load; wait 5; log; "   ; step 5: the lesson winds it on the drum
+                 "test; wait-test; wait 5; quit"))                                   ; step 6: Test, 30 s
+
+(test-case "Lesson 6 plays through by the mouse: the hand's wheel turns the drum and winds the block up 1.41 m"
+  (when (godot-available?)
+    (define out (run-editor windlass-playthrough #:seconds 120))
+    (check-equal? (steps-done out 6) '(1 2 3 4 5 6) "every step completes")
+    (check-true (ormap (λ (l) (string-contains? l "(post post #:at (0 0 0) #:material oak #:size-x 0.3 #:size-y 3 #:size-z 0.3)")) out) "the card's 3 m, pressed by the lesson")
+    (check-true (ormap (λ (l) (string-contains? l "step 1 done: set on its target (set post #:size-x 0.15) ; (set post #:size-z 0.15)")) out) "made slim")
+    (check-true (ormap (λ (l) (string-contains? l "(wheel drum #:at")) out) "the drum is named by its role as it is placed")
+    (check-true (ormap (λ (l) (string-contains? l "[Lesson] step 3 lit button gear_on:drum")) out) "the drum's Put a wheel on this shaft is lit")
+    (check-true (ormap (λ (l) (string-contains? l "[BuildMode] wheel on drum's shaft: placing cart-wheel-120cm, the ghost 0.386 m behind drum")) out)
+                "the wheel starts clear of the 0.6 m drum: 0.3 + 0.036 + 0.05")
+    (check-true (ormap (λ (l) (string-contains? l "step 3 done: set on its target (move handle (0 3.22 -0.4)) ; (set drum #:drive-rpm 3) ; (set drum #:drive-torque 40)")) out)
+                "the hand's drive on the drum, the axle's first wheel")
+    (check-false (ormap (λ (l) (string-contains? l "step 3 nudge shown")) out) "no nudge between the wheel and its axle: the lesson looks once both are in")
+    (check-true (ormap (λ (l) (string-contains? l "step 5 done: set on its target (remove rope-1) ; (move load (0.15 0.35 0)) ; (rope rope-1 #:from (drum 0 0 0) #:to (load 0 0.05 0) #:length 2.82 #:wind-on drum")) out)
+                "the rope wound on the drum, the block hung 0.3 m up under its winding side")
+    (define facts (facts-line out))
+    (check-= (rise-in facts "load") 1.413 0.01 (format "the block rose 1.413 m: ~a" facts))
+    (check-= (rpm-of out "drum") 3 0.1 "the drum at the hand's 3 rpm")
+    (check-true (string-contains? facts "broke=no") "the rope held")
+    (check-false (ormap (λ (l) (string-contains? l "spinning at Jolt's limit")) out) "nothing near the engine's spin limit")
+    (check-true (ormap (λ (l) (string-contains? l "step 6 done: lifted")) out) "the lesson's check passes")
+    (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished windlass") (string-contains? l "The block rose 1.41 m"))) out)
+                "the lesson says it is done, with the traced rise")))
+
+;; ---- Lesson 7: the treadwheel crane
+;; Worked by hand (game/lessons/07-crane.lesson): a 0.5 m granite stone, 337.5 kg, 3,311 N, on a 30 cm drum: 993 N.m. Two 70 kg walkers
+;; 30 degrees up a 4 m treadwheel's side turn it with 2 x 70 x 9.81 x 2 x sin 30 = 1,373 N.m, to 1 rpm in 0.35 s: the stone rises at
+;; 0.3 x 0.10472 = 0.0314 m/s, 0.9425 m in 30 s less 5.5 mm for the start and 2 mm of stretch, 0.935 m. One walker (687 N.m) loses:
+;; the stone, hung 0.3 m up, runs the wheel back and lands in 2.8 s, rise -0.3. The rope: 4.1193 off the drum to the pulley, 0.6123
+;; round it, 2.41 down: 7.1416 m.
+;; Played by the mouse words, then the done text's experiment: the treadwheel's drive-torque field typed 687, and Test again.
+(define crane-playthrough
+  (string-append "wait 30; lesson crane; wait 5; "
+                 "palette-click treadwheel; wait 5; click-at 0 0 0; wait 5; "                 ; step 1: the wheel, set 2.4 m up, two walkers in it
+                 "gear-on drum-30cm; wait 10; "                                               ; step 2: the drum on its axle, 1.25 m back
+                 "palette-click post; wait 5; click-at -4 0 -1.25; wait 5; "                  ; step 3: the jib post
+                 "palette-click pulley; wait 5; click-at -4.12 3.0 -1.25; wait 5; "           ; step 4: the pulley at its top's edge
+                 "palette-click block; wait 5; click-at -4.45 0 -1.25; wait 5; "              ; step 5: the stone, made 0.5 m by the lesson
+                 "palette-click rope; wait 5; click-part drum; click-part stone; wait 5; "    ; step 6: wound on the drum, over the pulley
+                 "test; wait-test; wait 5; "                                                  ; step 7: Test
+                 "select treadwheel; wait 5; field drive-torque 687; wait 5; test; wait-test; wait 5; quit"))   ; one walker
+
+(test-case "Lesson 7 plays through by the mouse: two walkers lift the 337.5 kg stone 0.94 m; one walker loses it to the ground"
+  (when (godot-available?)
+    (define out (run-editor crane-playthrough #:seconds 170))
+    (check-equal? (steps-done out 7) '(1 2 3 4 5 6 7) "every step completes")
+    (check-true (ormap (λ (l) (string-contains? l "step 1 done: set on its target (move treadwheel (0 2.4 0)) ; (set treadwheel #:drive-rpm 1) ; (set treadwheel #:drive-torque 1373)")) out)
+                "the wheel 2.4 m up, two walkers in it")
+    (check-true (ormap (λ (l) (string-contains? l "[BuildMode] drum on treadwheel's shaft: placing drum-30cm, the ghost 1.25 m behind treadwheel")) out)
+                "the drum starts clear of the 1.2 m wheel: 0.6 + 0.6 + 0.05")
+    (check-true (ormap (λ (l) (string-contains? l "(post jib #:at (-4 0 -1.25) #:material oak #:size-x 0.3 #:size-y 3 #:size-z 0.3)")) out) "the jib, the card's 3 m")
+    (check-true (ormap (λ (l) (string-contains? l "step 5 done: set on its target (set stone #:size 0.5) ; (move stone (-4.45 0.25 -1.25))")) out) "the stone made 0.5 m")
+    (check-true (ormap (λ (l) (string-contains? l "(rope rope-1 #:from (drum 0 0 0) #:to (stone 0 0.25 0) #:length 7.1416 #:wind-on drum #:over ((-4.05 3.21 -1.25) (-4.1086 3.3514 -1.25) (-4.25 3.41 -1.25) (-4.3914 3.3514 -1.25) (-4.45 3.21 -1.25)) #:turns pulley")) out)
+                "the rope wound on the drum and over the pulley's top, 7.1416 m")
+    (check-true (ormap (λ (l) (string-contains? l "masses treadwheel=424.16kg drum=265.785kg pulley=96.593kg stone=337.5kg")) out) "the Test's masses, as worked")
+    (define facts (filter (λ (l) (string-contains? l "[BuildMode] facts: ")) out))
+    (check-equal? (length facts) 2 "two Tests")
+    (check-= (rise-in (car facts) "stone") 0.935 0.01 (format "two walkers lift the stone 0.935 m: ~a" (car facts)))
+    (check-true (string-contains? (car facts) "broke=no") "the rope held")
+    (check-true (ormap (λ (l) (string-contains? l "step 7 done: lifted")) out) "the lesson's check passes")
+    (check-true (ormap (λ (l) (string-contains? l "> (set treadwheel #:drive-torque 687)")) out) "one walker, typed into the field")
+    (check-= (rise-in (cadr facts) "stone") -0.3 0.01 (format "one walker: the stone runs the wheel back and lands, 0.3 m down: ~a" (cadr facts)))
+    (check-true (regexp-match? #px"t=[0-9.]+ by=settled" (cadr facts)) "and everything stops there")
+    (check-false (ormap (λ (l) (string-contains? l "spinning at Jolt's limit")) out) "nothing near the engine's spin limit")
+    (define finished (filter (λ (l) (string-contains? l "[Lesson] finished crane")) out))
+    (check-true (and (pair? finished) (andmap (λ (l) (string-contains? l "The stone rose 0.94 m")) finished))
+                "the done text keeps the two walkers' rise after the one-walker Test")))

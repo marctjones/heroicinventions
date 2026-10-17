@@ -1,0 +1,95 @@
+;; Lesson 7: a treadwheel crane, the third of "Build five machines" (docs/plans/tutorial-plan.md). Read by
+;; src/HeroicInventions.Sim/Editor/Lessons.cs; the format is described there.
+;;
+;; The numbers, worked by hand before writing the steps (the catalogue's parts, materials.rktd: oak 720, granite 2700, bronze 8800 kg/m³):
+;;   the treadwheel, treadwheel-4.0m oak: radius 2 m, 1.2 m wide; 0.58911 m³ × 720 = 424.16 kg, about its axle 1.59145 × 720 = 1,145.8 kg·m²
+;;   the drum, drum-30cm oak: radius 0.3 m, 1.2 m long; 0.36915 m³ × 720 = 265.79 kg, about its axle 0.022024 × 720 = 15.86 kg·m²
+;;   the pulley, pulley-20cm bronze: radius 0.2 m; 0.010976 m³ × 8800 = 96.59 kg (the engine turns it with the rope; it doesn't slow it)
+;;   the stone, a 0.5 m granite block: 0.125 m³ × 2700 = 337.5 kg, weighing 3,310.9 N; on the drum's 0.3 m: 993.3 N·m
+;;   the walkers: two of 70 kg standing 30° up the wheel's side, 2 m from the axle, turn it with 2 × 70 × 9.81 × 2 × sin 30° = 1,373.4 N·m
+;;   (their weight bears down 1 m out across the axle); one walker 686.7 N·m. The lesson sets the wheel's drive to 1 rpm, at most 1,373.
+;;   two walkers: 1,373 − 993 = 380 N·m to spare (less the bearings' 0.2/s × 1,162 × 0.105 = 24) over 1,146 + 16 + 337.5 × 0.3² = 1,192 kg·m²:
+;;   0.30 rad/s², up to 1 rpm (0.10472 rad/s) in 0.35 s. The stone then rises at r ω = 0.3 × 0.10472 = 0.031416 m/s, in the Test's 30 s
+;;   0.9425 m, less 5.5 mm for the start and 2 mm the rope stretches as it takes the stone: 0.935 m. The Test's check: 0.94 within 0.12.
+;;   one walker: 687 against 993 runs the wheel back, (687 − 993) / 1,192 = −0.257 rad/s²: the stone sinks at 0.3 × 0.257 = 0.077 m/s²
+;;   and reaches the ground, 0.3 m down, in sqrt(2 × 0.3 / 0.077) = 2.8 s; there it rests, the walker too weak to lift it.
+;; Traced (2026-10-17: the rig typed into build mode and Tested before the steps were written, then this lesson played through by the
+;; mouse words, headless by racket/heroic/tests/lesson-test.rkt): two walkers "t=30.01 by=limit | rise stone=0.9350 peak=0.9350
+;; low=-0.0020 ... | turns treadwheel=0.5319 ... | turns pulley=-0.7673 ... | rope rope-1 max=3343.13 strength=18849.56 broke=no"; the
+;; Test's masses treadwheel 424.16, drum 265.785, pulley 96.593, stone 337.5 kg. One walker (the done text's experiment, drive torque
+;; 687 typed into the treadwheel's field, Test again): "t=8.92 by=settled | rise stone=-0.3000 peak=0.0000 low=-0.3000 ... | turns
+;; treadwheel=-0.1547 peak=0.1978 rpm=0.0". The rope, the Rope tool's 2 cm hemp, holds 18,850 N against the 3,343 it carried at most.
+;; (The engine counts the wheel's turns at 0.532, 6% over the 0.5 of 1 rpm for 30 s, while the stone rose as 1 rpm winds; the lesson
+;; checks the stone's own height and quotes no speed.)
+;;
+;; Geometry: the treadwheel's middle 2.4 m up (its rim 0.4 m off the ground; a click on the ground under it puts it 2 m up, within 0.6).
+;; "Put a drum on this shaft" starts the drum just clear of the wheel, ShaftSlots.ClearT: 0.6 + 0.6 + 0.05 = 1.25 m behind it (-z). The
+;; jib post, 3 m (its card's second size), 4 m out at x = -4 in the drum's plane (the Roman crane's pulley is 4.8 m from its drum,
+;; racket/machines/roman-crane.rkt): outside the treadwheel's pick box, which spans the wheel and its axle as far as the drum (a post
+;; inside it is never clicked on top: the ray meets the wheel's box first), and clear of the wheel in the picture. The pulley overhangs
+;; the post's outer face (-4.15) to its middle at -4.25, 3.21 m up (its rim 1 cm over the post's top), so the stone, hung under its far
+;; side at -4.45, clears the post by 5 cm (a pulley on the post's middle would hang the 0.5 m stone through it). The rope: off the drum
+;; to the pulley's near side, sqrt(4.1302² − 0.3²) = 4.1193, 4 chords of 2 × 0.2 × sin 22.5° = 0.6123 round its top, and 2.41 down to the
+;; stone's top, hung 0.3 m up (its centre 0.55): 7.1416 m. Seen from behind the wheel and to its side (yaw 3.75, 35° off the axle: the
+;; drum's side, the rope nearest the camera, and the axle seen across enough for the mouse to slide the drum along it); the right of
+;; the picture is -x.
+
+(lesson crane
+  (title "Lesson 7: the treadwheel crane")
+  (view 3.75 0.33 13 -1.9 2.6 -1.0)
+
+  (step
+    (text "The Romans lifted building stones with a crane worked by men walking inside a great wheel. Start with the wheel: pick Treadwheel in the parts list (it is lit up; the lesson has opened Show all parts). The card offers the one 4 m across, in oak. Click on the ground under the green wheel. The lesson then puts two walkers inside it, each 70 kg, stepping up its side so that it turns once a minute.")
+    (highlight treadwheel)
+    (variant treadwheel-4.0m)
+    (material oak)
+    (target (kind treadwheel-4.0m) (at 0 2.4 0) (within 0.6))
+    (check place (kind wheel) (catalogue treadwheel-4.0m) (as treadwheel)
+           (then "(set {id} #:drive-rpm 1)")
+           (then "(set {id} #:drive-torque 1373)")))
+
+  (step
+    (text "The rope winds onto a drum on the wheel's axle. The treadwheel is selected: the lesson has picked Winding drum in the Which list under Put a drum on this shaft. Press that button (it is lit up; scroll the panel down if you can't see it). The card offers the drum 30 cm in radius. It starts on the axle's bright line just clear of the wheel, on the green drum: click there.")
+    (select treadwheel)
+    (highlight button:gear_on)
+    (variant drum-30cm)
+    (material oak)
+    (target (kind drum-30cm) (at 0 2.4 -1.25) (within 0.3))
+    (check place (kind wheel) (catalogue drum-30cm) (on-shaft treadwheel) (as drum)))
+
+  (step
+    (text "The rope goes from the drum up over a pulley and down to the stone. The pulley needs a post to stand on: pick Post (lit up); the lesson has pressed 3 m on its card. Click on the green post, 4 m to the right of the wheel: a crane reaches out from the wheel that works it.")
+    (highlight post)
+    (preset "3 m")
+    (target (kind post) (at -4 0 -1.25) (within 0.3))
+    (check place (kind post) (as jib)))
+
+  (step
+    (text "Now the pulley on the post's top, overhanging its far edge so the stone can hang clear of the post. Pick Pulley (lit up); the card offers the one 20 cm in radius, in bronze. Click on the post's top, at its right-hand edge, by the green pulley.")
+    (highlight pulley)
+    (variant pulley-20cm)
+    (material bronze)
+    (target (kind pulley-20cm) (at -4.25 3.21 -1.25) (within 0.35))
+    (check place (kind wheel) (shape pulley) (radius 0.2) (as pulley)))
+
+  (step
+    (text "The stone to lift goes on the ground under the pulley's right-hand edge. Pick Block (lit up): granite. Click on the green block. The lesson then makes it a big building stone, half a metre each way.")
+    (highlight block)
+    (material granite)
+    (target (kind block) (at -4.45 0.05 -1.25) (within 0.3))
+    (check place (kind block) (category stone) (as stone)
+           (then "(set {id} #:size 0.5)")
+           (then "(move {id} (-4.45 0.25 -1.25))")))
+
+  (step
+    (text "Tie the stone to the drum: pick Rope (lit up), click the drum, then the stone. The lesson then winds the rope's top end onto the drum, runs it over the pulley, and hangs the stone {hoist} up.")
+    (highlight rope)
+    (check join (kind rope) (between drum stone) (wind-on drum) (over pulley) (hang 0.3)))
+
+  (step
+    (text "Press Test it (lit, top left) and watch. The stone weighs {stone.mass}: hung from the drum's 30 cm it turns the axle backwards with 993 newton-metres. The walkers, 70 kg each, stand 30 degrees up the wheel's side, 2 m from the axle, and turn it forwards with 2 × 70 × 9.81 × 2 × sin 30° = 1,373 newton-metres. They win, and the drum winds the rope in at 30 cm × 1 turn a minute: about 3 cm a second.")
+    (highlight test)
+    (fail "The stone rose {rise}, not the {expect} it should. Two walkers turn the wheel with 1,373 newton-metres and the stone pulls back with 993; one walker alone, 687, loses and the stone runs the wheel backwards to the ground. Is the rope wound on the drum, and the drum on the wheel's axle? Press Test it again after you have changed it.")
+    (check lifted (part stone) (about 0.94) (within 0.12)))
+
+  (done "The stone rose {rise} in the Test's 30 seconds. Two walkers weigh 1,373 newtons together and the stone 3,311, yet they won: their weight bears down 1 m out from the axle (2 m up the wheel's side at 30 degrees: 2 × sin 30° = 1 m across), the stone's only 30 cm, a lever 3.3 times as long. One walker alone turns it with only 687 newton-metres, against the stone's 993: the stone would run the wheel backwards and sink to the ground. To see it, select the treadwheel, open Show all its numbers on the right, type 687 in place of the 1373 there, and press Test it again."))

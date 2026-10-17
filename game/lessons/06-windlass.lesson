@@ -1,0 +1,80 @@
+;; Lesson 6: a windlass, the second of "Build five machines" (docs/plans/tutorial-plan.md). Read by
+;; src/HeroicInventions.Sim/Editor/Lessons.cs; the format is described there.
+;;
+;; The numbers, worked by hand before writing the steps (the catalogue's oak parts, materials.rktd: oak 720, granite 2700 kg/m³):
+;;   the drum, drum-15cm: radius 0.15 m, 0.6 m long, flanges 0.21 m; 0.046143 m³ × 720 = 33.22 kg, about its axle 0.00068825 × 720 = 0.4955 kg·m²
+;;   the handle, cart-wheel-120cm: radius 0.6 m, 7.2 cm wide; 0.024264 m³ × 720 = 17.47 kg, about its axle 0.0057281 × 720 = 4.124 kg·m²
+;;   the load, a 10 cm granite block: 0.001 m³ × 2700 = 2.7 kg, weighing 2.7 × 9.81 = 26.49 N
+;;   on the drum's 0.15 m the block turns the axle back with 26.49 × 0.15 = 3.97 N·m; a hand at the wheel's rim, 0.6 m out, holds it with
+;;   3.97 / 0.6 = 6.6 N: a quarter of the block's weight, R / r = 0.6 / 0.15 = 4
+;;   the hand turns the axle at 3 rpm = 0.31416 rad/s with at most 40 N·m (67 N at the rim). It is set on the drum, the axle's first
+;;   wheel: the engine drives an axle by its first wheel (MachineView.BuildOnAxle), and the button joins (arbor drum handle). Starting:
+;;   (40 − 3.97) / (0.4955 + 4.124 + 2.7 × 0.15²) = 7.7 rad/s², up to speed in 0.04 s (the bearings' drag, 0.2/s × 4.68 × 0.314 =
+;;   0.29 N·m, is nothing beside 40)
+;;   the rope winds in r ω = 0.15 × 0.31416 = 0.04712 m/s: in the Test's 30 s (it never goes quiet: the hand keeps turning) 1.4137 m,
+;;   less a millimetre for the start: 1.413 m, one and a half turns of 2 π × 0.15 = 0.9425 m. The Test's check: 1.41 within 0.15.
+;; Traced (2026-10-17: the rig typed into build mode and Tested before the steps were written, then this lesson played through by the
+;; mouse words, headless by racket/heroic/tests/lesson-test.rkt): "t=30.01 by=limit | rise load=1.4107 peak=1.4107 low=-0.0012 ... |
+;; turns drum=1.4802 ... rpm=3.0 | turns handle=1.4802 ... rpm=3.0 | rope rope-1 max=29.60 strength=18849.56 broke=no"; the Test's
+;; masses drum 33.223, handle 17.47, load 2.7 kg. The rope, the Rope tool's 2 cm hemp, holds 18,850 N; the most it carried, 29.6 N, is
+;; the start's jerk on the block's 26.5. (The engine counts the drum's turns 1.1% under the 1.497 turns of rope it wound; the lesson
+;; checks the block's own height.)
+;;
+;; Geometry: the 3 m post (its card's second size), made 15 cm square; the drum on its top, 3.22 m up (its flanges, 0.21 m, clear the
+;; post's top by a centimetre). The rope leaves the drum on the side that turning forward about its axle (+z) carries up, +x, and the
+;; block hangs plumb under it, x = 0.15: its sides 0.10 to 0.20 clear the slim post's 0.075 by 2.5 cm (a 30 cm post would hold it off).
+;; "Put a wheel on this shaft" starts the wheel just clear of the drum (ShaftSlots.ClearT: 0.3 + 0.036 + 0.05 = 0.386 m behind it, -z);
+;; the lesson sets it on 0.4. The block is hung 0.3 m up (its centre 0.35): 3.22 − 0.40 = 2.82 m of rope. Seen from the front and to the
+;; right, the handle behind the drum.
+
+(lesson windlass
+  (title "Lesson 6: the windlass")
+  (view 0.61 0.26 6.5 0 2.5 0)
+
+  (step
+    (text "A windlass winds a rope onto a drum to lift a load. The drum needs something high to stand on: pick Post in the parts list (it is lit up). The lesson has pressed 3 m on its card. Click on the green post. The lesson makes it slim, so the rope can hang beside it.")
+    (highlight post)
+    (preset "3 m")
+    (target (kind post) (at 0 0 0) (within 0.5))
+    (check place (kind post) (as post)
+           (then "(set {id} #:size-x 0.15)")
+           (then "(set {id} #:size-z 0.15)")))
+
+  (step
+    (text "Now the drum on top of the post: a wooden roller the rope winds onto. It is under Show all parts, which the lesson has opened. Pick Winding drum (it is lit up); the card offers the one 15 cm in radius, in oak. Click on the green drum over the post.")
+    (highlight drum)
+    (variant drum-15cm)
+    (material oak)
+    (target (kind drum-15cm) (at 0 3.22 0) (within 0.3))
+    (check place (kind wheel) (catalogue drum-15cm) (as drum)))
+
+  (step
+    (text "A drum alone is hard to turn: give it a big wheel on its axle, a handle you push round by the rim. The drum is selected, and the lesson has picked Wheel in the Which list on the right: press Put a wheel on this shaft (lit). The card offers the wheel 120 cm across. It slides along the drum's axle, the bright line: click on the green wheel just behind the drum. The lesson then puts a hand on the wheel, turning it 3 times a minute.")
+    (select drum)
+    (highlight button:gear_on)
+    (variant cart-wheel-120cm)
+    (material oak)
+    (target (kind cart-wheel-120cm) (at 0 3.22 -0.4) (within 0.3))
+    (check place (kind wheel) (catalogue cart-wheel-120cm) (on-shaft drum) (as handle)
+           (then "(set {drum} #:drive-rpm 3)")
+           (then "(set {drum} #:drive-torque 40)")))
+
+  (step
+    (text "Something to lift: a granite block on the ground, under the drum's right-hand edge. Pick Block (lit up) and click on the green block.")
+    (highlight block)
+    (material granite)
+    (target (kind block) (at 0.15 0.05 0) (within 0.2))
+    (check place (kind block) (category stone) (as load)))
+
+  (step
+    (text "Tie the block to the drum. Pick Rope in the parts list (it is lit up), click the drum, then the block. The lesson then winds the rope's top end onto the drum and hangs the block {hoist} up, so you can see it hanging from the rope.")
+    (highlight rope)
+    (check join (kind rope) (between drum load) (wind-on drum) (hang 0.3)))
+
+  (step
+    (text "Press Test it (lit, top left) and watch. The hand turns the big wheel 3 times a minute; the drum is on the same axle, so it turns with it and winds the rope in. Each turn takes in as much rope as the drum is round: 2 × 3.14 × 15 cm = 94 cm. The block weighs {load.mass}. Hung from the drum's 15 cm it pulls the axle round backwards; pushed at the wheel's 60 cm, four times as far out, the hand needs only a quarter of the block's pull.")
+    (highlight test)
+    (fail "The block rose {rise}, not the {expect} it should. Is the rope tied from the drum to the block, and is the wheel on the drum's axle? Press Test it again after you have changed it.")
+    (check lifted (part load) (about 1.41) (within 0.15)))
+
+  (done "The block rose {rise} in the Test's 30 seconds: one and a half turns of the drum, 94 cm a turn. The hand at the wheel's rim pushed with only a quarter of the block's weight, because the wheel is four times as big round as the drum: it moves four times as far as the rope does. That trade, a small push for a long way against a big pull for a short way, is the windlass, and the crane in the next lesson is the same thing, made big."))

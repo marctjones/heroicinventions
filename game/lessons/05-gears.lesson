@@ -32,6 +32,7 @@
   (step
     (text "Gears need something to stand on. Pick Post in the parts list (it is lit up), then click on the green post in the scene. The card's first size, 1 m tall, is the right one.")
     (highlight post)
+    (preset "1 m")
     (target (kind post) (at 0 0 0) (within 0.5))
     (check place (kind post) (as post)))
 
