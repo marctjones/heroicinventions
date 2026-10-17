@@ -74,7 +74,7 @@
   (step
     (text "Press Test it (lit, top left) and watch for 30 seconds. The wind is 6 m/s. The sails start from rest and speed up until the wind's push and the millstones' 11,440 newton-metres balance, at 8.6 turns a minute. They are heavy, 1,500 kg spread out to 10 m, so they take a while: about 10 seconds to reach two-thirds of that. The last pinion turns 256 times as fast: it nears 2,200 turns a minute, and at the Test's end should be at about 2,100.")
     (highlight test)
-    (fail "The last pinion was turning at {pinion-e.rpm} at the end, not the 2,100 rpm it should, or it didn't turn 256 times for each turn of the sails ({ratio}). Are all four stages there, each a 72 driving an 18, each on the last pinion's shaft? Press Test it again after you have changed it.")
+    (fail "The last pinion ended at {pinion-e.rpm} and turned {ratio} times for each turn of the sails; it should be about 2,100 rpm and 256 times. Are all four stages there, each a 72 driving an 18, each on the last pinion's shaft? Press Test it again after you have changed it.")
     (check turned (part pinion-e) (rpm 2100) (within 150))
     (check ratio (part wheel-a) (to pinion-e) (is 256) (within 2)))
 

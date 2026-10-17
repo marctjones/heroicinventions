@@ -101,7 +101,7 @@ public class LessonEightNineTests
         // the Test: the speed alone isn't enough (a train that slipped would turn 2,100 at the end and not 256 to one); both, done
         TestFacts Facts(double pinionTurns, double rpm) => new(30, "limit", [], [new WheelTurn("wheel-a", 2.9756, 2.9756, 8.2), new WheelTurn("pinion-e", pinionTurns, pinionTurns, rpm)], [], [], []);
         Assert.False(run.OnTest(NoTilts, NoMasses, Facts(700, 2101.3), s.Document));
-        Assert.StartsWith("The last pinion was turning at 2101 rpm at the end, not the 2,100 rpm it should, or it didn't turn 256 times for each turn of the sails (235).", run.Failure);
+        Assert.StartsWith("The last pinion ended at 2101 rpm and turned 235 times for each turn of the sails; it should be about 2,100 rpm and 256 times.", run.Failure);
         Assert.True(run.OnTest(NoTilts, NoMasses, Facts(761.9428, 2101.3), s.Document));
         Assert.True(run.Finished);
         Assert.StartsWith("The last pinion ended at 2101 rpm, and over the Test it turned 256 times for each turn of the sails", run.Fill(run.Lesson.Done, s.Document));
@@ -121,7 +121,7 @@ public class LessonEightNineTests
         Assert.Equal(("gear_on", "generator", "pinion-d"), (lesson.Steps[5].Button, lesson.Steps[5].Variant, lesson.Steps[5].Select));
         Assert.Equal(["(set {id} #:in {cells})", "(set {generator} #:charges {id})"], lesson.Steps[7].Check.Then);
         Assert.NotNull(lesson.Steps[6].View);
-        Assert.Null(lesson.Steps[7].View);
+        Assert.Equal(lesson.Steps[6].View, lesson.Steps[7].View);   // the bank's step looks at the ground too: a lesson resumed there does
         Assert.Equal(3, lesson.Steps[6].View!.Pivot.X);
         var test = lesson.Steps[8];
         Assert.Equal((440.0, 120.0), (test.Check.Watts, test.Check.Within));

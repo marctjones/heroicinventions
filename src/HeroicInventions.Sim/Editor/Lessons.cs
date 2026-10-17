@@ -661,10 +661,10 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         var (mw, mp) = axle.Contains(made.A) ? (made.A, made.B) : (made.B, made.A);
         if (!axle.Contains(mw))
             Nudge = $"That stage is not on the {onRole}'s axle. Undo it (Ctrl+Z), select the {onRole} and press Add a stage.";
-        else if (doc.Parts.TryGetValue(mw, out var gw) && doc.Parts.TryGetValue(mp, out var gp) && (!TeethIs(gw, c.Teeth) || !TeethIs(gp, c.Teeth2)))
+        else if (bound.Contains(mw) || bound.Contains(mp))
+            Nudge = $"That meshes a gear the lesson already has. Undo it (Ctrl+Z), select the {onRole} and press Add a stage.";
+        else if (doc.Parts.TryGetValue(mw, out var gw) && doc.Parts.TryGetValue(mp, out var gp))
             Nudge = $"That stage is {Sizes(gw, gp)}, but this step's is {asked}. Undo it (Ctrl+Z), pick {asked.Replace(" drives ", " and ")} under Add a stage and press it again.";
-        else
-            Nudge = $"That meshes gears the lesson already has. Undo it (Ctrl+Z), select the {onRole} and press Add a stage.";
         return (false, [], Nudge);
     }
 

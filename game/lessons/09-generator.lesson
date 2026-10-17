@@ -82,6 +82,7 @@
 
   (step
     (text "And the battery itself beside it: pick Battery bank (lit up) and click on the green bank. The lesson puts its cells in the store and runs the generator's wire to it.")
+    (view 3.6 0.35 9 3 0.6 -3)
     (highlight battery-bank)
     (target (kind battery-bank) (at 3.5 0 -3) (within 0.5))
     (check place (kind battery-bank) (as bank)
@@ -92,7 +93,7 @@
     (text "Press Test it (lit, top left) and watch the generator up by the gears: its needle and its label. The sails speed up from rest; until the generator's shaft reaches 1,500 turns a minute it charges nothing, and the sails turn freely. Past it the generator pushes back harder the faster it goes, and the sails settle where their push and the generator's balance: the generator near 1,800 turns a minute, giving the battery over 500 watts. In the Test's 30 seconds it gets most of the way: about 1,750 turns a minute and 440 watts.")
     (view 3.9 0.2 4 0.6 11 -1.6)
     (highlight test)
-    (fail "The generator was charging the bank at {generator.watts} at the end, its shaft at {pinion-d.rpm}, not the 440 W and 1,750 rpm it should. Under 1,500 turns a minute a generator charges nothing: are all three stages there, 72 driving 18, and is the generator on the last pinion's shaft? Is the bank's wire run from the generator? Press Test it again after you have changed it.")
+    (fail "The generator was charging the bank at {generator.watts} at the end, its shaft at {pinion-d.rpm}, not the 440 W and 1,750 rpm it should. Under 1,500 turns a minute a generator charges nothing: are all three stages there, 72 driving 18, and is the generator on the last pinion's shaft? Press Test it again after you have changed it.")
     (check charging (part generator) (watts 440) (within 120))
     (check turned (part pinion-d) (rpm 1750) (within 120)))
 
