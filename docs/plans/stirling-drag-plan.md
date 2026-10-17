@@ -288,3 +288,19 @@ Fable's second pass on #269, given the lead's constraint, kept the coefficients 
 | the 18 | 4.000× the 72 | 1,606.8 rpm (4.000×) |
 | rotor | 1,606 rpm | 1,605.7 rpm |
 | charge | 171 W | 170.6 W |
+
+## Measured (slice 1, the drag, 2026-10-17)
+
+One drag term k ω² with k 1.38e-5 N·m·s², the template's 0.4375 of Carnot (0.35 at the shaft at 1,500 rpm), and mars-stirling pinned at 0.35. Every number below was worked before its run (the "Decided" section and the tests' headers).
+
+| Test | Worked | Measured |
+|---|---|---|
+| `StirlingDragTests`: free speed, on 3 N·m, k = 0 after 20 s | 268.8 rad/s; 86.34 rad/s; 146.4 rad/s | within 0.5, 0.2, 0.5 (4 passed) |
+| `StirlingShaftLinkTests`: unloaded 20 s; wired | 84.9 rad/s, work = kinetic + drag heat; 160.06 rad/s, 0.341 N·m, 43.7 W | passed within 0.5 rad/s, 1% of the work; 0.5 rad/s, 0.02 N·m, 1 W |
+| `machine-behavior-test` Stirling case | 233.9 / 352.1 / 203.6 rpm, the loads 3ω | passed (0.2 rpm; 0.05 W) |
+| `stirling-route-test` A: shaft, rotor, torque, charge | 202.3 W, 1,601 rpm, 1.21 N·m, 162 W | 202.3 W, 1,600.2 rpm, 1.203 N·m, 161.2 W (slope 161.05 W) |
+| B: asleep; rotor, charge, bank at 2,700 s | 1,115 rpm; 1,595 rpm, 152.9 W, 11.3 Wh | 1,115.6 rpm; 1,595.1 rpm, 152.4 W, 11.67 Wh |
+| C: at 200 s, at 400 s, the clamp | 2,521, 2,560 rpm, never | 2,517.7, 2,559.4 rpm, `spin-limit.hits` 0; `free-rpm` 2,559.9, 0.13 W left at the shaft |
+| `stirling-gear-test`, 4:1: engine, rotor, charge | 407.5, 1,630 rpm, 213.4 W | 406.8, 1,629.7 rpm, 212.5 W |
+
+The whole sol (worked hour by hour, quasi-steady, if the bank takes charge all day): a plain shaft gives about 0.9 kWh of charge (5.5 sols for 5 kWh) and a 4:1 stage about 1.3 kWh (3.8 sols).

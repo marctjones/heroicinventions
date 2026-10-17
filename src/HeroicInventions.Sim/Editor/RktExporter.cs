@@ -262,7 +262,7 @@ public static class RktExporter
                 return $"  (air-pump {p.Id} {At()} #:from {Sym("from", "?")} #:to {Sym("to", "?")} #:speed {F(N("speed"))} #:until {F(N("until"))} {Mat()})\n";
             case "stirling":
                 return $"  (stirling {p.Id} {At()} #:aperture {F(N("aperture"))} #:conductance {F(N("conductance"))} " +
-                       $"#:carnot-fraction {F(N("carnot-fraction", 0.35))} #:emissivity {F(N("emissivity", 0.9))} " +
+                       $"#:carnot-fraction {F(N("carnot-fraction", 0.4375))} #:drag {F(N("drag", 1.38e-5))} #:emissivity {F(N("emissivity", 0.9))} " +
                        $"#:heat-capacity {F(N("heat-capacity", 10000))} #:inertia {F(N("inertia", 0.5))} #:load {F(N("load"))}" +
                        Opt("temperature", "temperature") + $" {Mat()})\n";
             case "envelope":

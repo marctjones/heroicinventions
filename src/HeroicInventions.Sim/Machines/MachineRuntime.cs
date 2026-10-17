@@ -452,10 +452,12 @@ public sealed partial class MachineRuntime
                 case "stirling":
                 {
                     double aperture = part.Number("aperture"), k = part.Number("conductance");
-                    if (aperture <= 0 || k < 0) throw new MachineFormatException($"stirling {part.Id}: #:aperture must be above 0 and #:conductance 0 or more", part.Location);
+                    double drag = part.Number("drag", StirlingEngine.DefaultDrag);
+                    if (aperture <= 0 || k < 0 || drag < 0) throw new MachineFormatException($"stirling {part.Id}: #:aperture must be above 0, #:conductance and #:drag 0 or more", part.Location);
                     _stirlings[part.Id] = new StirlingEngine(part.Id, aperture, k, TemperatureOr(part, "temperature", freezing: false))
                     {
-                        CarnotFraction = part.Number("carnot-fraction", 0.35),
+                        CarnotFraction = part.Number("carnot-fraction", StirlingEngine.DefaultCarnotFraction),
+                        Drag = drag,
                         Emissivity = part.Number("emissivity", 0.9),
                         HeatCapacity = part.Number("heat-capacity", 10_000),
                         MomentOfInertia = part.Number("inertia", 0.5),
@@ -1815,13 +1817,18 @@ public sealed partial class MachineRuntime
             _getters[$"{id}.radiation"] = () => se.Radiation;              // W its aperture gives back
             _getters[$"{id}.heat-drawn"] = () => se.HeatDrawn;             // W through the heater into the engine
             _getters[$"{id}.efficiency"] = () => se.Efficiency;            // f (1 - Tc/Th)
-            _getters[$"{id}.shaft-power"] = () => se.ShaftPower;           // W of work made
+            _getters[$"{id}.indicated-power"] = () => se.IndicatedPower;   // W of work the gas cycle makes
+            _getters[$"{id}.shaft-power"] = () => se.ShaftPower;           // W left at the shaft after the drag (#269)
+            _getters[$"{id}.drag-power"] = () => se.DragPower;             // W the engine's drag takes, k w^3
+            _getters[$"{id}.drag-heat"] = () => se.DragHeat;               // J the drag has turned to heat
+            _getters[$"{id}.free-rpm"] = () => double.IsFinite(se.FreeSpeed) ? se.FreeSpeed * 60 / (2 * Math.PI) : -1;   // rpm it would run at unloaded
             _getters[$"{id}.power"] = () => se.Power;                      // W into the load
             _getters[$"{id}.rpm"] = () => se.Rpm;
             _getters[$"{id}.work"] = () => se.Work;                        // J done on the load
             _setters[$"{id}.load"] = v => se.Load = Math.Max(0, v);
             _setters[$"{id}.conductance"] = v => se.Conductance = Math.Max(0, v);
             _setters[$"{id}.carnot-fraction"] = v => se.CarnotFraction = Math.Clamp(v, 0, 1);
+            _setters[$"{id}.drag"] = v => se.Drag = Math.Max(0, v);
         }
         foreach (var (id, d) in _doors)
         {

@@ -15,8 +15,12 @@
 ;;           give: K* maximises f (1 - Tc/T)(eQ - e sigma A (T^4 - Ta^4))
 ;;   large   K = 36 W/K:    draws hard but runs at -27.7 C, barely warmer
 ;;           than the cold side, where Carnot allows little: 64.1 W
-;; Each drives a 3 N m load, so it turns at P / 3 rad/s: 234, 354 and 204
-;; rpm. Far below the receiver's 190-odd C stagnation: a hot receiver
+;; Each drives a 3 N m load and its own drag (#269: k w^2, k 1.38e-5 N m s2),
+;; so it turns where P = (3 + k w^2) w: 233.9, 352.1 and 203.6 rpm (234, 354
+;; and 204 with no drag), giving the loads 73.5, 110.6 and 64.0 W. The
+;; engines here are pinned at 0.35 of Carnot for the gas cycle (#:carnot-fraction),
+;; the figure this machine was worked with; the template's default is 0.4375,
+;; which gives 0.35 at the shaft at 1,500 rpm (docs/plans/stirling-drag-plan.md). Far below the receiver's 190-odd C stagnation: a hot receiver
 ;; re-radiates what the mirrors bring. And the cold matters: the same
 ;; matched engine with a 20 C cold side (set scene.ambient 20) settles at
 ;; 100.5 C and gives only 55.8 W, half.
@@ -30,9 +34,9 @@
   #:source "Robert Stirling's hot-air engine (1816), on mirror heat at Meridiani"
   #:planet mars
   #:latitude -2 #:day 100 #:time 12
-  (stirling small #:at ((m -12) (m 1) 0) #:aperture 1 #:conductance 3 #:load 3)
-  (stirling matched #:at (0 (m 1) 0) #:aperture 1 #:conductance 9.36 #:load 3)
-  (stirling large #:at ((m 12) (m 1) 0) #:aperture 1 #:conductance 36 #:load 3)
+  (stirling small #:at ((m -12) (m 1) 0) #:aperture 1 #:conductance 3 #:load 3 #:carnot-fraction 0.35)
+  (stirling matched #:at (0 (m 1) 0) #:aperture 1 #:conductance 9.36 #:load 3 #:carnot-fraction 0.35)
+  (stirling large #:at ((m 12) (m 1) 0) #:aperture 1 #:conductance 36 #:load 3 #:carnot-fraction 0.35)
   (mirror s1 #:at ((car (ring -12 0)) (cadr (ring -12 0)) (caddr (ring -12 0))) #:area 1 #:onto small)
   (mirror s2 #:at ((car (ring -12 1)) (cadr (ring -12 1)) (caddr (ring -12 1))) #:area 1 #:onto small)
   (mirror s3 #:at ((car (ring -12 2)) (cadr (ring -12 2)) (caddr (ring -12 2))) #:area 1 #:onto small)

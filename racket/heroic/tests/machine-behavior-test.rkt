@@ -1351,10 +1351,13 @@
 
 ;; Issue #65: hot-air engines on mirror heat on Mars. Predicted before the
 ;; run (mars-stirling.rkt), from the traced Q = 1,508.8 W on each receiver:
-;; 98.5 / 40.2 / -27.7 C and 73.7 / 111.3 / 64.1 W; 55.8 W for the matched
-;; engine with a 20 C cold side.
+;; 98.5 / 40.2 / -27.7 C and 73.7 / 111.3 / 64.1 W indicated; 55.8 W for the
+;; matched engine with a 20 C cold side. Since #269 each engine also has its own
+;; drag, a torque k w^2 (k 1.38e-5 N m s2), so it turns where P = (3 + k w^2) w:
+;; 233.9 / 352.1 / 203.6 rpm, the loads getting 73.5 / 110.6 / 64.0 W (the
+;; machine pins 0.35 of Carnot for the gas cycle, the figure it was worked with).
 (test-case "Stirling engines on Mars: each hot end settles where eQ = radiation + K (T - Tc); the matched one gives the most; a warm cold side halves it"
-  (define sigma 5.670374e-8) (define e 0.9) (define f 0.35)
+  (define sigma 5.670374e-8) (define e 0.9) (define f 0.35) (define k 1.38e-5)
   (define (steady Q K tc)                         ; bisection on eQ = e sigma (T^4 - Tc^4) + K (T - Tc), A = 1
     (let loop ([lo tc] [hi 2000.0] [n 0])
       (define mid (/ (+ lo hi) 2))
@@ -1362,6 +1365,12 @@
             [(> (+ (* e sigma (- (expt mid 4) (expt tc 4))) (* K (- mid tc))) (* e Q)) (loop lo mid (add1 n))]
             [else (loop mid hi (add1 n))])))
   (define (power K T tc) (* f (- 1 (/ tc T)) K (- T tc)))
+  (define (turning P)                             ; bisection on P = (3 + k w^2) w: the 3 N m load and the engine's own drag
+    (let loop ([lo 0.0] [hi 1000.0] [n 0])
+      (define mid (/ (+ lo hi) 2))
+      (cond [(> n 200) mid]
+            [(> (* (+ 3 (* k mid mid)) mid) P) (loop lo mid (add1 n))]
+            [else (loop mid hi (add1 n))])))
   (for ([ambient '(-63 20)])
     (define run (simulate 'mars-stirling #:seconds 8000 #:step 0.05 #:sample-dt 2000
                           #:set (list '(scene clock-rate 0) (list 'scene 'ambient ambient))))
@@ -1373,9 +1382,11 @@
         (check-= Q 1508.8 0.1 "six heliostats' light on the aperture")
         (define T (steady Q K tc))
         (check-= (at 'hot-temperature) (- T 273.15) 0.05 (format "~a's hot end at ~a C" engine ambient))
-        (check-= (at 'shaft-power) (power K T tc) 0.05 (format "~a's shaft power at ~a C" engine ambient))
-        (check-= (at 'rpm) (* (/ (power K T tc) 3) (/ 60 (* 2 pi))) 0.2 "turning its 3 N m load at P / 3 rad/s")
-        (at 'shaft-power)))
+        (check-= (at 'indicated-power) (power K T tc) 0.05 (format "~a's indicated power at ~a C" engine ambient))
+        (define w (turning (power K T tc)))
+        (check-= (at 'rpm) (* w (/ 60 (* 2 pi))) 0.2 "turning where its power meets its 3 N m load and its drag")
+        (check-= (at 'shaft-power) (* 3 w) 0.05 "what the drag leaves is what the load takes")
+        (at 'indicated-power)))
     (when (= ambient -63)
       (check-true (> (second powers) (max (first powers) (third powers))) "the matched engine gives the most")
       (check-= (second powers) 111.29 0.05))

@@ -20,6 +20,12 @@
 ;;  - unloaded (the bank cold), the engine and rotor run up as sqrt(2 P t / I) to Jolt's 3,000 rpm clamp in about 140 s.
 ;; Measured (2026-10-17, the first runs; the plan's "Measured"): A 213.9 W at 12:01, 1,606 rpm, 170.9 W of charge; B 204.5 W at 12:39,
 ;; 1,602 rpm, 163.4 W of charge; C at the clamp by 140 s, nothing charged.
+;; Since #269 (docs/plans/stirling-drag-plan.md, "Decided"): the template engine has its own drag, a torque k w^2 (k 1.38e-5 N m s2),
+;; and 0.4375 of Carnot for its gas cycle, so 0.35 at the shaft at 1,500 rpm. The hot end's balance has no fraction in it (98.75 C at
+;; noon, as before); the indicated power is 1.25 x #220's: 267.4 W at 12:01, 255.6 W at 12:39. Worked before running (time-stepped):
+;;  A  the rotor where 267.4 = 1.38e-5 X^3 + 0.114592 (X - 157.08) X: 1,601 rpm, 1.21 N m, 202 W at the shaft (65 W of drag), 162 W of charge
+;;  B  asleep on its 2 N m: 255.6 = 2 w + k w^3, 1,115 rpm; joined, 1,595 rpm, 191 W at the shaft, 152.9 W of charge, 11.3 Wh by 2,700 s
+;;  C  open circuit: from rest toward the free speed (P / k)^(1/3), 2,521 rpm at 200 s, 2,560 at 400 s: under the 3,000 rpm clamp
 ;;
 ;; The runs (three processes at once, about 2 minutes; each ends on HEROIC_QUIT_AFTER_SIM_SECONDS so the traces' last block is written):
 ;;  A (gate)    the engine built with its hot end GIVEN at its settled 98.75 C (#:temperature), joined at once; the cells set to 25 C (GIVEN:
@@ -110,24 +116,26 @@
     (check-= (at e 'eng.cold-temperature) -28.7 0.1 "C: the weather's noon air")
     (check-= (at e 'eng.radiation) 794 5)
     (check-= (at e 'eng.heat-drawn) 1784 10)
-    (check-= (at e 'eng.efficiency) 0.120 0.001)
-    (check-= (at e 'eng.shaft-power) 214.0 2 "W at the shaft at noon (worked 214.3; the doc: 320)")
+    (check-= (at e 'eng.efficiency) 0.1499 0.001 "0.4375 (1 - Tc/Th) (#269: 0.35 at the shaft at 1,500 rpm)")
+    (check-= (at e 'eng.indicated-power) 267.4 2.5 "W the gas cycle makes at noon (#220's 213.9 x 1.25)")
+    (check-= (at e 'eng.shaft-power) 202.3 2.5 "W at the shaft at noon, after 65 W of drag at 1,601 rpm (#220 measured 213.9 before the drag)")
     (for ([m (from (hash-ref A 'motor) 100)] [l (from (hash-ref A 'links) 100)])
-      (check-= (at m 'motor.rpm) 1606 15 (format "rotor rpm at ~a s" (car m)))
-      (check-= (at m 'motor.torque) 1.27 0.04)
-      (check-= (at l 'shaft-1.power) 214 3)
-      (check-= (at l 'wire-1.power) 171 3 "W of charge: 0.8 of the shaft's")
+      (check-= (at m 'motor.rpm) 1601 15 (format "rotor rpm at ~a s" (car m)))
+      (check-= (at m 'motor.torque) 1.21 0.04)
+      (check-= (at l 'shaft-1.power) 202 3)
+      (check-= (at l 'wire-1.power) 162 3 "W of charge: 0.8 of the shaft's")
       (check-= (at l 'wire-1.open-circuit) 0 0)
       (check-= (at l 'wire-1.from-stirling) (at l 'wire-1.charge) 1e-9 "the bank files it all under the Stirling"))
-    (for ([e (from (hash-ref A 'engine) 100)]) (check-= (at e 'eng.rpm) 1606 15 "the engine turns with the rotor: ratio 1"))
+    (for ([e (from (hash-ref A 'engine) 100)]) (check-= (at e 'eng.rpm) 1601 15 "the engine turns with the rotor: ratio 1"))
     (define b2 (near (hash-ref A 'bank) 200))
     (define b3 (near (hash-ref A 'bank) 300))
     (define slope (/ (* 3600 (- (at b3 'bank.charge) (at b2 'bank.charge))) (- (car b3) (car b2))))
     (printf "STIRLING A: rotor ~a rpm, ~a N.m, charge ~a W (the bank's slope 200-300 s: ~a W)\n"
             (at (near (hash-ref A 'motor) 200) 'motor.rpm) (at (near (hash-ref A 'motor) 200) 'motor.torque) (at (near (hash-ref A 'links) 200) 'wire-1.power) slope)
-    (check-= slope 171 5)
+    (check-= slope 162 5)
     (check-= (at (last (hash-ref A 'motor)) 'spin-limit.hits) 0 0 "loaded, the rotor never reaches Jolt's clamp")
-    (check-= (at (near (hash-ref A 'engine) 390) 'eng.shaft-power) 212.8 2 "the sun and air drift by 12:07"))
+    (check-= (at (near (hash-ref A 'engine) 390) 'eng.indicated-power) 266.0 2.5 "the sun and air drift by 12:07")
+    (check-= (at (near (hash-ref A 'engine) 390) 'eng.shaft-power) 201.0 3 "less the drag at 1,601 rpm"))
 
   (test-case "B: started cold, the engine earns 204.5 W by 12:39, the first afternoon's peak; joined then, it charges the bank 164 W at 1,602 rpm"
     (define asleep (filter (λ (f) (< (car f) WAKE)) (hash-ref B 'bank)))
@@ -136,28 +144,32 @@
     (printf "STIRLING B (~a s, 12:39, earned from a cold start): on the aperture ~a W, hot end ~a C, air ~a C, shaft ~a W, the engine ~a rpm on its own 2 N.m load\n"
             (car e) (at e 'eng.heat) (at e 'eng.hot-temperature) (at e 'eng.cold-temperature) (at e 'eng.shaft-power)
             (at (last (filter (λ (f) (< (car f) WAKE)) (hash-ref B 'engine))) 'eng.rpm))
-    (check-= (at e 'eng.shaft-power) 204.5 3 "W at the shaft at 12:39 (worked 204.5; the doc: 320)")
+    (check-= (at e 'eng.indicated-power) 255.6 3 "W the gas cycle makes at 12:39 (#220's 204.5 x 1.25)")
     (check-= (at e 'eng.hot-temperature) 99.1 1)
     (check-= (at e 'eng.heat) 2831 15)
     (check-= (at e 'eng.cold-temperature) -25.5 0.2)
-    (check-= (at (last (filter (λ (f) (< (car f) WAKE)) (hash-ref B 'engine))) 'eng.rpm) 977 30 "rpm on its own load in the sleep: 204.5 W / 2 N.m")
+    (check-= (at (last (filter (λ (f) (< (car f) WAKE)) (hash-ref B 'engine))) 'eng.rpm) 1115 30 "rpm on its own load in the sleep: 255.6 = 2 w + k w^3")
     (for ([m (from (hash-ref B 'motor) (+ WAKE 50))] [l (from (hash-ref B 'links) (+ WAKE 50))])
-      (check-= (at m 'motor.rpm) 1602 15 (format "rotor rpm at ~a s" (car m)))
-      (check-= (at l 'wire-1.power) 164 3 "W of charge")
-      (check-= (at l 'shaft-1.power) 204 3))
+      (check-= (at m 'motor.rpm) 1595 15 (format "rotor rpm at ~a s" (car m)))
+      (check-= (at l 'wire-1.power) 152.9 3 "W of charge")
+      (check-= (at l 'shaft-1.power) 191 3 "W at the shaft after the drag"))
     (define end (last (hash-ref B 'bank)))
     (printf "STIRLING B: rotor ~a rpm, charge ~a W; the bank ~a Wh at ~a s, the cells ~a C\n"
             (at (last (hash-ref B 'motor)) 'motor.rpm) (at (last (hash-ref B 'links)) 'wire-1.power) (at end 'bank.charge) (car end) (at end 'cells.temperature))
-    ;; the plan worked 11 +- 1.5 Wh; 164 W x about 270 s of charging (the join near 2,400 s, the cut-in 25 s later, the run's end at 2,700) is 12.3 Wh
-    (check-= (at end 'bank.charge) 12 1.5 "Wh after about 270 s of charging (the cut-in 25 s after the join)")
+    ;; time-stepped before running: the join near 2,400 s at a shared 98 rad/s, the cut-in about 20 s later, 152.9 W to 2,700 s: 11.3 Wh
+    (check-= (at end 'bank.charge) 11.3 1.5 "Wh after about 280 s of charging")
     (check-true (< 0 (at end 'cells.temperature) 45)))
 
-  (test-case "C: the bank cold, the motor is an open circuit: nothing is charged, and the unloaded engine and rotor run up to Jolt's 3,000 rpm clamp"
+  (test-case "C: the bank cold, the motor is an open circuit: nothing is charged, and the unloaded engine and rotor settle at the engine's free speed, under Jolt's 3,000 rpm clamp"
     (for ([l (from (hash-ref C 'links) 10)]) (check-= (at l 'wire-1.power) 0 0))   ; (joined in the first seconds)
     (for ([b (hash-ref C 'bank)]) (check-= (at b 'bank.charge) 0 0))
-    (check-= (at (near (hash-ref C 'engine) 60) 'eng.shaft-power) 214.0 2 "the engine makes its power whatever loads it")
+    (check-= (at (near (hash-ref C 'engine) 60) 'eng.indicated-power) 267.4 2.5 "the engine makes its power whatever loads it")
     (define m (near (hash-ref C 'motor) 200))
-    (printf "STIRLING C (cold bank): rotor ~a rpm at 200 s, spin-limit hits ~a; the link carries ~a W into the clamp\n"
-            (at m 'motor.rpm) (at m 'spin-limit.hits) (at (near (hash-ref C 'links) 200) 'shaft-1.power))
-    (check-= (at m 'motor.rpm) 3000 30)
-    (check-true (>= (at (last (hash-ref C 'motor)) 'spin-limit.hits) 1) "the clamp brakes it: the model's engine has no free speed of its own")))
+    (define m4 (last (hash-ref C 'motor)))
+    (printf "STIRLING C (cold bank): rotor ~a rpm at 200 s, ~a rpm at ~a s, spin-limit hits ~a; the engine's free speed ~a rpm, ~a W left at its shaft\n"
+            (at m 'motor.rpm) (at m4 'motor.rpm) (car m4) (at m4 'spin-limit.hits)
+            (at (last (hash-ref C 'engine)) 'eng.free-rpm) (at (last (hash-ref C 'engine)) 'eng.shaft-power))
+    (check-= (at m 'motor.rpm) 2521 50 "rpm at 200 s: toward the free speed (#269's drag)")
+    (check-= (at m4 'motor.rpm) 2560 40 "rpm at the end: the free speed (P / k)^(1/3)")
+    (check-= (at m4 'spin-limit.hits) 0 0 "never at Jolt's clamp: the drag gives the engine a free speed of its own")
+    (check-true (< (at (last (hash-ref C 'engine)) 'eng.shaft-power) 8) "at its free speed the drag takes nearly all the engine makes")))

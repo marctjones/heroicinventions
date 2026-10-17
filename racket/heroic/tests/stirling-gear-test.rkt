@@ -12,6 +12,9 @@
 ;; shaft lose nothing, so the rotor settles where the motor's k (X - 157.08) X = P whatever the gearing: 168.2 rad/s, 1,606 rpm, 1.27 N.m
 ;; and 171 W of charge, as on #220's plain shaft; the gearing sets only the engine's own speed, 1,606 / 4 = 401.5 rpm, where it turns the
 ;; 72 at its own speed and the 18 at four times it. (Friction, #269's next slice, will make the engine's speed matter: then the stage pays.)
+;; Since #269's drag (a torque k w^2, k 1.38e-5 N m s2; 0.4375 of Carnot for the gas cycle, 267.4 W indicated at 12:01) the stage pays:
+;; worked before running, 267.4 = k (X/4)^3 + 0.114592 (X - 157.08) X: the rotor 1,630 rpm, the engine 407.5 rpm losing 1.1 W to drag,
+;; 213.4 W of charge, where a plain shaft (stirling-route-test's run A) gives 162 W, the engine at 1,601 rpm losing 65 W.
 ;; About 2 minutes. Skipped when Godot is not installed.
 (require rackunit racket/list racket/string racket/system racket/port racket/file racket/math racket/runtime-path
          (only-in heroic/godothost godot-available? godot-binary))
@@ -72,7 +75,7 @@
     (check-true (has? #rx"^\\[links\\] joined: shaft shaft-1 from built-1.pinion-b to motors.rotor$"))
     (check-true (has? #rx"^\\[links\\] joined: wire wire-1 from motors.motor to battery-bank.bank$")))
 
-  (test-case "the engine turns the 72 at its own speed and the 18 at four times it; the rotor settles at the worked 1,606 rpm, the engine at 401.5"
+  (test-case "the engine turns the 72 at its own speed and the 18 at four times it; the rotor settles at the worked 1,630 rpm, the engine at 407.5"
     (define e (last (from engine 150)))
     (define m (last (from motor 150)))
     (printf "STIRLING GEAR (~a s): engine ~a rpm at ~a W; wheel-a ~a rpm, pinion-b ~a rpm (x~a); rotor ~a rpm; charge ~a W\n"
@@ -82,9 +85,10 @@
       (define w (* (at f 'eng.rpm) (/ (* 2 pi) 60)))
       (check-= (at f 'wheel-a.omega) w (* 0.01 w) (format "the 72 turns with the engine, at ~a s" (car f)))
       (check-= (at f 'pinion-b.omega) (* 4 (at f 'wheel-a.omega)) (* 0.01 (at f 'pinion-b.omega)) "the 18 at 72/18 = 4 times the 72")
-      (check-= (at f 'eng.rpm) 401.5 5 "rpm: the rotor's 1,606 over the stage's 4")
-      (check-= (at f 'eng.shaft-power) 214.0 2 "W: the engine at its settled noon balance (#220)"))
+      (check-= (at f 'eng.rpm) 407.5 5 "rpm: the rotor's 1,630 over the stage's 4")
+      (check-= (at f 'eng.indicated-power) 267.4 2.5 "W: the engine at its settled noon balance")
+      (check-= (at f 'eng.shaft-power) 266.3 2.5 "W at its shaft: at 407 rpm the drag takes 1.1 W"))
     (for ([f (from motor 150)] [l (from links 150)])
-      (check-= (at f 'motor.rpm) 1606 15 (format "rotor rpm at ~a s: the same as on #220's plain shaft" (car f)))
-      (check-= (at l 'wire-1.power) 171 3 "W of charge: 0.8 of the engine's 214 W (the meshes and the shaft lose nothing)")
+      (check-= (at f 'motor.rpm) 1630 15 (format "rotor rpm at ~a s" (car f)))
+      (check-= (at l 'wire-1.power) 213.4 3 "W of charge: 0.8 of what the drag leaves (the meshes and the shaft lose nothing); a plain shaft gives 162")
       (check-= (at f 'spin-limit.hits) 0 0))))

@@ -506,7 +506,8 @@
       (bad (format "#:carnot-fraction must be in (0, 1], got ~e" (prop 'carnot-fraction))))
     (for ([k '(heat-capacity inertia)])
       (unless (and (real? (prop k)) (> (prop k) 0)) (bad (format "#:~a must be above 0, got ~e" k (prop k)))))
-    (unless (and (real? (prop 'load)) (>= (prop 'load) 0)) (bad (format "#:load must be 0 N m or more, got ~e" (prop 'load)))))
+    (unless (and (real? (prop 'load)) (>= (prop 'load) 0)) (bad (format "#:load must be 0 N m or more, got ~e" (prop 'load))))
+    (unless (and (real? (prop 'drag)) (>= (prop 'drag) 0)) (bad (format "#:drag must be 0 N m s2 or more, got ~e" (prop 'drag)))))
   (for ([p parts] #:when (eq? (part-kind p) 'crucible))
     (define (prop k) (cdr (assq k (part-props p))))
     (define loc (part-loc p))
@@ -1399,10 +1400,13 @@
     ;; #:aperture (m²) that mirrors and fires heat; it re-radiates through the
     ;; aperture, ε σ A (T⁴ − T_air⁴), and passes Q = K (T_hot − T_cold) to the
     ;; working gas through its heater, #:conductance K in W/K, the cold end at
-    ;; the air around it. Of Q it makes #:carnot-fraction (default 0.35) of
-    ;; Carnot's limit into work, f (1 − T_cold/T_hot) Q, on a flywheel of
-    ;; #:inertia (kg m², 0.5) against a #:load torque (N m); it settles where
-    ;; that work equals load × speed. #:heat-capacity is its hot end's (J/K,
+    ;; the air around it. Of Q its gas cycle makes #:carnot-fraction (default
+    ;; 0.4375) of Carnot's limit into work, f (1 − T_cold/T_hot) Q, on a flywheel
+    ;; of #:inertia (kg m², 0.5) against a #:load torque (N m) and its own
+    ;; #:drag (N m s², default 1.38e-5: a torque k ω², its friction and gas
+    ;; losses, #269); it settles where that work equals (load + k ω²) × speed.
+    ;; The defaults give 0.35 of Carnot at the shaft at 1,500 rpm, a fifth lost
+    ;; to drag there (docs/plans/stirling-drag-plan.md). #:heat-capacity is its hot end's (J/K,
     ;; 10,000). Size K to the mirrors: too small and the receiver sits hot
     ;; but passes little; too big and it runs barely warmer than the cold.
     (pattern (stirling id:id
@@ -1410,6 +1414,7 @@
                              (~once (~seq #:aperture aperture-v:expr))
                              (~once (~seq #:conductance k-v:expr))
                              (~optional (~seq #:carnot-fraction f-v:expr))
+                             (~optional (~seq #:drag drag-v:expr))
                              (~optional (~seq #:emissivity eps-v:expr))
                              (~optional (~seq #:heat-capacity c-v:expr))
                              (~optional (~seq #:inertia i-v:expr))
@@ -1419,7 +1424,7 @@
       #:attr info (pinfo #'id 'stirling (attribute mat) '())
       #:with expr #`(part 'id 'stirling '(~? mat iron) (list at.x at.y at.z)
                           (list (cons 'aperture aperture-v) (cons 'conductance k-v)
-                                (cons 'carnot-fraction (~? f-v 0.35)) (cons 'emissivity (~? eps-v 0.9))
+                                (cons 'carnot-fraction (~? f-v 0.4375)) (cons 'drag (~? drag-v 1.38e-5)) (cons 'emissivity (~? eps-v 0.9))
                                 (cons 'heat-capacity (~? c-v 10000)) (cons 'inertia (~? i-v 0.5))
                                 (cons 'load (~? load-v 0)) (cons 'temperature (~? temp-v #f))
                                 (cons 'height 0.5))

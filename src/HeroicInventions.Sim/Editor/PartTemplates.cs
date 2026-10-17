@@ -175,7 +175,7 @@ public static class PartTemplates
         "stirling" => new PartSpec(id, "stirling", material, at,
             new Dictionary<string, SExpr>
             {
-                ["aperture"] = new SNumber(1), ["conductance"] = new SNumber(14), ["carnot-fraction"] = new SNumber(0.35),
+                ["aperture"] = new SNumber(1), ["conductance"] = new SNumber(14), ["carnot-fraction"] = new SNumber(0.4375), ["drag"] = new SNumber(1.38e-5),
                 ["emissivity"] = new SNumber(0.9), ["heat-capacity"] = new SNumber(10000), ["inertia"] = new SNumber(0.5),
                 ["load"] = new SNumber(10), ["temperature"] = new SBool(false), ["height"] = new SNumber(0.5),
             },

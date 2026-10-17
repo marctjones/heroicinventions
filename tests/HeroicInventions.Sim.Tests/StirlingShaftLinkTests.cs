@@ -11,7 +11,8 @@ namespace HeroicInventions.Sim.Tests;
 /// #220: a Stirling engine is one end of a world shaft link, as a windmill is, so the player's engine turns the found motor (the
 /// `motors` crate's rotor, found-motor.rkt). Before, the join gesture refused it ("a stirling and a wheel") and the link builder had no
 /// Stirling end. The engine is mars-stirling's `matched` one (1 m2 receiver, K 9.36 W/K, six 1 m2 heliostats at latitude -2), started at
-/// its settled hot end, 40.2 C, where it makes 111.3 W (the machine's header, worked by bisection); its own load is taken off (#:load 0),
+/// its settled hot end, 40.2 C, where it makes 111.3 W indicated (the machine's header, worked by bisection; pinned at 0.35 of Carnot)
+/// and has the default drag (#269); its own load is taken off (#:load 0),
 /// so the motor is its only load. In the game the rotor is a Jolt body on a hinge; here a stand-in axle of the rotor's inertia, loaded by
 /// the generator each tick as the view loads the body (<see cref="Generator.Step"/>).
 /// </summary>
@@ -93,33 +94,35 @@ public class StirlingShaftLinkTests
     }
 
     /// <summary>
-    /// What sets the shaft's speed (the lead's question): the engine's power has no speed in it (P = f (1 - Tc/Th) K (Th - Tc)), so with
-    /// no load the engine and the rotor gain kinetic energy at P and nothing stops them but a load: ω = sqrt(2 P t / I), I = 0.5 + 0.099.
-    /// After 20 s at 111.3 W that is 86.2 rad/s, both ends turning as one (ratio 1), and the kinetic energy is the work the engine made.
+    /// What sets the shaft's speed: the engine's indicated power has no speed in it (P = f (1 - Tc/Th) K (Th - Tc)), so with no load the
+    /// engine and the rotor gain its work as speed, less only the engine's own drag, k ω² (#269: k 1.38e-5 N·m·s²), which grows until it
+    /// takes all of P at the free speed (P / k)^⅓ = 200.4 rad/s at 111.3 W. Time-stepped before running (I = 0.5 + 0.099): 84.9 rad/s
+    /// after 20 s (with no drag it was sqrt(2 P t / I) = 86.2), both ends turning as one (ratio 1), and the work the gas cycle made,
+    /// 2,226 J, is the two flywheels' 2,159 J plus the drag's 69 J of heat.
     /// </summary>
     [Fact]
-    public void UnloadedTheEngineAndRotorGainItsWorkAsSpeedAndNothingElseStopsThem()
+    public void UnloadedTheEngineAndRotorGainItsWorkAsSpeedLessItsDrag()
     {
         var w = new Linked(wired: false);
         double dt = 1.0 / 120, work = 0;
         for (int i = 0; i < 20 * 120; i++)
         {
             w.Step(dt);
-            work += w.Se.ShaftPower * dt;
+            work += w.Se.IndicatedPower * dt;
         }
-        double inertia = w.Se.ShaftInertia + w.Rotor.ShaftInertia;
         double kinetic = 0.5 * w.Se.ShaftInertia * w.Se.AngularVelocity * w.Se.AngularVelocity + 0.5 * w.Rotor.ShaftInertia * w.Rotor.AngularVelocity * w.Rotor.AngularVelocity;
-        Assert.Equal(111.3, w.Se.ShaftPower, 0.5);                           // the warm engine's settled power
+        Assert.Equal(111.3, w.Se.IndicatedPower, 0.5);                       // the warm engine's settled power
         Assert.Equal(w.Se.AngularVelocity, w.Rotor.AngularVelocity, 0.02);   // one shaft
-        Assert.Equal(Math.Sqrt(2 * 111.3 * 20 / inertia), w.Rotor.AngularVelocity, 1.0);   // 86.2 rad/s, still rising
-        Assert.Equal(work, kinetic, 0.01 * work);                            // the work is all in the two flywheels
+        Assert.Equal(84.9, w.Rotor.AngularVelocity, 0.5);                    // rad/s, still rising toward 200.4
+        Assert.Equal(200.4, w.Se.FreeSpeed, 0.5);
+        Assert.Equal(work, kinetic + w.Se.DragHeat, 0.01 * work);            // the work is in the two flywheels and the drag's heat
         Assert.Equal(0, w.Motor.Generated);                                  // no bank: an open circuit charges nothing
     }
 
     /// <summary>
-    /// Wired to a warm bank, the motor is the load: the rotor settles where its torque k (X - ω_cut) times X is the engine's power,
-    /// 0.114592 X^2 - 18.000 X - 111.3 = 0, X = 163.04 rad/s (1,557 rpm), τ 0.683 N.m, and the bank is charged at 0.8 x 111.3 = 89.0 W
-    /// (worked before running). The engine turns at the rotor's speed: a ratio only sets the engine's own speed, not the power.
+    /// Wired to a warm bank, the motor is the load: the rotor settles where the engine's power less its drag is the motor's,
+    /// 111.3 = 1.38e-5 X³ + 0.114592 (X - 157.08) X: X = 160.06 rad/s (1,528 rpm), τ 0.341 N.m, 54.6 W to the motor and 43.7 W of charge
+    /// (worked before running; with no drag it was 163.04 rad/s and 89.0 W). The engine turns at the rotor's speed.
     /// </summary>
     [Fact]
     public void WiredToAWarmBankTheMotorLoadsTheEngineAndChargesAtItsPower()
@@ -127,11 +130,11 @@ public class StirlingShaftLinkTests
         var w = new Linked(wired: true);
         double dt = 1.0 / 120;
         for (int i = 0; i < 300 * 120; i++) w.Step(dt);
-        Assert.Equal(163.04, w.Rotor.AngularVelocity, 0.5);
-        Assert.Equal(w.Se.AngularVelocity, w.Rotor.AngularVelocity, 0.1);   // the rotor is read after the motor's tick: tau dt / I = 0.058 rad/s behind
-        Assert.Equal(0.683, w.Motor.Torque, 0.02);
-        Assert.Equal(0.8 * w.Se.ShaftPower, w.Motor.Power, 0.01 * w.Motor.Power);
-        Assert.Equal(89.0, w.Motor.Power, 1.0);
+        Assert.Equal(160.06, w.Rotor.AngularVelocity, 0.5);
+        Assert.Equal(w.Se.AngularVelocity, w.Rotor.AngularVelocity, 0.1);   // the rotor is read after the motor's tick: tau dt / I = 0.03 rad/s behind
+        Assert.Equal(0.341, w.Motor.Torque, 0.02);
+        Assert.Equal(0.8 * w.Se.ShaftPower, w.Motor.Power, 0.02 * w.Motor.Power);   // what the drag leaves at the shaft goes to the motor
+        Assert.Equal(43.7, w.Motor.Power, 1.0);
         Assert.True(w.Works.Banks["bank"].Sources.GetValueOrDefault("stirling") > 0, "the works' bank files the motor's charge under the Stirling");
     }
 }

@@ -208,3 +208,14 @@ So the design doc's 320 W at noon is 204.5 W in the crater (214 W settled), and 
 What the route does not show yet: a win. The found bank is -63 °C at noon on sol 1 and passes 0 °C near 19:00, after the 17:01 sunset, so a Stirling win is the 03:00 pass on sol 3 (#232). Two things in the model bear on that, for the owner (the plan's section 9): an unloaded Stirling has no free speed of its own (nothing but a load or Jolt's clamp stops it, so a paused sleep, which steps the engine but not the shafts, stores its work as speed), and a paused sleep holds a Stirling-linked motor at an estimate read from the engine's present speed, not its power.
 
 **A gear stage on the engine (#269, slice 0).** A Stirling now drives the Jolt gears on its arbor as a windmill does (`MachineView.Gears.IsSimTurned`). Its crankshaft runs along X through its flywheel, 0.3 m over its foot. Before, an arbor holding an engine stopped the machine's view building (`KeyNotFoundException: 'eng'`). `stirling-gear-test.rkt` puts a 72 on the crankshaft meshing an 18, and joins the 18 to the found motor. In this frictionless model the gearing changes only the engine's own speed: 400.9 rpm (worked 401.5), the rotor 1,605.7 rpm (1,606), 170.6 W of charge (171), as on the plain shaft. With #269's seal and flow losses the engine's speed costs power, and the stage pays (`docs/plans/stirling-drag-plan.md` section 6).
+
+**The engine's drag (#269, slice 1).** The engine now has its own losses: a drag torque k ω² (k 1.38e-5 N·m·s², the owner's choice of one number), and 0.4375 of Carnot for its gas cycle, so 0.35 at the shaft at 1,500 rpm (published fractions of Carnot are brake figures). `stirling-route-test.rkt`, worked against measured:
+
+| Run | Worked | Measured |
+|---|---|---|
+| A, plain shaft: at the shaft, rotor, charge | 202.3 W, 1,601 rpm, 162 W | 202.3 W, 1,600 rpm, 161.2 W |
+| B, the wake at 12:39: asleep on 2 N·m | 1,115 rpm | 1,115.6 rpm |
+| B, after the join: rotor, charge, bank at 2,700 s | 1,595 rpm, 152.9 W, 11.3 Wh | 1,595 rpm, 152.4 W, 11.7 Wh |
+| C, the bank cold, at 200 s and 400 s | 2,521 and 2,560 rpm, under the clamp | 2,518 and 2,559 rpm, `spin-limit.hits` 0 |
+
+`stirling-gear-test.rkt`, the 4:1 stage: the engine at 406.8 rpm (worked 407.5), the rotor at 1,629.7 rpm (1,630), 212.5 W of charge (213.4) against the plain shaft's 161 W. At 08:00 on sol 2 (worked) a plain shaft charges about 5 W of the engine's 60 W and the stage about 47 W. The runaway of the frictionless model is gone: unloaded, the engine settles at its free speed.
