@@ -304,6 +304,7 @@ public partial class MachineView : Node3D
             PixelSize = pixelSize, // default suits 10-30cm parts; generated parts pass one scaled to their own size
             Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
             NoDepthTest = true, // always readable, even behind glass or another part
+            RenderPriority = 10, OutlineRenderPriority = 9,   // after every transparent thing, as build mode's own labels: a nearer gear's mark was drawn over the name (#268)
         };
         (parent ?? this).AddChild(label);
     }

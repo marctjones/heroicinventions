@@ -328,7 +328,80 @@ public partial class BuildMode : Node3D
     {
         _orbit.ProcessKeys(delta, GetViewport());
         LessonProcess(delta);
+        LayoutStatus();
         _inputScript?.Process(delta);
+    }
+
+    private const float StatusMargin = 10;
+    private float? _lessonTop;   // where the lesson panel stands with nothing above it, as BuildMode.Lessons.cs puts it
+
+    /// <summary>
+    /// The status line (#268): a box centred in the gap between the left panel's right edge and the right panel's left edge (both move: the
+    /// parts list and the inspector are as wide as their contents), as wide as its sentence up to that gap, wrapped inside it and growing
+    /// downward, so a long Test sentence never runs under a panel. The lesson panel, which stands under it at the top, is moved down to
+    /// clear it while it holds more than one line. Hidden while it has no text.
+    /// </summary>
+    private void LayoutStatus()
+    {
+        bool has = _status.Text.Length > 0;
+        if (_status.Visible != has) _status.Visible = has;
+        float left = _leftPanel.GetGlobalRect().End.X + 8, right = _rightPanel.GetGlobalRect().Position.X - 8;
+        float gap = Mathf.Max(200, right - left);
+        if (has)
+        {
+            var font = _status.GetThemeFont("font");
+            float natural = font.GetMultilineStringSize(_status.Text, HorizontalAlignment.Left, -1, _status.GetThemeFontSize("font_size")).X + 2 * StatusMargin + 8;
+            float width = Mathf.Min(Mathf.Ceil(natural / 24) * 24, gap), x = left + (gap - width) / 2;   // in steps: a counting readout doesn't shiver
+            if (!Mathf.IsEqualApprox(_status.OffsetLeft, x) || !Mathf.IsEqualApprox(_status.OffsetRight, x + width))
+            {
+                _status.OffsetLeft = x;
+                _status.OffsetRight = x + width;
+            }
+        }
+        if (!_lessonPanel.Visible) return;
+        _lessonTop ??= _lessonPanel.OffsetTop;
+        var lesson = _lessonPanel.GetGlobalRect();
+        bool over = has && _status.OffsetLeft < lesson.End.X && _status.OffsetRight > lesson.Position.X;
+        float top = over ? Mathf.Max(_lessonTop.Value, _status.OffsetTop + _status.Size.Y + 4) : _lessonTop.Value;
+        if (!Mathf.IsEqualApprox(_lessonPanel.OffsetTop, top)) _lessonPanel.OffsetTop = top;
+    }
+
+    // ------------------------------------------------- the part names' layout (Main.Labels.cs, #268)
+
+    /// <summary>Build mode's own camera: the one its labels are laid out through.</summary>
+    public Camera3D Camera => _camera;
+
+    private bool _labelsStale = true;
+
+    /// <summary>True once after the scene was redrawn or the selection changed: new labels are laid out at once, not a few ticks later with every name written over the next.</summary>
+    public bool TakeLabelsStale()
+    {
+        bool stale = _labelsStale;
+        _labelsStale = false;
+        return stale;
+    }
+
+    /// <summary>The panels over the scene, which a part's name is not written under: the two side panels, the part's card, the status line, the lesson's.</summary>
+    public IEnumerable<Control> KeepClearPanels() =>
+        new Control?[] { _leftPanel, _rightPanel, _card, _status, _lessonPanel }.OfType<Control>().Where(c => c.IsVisibleInTree() && c.Size.X > 0 && c.Size.Y > 0);
+
+    /// <summary>
+    /// How much a label matters to the layout, or null for the run view's own rule (a reading before a plain name). The selected part's
+    /// name comes first and always shows (4); the live ratio and the words beside the points being joined, which the player asked to see, next (3).
+    /// </summary>
+    public int? LabelRank(Label3D label)
+    {
+        if (_selectedId is { } selected && PartOf(label) == selected) return 4;
+        if (_ratioLabels.Contains(label) || _portLabels.Any(p => p.Node == label)) return 3;
+        return null;
+    }
+
+    /// <summary>The part a node belongs to: its own "part_id" or its nearest tagged ancestor's (a label hung on a block rides on the block).</summary>
+    private static string? PartOf(Node node)
+    {
+        for (var n = node; n is not null; n = n.GetParent())
+            if (n.HasMeta("part_id")) return n.GetMeta("part_id").AsString();
+        return null;
     }
 
     /// <summary>
@@ -700,6 +773,7 @@ public partial class BuildMode : Node3D
         var right = _rightPanel = new PanelContainer { CustomMinimumSize = new Vector2(300, 0) };
         right.SetAnchorsPreset(Control.LayoutPreset.RightWide);
         right.OffsetLeft = -300;
+        right.GrowHorizontal = Control.GrowDirection.Begin;   // a wider inspector grows toward the scene, never off the window (#268)
         layer.AddChild(right);
         var rightCol = new VBoxContainer();
         right.AddChild(rightCol);
@@ -734,9 +808,17 @@ public partial class BuildMode : Node3D
         help.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
         help.OffsetLeft = 270; help.OffsetRight = -320; help.OffsetTop = -60; help.OffsetBottom = -6;
         layer.AddChild(help);
-        _status = new Label { HorizontalAlignment = HorizontalAlignment.Center };
-        _status.SetAnchorsPreset(Control.LayoutPreset.TopWide);
-        _status.OffsetLeft = 260; _status.OffsetRight = -310; _status.OffsetTop = 10; _status.OffsetBottom = 34;
+        // the status line: a box over the scene that wraps inside the gap between the two panels and grows downward (LayoutStatus, #268);
+        // its text is written all over build mode (_status.Text = ...), so it shows when it has some
+        _status = new Label { HorizontalAlignment = HorizontalAlignment.Center, AutowrapMode = TextServer.AutowrapMode.WordSmart, Visible = false };
+        _status.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+        _status.OffsetTop = 10; _status.OffsetBottom = 10;
+        var statusBox = new StyleBoxFlat
+        {
+            BgColor = new Color(HudTheme.Panel, 0.82f), ContentMarginLeft = StatusMargin, ContentMarginRight = StatusMargin, ContentMarginTop = 4, ContentMarginBottom = 4,
+            CornerRadiusBottomLeft = 4, CornerRadiusBottomRight = 4, CornerRadiusTopLeft = 4, CornerRadiusTopRight = 4,
+        };
+        _status.AddThemeStyleboxOverride("normal", statusBox);
         layer.AddChild(_status);
 
         _saveDialog = new FileDialog
@@ -1077,6 +1159,7 @@ public partial class BuildMode : Node3D
 
     private void RefreshHighlights()
     {
+        _labelsStale = true;   // a new selection ranks other names first (Main.Labels.cs)
         UpdateCandidates();
         UpdatePortLabels();
         var lit = _candidates.Select(c => c.PartId).ToHashSet();
@@ -1137,7 +1220,7 @@ public partial class BuildMode : Node3D
         }
         string entryKey = EntryKeyOf(part.Props.GetValueOrDefault("catalogue") is SSymbol cat ? cat.Name : part.Kind);
         string plainName = _entryByKey.TryGetValue(entryKey, out var pe) ? pe.Label : part.Kind;
-        _inspector.AddChild(new Label { Text = $"{part.Id}: {plainName}" });
+        _inspector.AddChild(new Label { Text = $"{part.Id}: {plainName}", AutowrapMode = TextServer.AutowrapMode.WordSmart });   // wrapped: "heat_store_2: Heat store (rock or hot water)" was wider than the panel (#268)
         if (_unfinished.TryGetValue(id, out var why))
             _inspector.AddChild(new Label { Text = $"Not finished: {Plain(why)}", AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(1f, 0.55f, 0.45f) });
 
@@ -1173,7 +1256,7 @@ public partial class BuildMode : Node3D
         {
             if (!_showNumbers) break;
             var row = new HBoxContainer();
-            row.AddChild(new Label { Text = key, CustomMinimumSize = new Vector2(120, 0), ClipText = true, TooltipText = key });
+            row.AddChild(new Label { Text = key, CustomMinimumSize = new Vector2(100, 0), ClipText = true, TooltipText = key });   // 100: the field beside it keeps room for its "not set" words (#268)
             if (value is SNumber n)
             {
                 row.AddChild(NumberField(n.Value, text => { if (TryNumber(text, out double v)) RunCommand($"(set {id} #:{key} {F(v)})"); }));
@@ -1187,7 +1270,7 @@ public partial class BuildMode : Node3D
             else if (key == "wall" && part.Kind == "enclosure" && value is SBool or SSymbol)
             {
                 // the enclosure's wall (#213): a material heat soaks into, or none. A list, not a number field or a part's name.
-                var pick = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, TooltipText = "What the room's wall is made of: heat soaks into it, so a thick regolith wall keeps a room warm through the night. None is a bare box in the air." };
+                var pick = RowList("What the room's wall is made of: heat soaks into it, so a thick regolith wall keeps a room warm through the night. None is a bare box in the air.");
                 var walls = _materials.All.Where(m => m.Conductivity is not null && m.SpecificHeat is not null).OrderBy(m => m.Id).Select(m => m.Id).ToList();
                 string now = value is SSymbol w ? w.Name : "none";
                 if (now != "none" && !walls.Contains(now)) walls.Insert(0, now);
@@ -1200,7 +1283,7 @@ public partial class BuildMode : Node3D
             else if (value is SSymbol sym && SymbolChoices(key) is { } choices)
             {
                 // A prop with a fixed set of answers: a dropdown of them.
-                var pick = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                var pick = RowList();
                 var options = choices.Contains(sym.Name) ? choices : [sym.Name, .. choices];
                 foreach (var o in options) pick.AddItem(o);
                 pick.Select(options.IndexOf(sym.Name));
@@ -1210,7 +1293,7 @@ public partial class BuildMode : Node3D
             else if (value is SSymbol && key is not "shape")
             {
                 // A prop naming another part (or a channel or inflow): pick it from what is on the bench.
-                var pick = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                var pick = RowList();
                 var doc = _session.Document;
                 var targets = doc.Parts.Keys.Concat(doc.Channels.Select(c => c.Id)).Concat(doc.Sources.Select(x => x.Id)).Concat(doc.Pipes.Keys)
                     .Where(k => k != id).Distinct().OrderBy(k => k).ToList();
@@ -1232,12 +1315,13 @@ public partial class BuildMode : Node3D
             else if (value is SBool)
             {
                 // An optional number that is not set (#f): type one to set it.
-                var field = new LineEdit { PlaceholderText = "not set: type a number", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+                var field = new LineEdit { PlaceholderText = "not set: type a number", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, CustomMinimumSize = new Vector2(56, 0) };
+                field.AddThemeConstantOverride("minimum_character_width", 2);
                 field.TextSubmitted += text => { if (TryNumber(text, out double v)) RunCommand($"(set {id} #:{key} {F(v)})"); };
                 row.AddChild(field);
             }
             else
-                row.AddChild(new Label { Text = SExprText(value), TooltipText = "set in the console", Modulate = new Color(1, 1, 1, 0.6f) });
+                row.AddChild(new Label { Text = SExprText(value), TooltipText = "set in the console", Modulate = new Color(1, 1, 1, 0.6f), AutowrapMode = TextServer.AutowrapMode.WordSmart, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });   // wraps: a mesh's name or a list of points was wider than the panel (#268)
             _inspector.AddChild(row);
         }
 
@@ -1263,7 +1347,7 @@ public partial class BuildMode : Node3D
                 }
                 if (ropeId is not null && _session.Document.Ropes.FirstOrDefault(r => r.Id == ropeId) is { } rope)
                 {
-                    var trim = new HBoxContainer();
+                    var trim = new HFlowContainer();   // two labels and two fields: wider than the panel in a row, so it wraps (#268)
                     trim.AddChild(new Label { Text = "  length (m)" });
                     trim.AddChild(NumberField(rope.Length, text => { if (TryNumber(text, out double v)) RunCommand($"(set-rope {ropeId} #:length {F(v)})"); }));
                     trim.AddChild(new Label { Text = "diameter" });
@@ -1274,7 +1358,7 @@ public partial class BuildMode : Node3D
                         // what its #:over points are: pulleys that turn, or fixed bars it drags over (capstan friction)
                         var over = new HBoxContainer();
                         over.AddChild(new Label { Text = "  runs over" });
-                        var barBox = new OptionButton { TooltipText = "A fixed bar holds e^(μθ) times the slack side's pull: 4.4× over half a turn of oak" };
+                        var barBox = RowList("A fixed bar holds e^(μθ) times the slack side's pull: 4.4× over half a turn of oak");
                         barBox.AddItem("pulleys (no friction)");
                         foreach (var mid in _materialIds) barBox.AddItem($"a fixed {_materials[mid].Name.ToLowerInvariant()} bar");
                         barBox.Select(rope.Bar is { } bar ? _materialIds.IndexOf(bar) + 1 : 0);
@@ -1340,7 +1424,8 @@ public partial class BuildMode : Node3D
 
     private static LineEdit NumberField(double value, Action<string> commit)
     {
-        var field = new LineEdit { Text = F(value), CustomMinimumSize = new Vector2(70, 0), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        var field = new LineEdit { Text = F(value), CustomMinimumSize = new Vector2(56, 0), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        field.AddThemeConstantOverride("minimum_character_width", 2);   // not the theme's four wide characters: x, y and z side by side leave the panel room for its scroll bar (#268)
         // Enter commits; so does leaving the field with a changed text, but not again when the inspector is rebuilt round the field
         // after Enter (the freed field loses focus with the old value still to compare), which ran the same (set ...) twice
         bool submitted = false;
@@ -1349,6 +1434,16 @@ public partial class BuildMode : Node3D
         field.FocusExited += () => { if (!submitted && field.Text != F(value)) commit(field.Text); };
         return field;
     }
+
+    /// <summary>
+    /// A list in an inspector row: it takes the room the row leaves and clips its text, where an OptionButton's own width is its longest
+    /// entry's ("a fixed wrought iron bar", every part's name) and a wide one widened the whole panel off the window (#268).
+    /// </summary>
+    private static OptionButton RowList(string? tip = null) => new()
+    {
+        SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, FitToLongestItem = false, ClipText = true,
+        CustomMinimumSize = new Vector2(48, 0), TooltipText = tip ?? "",
+    };
 
     private static bool TryNumber(string text, out double v) =>
         double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v);

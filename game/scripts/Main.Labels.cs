@@ -13,6 +13,10 @@ namespace HeroicInventions;
 /// It hides a label by taking its text and outline alpha to zero (remembering what they were, so a tinted label keeps
 /// its tint), never through Visible, which builders set themselves (a rope's bar label, a released rope's tag,
 /// silhouette mode). GeometryInstance3D.Transparency was tried first: a Label3D drawn with no depth test ignores it.
+///
+/// Build mode uses the same layout (#268): through its own camera (Main's is not the one on screen while building), over the world's
+/// machines and build mode's own labels (the preview, the points' words, the train's ratio), keeping its panels, status line and
+/// lesson clear, the selected part's name first and always shown (BuildMode.LabelRank).
 /// </summary>
 public partial class Main
 {
@@ -28,38 +32,66 @@ public partial class Main
 
     private void DeclutterLabels()
     {
-        if (++_declutterTick < DeclutterEvery) return;
+        var build = _buildMode is { } b && IsInstanceValid(b) ? b : null;
+        // build mode just redrew or took a new selection: laid out now, not a few ticks later with every name over the next
+        bool redrawn = build?.TakeLabelsStale() ?? false;
+        if (++_declutterTick < DeclutterEvery && !redrawn) return;
         _declutterTick = 0;
-        var views = _views.Count > 0 ? _views.Cast<Node>() : _current is not null ? [_current] : [];
+        List<Node> roots = _views.Count > 0 ? [.. _views] : _current is not null ? [_current] : [];
+        if (build is not null)
+        {
+            roots.Add(build);   // its preview (when it is not one of the world's machines), the points' words, the train's ratio
+            LayOutLabels(build.Camera, roots, build.KeepClearPanels(), build.LabelRank, "build", outlined: true);
+        }
+        else
+        {
+            if (_cargoNode is { } cargo && IsInstanceValid(cargo)) roots.Add(cargo);   // the rover world's cargo areas' names (Main.Markers.cs): "hand-tools" was drawn under the left panel (#268)
+            LayOutLabels(_camera, roots, [_leftPanel, _infoPanel], l => _chosenMarker is { } chosen && l.Name == $"Name-{chosen}" ? 3 : null, _currentName);   // the chosen area's name stays
+        }
+    }
+
+    /// <summary>A label this important is shown wherever it can be put, even where nothing is clear (the selected part's name in build mode).</summary>
+    private const int AlwaysShownRank = 4;
+
+    /// <summary>
+    /// One layout pass through <paramref name="camera"/> over every label under <paramref name="roots"/>, each label once.
+    /// <paramref name="panels"/> are the controls over the scene that a label is not written under. <paramref name="rankOf"/> gives a label
+    /// its rank, or null for the default (a reading with a number in it before a plain name). <paramref name="outlined"/> grows each label's
+    /// box by its outline (the run view's boxes are the text alone).
+    /// </summary>
+    private void LayOutLabels(Camera3D camera, IReadOnlyList<Node> roots, IEnumerable<Control> panels, Func<Label3D, int?>? rankOf, string? name, bool outlined = false)
+    {
         var labels = new List<(Label3D Label, Vector2 Anchor, Vector2 Size, float PerPixel, float Line, int Rank, ulong Age)>();
-        float tanHalf = Mathf.Tan(Mathf.DegToRad(_camera.Fov / 2));
-        float screenH = GetViewport().GetVisibleRect().Size.Y;
-        foreach (var view in views)
+        var seen = new HashSet<Label3D>();
+        var viewport = camera.GetViewport();
+        float tanHalf = Mathf.Tan(Mathf.DegToRad(camera.Fov / 2));
+        float screenH = viewport.GetVisibleRect().Size.Y;
+        foreach (var view in roots)
         {
             if (!IsInstanceValid(view)) continue;
             foreach (var node in view.FindChildren("*", "Label3D", true, false))
             {
                 var l = (Label3D)node;
-                if (!l.IsVisibleInTree() || string.IsNullOrWhiteSpace(l.Text)) continue;
-                if (_allLabels || _camera.IsPositionBehind(l.GlobalPosition)) { Show(l, true); Place(l, Vector2.Zero, 1); continue; }
+                if (!l.IsVisibleInTree() || string.IsNullOrWhiteSpace(l.Text) || l.GetViewport() != viewport || !seen.Add(l)) continue;
+                if (_allLabels || camera.IsPositionBehind(l.GlobalPosition)) { Show(l, true); Place(l, Vector2.Zero, 1); continue; }
                 // its size on screen: a fixed-size label's texture pixels map to about pixelSize · height / (2 tan(fov/2))
                 // screen pixels each (Skins.ScreenLabel); a world-sized one shrinks with distance
-                float distance = Mathf.Max(0.01f, _camera.GlobalPosition.DistanceTo(l.GlobalPosition));
+                float distance = Mathf.Max(0.01f, camera.GlobalPosition.DistanceTo(l.GlobalPosition));
                 float perPixel = l.PixelSize * screenH / (2 * tanHalf) / (l.FixedSize ? 1 : distance);
                 var font = l.Font ?? ThemeDB.FallbackFont;
                 var size = font.GetMultilineStringSize(l.Text, HorizontalAlignment.Center, l.Width > 0 && l.AutowrapMode != TextServer.AutowrapMode.Off ? l.Width : -1, l.FontSize)
-                           * perPixel + new Vector2(4, 4);
-                int rank = l.Text.Any(char.IsDigit) ? 2 : 1;
-                labels.Add((l, _camera.UnprojectPosition(l.GlobalPosition), size, perPixel, font.GetHeight(l.FontSize) * perPixel, rank, l.GetInstanceId()));
+                           * perPixel + new Vector2(4, 4) + (outlined ? Vector2.One * 2 * l.OutlineSize * perPixel : Vector2.Zero);   // build mode: the outline too, which stands out a few pixels on every side (#268)
+                int rank = rankOf?.Invoke(l) ?? (l.Text.Any(char.IsDigit) ? 2 : 1);
+                labels.Add((l, camera.UnprojectPosition(l.GlobalPosition), size, perPixel, font.GetHeight(l.FontSize) * perPixel, rank, l.GetInstanceId()));
             }
         }
         if (_allLabels) return;
-        var keepClear = KeepClearRects(views);
+        var keepClear = KeepClearRects(camera, roots);
         // the window, and the panels over it: a label is not written under the HUD (they are boxes, not the full height:
         // below the info panel the scene shows again)
-        var window = GetViewport().GetVisibleRect();
-        foreach (var panel in new Control[] { _leftPanel, _infoPanel })
-            if (panel.Visible && panel.Size.X > 0) keepClear.Add(panel.GetGlobalRect().Grow(4));
+        var window = viewport.GetVisibleRect();
+        foreach (var panel in panels)
+            if (panel.IsVisibleInTree() && panel.Size.X > 0) keepClear.Add(panel.GetGlobalRect().Grow(4));
         var placed = new List<Rect2>();
         foreach (var (label, anchor, size, perPixel, line, rank, _) in labels.OrderByDescending(x => x.Rank).ThenByDescending(x => x.Label.FontSize).ThenByDescending(x => x.Age))
         {
@@ -79,11 +111,16 @@ public partial class Main
                 Place(label, move, perPixel);
                 break;
             }
+            if (chosen is null && rank >= AlwaysShownRank)
+            {
+                chosen = new Rect2(anchor - size / 2, size);   // nowhere clear: where it hangs, over whatever is there
+                Place(label, Vector2.Zero, perPixel);
+            }
             Show(label, chosen is not null);
             if (chosen is { } c) placed.Add(c);
             else Place(label, Vector2.Zero, perPixel);
         }
-        ReportLabels(labels.Count, placed, keepClear);
+        ReportLabels(name, roots, labels.Count, placed, keepClear);
     }
 
     private ulong _labelReportAt;
@@ -92,17 +129,16 @@ public partial class Main
     /// HEROIC_FRAMING_REPORT=1: every 5 s, how many labels are shown, moved aside and faded, and how many things
     /// (dials, a glint, the figure, a trail) labels were kept off: the label half of #190's check, as numbers.
     /// </summary>
-    private void ReportLabels(int all, List<Rect2> placed, List<Rect2> keepClear)
+    private void ReportLabels(string? name, IReadOnlyList<Node> roots, int all, List<Rect2> placed, List<Rect2> keepClear)
     {
         if (!_framingReport || Time.GetTicksMsec() < _labelReportAt) return;
         _labelReportAt = Time.GetTicksMsec() + 5000;
         int moved = 0;
-        var views = _views.Count > 0 ? _views.Cast<Node>() : _current is not null ? [_current] : [];
-        foreach (var view in views)
+        foreach (var view in roots)
             if (IsInstanceValid(view))
                 foreach (var node in view.FindChildren("*", "Label3D", true, false))
                     if (node is Label3D l && l.Offset != Vector2.Zero && !Faded.Contains(l)) moved++;
-        GD.Print($"[labels] {_currentName}: {placed.Count} of {all} shown ({moved} moved aside), {all - placed.Count} faded; {keepClear.Count} kept clear");
+        GD.Print($"[labels] {name}: {placed.Count} of {all} shown ({moved} moved aside), {all - placed.Count} faded; {keepClear.Count} kept clear");
     }
 
     /// <summary>
@@ -142,7 +178,7 @@ public partial class Main
     /// sluice's heap, the scale figure, and the throw's trail marks (Main.Trail.cs). Dials and glints are found by their
     /// shape, a flat disc at most 12.5 mm thick, so any instrument face built the same way is covered too.
     /// </summary>
-    private List<Rect2> KeepClearRects(IEnumerable<Node> views)
+    private List<Rect2> KeepClearRects(Camera3D camera, IEnumerable<Node> views)
     {
         if (++_keepClearAge > 20)
         {
@@ -159,10 +195,33 @@ public partial class Main
         var rects = new List<Rect2>();
         _keepClearNodes.RemoveAll(n => !IsInstanceValid(n));
         foreach (var n in _keepClearNodes)
-            if (n.IsVisibleInTree() && ScreenRect(n.GlobalTransform * n.GetAabb()) is { } r && r.Size.X < 400) rects.Add(r.Grow(2));
-        if (_figure is not null && IsInstanceValid(_figure) && _figure.Visible && !_camera.IsPositionBehind(_figure.GlobalPosition))
-            rects.Add(FigureOnScreen(_figure.GlobalPosition));
+            if (n.IsVisibleInTree() && ScreenRect(camera, n.GlobalTransform * n.GetAabb()) is { } r && r.Size.X < 400) rects.Add(r.Grow(2));
+        if (_figure is not null && IsInstanceValid(_figure) && _figure.Visible && !camera.IsPositionBehind(_figure.GlobalPosition))
+            rects.Add(FigureOnScreen(camera, _figure.GlobalPosition));
         return rects;
+    }
+
+    // ScreenRect and FigureOnScreen (Main.Framing.cs, Main.Composition.cs) through the camera it is given: build mode's, not Main's (#268)
+    private static Rect2? ScreenRect(Camera3D camera, Aabb box)
+    {
+        Rect2? rect = null;
+        for (int i = 0; i < 8; i++)
+        {
+            var corner = box.GetEndpoint(i);
+            if (camera.IsPositionBehind(corner)) return null;
+            var p = camera.UnprojectPosition(corner);
+            rect = rect is { } r ? r.Expand(p) : new Rect2(p, Vector2.Zero);
+        }
+        return rect;
+    }
+
+    private static Rect2 FigureOnScreen(Camera3D camera, Vector3 at)
+    {
+        var right = camera.GlobalBasis.X * 0.2f;
+        var rect = new Rect2(camera.UnprojectPosition(at), Vector2.Zero);
+        foreach (var p in new[] { at + right, at - right, at + Vector3.Up * FigureHeight + right, at + Vector3.Up * FigureHeight - right })
+            rect = rect.Expand(camera.UnprojectPosition(p));
+        return rect;
     }
 
     /// <summary>
