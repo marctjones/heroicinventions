@@ -4,7 +4,7 @@ namespace HeroicInventions.Sim.Tests;
 
 /// <summary>
 /// #269: a Stirling engine's own drag, a torque k ω² (the owner's choice: one number, the simplest model that gives an unloaded engine a
-/// free speed under the physics engine's 3,000 rpm limit). The engine here is #220's at the crater's noon, its hot end held at 98.75 °C
+/// free speed, (P / k)^⅓; under the physics engine's 3,000 rpm limit up to about 428 W, 1.6 times this noon's power). The engine here is #220's at the crater's noon, its hot end held at 98.75 °C
 /// (a huge heat capacity) over -28.79 °C air, with the template's numbers: K 14 W/K, 0.4375 of Carnot, k 1.38e-5 N·m·s².
 /// Worked before running: P = 0.4375 (1 - 244.36 / 371.90) 14 (127.54) = 267.9 W; the free speed (P / k)^⅓ = 268.8 rad/s (2,567 rpm).
 /// </summary>

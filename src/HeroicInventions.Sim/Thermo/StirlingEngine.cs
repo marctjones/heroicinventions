@@ -45,8 +45,13 @@ namespace HeroicInventions.Sim.Thermo;
 /// indicated work to drag there (a rule of thumb, the owner's choice of the
 /// simplest model): the indicated fraction is 0.35 / 0.8 = 0.4375 and k is
 /// 0.2 × 267.9 W / (157.08 rad/s)³ = 1.38e-5 N·m·s² (267.9 W indicated under
-/// ten 1 m² heliostats at the crater's noon). Its free speed is then ∛5 times
-/// the rated speed, 2,565 rpm, under the physics engine's 3,000 rpm limit.
+/// ten 1 m² heliostats at the crater's noon). k is a rule of thumb for that
+/// engine, not a measured coefficient; a machine can set its own #:drag. The
+/// free speed grows with the cube root of the indicated power, (P / k)^⅓:
+/// 2,565 rpm at that noon's 267.9 W, and at Jolt's 3,000 rpm limit (314 rad/s)
+/// at about 428 W (1.6 times it; twice the heliostats would pass it). Over that
+/// the physics engine's clamp limits it as it does a windmill's open circuit: it
+/// brakes the shaft and destroys the excess; no energy is made.
 /// Reading 0.35 as the gas cycle's instead is one number: #:carnot-fraction 0.35.
 /// </summary>
 public sealed class StirlingEngine(string name, double aperture, double conductance, double temperatureC) : IHeated, IShaft

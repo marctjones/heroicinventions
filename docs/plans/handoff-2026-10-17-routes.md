@@ -8,7 +8,7 @@ For the session that picks this up. Milestone **17 "A second way to win"** holds
 - **#269 slices 0 and 1, ready to land** on branch `claude/routes-stirling-a546ca` (rebased on main after #220; 5 commits). The lead runs the full suite and lands.
   - **Slice 0:** a Stirling drives the Jolt gears on its arbor, as a windmill does (`MachineView.Gears.IsSimTurned`). Its crankshaft runs along X through its flywheel, 0.3 m over its foot. `stirling-gear-test.rkt`. Windmill A/B: e2e byte-identical. The director's solve wins on sol 3 at 03:00 with identical expect lines; its traces are not byte-repeatable run to run (a paused sleep's wake lands where the wall-clock budget puts it), and a rerun of the same code differs as much.
   - **Slice 1:** the engine's own drag, ONE term k ω² (the owner's choice of the simplest model), k = 1.38e-5 N·m·s² by a rule of thumb (a fifth of the power lost at the rated 1,500 rpm). The default fraction of Carnot is 0.4375, so 0.35 at the shaft at 1,500 rpm (the lead's Option 2, delegated by the owner); `mars-stirling` is pinned at 0.35.
-    - Unloaded, the engine settles at its free speed, about 2,560 rpm, under Jolt's 3,000 rpm clamp.
+    - Unloaded, the engine settles at its free speed, (P/k)^⅓: about 2,560 rpm at noon's power. Jolt's 3,000 rpm clamp co-limits above about 428 W (1.6x noon, e.g. twice the heliostats); the clamp then brakes the shaft and destroys the excess, as with a windmill's open circuit.
     - A plain shaft charges 161 W at noon; a 4:1 gear stage charges 212 W.
     - At 08:00 on sol 2 a plain shaft charges about 5 W and the stage about 47 W.
     - Tests: `StirlingDragTests`, the re-worked route, gear and behaviour tests.

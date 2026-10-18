@@ -29,7 +29,7 @@ For (b): a frozen Jolt body reads zero speed and drops impulses, so stepping a J
 
 So the indicated default becomes 0.35 / 0.80 = **0.4375**, and the shaft gives 0.35 at 1,500 rpm. Option 1 (0.35 as the gas cycle's, the shaft about 0.27 of Carnot at 1,500 rpm) is one constant away (`#:carnot-fraction 0.35`) if the owner flips it.
 
-Worked (W, 2026-10-17, before any run). The indicated power at noon is 214.3 × 1.25 = 267.9 W (the hot end's balance has no `f` in it, so Th stays 98.75 °C). So **k = 0.2 × 267.9 / 157.08³ = 1.38e-5 N·m·s²**, and the free speed is (P/k)^⅓ = 157.08 × ∛5 = **268.6 rad/s, 2,565 rpm** at noon: under the clamp at any power, since the ratio does not depend on P.
+Worked (W, 2026-10-17, before any run). The indicated power at noon is 214.3 × 1.25 = 267.9 W (the hot end's balance has no `f` in it, so Th stays 98.75 °C). So **k = 0.2 × 267.9 / 157.08³ = 1.38e-5 N·m·s²** (a rule of thumb fitted to the template engine at the crater's noon, not a measured coefficient; a machine can set its own `#:drag`). The free speed is ω_free = (P/k)^⅓: 157.08 × ∛5 = **268.6 rad/s, 2,565 rpm** at noon's 267.9 W. It grows with the cube root of the indicated power, and **Jolt's clamp (314.16 rad/s, 3,000 rpm) is reached at P = k × 314.16³ ≈ 428 W**, 1.6 times noon (twice the heliostats would give about 338 rad/s). Over that the clamp co-limits, as with a windmill's open circuit: it brakes the shaft and destroys the excess energy; none is created. Allowed: a player can build more mirrors.
 
 | Case (P_ind) | plain shaft: rotor rpm, τ_g, to the motor, charge, drag | 4:1 stage: rotor rpm, charge, drag (engine rpm) |
 |---|---|---|
