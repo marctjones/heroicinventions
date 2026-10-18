@@ -4,6 +4,18 @@ Planned read-only with Fable from the code at 32b9a98 (2026-10-17), after #220 a
 
 **Headline.** The windmill route's `cut-in`, `wired` and `gear-up` conditions read any generator or train, so a Stirling turning the found motor would start "The windmiller". The smallest honest change: a route condition may name its prime mover (`(rotor-over-cut-in wind)`, `(generator-wired stirling)`, `(train-ratio-at-least 100 wind)`), read from `Generator.Mover.Name` (wind, water-wheel, steam-jet, stirling), and the windmill's three conditions say `wind` (a data change, no number changes). The Stirling route has six steps (engine, heat, cut-in, wired, warm, full), two new zero-argument kinds (`stirling-exists`, `engine-heated`) and three new reason numbers read from the engine. The win: in lonely-rover-e2e the engine built at noon on sol 1 and joined at once charges nothing until the bank passes 0 °C at 19:27 (M), fills from the dawn of sol 2 (cut-in 07:49, full 08:29; W, no friction) and calls at 03:00 on sol 3, 144,259 s. The one thing that could stop it is the vault, not the engine. On sol 2 the mirror has the rock for ten hours and the lid shuts at 40 °C; the director's solve wins at 03:00 sol 3 with the cells at 39.7 °C (M, 2026-10-17), 5.3 K under the 45 °C limit, and the e2e vault had 2-3 more hours of sol-1 sun. So a vault-only run is step 1.
 
+## Status, 2026-10-17 (the session was stopped by the owner; see docs/plans/handoff-2026-10-17-routes.md)
+
+Done on branch `claude/stirling-win-wip` (commit `3ab31c7`), not yet landed:
+- the route data and code of section 1: a generator reading's source, `(rotor-over-cut-in wind)` and so on, `stirling-exists`, `engine-heated`, `engine-watts`; `windmill.route` says `wind`; `stirling.route`;
+- the reveal tests (StirlingRouteRevealTests: Stirling-only, windmill-only, mixed);
+- `stirling-win-test.rkt`, written, not yet run.
+
+What changed since this plan was written:
+1. **#269 slice 1 gave the engine its drag** (k ω², 0.4375 of Carnot). The plain shaft charges about 5 W at 08:00 on sol 2 (most of the engine's 60 W is lost to drag at the motor's 1,500 rpm) and about 82 W at 09:00. The winning run therefore joins at 09:00 on sol 2, and the fill is worked at about 900 s: full near 09:15.
+2. **#269 (b) is parked**, so the run must never sleep with the engine joined while the motor would charge. The order is: build at noon on sol 1 (unjoined); a paused sleep to 09:00 on sol 2; join while watched; a live sleep until full; a paused sleep to the 03:00 pass with a full bank. This is section 3's fallback shape, with the engine on load 0 (the drag now bounds it).
+3. **The vault on sol 2 was the risk this plan named, and it was real.** With the old physics the cells were 45.6 °C at 03:00 on sol 3, over the limit, because a shut lid did not block the mirror (the rock reached 762 °C). The lid fix (commit `c6c63db` on the same branch; its own issue in milestone 17) gives 34.5 °C at the call. The win test needs it.
+
 ## 1. Code and route data
 
 ### `src/HeroicInventions.Sim/Game/Routes.cs`

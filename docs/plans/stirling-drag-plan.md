@@ -12,6 +12,12 @@ With the defaults the #220 engine runs free at **2,734 rpm at 214.3 W** (2,689 a
 
 For (b): a frozen Jolt body reads zero speed and drops impulses, so stepping a Jolt-to-Jolt shaft through a paused sleep is a no-op, and the windmill route's traces are predicted **byte-identical**. A shaft from a sim engine to a Jolt rotor needs a sim stand-in for the rotor, designed in section 2.
 
+## Status, 2026-10-17 (see docs/plans/handoff-2026-10-17-routes.md)
+
+- **Slice 0** (a Stirling drives gears) and **slice 1** (one drag term) are done and ready to land on `claude/routes-stirling-a546ca`.
+- **Part (b)** (a paused sleep steps a Stirling's world shaft) was **parked by the owner**. Its sim side is on branch `claude/stirling-sleep-parked` (2 tests passing, not wired into the game). The bug it fixes is described in the hand-off note. Section 2 below is its design.
+- The source reading of sections 1.1-1.3 was dropped. The owner chose one drag term with a stated rule of thumb ("Decided", below).
+
 ## Decided 2026-10-17 (supersedes sections 1.1-1.3 and 1.5's coefficients)
 
 **The owner chose ONE drag term**: "our engine is a simplified simulation of the physics", with no literature hunt for coefficients. The loss torque on the engine's shaft is `k ω²` (power `k ω³`), one part property `#:drag` in N·m·s². Its default comes from a stated rule of thumb, not a measurement: **the template engine loses 20% of its indicated power at its rated 1,500 rpm under ten heliostats at the crater's noon.** A constant friction torque alone would give a free speed of 5x the rated speed (7,500 rpm), and a `c ω` drag alone √5x (3,350 rpm), both over Jolt's 3,000 rpm clamp. The `ω²` torque gives ∛5x.
