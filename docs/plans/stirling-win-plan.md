@@ -6,7 +6,7 @@ Planned read-only with Fable from the code at 32b9a98 (2026-10-17), after #220 a
 
 ## Status, 2026-10-17 (the session was stopped by the owner; see docs/plans/handoff-2026-10-17-routes.md)
 
-Done on branch `claude/stirling-win-wip` (commit `3ab31c7`), not yet landed:
+Done on branch `claude/stirling-win-wip` (commit "WIP #232: the Stirling as a second route"), not yet landed:
 - the route data and code of section 1: a generator reading's source, `(rotor-over-cut-in wind)` and so on, `stirling-exists`, `engine-heated`, `engine-watts`; `windmill.route` says `wind`; `stirling.route`;
 - the reveal tests (StirlingRouteRevealTests: Stirling-only, windmill-only, mixed);
 - `stirling-win-test.rkt`, written, not yet run.
@@ -14,7 +14,7 @@ Done on branch `claude/stirling-win-wip` (commit `3ab31c7`), not yet landed:
 What changed since this plan was written:
 1. **#269 slice 1 gave the engine its drag** (k ω², 0.4375 of Carnot). The plain shaft charges about 5 W at 08:00 on sol 2 (most of the engine's 60 W is lost to drag at the motor's 1,500 rpm) and about 82 W at 09:00. The winning run therefore joins at 09:00 on sol 2, and the fill is worked at about 900 s: full near 09:15.
 2. **#269 (b) is parked**, so the run must never sleep with the engine joined while the motor would charge. The order is: build at noon on sol 1 (unjoined); a paused sleep to 09:00 on sol 2; join while watched; a live sleep until full; a paused sleep to the 03:00 pass with a full bank. This is section 3's fallback shape, with the engine on load 0 (the drag now bounds it).
-3. **The vault on sol 2 was the risk this plan named, and it was real.** With the old physics the cells were 45.6 °C at 03:00 on sol 3, over the limit, because a shut lid did not block the mirror (the rock reached 762 °C). The lid fix (commit `c6c63db` on the same branch; its own issue in milestone 17) gives 34.5 °C at the call. The win test needs it.
+3. **The vault on sol 2 was the risk this plan named, and it was real.** With the old physics the cells were 45.6 °C at 03:00 on sol 3, over the limit, because a shut lid did not block the mirror (the rock reached 762 °C). The lid fix (commit "WIP: a shut lid blocks the mirror's light" on the same branch; its own issue in milestone 17) gives 34.5 °C at the call. The win test needs it.
 
 ## 1. Code and route data
 

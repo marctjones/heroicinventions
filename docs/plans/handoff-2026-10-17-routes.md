@@ -17,11 +17,11 @@ For the session that picks this up. Milestone **17 "A second way to win"** holds
 
 ## Unfinished work, on local branches (not pushed: the lead decides)
 
-| Branch | Commits | What it is | What is left |
+| Branch | Commit | What it is | What is left |
 |---|---|---|---|
-| `claude/stirling-win-wip` | `c6c63db` | **A shut lid blocks the mirror's light** (new issue in milestone 17). The fix is one helper, `MachineRuntime.LidOpenOver`. Owner approved. | Re-run `e2e-route-test.rkt` (its night numbers are already updated to the measured 14.5 °C cells, 49.9 °C rock, lid 0.69); run the director's solve (it must still win on sol 3 at 03:00); update `docs/e2e-route.md`'s vault numbers. |
-| `claude/stirling-win-wip` | `3ab31c7` | **#232**: the Stirling as a second route. The route data and the reveal tests are done (dotnet 1,531 passed). `stirling-win-test.rkt` is written. | Run `stirling-win-test.rkt` (about 6 minutes), fix what it shows, then the docs (`docs/e2e-route.md`, `conventions.md` routes section, `stirling-win-plan.md` Measured). |
-| `claude/stirling-sleep-parked` | `f4f99db` | **#269 part (b), parked by the owner:** a paused sleep steps a Stirling's world shaft through a stand-in rotor. Sim side only, 2 tests passing. | Only if the owner un-parks it: the three `SleepControl` hooks, `Main` wiring, `MachineView.Links` `ShaftState`/`SetShaftSpeed`, a Godot test, a windmill A/B. |
+| `claude/stirling-win-wip` | "WIP: a shut lid blocks the mirror's light" | **A shut lid blocks the mirror's light** (new issue in milestone 17). The fix is one helper, `MachineRuntime.LidOpenOver`. Owner approved. | Re-run `e2e-route-test.rkt` (its night numbers are already updated to the measured 14.5 °C cells, 49.9 °C rock, lid 0.69); run the director's solve (it must still win on sol 3 at 03:00); update `docs/e2e-route.md`'s vault numbers. |
+| `claude/stirling-win-wip` | "WIP #232: the Stirling as a second route" | **#232**: the Stirling as a second route. The route data and the reveal tests are done (dotnet 1,531 passed). `stirling-win-test.rkt` is written. | Run `stirling-win-test.rkt` (about 6 minutes), fix what it shows, then the docs (`docs/e2e-route.md`, `conventions.md` routes section, `stirling-win-plan.md` Measured). |
+| `claude/stirling-sleep-parked` | "WIP, parked: #269 (b)" | **#269 part (b), parked by the owner:** a paused sleep steps a Stirling's world shaft through a stand-in rotor. Sim side only, 2 tests passing. | Only if the owner un-parks it: the three `SleepControl` hooks, `Main` wiring, `MachineView.Links` `ShaftState`/`SetShaftSpeed`, a Godot test, a windmill A/B. |
 
 Rebase each onto main once its base has landed (`git rebase --onto <new base> <old base> <branch>`; never move main).
 
