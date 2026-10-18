@@ -14,7 +14,7 @@
 (define-values (game-dir) (simplify-path (build-path (collection-file-path "godothost.rkt" "heroic") 'up 'up 'up "game")))
 
 ;; Runs build mode with an input script and a fresh lesson folder; returns the lines it printed.
-(define (run-editor script #:seconds [seconds 40])
+(define (run-editor script #:seconds [seconds 40] #:errors [errors #f])
   (define lessons (make-temporary-file "heroic-lessons-~a" 'directory))
   (define env (environment-variables-copy (current-environment-variables)))
   (for ([kv `(("HEROIC_EDITOR" . "1") ("HEROIC_EDITOR_INPUT" . ,script)
@@ -26,7 +26,7 @@
       (define-values (p stdout stdin stderr)
         (subprocess #f #f #f godot-binary "--headless" "--resolution" "1280x800" "."))
       (close-output-port stdin)
-      (define drain (thread (λ () (port->string stderr))))
+      (define drain (thread (λ () (let ([e (port->string stderr)]) (when errors (set-box! errors e))))))
       (begin0 (port->string stdout) (subprocess-wait p) (thread-wait drain) (close-input-port stdout) (close-input-port stderr))))
   (delete-directory/files lessons #:must-exist? #f)
   (string-split out "\n"))
@@ -475,3 +475,16 @@
     (check-true (ormap (λ (l) (string-contains? l "step 9 done: charging, turned")) out) "both of the Test's checks pass")
     (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished generator") (string-contains? l "The generator ended at 1750 rpm, charging the battery at 440 W."))) out)
                 "the lesson says it is done, with the traced numbers")))
+
+;; #270: build mode's frozen preview of a windmill-driven gear train once threw a NullReferenceException in
+;; DrawGearTrains (a drawing path, so only the engine's error output shows it, not the lesson's lines).
+(test-case "Meshing stages onto a windmill logs no NullReferenceException (#270)"
+  (when (godot-available?)
+    (define errors (box ""))
+    (define out
+      (run-editor (string-append "wait 30; cmd (post post #:at (0.45 0 -1.45) #:material oak #:size-x 0.6 #:size-y 10.6 #:size-z 0.6); "
+                                 "cmd (windmill sails #:at (0 11.05 0) #:material oak); select sails; wait 3; add-stage; wait 5; add-stage; wait 5; log; quit")
+                  #:errors errors))
+    (check-true (ormap (λ (l) (string-contains? l "meshed")) out) "the stages were meshed")
+    (check-false (string-contains? (string-append (string-join out "\n") (unbox errors)) "NullReferenceException")
+                 "no NullReferenceException in the output")))
