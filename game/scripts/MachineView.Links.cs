@@ -27,12 +27,15 @@ public partial class MachineView
         {
             get
             {
-                if (bodies.Count == 1) return PhysicsServer3D.BodyGetDirectState(lead.GetRid()).AngularVelocity.Dot(hinge.Axis);
+                // a frozen preview's bodies have no physics state yet (#270): at rest
+                if (bodies.Count == 1) return PhysicsServer3D.BodyGetDirectState(lead.GetRid())?.AngularVelocity.Dot(hinge.Axis) ?? 0;
                 double momentum = 0, inertia = 0;
                 foreach (var b in bodies)
                 {
+                    var state = PhysicsServer3D.BodyGetDirectState(b.GetRid());
+                    if (state is null) return 0;
                     double i = InertiaAbout(b, hinge);
-                    momentum += i * PhysicsServer3D.BodyGetDirectState(b.GetRid()).AngularVelocity.Dot(hinge.Axis);
+                    momentum += i * state.AngularVelocity.Dot(hinge.Axis);
                     inertia += i;
                 }
                 return inertia > 0 ? momentum / inertia : 0;
