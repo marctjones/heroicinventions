@@ -3,9 +3,13 @@
 # --hidden, never takes focus), real clicks through Godot's own input pipeline, a camera line before each shot. Each lesson in its own
 # run with a fresh lesson folder in OUT_DIR, so the player's own progress (user://lessons) is left alone.
 #
-#   tools/lessons-gui.sh [OUT_DIR] [LESSON ...]   # LESSON: gears, windlass, crane, mill, generator (default: all); about two minutes each
+#   tools/lessons-gui.sh [OUT_DIR] [LESSON ...]   # LESSON: gears, windlass, crane, mill, generator (default: all); about two minutes each;
+#                                                 # pulley, ramp, water (lessons 2-4's experiments, #197) only when named
 #
 # Shots are named as docs/art/tutorial keeps them, NN-lesson-SS-what.png, and each lesson's log is OUT_DIR/NN-lesson-run.log.
+#   Lessons 2-4's experiments (named only): pulley: 06 the first Test's result, 07 the blocks swapped by the lesson (stone on the ground, wood
+#   hung), 08 the second Test and done text; ramp: 04 the oak block beside the ball, 05 the Test and done text; water: 06 the lower tank on its
+#   tall post, 07 the second Test and done text.
 #   Lesson 5, gears: 01 the lit Post and the green post; 02 the lit Gear, its card's 72 and the green gear over the post; 03 the crank
 #   selected and its lit "Add a meshing gear"; 04 the 18's ghost on the green circle; 05 the 18 selected and its lit button; 06 the 36's
 #   ghost on its circle; 07 the three gears and the live ratio's label "crank -> third: 2:1" (the parts are named by their lesson roles);
@@ -35,6 +39,29 @@ play() {
   shot() { echo "camera; shot $out/$prefix-$1.png"; }
   local steps=()
   case $prefix in
+    02-pulley) steps=(
+      "wait 60; lesson pulley; wait 30; palette-click post; wait 10; hover-at 0 0 0; wait 10; click-at 0 0 0; wait 20"
+      "palette-click pulley; wait 10; hover-at 0 1.0 0; wait 20; click-at 0 1.0 0; wait 20"
+      "palette-click block; wait 10; hover-at 0.1 0 0; wait 20; click-at 0.1 0 0; wait 20"
+      "palette-click block; wait 10; hover-at -0.1 0 0; wait 20; click-at -0.1 0 0; wait 20"
+      "palette-click rope; wait 10; click-part heavy; wait 10; click-part light; wait 20; key escape; wait 20"
+      "test; wait 300; wait-test; wait 30; $(shot 06-the-first-test)"
+      "wait 30; $(shot 07-the-blocks-swapped)"
+      "test; wait 300; wait-test; wait 30; log; $(shot 08-the-second-test-and-done); quit") ;;
+    03-ramp) steps=(
+      "wait 60; lesson ramp; wait 30; palette-click ramp; wait 10; hover-at 0 0 0; wait 20; click-at 0 0 0; wait 20"
+      "palette-click ball; wait 10; hover-at 0 0.3 -0.85; wait 20; click-at 0 0.3 -0.85; wait 20"
+      "test; wait 900; wait-test; wait 30"
+      "palette-click block; wait 10; hover-at 0.1 0.3 -0.8; wait 5; hover-at 0.15 0.3 -0.85; wait 20; click-at 0.15 0.3 -0.85; wait 20; $(shot 04-the-block-beside-the-ball)"
+      "test; wait 900; $(shot 05a-testing); wait-test; wait 30; log; $(shot 05-the-block-held-and-done); quit") ;;
+    04-water) steps=(
+      "wait 60; lesson water; wait 30; palette-click post; wait 10; hover-at 0 0 0; wait 20; click-at 0 0 0; wait 20"
+      "palette-click tank; wait 10; hover-at 0 1.0 0; wait 20; click-at 0 1.0 0; wait 20"
+      "palette-click tank; wait 10; hover-at 0.8 0 0; wait 20; click-at 0.8 0 0; wait 20"
+      "click-port upper.outlet; wait 10; click-port lower.inlet; wait 30"
+      "test; wait 600; wait-test; wait 30; $(shot 05-the-first-test)"
+      "wait 120; $(shot 06-the-lower-tank-raised)"
+      "test; wait 300; wait-test; wait 30; log; $(shot 07-no-water-moved-and-done); quit") ;;
     05-gears) steps=(
       "wait 60; lesson gears; wait 30; $(shot 01-post)"
       "palette-click post; wait 10; hover-at 0 0 0; wait 10; click-at 0 0 0; wait 20"
@@ -91,11 +118,14 @@ play() {
 
 for lesson in "${lessons[@]}"; do
   case $lesson in
+    pulley) play 02-pulley ;;
+    ramp) play 03-ramp ;;
+    water) play 04-water ;;
     gears) play 05-gears ;;
     windlass) play 06-windlass ;;
     crane) play 07-crane ;;
     mill) play 08-mill ;;
     generator) play 09-generator ;;
-    *) echo "no lesson $lesson (gears, windlass, crane, mill, generator)" >&2; exit 2 ;;
+    *) echo "no lesson $lesson (gears, windlass, crane, mill, generator, pulley, ramp, water)" >&2; exit 2 ;;
   esac
 done

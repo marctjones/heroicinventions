@@ -19,6 +19,15 @@
 ;;   Traced in the sim (an editor Test of this very rig): the fastest the ball goes is 1.910 m/s, 0.8 % above the worked
 ;;   number; nothing slows a ball rolling on flat ground, so it carries on at that speed for the whole 30 s test (52 m).
 ;; So the check: the ball's fastest speed is within 0.15 m/s of 1.895, and it ended at least 1 m from where it began.
+;;
+;; The experiment (#197), a block on the same ramp (the ball stays at the top and rolls off in the same Test): a block stays put on
+;; a slope while friction can hold it, and slides once tan(theta) is more than the friction number mu. The ramp is limestone (mu 0.60),
+;; the block oak (mu 0.45); the sim's block behaves with the smaller of the two numbers, here oak's 0.45, so
+;;     it holds while tan(theta) < 0.45, that is for theta < atan(0.45) = 24.2 degrees; this ramp is 15 degrees, tan 15 = 0.268 < 0.45: it holds.
+;; Traced on the real rig (oak 10 cm block, 5 cm slab, 0.9 m up the limestone slope, 4 s): at 15 and 22 degrees it does not move;
+;; at 25 degrees it slides, 0.40 m down and 0.53 m/s at its fastest (27 degrees: 0.96 m/s; 30 degrees: 1.38 m/s, worked
+;; sqrt(2 g (sin 30 - 0.45 cos 30) 0.9) = 1.40 m/s). The block is laid flat on the slope (tilted 15 degrees by the lesson), 0.15 m to the
+;; side of the ball, so they do not meet. The check: the block ends within 0.05 m of the height it began at.
 
 (lesson ramp
   (title "Lesson 3: the ramp and the ball")
@@ -42,4 +51,18 @@
     (fail "The ball's fastest was {top} and it ended {across} from where it began, but rolling down from {drop} up should give {speed}, and it should roll away at least a metre. Is the ball on the ramp, near the top? Move it back to the green ball and press Test it again.")
     (check rolled (part ball) (far 1) (within 0.15)))
 
-  (done "The ball reached {top} (worked out beforehand: {speed}) and rolled on {across}: nothing slows a ball on smooth flat ground. A block with no friction would have reached {slide}. A ball spins as it goes, and the spinning takes a share of the energy, so on any slope it picks up speed at five sevenths of what a sliding block would: 1.81 metres a second faster every second here, against 2.54."))
+  (step
+    (text "That is a ball, which has nothing to hold it on a slope. Now a block: put an oak block on the same ramp, beside the ball, on the green block. Pick Block: this time the lesson has picked Oak on its card. The lesson lays it flat on the slope.")
+    (highlight block)
+    (material oak)
+    (target (kind block) (on ramp) (along 0.9) (up 0.076) (across 0.15) (within 0.2))
+    (check place (kind block) (category wood) (as block)
+           (then "(set {id} #:tilt-deg 15)")))
+
+  (step
+    (text "Work out what the block will do before you watch. A block on a slope is held by friction, the grip between the two surfaces. It stays put while the slope's steepness (how far it rises for each metre along) is less than the friction number of the surfaces, and it slides once the slope is steeper. This ramp rises 0.27 m for each metre along (15°), and oak on limestone has a friction number of 0.45, which would take a slope of 24°. So 0.27 is under 0.45: the block should hold still while the ball beside it rolls away. Press Test it.")
+    (highlight test)
+    (fail "The block moved: it ended {rise} from the height it began at, but on a 15° slope oak should hold still. Is it an oak block, laid flat on the ramp beside the ball? Move it to the green block and press Test it again.")
+    (check lifted (part block) (about 0) (within 0.05)))
+
+  (done "The block held still while the ball rolled away: the ball ran down at {speed}, spinning as it went (a block with no friction would have reached {slide}), but the oak block was gripped by the limestone. The grip is the friction number, 0.45 for oak on limestone, and the slope rises only 0.27 for each metre along. A block slides only when the slope is steeper than its friction number: for oak on limestone, steeper than 24°. A ball spins as it goes, and the spinning takes a share of the energy, so on any slope it picks up speed at five sevenths of what a sliding block would: 1.81 metres a second faster every second here, against 2.54."))

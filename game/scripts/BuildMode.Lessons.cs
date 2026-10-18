@@ -259,6 +259,15 @@ public partial class BuildMode
         GD.Print($"[Lesson] test seen at step {before + 1}: {tilts}; masses {string.Join(" ", result.Masses.Select(kv => $"{kv.Key}={kv.Value:0.###}kg"))}");
         if (done) GD.Print($"[Lesson] step {before + 1} done{(outcome == "balanced" ? $": balanced, most tilt {_lesson.LastTilt:0.###}°" : outcome is not null ? $": {outcome}" : "")}");
         else if (_lesson.Failure is { } why) GD.Print($"[Lesson] step {before + 1} not yet: {why}");
+        // an experiment's set-up (the finished step's then-lines): run before the next step is shown, so it is not nudged about
+        var settle = _lesson.TakeSettle();
+        if (settle.Count > 0)
+        {
+            GD.Print($"[Lesson] set for the next step: {string.Join(" ; ", settle)}");
+            _lessonChecking = true;
+            try { foreach (var command in settle) RunCommand(command); }
+            finally { _lessonChecking = false; }
+        }
         SaveProgress();
         _lessonShownStep = -1;
         ShowLessonStep();

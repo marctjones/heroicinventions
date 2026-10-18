@@ -60,7 +60,7 @@ namespace HeroicInventions.Sim.Editor;
 /// distance, so that the beam balances. On a remembered ramp, (along 0.9) is
 /// the distance up the slope from its foot and (up 0.076) how far the part's
 /// centre stands off the slab's middle (half its 2.5 cm thickness and a 5 cm
-/// ball's radius, and a millimetre).
+/// ball's radius, and a millimetre); (across 0.15) puts it that far to the side of the slope's middle line.
 ///
 /// Text may name numbers the lesson works out from the design: {heavy.mass}
 /// (kg), {heavy.dist} (m from the pivot), {heavy.turn} (kg·m),
@@ -103,7 +103,7 @@ public sealed record Lesson(string Id, string Title, IReadOnlyList<LessonStep> S
             (string, string)? balance = t.Field("balance") is { } b ? (Sym(b, 1), Sym(b, 2)) : null;
             target = new LessonTarget(Sym(t.Field("kind")!, 1), at, t.Field("on") is { } on ? Sym(on, 1) : null,
                                       t.Field("along") is { } al ? Num(al, 1) : 0, t.Field("up") is { } up ? Num(up, 1) : 0,
-                                      balance, t.Field("within") is { } w ? Num(w, 1) : 0.15);
+                                      balance, t.Field("within") is { } w ? Num(w, 1) : 0.15) { Across = t.Field("across") is { } ac ? Num(ac, 1) : 0 };
         }
         var checks = step.Fields("check").Select(ParseCheck).ToList();
         if (checks.Count == 0) throw new FormatException("a step needs a (check ...)");
@@ -191,7 +191,11 @@ public sealed record LessonStep(string Text, string? Highlight, string? Material
 }
 
 /// <summary>Where a step's part should go: a point, or a place along a remembered beam (see <see cref="Lesson"/>).</summary>
-public sealed record LessonTarget(string Kind, Vec3? At, string? On, double Along, double Up, (string Heavy, string Light)? Balance, double Within);
+public sealed record LessonTarget(string Kind, Vec3? At, string? On, double Along, double Up, (string Heavy, string Light)? Balance, double Within)
+{
+    /// <summary>On a ramp: how far to the side of the slope's middle line, metres ((across 0.15)), so a second part sits beside the first.</summary>
+    public double Across { get; init; }
+}
 
 /// <summary>
 /// What completes a step: "place", "mesh", "stage", "join", "test", or one of the checks of a Test's outcome, "balanced", "lifted", "rolled",
@@ -380,7 +384,7 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         {
             // up the slope from the foot (it rises toward -z at heading 0), then off the slab along its normal
             double a = beam.Number("angle-deg", 15) * Math.PI / 180, hd = beam.Number("heading-deg", 0) * Math.PI / 180;
-            double lx = 0, ly = along * Math.Sin(a) + t.Up * Math.Cos(a), lz = -along * Math.Cos(a) + t.Up * Math.Sin(a);
+            double lx = t.Across, ly = along * Math.Sin(a) + t.Up * Math.Cos(a), lz = -along * Math.Cos(a) + t.Up * Math.Sin(a);
             return new Vec3(beam.At.X + lx * Math.Cos(hd) + lz * Math.Sin(hd), beam.At.Y + ly, beam.At.Z - lx * Math.Sin(hd) + lz * Math.Cos(hd));
         }
         var axis = AxisOf(beam);
@@ -863,13 +867,27 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
         return false;
     }
 
+    /// <summary>
+    /// The then-lines of the outcome step the last <see cref="OnTest"/> finished, for the editor to run before it shows the next step (a lesson's
+    /// experiment: the blocks swapped, a tank lifted): cleared by <see cref="TakeSettle"/>.
+    /// </summary>
+    public IReadOnlyList<string> SettleAfterTest { get; private set; } = [];
+
+    /// <summary>The then-lines the last finished Test step leaves to run, once.</summary>
+    public IReadOnlyList<string> TakeSettle() { var s = SettleAfterTest; SettleAfterTest = []; return s; }
+
     /// <summary>A Test's outcome against every check of the step: all met, the step is done; else the step's fail text, or the first unmet check in plain words.</summary>
     private bool OutcomeOk(LessonStep step, EditorDocument? doc)
     {
         string? first = null;
         foreach (var c in step.Checks)
             if (!OutcomeMet(c, doc, out var plain)) first ??= plain;
-        if (first is null) { Advance(); return true; }
+        if (first is null)
+        {
+            SettleAfterTest = [.. step.Checks.SelectMany(c => ThenLines(c, c.Part is { } r && Roles.TryGetValue(r, out var pid) ? pid : ""))];
+            Advance();
+            return true;
+        }
         Failure = step.Fail is { } fail && doc is not null ? Fill(fail, doc) : first;
         return false;
     }
@@ -996,9 +1014,11 @@ public sealed class LessonRunner(Lesson lesson, MaterialLibrary materials)
     /// <summary>The worked and measured numbers a lesson's words can quote, or null when the name is not one of them (or not known yet).</summary>
     private string? Number(string name, EditorDocument doc)
     {
-        string Metres(double v) => $"{N(Math.Round(v, 2))} m";
+        string Metres(double v) => $"{N(Math.Round(v, 2) + 0.0)} m";   // + 0.0: no "-0 m"
         var check = Current?.Check ?? Lesson.Steps[^1].Check;
-        var outcome = Lesson.Steps.Select(s => s.Check).LastOrDefault(c => c.Type is "lifted" or "rolled" or "level" or "turned" or "charging" or "ratio") ?? check;
+        // the words of an outcome step speak of its own check; a finished lesson's, of the last (an experiment after the build has its own steps)
+        var outcome = Current is { Check: { IsOutcome: true, Type: not "balanced" } } ? check
+                    : Lesson.Steps.Select(s => s.Check).LastOrDefault(c => c.IsOutcome && c.Type != "balanced") ?? check;
         string? partId = outcome.Part is { } role && Roles.TryGetValue(role, out var pid) ? pid : null;
         switch (name)
         {

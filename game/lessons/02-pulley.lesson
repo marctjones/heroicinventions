@@ -24,6 +24,14 @@
 ;; the stone lands and settles back). The fall takes sqrt(2 × 0.55 / 5.68) = 0.44 s, landing at sqrt(2 × 5.68 × 0.55) = 2.50 m/s.
 ;; The pulley turns 0.55 / (2 π × 0.1 m) = 0.875 of a turn.
 ;;
+;; The experiment (#197), swap the blocks: after the first Test the lesson (then-lines of the Test step, run when it is done) puts the
+;; stone on the ground at the right and hangs the wood 0.55 m up at the left, and ties the same rope between them again (the stone's
+;; and the wood's ends exchanged; the path over the pulley is the same, so the rope is the same 1.7561 m).
+;;   the wood can pull down on the rope with only its weight, 0.72 × 9.81 = 7.06 N; the stone's weight is 2.7 × 9.81 = 26.49 N, so the
+;;   rope cannot lift it (it needs 26.49 N) and the ground still carries the other 19.4 N of it. Nothing moves: the wood rises 0 m,
+;;   the stone 0 m, and the rope carries 7.06 N (the Test's own trace of this rig: 7.41 N at most, while the rope takes up its slack).
+;;   The Test's check is both rises within 0.08 m of 0.
+;;
 ;; Geometry: the pulley's centre 1.1 m up (on top of the 1 m post), radius 0.1 m, so the rope's two
 ;; sides hang 0.1 m either side of the post's middle: the stone at x = -0.1, the wood at x = +0.1.
 ;; The post is made 6 cm across so the blocks stand clear of it. The rope runs from the top of the
@@ -73,6 +81,17 @@
     (text "Press Test it (lit, top left) and watch. The stone weighs {heavy.mass} and the wood only {light.mass}, so the stone pulls down harder than the wood pulls back: the stone falls and the rope hauls the wood up. Together they speed up at {accel}: gravity times the difference of the two weights, over their total. The rope does not stretch, so the wood must rise exactly as far as the stone falls: {hoist}.")
     (highlight test)
     (fail "The wood block rose {rise}, not the {expect} it should: the stone only falls as far as the rope lets it. Is the rope tied from the stone, over the pulley, to the wood? Is the stone really the heavier one? Press Test it again after you have changed it.")
-    (check lifted (part light) (about 0.55) (within 0.08)))
+    (check lifted (part light) (about 0.55) (within 0.08)
+           (then "(remove rope-1)")
+           (then "(move {heavy} (0.1 0.05 0))")
+           (then "(move {light} (-0.1 0.6 0))")
+           (then "(rope rope-1 #:from ({light} 0 0.05 0) #:to ({heavy} 0 0.05 0) #:length 1.7561 #:over ((-0.1 1.1 0) (-0.0707 1.1707 0) (0 1.2 0) (0.0707 1.1707 0) (0.1 1.1 0)) #:turns {pulley} #:material hemp #:diameter 0.01)")))
 
-  (done "The wood rose {rise}, just as far as the stone fell. The stone ({heavy.mass}) outweighs the wood ({light.mass}), so it sped downward at {accel} and hauled the wood up. A pulley fixed like this does not make you stronger, it only turns the pull around: the rope pulls on the wood exactly as hard as on the stone. To lift a heavy weight with a light one you need to be cleverer than that: a lever, or more pulleys."))
+  (step
+    (text "That is what a heavy stone does to a light block. Now try it the other way round: the lesson has swapped them. The stone ({heavy.mass}) now stands on the ground at the right, and the wood ({light.mass}) hangs 0.55 m up at the left, with the same rope between them. Work it out before you watch. The wood pulls down on the rope with only its own weight, about 7 newtons. To lift the stone the rope would have to pull with the stone's weight, about 26 newtons. So the rope cannot lift the stone, and the ground still holds most of the stone's weight. Press Test it (lit, top left): the stone should stay where it is, and so should the wood.")
+    (highlight test)
+    (fail "Something moved: the wood changed height by {rise}, when it should have stayed put. Is the stone on the ground at the right and the wood hung at the left, with the rope between them over the pulley? Put them back, or press Start over, and press Test it again.")
+    (check lifted (part light) (about 0) (within 0.08))
+    (check lifted (part heavy) (about 0) (within 0.08)))
+
+  (done "The stone stayed on the ground, and the wood stayed where it hung. The wood ({light.mass}) can pull on the rope with only its own weight, and that is far too little to lift the stone ({heavy.mass}). In the first Test the stone fell and hauled the wood up at 5.68 metres a second, every second; swapped, nothing moves at all. A pulley fixed like this only turns the pull around, it never makes it stronger: the heavier side always wins. To lift a heavy weight with a light one you need to be cleverer than that: a lever, or more pulleys."))

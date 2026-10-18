@@ -139,6 +139,10 @@
                   [(top) (and (cadddr m) (string->number (cadddr m)))])))))
 
 (define (facts-line out) (findf (λ (l) (string-contains? l "[BuildMode] facts: ")) out))
+;; the facts line of the Test after the first (a lesson's experiment, #197), or #f
+(define (second-facts-line out)
+  (define all (filter (λ (l) (string-contains? l "[BuildMode] facts: ")) out))
+  (and (>= (length all) 2) (cadr all)))
 
 ;; ---- Lesson 2: the pulley
 ;; Worked by hand (game/lessons/02-pulley.lesson): a granite block is 2.7 kg, an oak one 0.72 kg, so over a
@@ -146,6 +150,8 @@
 ;; 0.55 m up, so it falls 0.55 m and the wood is hauled up 0.55 m (the rope does not stretch): the wood ends
 ;; 0.55 m up (0.5472 measured, 0.82 m at its highest on the stone's bounce), the pulley turns 0.55 / (2 pi 0.1) = 0.875
 ;; of a turn, and the stone lands at sqrt(2 a d) = sqrt(2 5.68 0.55) = 2.50 m/s.
+;; The swap (#197), worked by hand: the wood can pull on the rope with only its weight, 0.72 x 9.81 = 7.06 N, and the stone needs
+;; 2.7 x 9.81 = 26.49 N to be lifted, so nothing moves (the rope carries 7.06 N; 7.41 N traced while it takes up its slack).
 (define pulley-playthrough
   (string-append "wait 30; lesson pulley; wait 5; "
                  "palette post; click-at 0 0 0; wait 5; "                  ; step 1: the post (the lesson slims it)
@@ -154,6 +160,7 @@
                  "palette block; click-at -0.1 0 0; wait 5; "              ; step 4: granite, to the left
                  "palette rope; click-part heavy; click-part light; wait 5; "   ; step 5: stone, then wood; the lesson threads it
                  "log; test; wait-test; wait 5; "                          ; step 6: Test, and the lesson reads its facts
+                 "test; wait-test; wait 5; "                               ; step 7 (#197): the lesson has swapped the blocks; Test again
                  "lesson-leave; lesson-resume pulley; wait 5; log; quit"))
 
 (test-case "Lesson 2 plays through: the rope is threaded over the pulley and the wood rises as far as the stone fell"
@@ -170,8 +177,18 @@
     (check-= (fact-of out "turns pulley" 'value) (/ 0.55 (* 2 pi 0.1)) 0.06 "the pulley turned 0.875 of a turn")
     (check-= (fact-of out "rise heavy" 'top) (sqrt (* 2 (/ (* 9.81 (- 2.7 0.72)) (+ 2.7 0.72)) 0.55)) 0.15 "the stone landed at 2.50 m/s")
     (check-true (ormap (λ (l) (string-contains? l "step 6 done: lifted")) out) "the lesson's check passes")
-    (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished pulley") (string-contains? l "5.68 m/s²") (string-contains? l "The wood rose 0.55 m"))) out)
-                "the lesson says it is done, with the worked acceleration")
+    ;; the experiment: the blocks swapped by the lesson, the rope tied again with its ends exchanged
+    (check-true (ormap (λ (l) (string-contains? l "[Lesson] set for the next step: (remove rope-1) ; (move heavy (0.1 0.05 0)) ; (move light (-0.1 0.6 0))")) out)
+                "the lesson swaps the blocks after the first Test")
+    (check-true (ormap (λ (l) (string-contains? l "(rope rope-1 #:from (light 0 0.05 0) #:to (heavy 0 0.05 0) #:length 1.7561 #:over ((-0.1 1.1 0)")) out)
+                "the same rope, tied again from the wood to the stone")
+    (define swapped (second-facts-line out))
+    (check-true (and swapped #t) "the swapped rig is tested")
+    (check-false (regexp-match? #px"rise (light|heavy)=" swapped) (format "nothing moved: ~a" swapped))
+    (check-= (let ([m (regexp-match #px"rope rope-1 max=([0-9.]+)" swapped)]) (string->number (cadr m))) (* 0.72 9.81) 0.5 "the rope carries the wood's weight, 7.06 N")
+    (check-equal? (steps-done out 7) '(1 2 3 4 5 6 7) "the swap step completes too")
+    (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished pulley") (string-contains? l "The stone stayed on the ground") (string-contains? l "5.68 metres a second"))) out)
+                "the lesson says it is done, with the experiment's result")
     ;; a finished lesson is remembered like lesson 1's: taken up again, it starts from its first step, with its design
     (check-true (ormap (λ (l) (string-contains? l "[Lesson] started pulley at step 1")) out) "a finished lesson is remembered")))
 
@@ -209,11 +226,16 @@
 ;; to rest on flat ground with its centre 0.05 m up, so it gives up h = 0.2563 m and at the most reaches
 ;; v = sqrt(10/7 g h) = 1.895 m/s (a sliding block: sqrt(2 g h) = 2.243), turning at 37.9 rad/s, under the 47.1 rad/s cap.
 ;; Nothing slows a ball rolling on flat ground, so it goes on for the 30 s of the test: at least a metre.
+;; The block (#197), worked by hand: oak on limestone has the friction number 0.45, so a block holds while tan(angle) < 0.45, up to
+;; atan(0.45) = 24.2 degrees; the ramp is 15 degrees, tan 15 = 0.268: it holds. (Traced with the angle changed: still at 22 degrees,
+;; sliding at 25: 0.40 m down, 0.53 m/s.)
 (define ramp-playthrough
   (string-append "wait 30; lesson ramp; wait 5; "
                  "palette ramp; click-at 0 0 0; wait 5; "                  ; step 1: the ramp
                  "palette ball; click-at 0 0.3 -0.85; wait 5; "            ; step 2: the ball, near the top (set exactly on the slope)
-                 "log; test; wait-test; wait 5; quit"))                    ; step 3: Test
+                 "log; test; wait-test; wait 5; "                          ; step 3: Test
+                 "palette block; click-at 0.15 0.3 -0.85; wait 5; "         ; step 4 (#197): an oak block beside the ball, laid flat on the slope by the lesson
+                 "log; test; wait-test; wait 5; quit"))                    ; step 5: Test again
 
 (test-case "Lesson 3 plays through: the ball rolls at sqrt(10/7 g h), not the sliding block's sqrt(2 g h)"
   (when (godot-available?)
@@ -228,19 +250,28 @@
     (check-true (> (fact-of out "rise ball" 'across) 1) "it rolled on")
     (check-= (fact-of out "rise ball" 'value) (- (- 0.3063 0.05)) 0.005 "it came down 0.2563 m")
     (check-true (ormap (λ (l) (string-contains? l "step 3 done: rolled")) out) "the lesson's check passes")
-    (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished ramp") (string-contains? l "worked out beforehand"))) out) "the lesson says it is done")))
+    (check-= (* (/ 180 pi) (atan 0.45)) 24.2 0.05 "the worked angle at which oak lets go on limestone")
+    (check-true (< (tan (* 15 (/ pi 180))) 0.45) "a 15 degree slope is gentler than that")
+    (check-true (ormap (λ (l) (string-contains? l "(set block #:tilt-deg 15)")) out) "the lesson lays the block flat on the slope")
+    (check-true (ormap (λ (l) (string-contains? l "(move block (0.15 0.3063 -0.8497))")) out) "beside the ball, 0.15 m to the side")
+    (check-equal? (steps-done out 5) '(1 2 3 4 5) "every step completes, the block's too")
+    (check-false (regexp-match? #px"rise block=" (second-facts-line out)) (format "the block held still: ~a" (second-facts-line out)))
+    (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished ramp") (string-contains? l "The block held still while the ball rolled away"))) out) "the lesson says it is done")))
 
 ;; ---- Lesson 4: water from tank to tank
 ;; Worked by hand (game/lessons/04-water.lesson), from the pipe model's flow q = k (h_upper - h_lower) with k = 0.001 m³/s per
 ;; metre: a 10 litre starter tank (0.05 m², 0.2 m deep) on a 1 m post over an empty one on the ground, a(t) = -0.4 + 0.6 e^(-0.04 t),
 ;; the upper tank dry at ln(1.5)/0.04 = 10.14 s, all 10 litres moved, the Test over a second later (11.14 s).
+;; Uphill (#197), worked by hand: the lower tank on a 2 m post has its floor at 2.0 m, above the 1.2 m the upper tank's water reaches, and
+;; it holds nothing to send down, so q = 0: no water moves, and the Test ends at its 4 s minimum (4.01 s traced).
 (define water-playthrough
   (string-append "wait 30; lesson water; wait 5; "
                  "palette post; click-at 0 0 0; wait 5; "                  ; step 1: the post
                  "palette tank; click-at 0 1.0 0; wait 5; "                ; step 2: the upper tank, on it (10 litres)
                  "palette tank; click-at 0.8 0 0; wait 5; "                ; step 3: the lower, poured out by the lesson
                  "click-port upper.outlet; click-port lower.inlet; wait 5; "   ; step 4: the pipe, by clicking a dot on each
-                 "log; test; wait-test; wait 5; quit"))                   ; step 5: Test
+                 "log; test; wait-test; wait 5; "                         ; step 5: Test
+                 "test; wait-test; wait 5; log; quit"))                   ; step 6 (#197): the lesson has stood the lower tank on a tall post; Test again
 
 (test-case "Lesson 4 plays through: all ten litres run down into the lower tank, the Test ending when the upper is dry"
   (when (godot-available?)
@@ -255,7 +286,15 @@
     (define t (string->number (cadr (regexp-match #px"t=([0-9.]+) by=settled" facts))))
     (check-true (< (+ t-dry 0.9) t (+ t-dry 1.4)) (format "the test ended a second after the water stopped: ~a s" t))
     (check-true (ormap (λ (l) (string-contains? l "step 5 done: level")) out) "the lesson's check passes")
-    (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished water") (string-contains? l "10 litres more water, 20 cm deep"))) out) "the lesson says it is done")))
+    ;; the experiment
+    (check-true (ormap (λ (l) (string-contains? l "[Lesson] set for the next step: (move lower (0.8 2 0)) ; (post tower #:at (0.8 0 0) #:size-y 2")) out)
+                "the lesson stands the lower tank on a tall post after the first Test")
+    (define uphill (second-facts-line out))
+    (check-true (and uphill #t) "the raised rig is tested")
+    (check-false (string-contains? uphill "water ") (format "no water moved: ~a" uphill))
+    (check-true (< (string->number (cadr (regexp-match #px"t=([0-9.]+) by=settled" uphill))) 5) "the Test ends at its 4 s minimum")
+    (check-equal? (steps-done out 6) '(1 2 3 4 5 6) "the uphill step completes")
+    (check-true (ormap (λ (l) (and (string-contains? l "[Lesson] finished water") (string-contains? l "No water moved: the upper tank kept its 10 litres"))) out) "the lesson says it is done")))
 
 ;; ---------------------------------------------------------------------------------------------
 ;; "Build five machines" (docs/plans/tutorial-plan.md), after the four basics in the Lessons menu.

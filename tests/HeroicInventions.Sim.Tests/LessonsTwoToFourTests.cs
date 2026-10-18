@@ -167,8 +167,29 @@ public class LessonsTwoToFourTests
         Assert.False(run.Finished);
         // the sim's own run of this rig: the wood ended 0.5472 m up (0.82 m at its highest, on the stone's bounce), within 0.08 m of 0.55
         Assert.True(run.OnTest(none, masses, Facts([new PartRise("wood", 0.5472, 0.8189, 0), new PartRise("stone", -0.55, 0, -0.55)]), s.Document));
+        Assert.False(run.Finished);   // the experiment is a step of its own (#197)
+
+        // the Test step leaves the swap to run: the stone on the ground at the right, the wood hung at the left, the rope tied again with its ends exchanged
+        var swap = run.TakeSettle();
+        Assert.Contains("(move stone (0.1 0.05 0))", swap);
+        Assert.Contains("(move wood (-0.1 0.6 0))", swap);
+        Assert.Contains(swap, c => c.StartsWith("(rope rope-1 #:from (wood 0 0.05 0) #:to (stone 0 0.05 0) #:length 1.7561 #:over ((-0.1 1.1 0)") && c.Contains("#:turns pul "));
+        Assert.Empty(run.TakeSettle());
+        foreach (var c in swap) s.Execute(c);
+        run.Rebase(s.Document);
+        Assert.Equal(new Vec3(0.1, 0.05, 0), s.Document.Parts["stone"].At);
+        Assert.Equal(new Vec3(-0.1, 0.6, 0), s.Document.Parts["wood"].At);
+
+        // the worked prediction: the wood's weight, 0.72 × 9.81 = 7.06 N, against the stone's 26.49 N: nothing moves
+        Assert.Equal(0.72 * 9.81, run.SimMasses.GetValueOrDefault("wood", 0.72) * 9.81, 6);
+        Assert.Contains("0.72 kg", run.Fill(run.Current!.Text, s.Document));
+        Assert.False(run.OnTest(none, masses, Facts([new PartRise("wood", 0.4, 0.4, 0), new PartRise("stone", 0, 0, 0)]), s.Document));
+        Assert.Equal("Something moved: the wood changed height by 0.4 m, when it should have stayed put. Is the stone on the ground at the right and the wood hung at the left, with the rope between them over the pulley? Put them back, or press Start over, and press Test it again.",
+                     run.Failure);
+        Assert.False(run.OnTest(none, masses, Facts([new PartRise("wood", 0, 0, 0), new PartRise("stone", 0.3, 0.3, 0)]), s.Document));   // the stone must stay down too
+        Assert.True(run.OnTest(none, masses, Facts([new PartRise("wood", -0.001, 0, -0.001), new PartRise("stone", 0, 0, 0)]), s.Document));
         Assert.True(run.Finished);
-        Assert.Contains("The wood rose 0.55 m, just as far as the stone fell.", run.Fill(run.Lesson.Done, s.Document));
+        Assert.Contains("The stone stayed on the ground, and the wood stayed where it hung.", run.Fill(run.Lesson.Done, s.Document));
     }
 
     [Fact]
@@ -235,8 +256,41 @@ public class LessonsTwoToFourTests
         Assert.False(run.OnTest(none, masses, Facts([new PartRise("ball1", -0.2563, 0, -0.2563, 0.4, 1.9)]), s.Document));
         // the sim's own run of this rig: 1.910 m/s, 51.8 m in 30 s
         Assert.True(run.OnTest(none, masses, Facts([new PartRise("ball1", -0.2563, 0, -0.2563, 51.818, 1.910)]), s.Document));
+        Assert.False(run.Finished);   // the block on the ramp is the experiment after it (#197)
+        Assert.Empty(run.TakeSettle());
+    }
+
+    [Fact]
+    public void ABlockLaidFlatBesideTheBallHoldsOnTheFifteenDegreeRampAndTheTextWorksOutWhy()
+    {
+        var (s, run) = BallOnRamp();
+        var none = new Dictionary<string, List<double>>();
+        var masses = new Dictionary<string, double>();
+        Assert.True(run.OnTest(none, masses, Facts([new PartRise("ball1", -0.2563, 0, -0.2563, 51.818, 1.910)]), s.Document));
+
+        // the block goes 0.15 m to the side of the ball's line, on the slope, and the lesson tilts it with the ramp
+        var target = run.TargetAt(s.Document)!.Value;
+        Assert.Equal(0.15, target.X, 6);   // the ramp is set on its target at x = 0
+        Assert.True(Do(s, run, $"(block blk #:at ({target.X} {target.Y} {target.Z}) #:material oak)"));
+        Assert.Equal(15, s.Document.Parts["blk"].Number("tilt-deg", 0));
+        run.Rebase(s.Document);
+
+        // worked: it holds while tan(angle) < the friction number 0.45, i.e. up to atan(0.45) = 24.2°; the ramp is 15°, tan 15° = 0.268
+        Assert.Equal(24.2, Math.Atan(0.45) * 180 / Math.PI, 1);
+        Assert.True(Math.Tan(15 * Math.PI / 180) < 0.45);
+        var words = run.Fill(run.Current!.Text, s.Document);
+        Assert.Contains("0.27 m for each metre along (15°)", words);
+        Assert.Contains("friction number of 0.45", words);
+
+        // traced on the real rig: still at 15° (rise 0), and 0.40 m down at 25°, where it slides
+        Assert.False(run.OnTest(none, masses, Facts([new PartRise("blk", -0.3992, 0, -0.3992, 0.893, 0.533)]), s.Document));
+        Assert.Equal("The block moved: it ended -0.4 m from the height it began at, but on a 15° slope oak should hold still. Is it an oak block, laid flat on the ramp beside the ball? Move it to the green block and press Test it again.",
+                     run.Failure);
+        Assert.True(run.OnTest(none, masses, Facts([new PartRise("blk", 0, 0, 0), new PartRise("ball1", -0.2563, 0, -0.2563, 51.818, 1.910)]), s.Document));
         Assert.True(run.Finished);
-        Assert.Contains("The ball reached 1.91 m/s (worked out beforehand: 1.9 m/s) and rolled on 51.82 m", run.Fill(run.Lesson.Done, s.Document));
+        var done = run.Fill(run.Lesson.Done, s.Document);
+        Assert.Contains("The block held still while the ball rolled away", done);
+        Assert.Contains("the ball ran down at 1.9 m/s", done);
     }
 
     // ------------------------------------------------------------ lesson 4: the water
@@ -305,7 +359,23 @@ public class LessonsTwoToFourTests
                      run.Failure);
         // the sim's own run of this rig: 10.000 litres moved, over 11.15 s
         Assert.True(run.OnTest(none, masses, Facts(tanks: [new TankChange("up", 10, 0), new TankChange("low", 0, 10.0)]), s.Document));
+        Assert.False(run.Finished);   // the uphill try is a step of its own (#197)
+
+        // the lesson stands the lower tank on a 2 m post, its floor above the 1.2 m the upper tank's water reaches
+        var lift = run.TakeSettle();
+        Assert.Equal(["(move low (0.8 2 0))", "(post tower #:at (0.8 0 0) #:size-y 2 #:material oak)"], lift);
+        foreach (var c in lift) s.Execute(c);
+        run.Rebase(s.Document);
+        Assert.Equal(2.0, s.Document.Parts["low"].At.Y);
+        Assert.True(s.Document.Parts["low"].At.Y > s.Document.Parts["up"].At.Y + s.Document.Parts["up"].Number("water", 0) / 0.05 / 1000 * 1000);   // above the upper water
+
+        Assert.Contains("the upper tank keeps its 10 litres", run.Fill(run.Current!.Text, s.Document));
+        Assert.False(run.OnTest(none, masses, Facts(tanks: [new TankChange("up", 10, 6), new TankChange("low", 0, 4)]), s.Document));
+        Assert.Equal("Some water moved: the lower tank's water changed by 4 litres, but this time none should run uphill. Is the lower tank on the tall post, above the water in the upper one, with the pipe still joined to both? Put it back, or press Start over, and press Test it again.",
+                     run.Failure);
+        // traced on the real rig: no water moved, the Test over at 4.01 s
+        Assert.True(run.OnTest(none, masses, Facts(tanks: [new TankChange("up", 10, 10), new TankChange("low", 0, 0)]), s.Document));
         Assert.True(run.Finished);
-        Assert.Contains("The lower tank ended with 10 litres more water, 20 cm deep", run.Fill(run.Lesson.Done, s.Document));
+        Assert.Contains("No water moved: the upper tank kept its 10 litres and the lower one stayed empty.", run.Fill(run.Lesson.Done, s.Document));
     }
 }
